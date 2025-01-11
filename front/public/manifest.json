@@ -1,0 +1,7 @@
+{
+	"short_name": "money",
+	"name": "money",
+	"icons": [],
+	"start_url": ".",
+	"display": "standalone"
+}

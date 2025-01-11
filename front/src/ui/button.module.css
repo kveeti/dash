@@ -1,0 +1,29 @@
+@import "../theme.css" theme(reference);
+
+.button {
+	@apply relative 
+		select-none 
+		inline-flex
+		justify-center
+		items-center
+		whitespace-nowrap
+
+		outline-hidden
+
+		focus-visible:outline-gray-10
+
+		disabled:pointer-events-none
+		disabled:opacity-50;
+}
+
+.button.variant-default {
+	@apply text-gray-12 border border-gray-a5 bg-gray-4;
+}
+
+.button.size-default {
+	@apply h-10 px-4;
+}
+
+.button.size-lg {
+	@apply h-12 px-4;
+}

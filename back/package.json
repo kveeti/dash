@@ -1,0 +1,22 @@
+{
+	"name": "back",
+	"type": "module",
+	"scripts": {
+		"dev": "node --watch-preserve-output --watch src/index.ts"
+	},
+	"dependencies": {
+		"@hono/node-server": "^1.13.7",
+		"argon2": "^0.41.1",
+		"date-fns": "^4.1.0",
+		"hono": "^4.6.16",
+		"nanoid": "^5.0.9",
+		"postgres": "^3.4.5",
+		"valibot": "1.0.0-beta.11"
+	},
+	"devDependencies": {
+		"@trivago/prettier-plugin-sort-imports": "^5.2.1",
+		"@types/node": "^22.10.5",
+		"dotenv": "^16.4.7",
+		"prettier": "^3.4.2"
+	}
+}

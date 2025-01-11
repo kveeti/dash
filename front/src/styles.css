@@ -1,0 +1,153 @@
+@import "tailwindcss";
+@import "./theme.css";
+
+@utility focus {
+	@apply focus-visible:outline-gray-10 outline-hidden;
+}
+
+@variant pwa (@media (display-mode: standalone));
+
+@font-face {
+	font-family: jbmono;
+	src: url("/fonts/jbmono.ttf") format("truetype-variations");
+	font-weight: 100, 900;
+	font-display: swap;
+}
+
+body {
+	@apply bg-gray-1 text-gray-12 text-sm;
+
+	font-family: "JetBrainsMono Nerd Font", "JetBrainsMono", jbmono, monospace;
+}
+
+:root {
+	--black-a1: rgba(0, 0, 0, 0.05);
+	--black-a2: rgba(0, 0, 0, 0.1);
+	--black-a3: rgba(0, 0, 0, 0.15);
+	--black-a4: rgba(0, 0, 0, 0.2);
+	--black-a5: rgba(0, 0, 0, 0.3);
+	--black-a6: rgba(0, 0, 0, 0.4);
+	--black-a7: rgba(0, 0, 0, 0.5);
+	--black-a8: rgba(0, 0, 0, 0.6);
+	--black-a9: rgba(0, 0, 0, 0.7);
+	--black-a10: rgba(0, 0, 0, 0.8);
+	--black-a11: rgba(0, 0, 0, 0.9);
+	--black-a12: rgba(0, 0, 0, 0.95);
+
+	--white-a1: rgba(255, 255, 255, 0.05);
+	--white-a2: rgba(255, 255, 255, 0.1);
+	--white-a3: rgba(255, 255, 255, 0.15);
+	--white-a4: rgba(255, 255, 255, 0.2);
+	--white-a5: rgba(255, 255, 255, 0.3);
+	--white-a6: rgba(255, 255, 255, 0.4);
+	--white-a7: rgba(255, 255, 255, 0.5);
+	--white-a8: rgba(255, 255, 255, 0.6);
+	--white-a9: rgba(255, 255, 255, 0.7);
+	--white-a10: rgba(255, 255, 255, 0.8);
+	--white-a11: rgba(255, 255, 255, 0.9);
+	--white-a12: rgba(255, 255, 255, 0.95);
+
+	--red-1: hsl(0, 100%, 99%);
+	--red-2: hsl(0, 100%, 98%);
+	--red-3: hsl(357, 90%, 96%);
+	--red-4: hsl(358, 100%, 93%);
+	--red-5: hsl(359, 100%, 90%);
+	--red-6: hsl(359, 94%, 87%);
+	--red-7: hsl(359, 77%, 81%);
+	--red-8: hsl(359, 70%, 74%);
+	--red-9: hsl(358, 75%, 59%);
+	--red-10: hsl(358, 69%, 55%);
+	--red-11: hsl(358, 65%, 49%);
+	--red-12: hsl(351, 63%, 24%);
+
+	--green-1: #fbfefc;
+	--green-2: #f4fbf6;
+	--green-3: #e6f6eb;
+	--green-4: #d6f1df;
+	--green-5: #c4e8d1;
+	--green-6: #adddc0;
+	--green-7: #8eceaa;
+	--green-8: #5bb98b;
+	--green-9: #30a46c;
+	--green-10: #2b9a66;
+	--green-11: #218358;
+	--green-12: #193b2d;
+
+	--gray-1: #fcfcfc;
+	--gray-2: #f9f9f9;
+	--gray-3: #f0f0f0;
+	--gray-4: #e8e8e8;
+	--gray-5: #e0e0e0;
+	--gray-6: #d9d9d9;
+	--gray-7: #cecece;
+	--gray-8: #bbbbbb;
+	--gray-9: #8d8d8d;
+	--gray-10: #838383;
+	--gray-11: #646464;
+	--gray-12: #202020;
+	--gray-a1: #00000003;
+	--gray-a2: #00000006;
+	--gray-a3: #0000000f;
+	--gray-a4: #00000017;
+	--gray-a5: #0000001f;
+	--gray-a6: #00000026;
+	--gray-a7: #00000031;
+	--gray-a8: #00000044;
+	--gray-a9: #00000072;
+	--gray-a10: #0000007c;
+	--gray-a11: #0000009b;
+	--gray-a12: #000000df;
+
+	@media (prefers-color-scheme: dark) {
+		--red-1: oklch(0.08 0.09 29.6);
+		--red-2: oklch(0.1 0.1 29.8);
+		--red-3: oklch(0.15 0.15 26.1);
+		--red-4: oklch(0.19 0.19 27.3);
+		--red-5: oklch(0.23 0.19 28.8);
+		--red-6: oklch(0.29 0.18 30.2);
+		--red-7: oklch(0.37 0.15 33.2);
+		--red-8: oklch(0.49 0.13 37.8);
+		--red-9: oklch(0.59 0.23 37.9);
+		--red-10: oklch(0.65 0.22 43.7);
+		--red-11: oklch(0.79 0.21 49.4);
+		--red-12: oklch(0.91 0.05 25.9);
+
+		--green-1: #0e1512;
+		--green-2: #121b17;
+		--green-3: #132d21;
+		--green-4: #113b29;
+		--green-5: #174933;
+		--green-6: #20573e;
+		--green-7: #28684a;
+		--green-8: #2f7c57;
+		--green-9: #30a46c;
+		--green-10: #33b074;
+		--green-11: #3dd68c;
+		--green-12: #b1f1cb;
+
+		--gray-1: #111111;
+		--gray-2: #191919;
+		--gray-3: #222222;
+		--gray-4: #2a2a2a;
+		--gray-5: #313131;
+		--gray-6: #3a3a3a;
+		--gray-7: #484848;
+		--gray-8: #606060;
+		--gray-9: #6e6e6e;
+		--gray-10: #7b7b7b;
+		--gray-11: #b4b4b4;
+		--gray-12: #eeeeee;
+		--gray-a1: #00000000;
+		--gray-a2: #ffffff09;
+		--gray-a3: #ffffff12;
+		--gray-a4: #ffffff1b;
+		--gray-a5: #ffffff22;
+		--gray-a6: #ffffff2c;
+		--gray-a7: #ffffff3b;
+		--gray-a8: #ffffff55;
+		--gray-a9: #ffffff64;
+		--gray-a10: #ffffff72;
+		--gray-a11: #ffffffaf;
+		--gray-a12: #ffffffed;
+	}
+}
