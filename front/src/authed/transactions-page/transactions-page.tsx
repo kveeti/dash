@@ -23,7 +23,19 @@ import c from "./transactions-page.module.css";
 
 type Transaction = NonNullable<ReturnType<typeof useTransactions>["data"]>["transactions"][number];
 
+const shortDateFormatter = Intl.DateTimeFormat(undefined, {
+	month: "short",
+	day: "numeric",
+});
+
+const longDateFormatter = Intl.DateTimeFormat(undefined, {
+	month: "numeric",
+	day: "numeric",
+	year: "2-digit",
+});
+
 export default function TransactionsPage() {
+	const thisYear = new Date().getFullYear();
 	const search = useSearch();
 	const searchParams = new URLSearchParams(search);
 
@@ -34,7 +46,6 @@ export default function TransactionsPage() {
 	const prevId = q.data?.prev_id;
 
 	let lastDate = "";
-	let lastYear = 0;
 
 	const [selectedTxId, setSelectedTxId] = useState<Transaction | null>(null);
 	const selectedTx = q.data?.transactions.find((t) => t.id === selectedTxId?.id);
@@ -65,13 +76,15 @@ export default function TransactionsPage() {
 				<ul className="grid grid-cols-[max-content_1fr_auto] items-center">
 					{q.data.transactions.map((t) => {
 						const asDate = new Date(t.date);
-						const date = format(asDate, "MMM dd");
+						const year = asDate.getFullYear();
+						const showYear = year !== thisYear;
+
+						const date = showYear
+							? longDateFormatter.format(asDate)
+							: shortDateFormatter.format(asDate);
+
 						const showDate = date !== lastDate;
 						lastDate = date;
-
-						const year = asDate.getFullYear();
-						const showYear = year !== lastYear;
-						lastYear = year;
 
 						const isPositive = t.amount > 0;
 
@@ -81,12 +94,6 @@ export default function TransactionsPage() {
 								data-id={t.id}
 								className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
 							>
-								{showYear && (
-									<div className="bg-gray-1 sticky top-0 col-span-3 px-2 py-3 text-sm">
-										{year}
-									</div>
-								)}
-
 								<div className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm">
 									<span
 										className={cn(
