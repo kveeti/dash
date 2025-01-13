@@ -9,6 +9,7 @@ const server = createServer({ port: 8000, data });
 server.start();
 
 const close = async () => {
+	console.log("closing...");
 	await Promise.allSettled([server.close(), data.close()]);
 };
 

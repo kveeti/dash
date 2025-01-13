@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import * as v from "valibot";
 
-import { createAuthCookie } from "../auth.ts";
+import { createAuthCookie, createCsrfCookie } from "../auth.ts";
+import { id } from "../data/id.ts";
 import { envs } from "../envs.ts";
 import { authProc, publicProcedure, router } from "../trpc.ts";
 
@@ -22,8 +23,9 @@ export const auth_v1 = router({
 
 		const { token, user } = data;
 
-		const cookie = createAuthCookie(token.value, token.expiry, envs.useSecureCookie);
+		const cookie = createAuthCookie(token.value, token.expiry);
 		ctx.res.appendHeader("set-cookie", cookie);
+		ctx.res.appendHeader("set-cookie", createCsrfCookie(id("csrf")));
 
 		return user;
 	}),
@@ -43,14 +45,15 @@ export const auth_v1 = router({
 
 		const { token, user } = data;
 
-		const cookie = createAuthCookie(token.value, token.expiry, envs.useSecureCookie);
+		const cookie = createAuthCookie(token.value, token.expiry);
 		ctx.res.appendHeader("set-cookie", cookie);
+		ctx.res.appendHeader("set-cookie", createCsrfCookie(id("csrf")));
 
 		return user;
 	}),
 
 	logout: publicProcedure.mutation(async ({ ctx }) => {
-		ctx.res.appendHeader("set-cookie", createAuthCookie("", new Date(0), envs.useSecureCookie));
+		ctx.res.appendHeader("set-cookie", createAuthCookie("", new Date(0)));
 	}),
 
 	me: authProc.query(async ({ ctx }) => {
@@ -59,6 +62,6 @@ export const auth_v1 = router({
 			throw new Error("??");
 		}
 
-		return user;
+		return { ...user, csrf: ctx.csrf };
 	}),
 });

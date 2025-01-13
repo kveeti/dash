@@ -1,5 +1,4 @@
 import argon2 from "argon2";
-import type { HonoRequest } from "hono";
 
 import { envs } from "./envs.ts";
 
@@ -15,7 +14,7 @@ export async function verifyPassword(plaintext: string, hash: string) {
 	return await argon2.verify(hash, plaintext);
 }
 
-export function createAuthCookie(token: string, expiry: Date, isSecure: boolean) {
+export function createAuthCookie(token: string, expiry: Date) {
 	return (
 		authCookieName +
 		"=" +
@@ -23,7 +22,16 @@ export function createAuthCookie(token: string, expiry: Date, isSecure: boolean)
 		"; Path=/; Max-Age=" +
 		Math.floor((expiry.getTime() - Date.now()) / 1000) +
 		"; HttpOnly; SameSite=Lax;" +
-		(isSecure ? " Secure;" : "")
+		(envs.useSecureCookie ? " Secure;" : "")
+	);
+}
+
+export function createCsrfCookie(csrf: string) {
+	return (
+		"csrf=" +
+		csrf +
+		"; Path=/; HttpOnly; SameSite=Lax;" +
+		(envs.useSecureCookie ? " Secure;" : "")
 	);
 }
 
@@ -34,35 +42,6 @@ export async function createToken(userId: string, expiry: Date) {
 	const signatureBase64 = arrayBufferToBase64(signature);
 
 	return data + signatureSplitter + signatureBase64;
-}
-
-export async function getUserId(req: HonoRequest) {
-	const cookie = req.header("Cookie");
-	if (!cookie) {
-		return null;
-	}
-
-	const token = cookie.split(";").find((c) => c.trim().startsWith(authCookieName));
-	if (!token) {
-		return null;
-	}
-
-	const tokenValue = token.split("=")[1];
-	if (!tokenValue) {
-		return null;
-	}
-
-	const tokenData = await verifyToken(tokenValue);
-	if (!tokenData) {
-		return null;
-	}
-
-	const { userId, expiry } = tokenData;
-	if (new Date().getTime() > Number(expiry)) {
-		return null;
-	}
-
-	return userId;
 }
 
 function arrayBufferToBase64(bytes: Uint8Array) {

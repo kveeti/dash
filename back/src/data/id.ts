@@ -7,6 +7,7 @@ const things = {
 	user: "usr",
 	transaction: "tx",
 	transaction_category: "txc",
+	csrf: "csrf",
 };
 
 export function id(thing: keyof typeof things) {

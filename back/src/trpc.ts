@@ -29,8 +29,8 @@ export const authProc = publicProcedure.use(async (opts) => {
 		});
 	}
 
-	if (false && shouldConsiderCsrf) {
-		const csrfCookie = cookies.split("csrf=")?.[1]?.split(";")?.[0];
+	const csrfCookie = cookies.split("csrf=")?.[1]?.split(";")?.[0];
+	if (shouldConsiderCsrf) {
 		const csrfHeader = String(opts.ctx.req.headers["x-csrf"]);
 		if (
 			!csrfCookie ||
@@ -54,6 +54,6 @@ export const authProc = publicProcedure.use(async (opts) => {
 	}
 
 	return opts.next({
-		ctx: { userId },
+		ctx: { userId, csrf: csrfCookie },
 	});
 });
