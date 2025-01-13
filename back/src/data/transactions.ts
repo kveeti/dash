@@ -33,7 +33,6 @@ export function transactions(sql: Pg) {
 					select
 						${period} as period,
 						sum(t.amount) as total,
-						count(t.id) as count,
 						c.name as category_name
 					from transactions t
 					left join transaction_categories c
@@ -43,25 +42,54 @@ export function transactions(sql: Pg) {
 						and t.date at time zone ${timezone} <= ${end}
 					group by period, c.name
 				)
-				select 
-					p.period,
-					coalesce(
-						json_agg(
-							json_build_object(
-								'name', pt.category_name,
-								'total', pt.total,
-								'count', pt.count
-							)
-						) filter (where pt.category_name is not null), '[]'::json
-					) as categories
-				from period_series p
+				select
+					ps.period,
+					json_object_agg(category_name, total) filter (where category_name is not null) as categories
+				from period_series ps
 				left join processed_transactions pt
-					on p.period = pt.period
-				group by p.period
-				order by p.period;
-			`;
+					on ps.period = pt.period
+				group by ps.period;
+			`.values();
 
-			console.log(JSON.stringify(rows, null, 2));
+			// produces:
+			// [
+			//   "2021-01-01T00:00:00.000Z",
+			//   {
+			//     "{category}": {total},
+			//     "{category}": {total},
+			//   }
+			// ]
+
+			const uniqueNegativeCategories = new Set<string>();
+			const uniquePositiveCategories = new Set<string>();
+
+			const resolved = rows.map((row) => {
+				const period = row[0];
+				const categories = row[1];
+				if (categories) {
+					const categoryNames = Object.keys(categories);
+					for (let i = 0; i < categoryNames.length; i++) {
+						const cat = categoryNames[i]
+						const amount = categories[cat];
+						if (amount > 0) {
+							uniquePositiveCategories.add(cat)
+						} else {
+							uniqueNegativeCategories.add(cat)
+						}
+					}
+				}
+
+				return {
+					period,
+					...categories,
+				};
+			});
+
+			return {
+				stats: resolved,
+				negCategories: [...uniqueNegativeCategories],
+				posCategories: [...uniquePositiveCategories]
+			};
 		},
 
 		query: async (opts: {

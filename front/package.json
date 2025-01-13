@@ -20,6 +20,7 @@
     "react": "^18.3.1",
     "react-aria-components": "^1.5.0",
     "react-dom": "^18.3.1",
+    "recharts": "^2.15.0",
     "sonner": "^1.7.1",
     "superjson": "^2.2.2",
     "valibot": "1.0.0-beta.11",
