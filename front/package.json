@@ -14,11 +14,14 @@
     "@internationalized/date": "^3.6.0",
     "@radix-ui/react-icons": "^1.3.2",
     "@tanstack/react-query": "^5.63.0",
+    "@trpc/client": "11.0.0-rc.700",
+    "@trpc/react-query": "11.0.0-rc.700",
     "date-fns": "^4.1.0",
     "react": "^18.3.1",
     "react-aria-components": "^1.5.0",
     "react-dom": "^18.3.1",
     "sonner": "^1.7.1",
+    "superjson": "^2.2.2",
     "valibot": "1.0.0-beta.11",
     "wouter": "^3.3.5"
   },
@@ -36,7 +39,7 @@
     "prettier": "^3.4.2",
     "prettier-plugin-tailwindcss": "^0.6.9",
     "tailwindcss": "4.0.0-beta.9",
-    "typescript": "~5.6.2",
+    "typescript": "~5.7.3",
     "typescript-eslint": "^8.18.2",
     "vite": "^6.0.5"
   }

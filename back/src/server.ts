@@ -1,57 +1,51 @@
-import { type ServerType, serve } from "@hono/node-server";
-import { Hono } from "hono";
+import { createHTTPHandler } from "@trpc/server/adapters/standalone";
+import { createServer as _createServer } from "node:http";
 
 import type { Data } from "./data/data.ts";
-import { auth_v1 } from "./routes/auth_v1.ts";
-import { categories_v1 } from "./routes/categories_v1.ts";
-import { transactions_v1 } from "./routes/transactions_v1.ts";
-import { type Auth, auth } from "./services/auth.ts";
-import { categories } from "./services/categories.ts";
-import { transactions } from "./services/transactions.ts";
+import { rootRouter } from "./routes/_router.ts";
+import { auth } from "./services/auth.ts";
+import { createContext } from "./trpc.ts";
 
 export function createServer({ port, data }: { port: number; data: Data }) {
-	const hono = new Hono();
+	const services = {
+		auth: auth(data),
+	};
 
-	hono.use(async (c, next) => {
-		c.res.headers.set("Access-Control-Allow-Origin", "http://localhost:3000");
-		c.res.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-		c.res.headers.set("Access-Control-Allow-Headers", "Content-Type");
-		c.res.headers.set("Access-Control-Allow-Credentials", "true");
-
-		const isPreflight = c.req.method === "OPTIONS";
-		if (isPreflight) {
-			return new Response(null, {
-				headers: c.res.headers,
-				status: 204,
-			});
-		}
-
-		await next();
+	const trpcHandler = createHTTPHandler({
+		router: rootRouter,
+		createContext: createContext(data, services),
 	});
 
-	const s_auth = auth(data);
-	const s_categories = categories(data);
-	const s_transactions = transactions(data);
+	const s = _createServer((req, res) => {
+		res.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
+		res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+		res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-csrf");
+		res.setHeader("Access-Control-Allow-Credentials", "true");
 
-	hono.route("/api/v1/auth", auth_v1(s_auth));
-	hono.route("/api/v1/transactions", transactions_v1(s_transactions));
-	hono.route("/api/v1/categories", categories_v1(s_categories));
+		const isPreflight = req.method === "OPTIONS";
+		if (isPreflight) {
+			res.writeHead(204);
+			res.end();
+			return;
+		}
 
-	let server: ServerType | null = null;
+		return trpcHandler(req, res);
+	});
 
 	return {
 		start: () => {
-			server = serve({ fetch: hono.fetch, port }, () => {
-				console.log(`listening on port ${port}`);
-			});
+			s.listen(port, () => console.log(`listening on port ${port}`));
 		},
 		close: async () => {
-			if (server) {
-				server.close();
-			}
-			await data.close();
+			await new Promise<void>((resolve, reject) => {
+				s.close((err) => {
+					if (err) {
+						reject(err);
+					} else {
+						resolve();
+					}
+				});
+			});
 		},
 	};
 }
-
-function routes(hono: Hono, auth: Auth) {}

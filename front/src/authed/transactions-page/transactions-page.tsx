@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ArrowRightIcon } from "@radix-ui/react-icons";
+import { ArrowLeftIcon, ArrowRightIcon, MixerHorizontalIcon } from "@radix-ui/react-icons";
 import { format } from "date-fns";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -10,6 +10,7 @@ import {
 } from "../../lib/api/transactions";
 import { errorToast } from "../../lib/error-toast";
 import { formatCurrency } from "../../lib/format";
+import { trpc } from "../../lib/trpc";
 import { cn } from "../../lib/utils";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -39,7 +40,7 @@ export default function TransactionsPage() {
 	const search = useSearch();
 	const searchParams = new URLSearchParams(search);
 
-	const q = useTransactions(searchParams);
+	const q = trpc.v1.transactions.query.useQuery({});
 	const linking = useTransactionLinking();
 
 	const nextId = q.data?.next_id;
@@ -61,7 +62,13 @@ export default function TransactionsPage() {
 
 	return (
 		<div className="w-full max-w-sm">
-			<Search currentSearchParams={searchParams} />
+			<div className="sticky top-0 bg-gray-1 p-1 flex gap-1">
+				<Search currentSearchParams={searchParams} />
+
+				<Button>
+					<MixerHorizontalIcon />
+				</Button>
+			</div>
 
 			{q.isPending ? (
 				"loading"
@@ -216,7 +223,7 @@ function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams 
 	}
 
 	return (
-		<form onSubmit={onSubmit}>
+		<form onSubmit={onSubmit} className="w-full">
 			<label htmlFor="query" className="sr-only">
 				search
 			</label>

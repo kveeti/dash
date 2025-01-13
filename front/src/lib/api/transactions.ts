@@ -134,7 +134,7 @@ export function useUpdateTransaction<
 	});
 }
 
-export function useTransactionStats() {
+export function useTransactionStats(props) {
 	return useQuery({
 		queryKey: ["transcationStats"],
 		queryFn: () =>

@@ -14,7 +14,7 @@
 		<link rel="manifest" href="manifest.json" />
 
 		<script>
-			const p = fetch("%PUBLIC_API_URL%" + "/v1/auth/@me", {
+			const p = fetch("%PUBLIC_API_URL%" + "/v1.auth.me", {
 				credentials: "include",
 			})
 				.catch(() => {})

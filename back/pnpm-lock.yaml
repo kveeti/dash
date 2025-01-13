@@ -8,27 +8,27 @@ importers:
 
   .:
     dependencies:
-      '@hono/node-server':
-        specifier: ^1.13.7
-        version: 1.13.7(hono@4.6.16)
+      '@trpc/server':
+        specifier: 11.0.0-rc.700
+        version: 11.0.0-rc.700(typescript@5.7.3)
       argon2:
         specifier: ^0.41.1
         version: 0.41.1
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
-      hono:
-        specifier: ^4.6.16
-        version: 4.6.16
       nanoid:
         specifier: ^5.0.9
         version: 5.0.9
       postgres:
         specifier: ^3.4.5
         version: 3.4.5
+      superjson:
+        specifier: ^2.2.2
+        version: 2.2.2
       valibot:
         specifier: 1.0.0-beta.11
-        version: 1.0.0-beta.11
+        version: 1.0.0-beta.11(typescript@5.7.3)
     devDependencies:
       '@trivago/prettier-plugin-sort-imports':
         specifier: ^5.2.1
@@ -78,12 +78,6 @@ packages:
     resolution: {integrity: sha512-L6mZmwFDK6Cjh1nRCLXpa6no13ZIioJDz7mdkzHv399pThrTa/k0nUlNaenOeh2kWu/iaOQYElEpKPUswUa9Vg==}
     engines: {node: '>=6.9.0'}
 
-  '@hono/node-server@1.13.7':
-    resolution: {integrity: sha512-kTfUMsoloVKtRA2fLiGSd9qBddmru9KadNyhJCwgKBxTiNkaAJEwkVN9KV/rS4HtmmNRtUh6P+YpmjRMl0d9vQ==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      hono: ^4
-
   '@jridgewell/gen-mapping@0.3.8':
     resolution: {integrity: sha512-imAbBGkb+ebQyxKgzv5Hu2nmROxoDOXHh80evxdoXNOrvAnVx7zimzc1Oo5h9RlfV4vPXaE2iM5pOFbvOCClWA==}
     engines: {node: '>=6.0.0'}
@@ -122,12 +116,21 @@ packages:
       svelte:
         optional: true
 
+  '@trpc/server@11.0.0-rc.700':
+    resolution: {integrity: sha512-EmbaGj76YcZWsnujZrrJEYa/2a6ZncTMm1he99RlemWE/ZsZbN+I+KCz+VKIsUr+JLaQmQMElcXs2x0qLI6T5g==}
+    peerDependencies:
+      typescript: '>=5.7.2'
+
   '@types/node@22.10.5':
     resolution: {integrity: sha512-F8Q+SeGimwOo86fiovQh8qiXfFEh2/ocYv7tU5pJ3EXMSSxk1Joj5wefpFK2fHTf/N6HKGSxIDBT9f3gCxXPkQ==}
 
   argon2@0.41.1:
     resolution: {integrity: sha512-dqCW8kJXke8Ik+McUcMDltrbuAWETPyU6iq+4AhxqKphWi7pChB/Zgd/Tp/o8xRLbg8ksMj46F/vph9wnxpTzQ==}
     engines: {node: '>=16.17.0'}
+
+  copy-anything@3.0.5:
+    resolution: {integrity: sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==}
+    engines: {node: '>=12.13'}
 
   date-fns@4.1.0:
     resolution: {integrity: sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==}
@@ -149,9 +152,9 @@ packages:
     resolution: {integrity: sha512-WOBp/EEGUiIsJSp7wcv/y6MO+lV9UoncWqxuFfm8eBwzWNgyfBd6Gz+IeKQ9jCmyhoH99g15M3T+QaVHFjizVA==}
     engines: {node: '>=4'}
 
-  hono@4.6.16:
-    resolution: {integrity: sha512-iE6xOPwDYlfnZFwk6BfIMMIH4WZm3pPhz6rc1uJM/OPew0pjG5K6p8WTLaMBY1/szF/T0TaEjprMpwn16BA0NQ==}
-    engines: {node: '>=16.9.0'}
+  is-what@4.1.16:
+    resolution: {integrity: sha512-ZhMwEosbFJkA0YhFnNDgTM4ZxDRsS6HqTo7qsZM08fehyRYIYa0yHu5R6mgo1n/8MgaPBXiPimPD77baVFYg+A==}
+    engines: {node: '>=12.13'}
 
   javascript-natural-sort@0.7.1:
     resolution: {integrity: sha512-nO6jcEfZWQXDhOiBtG2KvKyEptz7RVbpGP4vTD2hLBdmNQSsCiicO2Ioinv6UI4y9ukqnBpy+XZ9H6uLNgJTlw==}
@@ -193,6 +196,15 @@ packages:
   prettier@3.4.2:
     resolution: {integrity: sha512-e9MewbtFo+Fevyuxn/4rrcDAaq0IYxPGLvObpQjiZBMAzB9IGmzlnG9RZy3FFas+eBMu2vA0CszMeduow5dIuQ==}
     engines: {node: '>=14'}
+    hasBin: true
+
+  superjson@2.2.2:
+    resolution: {integrity: sha512-5JRxVqC8I8NuOUjzBbvVJAKNM8qoVuH0O77h4WInc/qC2q5IreqKxYwgkga3PfA22OayK2ikceb/B26dztPl+Q==}
+    engines: {node: '>=16'}
+
+  typescript@5.7.3:
+    resolution: {integrity: sha512-84MVSjMEHP+FQRPy3pX9sTVV/INIex71s9TL2Gm5FG/WG1SqXeKyZ0k7/blY/4FdOzI12CBy1vGc4og/eus0fw==}
+    engines: {node: '>=14.17'}
     hasBin: true
 
   undici-types@6.20.0:
@@ -253,10 +265,6 @@ snapshots:
       '@babel/helper-string-parser': 7.25.9
       '@babel/helper-validator-identifier': 7.25.9
 
-  '@hono/node-server@1.13.7(hono@4.6.16)':
-    dependencies:
-      hono: 4.6.16
-
   '@jridgewell/gen-mapping@0.3.8':
     dependencies:
       '@jridgewell/set-array': 1.2.1
@@ -288,6 +296,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@trpc/server@11.0.0-rc.700(typescript@5.7.3)':
+    dependencies:
+      typescript: 5.7.3
+
   '@types/node@22.10.5':
     dependencies:
       undici-types: 6.20.0
@@ -297,6 +309,10 @@ snapshots:
       '@phc/format': 1.0.0
       node-addon-api: 8.3.0
       node-gyp-build: 4.8.4
+
+  copy-anything@3.0.5:
+    dependencies:
+      is-what: 4.1.16
 
   date-fns@4.1.0: {}
 
@@ -308,7 +324,7 @@ snapshots:
 
   globals@11.12.0: {}
 
-  hono@4.6.16: {}
+  is-what@4.1.16: {}
 
   javascript-natural-sort@0.7.1: {}
 
@@ -332,6 +348,14 @@ snapshots:
 
   prettier@3.4.2: {}
 
+  superjson@2.2.2:
+    dependencies:
+      copy-anything: 3.0.5
+
+  typescript@5.7.3: {}
+
   undici-types@6.20.0: {}
 
-  valibot@1.0.0-beta.11: {}
+  valibot@1.0.0-beta.11(typescript@5.7.3):
+    optionalDependencies:
+      typescript: 5.7.3

@@ -6,8 +6,9 @@ const splitter = "_";
 const things = {
 	user: "usr",
 	transaction: "tx",
+	transaction_category: "txc",
 };
 
 export function id(thing: keyof typeof things) {
-	return thing + splitter + _id(16);
+	return things[thing] + splitter + _id(25);
 }

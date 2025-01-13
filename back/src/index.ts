@@ -8,5 +8,9 @@ const server = createServer({ port: 8000, data });
 
 server.start();
 
-process.on("SIGINT", server.close);
-process.on("SIGTERM", server.close);
+const close = async () => {
+	await Promise.allSettled([server.close(), data.close()]);
+};
+
+process.on("SIGINT", close);
+process.on("SIGTERM", close);

@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { ComponentProps, startTransition, useId, useMemo, useState } from "react";
 import * as Rac from "react-aria-components";
 
-import { useCategories } from "../../lib/api/categories";
+import { trpc } from "../../lib/trpc";
 import { useDebounce } from "../../lib/utils";
 import { Error, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 
@@ -13,7 +13,7 @@ export function CategoryField({ error, defaultValue }: { error?: string; default
 	const [inputValue, setInputValue] = useState(defaultValue ?? "");
 	const search = useDebounce(inputValue, 200);
 	const isStale = search !== inputValue;
-	const categories = useCategories(search);
+	const categories = trpc.v1.categories.query.useQuery({ query: search });
 
 	const matches = useMemo(
 		() =>

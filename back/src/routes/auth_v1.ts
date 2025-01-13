@@ -1,76 +1,64 @@
-import { Hono } from "hono";
+import { TRPCError } from "@trpc/server";
 import * as v from "valibot";
 
-import { createAuthCookie, getUserId } from "../auth.ts";
+import { createAuthCookie } from "../auth.ts";
 import { envs } from "../envs.ts";
-import type { Auth } from "../services/auth.ts";
+import { authProc, publicProcedure, router } from "../trpc.ts";
 
 const schema = v.object({
 	username: v.pipe(v.string(), v.nonEmpty()),
 	password: v.pipe(v.string(), v.nonEmpty()),
 });
 
-export function auth_v1(auth: Auth) {
-	const s = new Hono();
-
-	s.post("login", async (c) => {
-		const body = await c.req.json();
-		if (!v.is(schema, body)) {
-			return new Response(null, { status: 400 });
-		}
-
-		const [data, err] = await auth.login(body.username, body.password);
+export const auth_v1 = router({
+	login: publicProcedure.input(v.parser(schema)).mutation(async ({ input, ctx }) => {
+		const [data, err] = await ctx.services.auth.login(input.username, input.password);
 		if (err) {
-			return c.json({ error: { message: "invalid credentials" } }, { status: 401 });
+			throw new TRPCError({
+				code: "UNAUTHORIZED",
+				message: "invalid credentials",
+			});
 		}
 
 		const { token, user } = data;
 
 		const cookie = createAuthCookie(token.value, token.expiry, envs.useSecureCookie);
-		c.res.headers.set("Set-Cookie", cookie);
+		ctx.res.appendHeader("set-cookie", cookie);
 
-		return c.json(user);
-	});
+		return user;
+	}),
 
-	s.post("register", async (c) => {
-		const body = await c.req.json();
-		if (!v.is(schema, body)) {
-			return new Response(null, { status: 400 });
-		}
-
-		const [data, err] = await auth.register(body.username, body.password);
+	register: publicProcedure.input(v.parser(schema)).mutation(async ({ input, ctx }) => {
+		const [data, err] = await ctx.services.auth.register(input.username, input.password);
 		if (err === "username taken") {
-			return c.json({ error: { message: "username taken" } }, { status: 409 });
+			throw new TRPCError({
+				code: "CONFLICT",
+				message: "username taken",
+			});
 		} else if (err) {
-			return c.status(500);
+			throw new TRPCError({
+				code: "INTERNAL_SERVER_ERROR",
+			});
 		}
 
 		const { token, user } = data;
 
 		const cookie = createAuthCookie(token.value, token.expiry, envs.useSecureCookie);
-		c.res.headers.set("Set-Cookie", cookie);
+		ctx.res.appendHeader("set-cookie", cookie);
 
-		return c.json(user, { status: 201 });
-	});
+		return user;
+	}),
 
-	s.post("logout", async (c) => {
-		c.res.headers.set("Set-Cookie", createAuthCookie("", new Date(0), envs.useSecureCookie));
-		return new Response(null, { status: 204 });
-	});
+	logout: publicProcedure.mutation(async ({ ctx }) => {
+		ctx.res.appendHeader("set-cookie", createAuthCookie("", new Date(0), envs.useSecureCookie));
+	}),
 
-	s.get("@me", async (c) => {
-		const userId = await getUserId(c.req);
-		if (!userId) {
-			return new Response(null, { status: 401 });
-		}
-
-		const user = await auth.getUser(userId);
+	me: authProc.query(async ({ ctx }) => {
+		const user = await ctx.services.auth.getUser(ctx.userId);
 		if (!user) {
-			return c.json({ error: { message: "user not found" } }, { status: 400 });
+			throw new Error("??");
 		}
 
-		return c.json(user);
-	});
-
-	return s;
-}
+		return user;
+	}),
+});

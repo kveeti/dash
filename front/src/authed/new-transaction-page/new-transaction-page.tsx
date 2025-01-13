@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from "react";
 import * as v from "valibot";
 
-import { useCreateTransaction } from "../../lib/api/transactions";
+import { trpc } from "../../lib/trpc";
 import { valibotToHumanUnderstandable } from "../../lib/utils";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
@@ -15,7 +15,7 @@ const schema = v.object({
 	date: v.pipe(
 		v.string(),
 		v.nonEmpty(),
-		v.transform((v) => new Date(v).toISOString())
+		v.transform((v) => new Date(v))
 	),
 	additional: v.pipe(
 		v.string(),
@@ -28,10 +28,10 @@ const schema = v.object({
 });
 
 export default function NewTransactionPage() {
-	const mutation = useCreateTransaction();
+	const mutation = trpc.v1.transactions.create.useMutation();
 	const [localErrors, setLocalErrors] = useState<Record<string, string> | null>(null);
 
-	function onSubmit(event: FormEvent<HTMLFormElement>) {
+	async function onSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		if (mutation.isPending) return;
 
@@ -53,6 +53,8 @@ export default function NewTransactionPage() {
 		<main className="w-full px-2 py-6 md:pt-4">
 			<div className="mx-auto max-w-100">
 				<Heading>new transaction</Heading>
+
+				<Generate />
 
 				<form onSubmit={onSubmit} className="flex flex-col gap-4 pt-5">
 					<Input
@@ -78,4 +80,9 @@ export default function NewTransactionPage() {
 			</div>
 		</main>
 	);
+}
+
+function Generate() {
+	const m = trpc.v1.transactions.gen.useMutation();
+	return <Button onClick={() => m.mutateAsync()}>Generate</Button>;
 }

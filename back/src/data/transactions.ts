@@ -1,7 +1,69 @@
 import type { Pg } from "./data.ts";
+import { id } from "./id.ts";
 
 export function transactions(sql: Pg) {
 	return {
+		stats: async ({
+			userId,
+			start,
+			end,
+			timezone,
+			frequency,
+		}: {
+			userId: string;
+			start: Date;
+			end: Date;
+			timezone: string;
+			frequency: "monthly" | "yearly";
+		}) => {
+			const period =
+				frequency === "monthly"
+					? sql`date_trunc('month', t.date at time zone ${timezone})`
+					: sql`date_trunc('year', t.date at time zone ${timezone})`;
+
+			const rows = await sql`
+				with period_series as (
+					select generate_series(
+						date_trunc('month', ${start}), 
+						date_trunc('month', ${end}), 
+						interval '1 month'
+					) as period
+				),
+				processed_transactions as (
+					select
+						${period} as period,
+						sum(t.amount) as total,
+						count(t.id) as count,
+						c.name as category_name
+					from transactions t
+					left join transaction_categories c
+						on t.category_id = c.id
+					where t.user_id = ${userId}
+						and t.date at time zone ${timezone} >= ${start}
+						and t.date at time zone ${timezone} <= ${end}
+					group by period, c.name
+				)
+				select 
+					p.period,
+					coalesce(
+						json_agg(
+							json_build_object(
+								'name', pt.category_name,
+								'total', pt.total,
+								'count', pt.count
+							)
+						) filter (where pt.category_name is not null), '[]'::json
+					) as categories
+				from period_series p
+				left join processed_transactions pt
+					on p.period = pt.period
+				group by p.period
+				order by p.period;
+			`;
+
+			console.log(JSON.stringify(rows, null, 2));
+		},
+
 		query: async (opts: {
 			userId: string;
 			cursor?: { id: string; dir: "left" | "right" };
@@ -27,7 +89,7 @@ export function transactions(sql: Pg) {
 						)
 						or t.date > (select date from transactions where id = ${id})
 					)
-				`;
+					`;
 				} else if (dir === "right") {
 					cursorClause = sql`
 					(
@@ -37,7 +99,7 @@ export function transactions(sql: Pg) {
 						)
 						or t.date < (select date from transactions where id = ${id})
 					)
-				`;
+					`;
 				}
 			}
 
@@ -164,7 +226,7 @@ export function transactions(sql: Pg) {
 
 		insertWithCategory: async (props: {
 			id: string;
-			date: string;
+			date: Date;
 			amount: number;
 			currency: string;
 			counterParty: string;
@@ -175,15 +237,9 @@ export function transactions(sql: Pg) {
 			const category_id = await sql.begin(async (sql) => {
 				const [{ id: category_id }]: [{ id: string }] = await sql`
 					insert into transaction_categories (id, name, user_id)
-					values (
-						(
-							select id from transaction_categories 
-							where name = ${props.categoryName}
-							and user_id = ${props.userId}
-						),
-						${props.categoryName},
-						${props.userId}
-					)
+					values (${id("transaction_category")}, ${props.categoryName}, ${props.userId})
+					on conflict (user_id, lower(name))
+					do update set name = excluded.name
 					returning id;
 				`;
 
@@ -200,7 +256,7 @@ export function transactions(sql: Pg) {
 
 		insert: async (props: {
 			id: string;
-			date: string;
+			date: Date;
 			amount: number;
 			currency: string;
 			counterParty: string;
@@ -211,6 +267,55 @@ export function transactions(sql: Pg) {
 				insert into transactions (id, date, amount, currency, counter_party, additional, user_id)
 				values (${props.id}, ${props.date}, ${props.amount}, ${props.currency}, ${props.counterParty}, ${props.additional}, ${props.userId});
 			`;
+		},
+
+		insertMany: async (props: {
+			transactions: Array<{
+				id: string;
+				date: Date;
+				amount: number;
+				currency: string;
+				counter_party: string;
+				additional: string | null;
+				user_id: string;
+				category_name: string;
+			}>;
+		}) => {
+			const uniqueCategories = new Set<string>();
+			for (const t of props.transactions) {
+				uniqueCategories.add(t.category_name);
+			}
+
+			const categoryIds = new Map<string, string>();
+
+			for (const category of uniqueCategories.values()) {
+				const c = {
+					id: id("transaction_category"),
+					name: category,
+					user_id: props.transactions[0].user_id,
+				};
+
+				const [{ id: categoryId }] = await sql`
+					insert into transaction_categories (id, name, user_id)
+					values (${c.id}, ${c.name}, ${c.user_id})
+					on conflict (user_id, lower(name))
+					do update set name = excluded.name
+					returning id;
+				`;
+
+				categoryIds.set(category, categoryId);
+			}
+
+			const transactions = props.transactions.map(({ category_name, ...t }) => {
+				const category_id = categoryIds.get(category_name);
+
+				return {
+					...t,
+					category_id,
+				};
+			});
+
+			await sql`insert into transactions ${sql(transactions)}`;
 		},
 	};
 }

@@ -74,7 +74,7 @@ function arrayBufferToBase64(bytes: Uint8Array) {
 	return btoa(binary);
 }
 
-async function hmacSha256(data: string, key: string) {
+export async function hmacSha256(data: string, key: string) {
 	const encoder = new TextEncoder();
 	const encodedData = encoder.encode(data);
 	const encodedKey = encoder.encode(key);
@@ -92,7 +92,7 @@ async function hmacSha256(data: string, key: string) {
 	return new Uint8Array(signature);
 }
 
-function timingSafeEqual(a: Uint8Array, b: Uint8Array) {
+export function timingSafeEqual(a: Uint8Array, b: Uint8Array) {
 	if (a.length !== b.length) {
 		return false;
 	}
@@ -105,7 +105,7 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array) {
 	return result === 0;
 }
 
-async function verifyToken(token: unknown) {
+export async function verifyToken(token: unknown) {
 	if (typeof token !== "string") {
 		return null;
 	}
@@ -125,5 +125,9 @@ async function verifyToken(token: unknown) {
 		return null;
 	}
 
-	return { userId, expiry };
+	if (new Date().getTime() > Number(expiry)) {
+		return null;
+	}
+
+	return userId;
 }

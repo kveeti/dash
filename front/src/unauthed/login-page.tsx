@@ -1,12 +1,12 @@
-import { useLogin } from "../lib/api/auth";
 import { errorToast } from "../lib/error-toast";
+import { trpc } from "../lib/trpc";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { TextLink } from "../ui/link";
 import { Heading } from "../ui/typography";
 
 export default function LoginPage() {
-	const login = useLogin();
+	const login = trpc.v1.auth.login.useMutation();
 
 	function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();

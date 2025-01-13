@@ -1,26 +1,20 @@
-import { Hono } from "hono";
+import * as v from "valibot";
 
-import { getUserId } from "../auth.ts";
-import type { Categories } from "../services/categories.ts";
+import { authProc, router } from "../trpc.ts";
 
-export function categories_v1(categories: Categories) {
-	const s = new Hono();
-
-	s.get("", async (c) => {
-		const userId = await getUserId(c.req);
-		if (!userId) {
-			return new Response(null, { status: 401 });
-		}
-
-		const query = c.req.query("query");
-
-		const res = await categories.query({
-			userId,
-			query,
-		});
-
-		return c.json(res);
-	});
-
-	return s;
-}
+export const categories_v1 = router({
+	query: authProc
+		.input(
+			v.parser(
+				v.object({
+					query: v.optional(v.string()),
+				})
+			)
+		)
+		.query(async ({ ctx, input }) => {
+			return await ctx.data.categories.query({
+				userId: ctx.userId,
+				query: input.query ?? "",
+			});
+		}),
+});
