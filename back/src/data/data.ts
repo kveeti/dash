@@ -39,10 +39,10 @@ create table transaction_categories (
     id varchar(30) primary key not null,
     name varchar(100) not null,
     user_id varchar(30) not null,
-    foreign key (user_id) references users(id),
-    unique(user_id, name)
+    foreign key (user_id) references users(id)
 );
 create index idx_transaction_categories_user_id_lower_name on transaction_categories(user_id, lower(name));
+create unique index on transaction_categories (user_id, lower(name));
 
 create table transactions (
     id varchar(30) primary key not null,
