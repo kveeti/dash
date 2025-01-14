@@ -15,6 +15,7 @@ import { trpc } from "./lib/trpc";
 import "./styles.css";
 import LoginPage from "./unauthed/login-page";
 import RegisterPage from "./unauthed/register-page";
+import { CategoriesPage } from "./authed/categories-page/categories-page";
 
 const [useMe, meContext] = createContext<{
   me: { id: string; username: string } | null;
@@ -47,6 +48,9 @@ function Entry() {
 
         <Route path="/transactions/stats">
           <TransactionStatsPage />
+        </Route>
+        <Route path="/categories">
+          <CategoriesPage />
         </Route>
 
         <Route path="*">

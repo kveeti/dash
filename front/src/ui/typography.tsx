@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 
 const headings = {
 	1: "text-xl font-medium",
-	2: "text-md font-medium",
+	2: "text-base font-medium",
 };
 
 export function Heading({
