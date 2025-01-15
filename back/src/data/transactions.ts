@@ -24,8 +24,8 @@ export function transactions(sql: Pg) {
 			const rows = await sql`
 				with period_series as (
 					select generate_series(
-						date_trunc('month', ${start}), 
-						date_trunc('month', ${end}), 
+						date_trunc('month', ${start} at time zone ${timezone}),
+						date_trunc('month', ${end} at time zone ${timezone}),
 						interval '1 month'
 					) as period
 				),
@@ -48,7 +48,8 @@ export function transactions(sql: Pg) {
 				from period_series ps
 				left join processed_transactions pt
 					on ps.period = pt.period
-				group by ps.period;
+				group by ps.period
+				order by ps.period;
 			`.values();
 
 			// produces:
@@ -69,12 +70,12 @@ export function transactions(sql: Pg) {
 				if (categories) {
 					const categoryNames = Object.keys(categories);
 					for (let i = 0; i < categoryNames.length; i++) {
-						const cat = categoryNames[i]
+						const cat = categoryNames[i];
 						const amount = categories[cat];
 						if (amount > 0) {
-							uniquePositiveCategories.add(cat)
+							uniquePositiveCategories.add(cat);
 						} else {
-							uniqueNegativeCategories.add(cat)
+							uniqueNegativeCategories.add(cat);
 						}
 					}
 				}
@@ -88,7 +89,7 @@ export function transactions(sql: Pg) {
 			return {
 				stats: resolved,
 				negCategories: [...uniqueNegativeCategories],
-				posCategories: [...uniquePositiveCategories]
+				posCategories: [...uniquePositiveCategories],
 			};
 		},
 

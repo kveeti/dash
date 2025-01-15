@@ -69,6 +69,9 @@ importers:
       '@trivago/prettier-plugin-sort-imports':
         specifier: ^5.2.1
         version: 5.2.1(prettier@3.4.2)
+      '@trpc/server':
+        specifier: 11.0.0-rc.700
+        version: 11.0.0-rc.700(typescript@5.7.3)
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.18
