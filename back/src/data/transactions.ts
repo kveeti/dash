@@ -33,6 +33,8 @@ export function transactions(sql: Pg) {
 					select
 						${period} as period,
 						sum(t.amount) as total,
+						coalesce(sum(case when t.amount > 0 then t.amount else 0 end), 0) as total_plus,
+						coalesce(sum(case when t.amount < 0 then t.amount else 0 end), 0) as total_minus,
 						c.name as category_name
 					from transactions t
 					left join transaction_categories c
@@ -44,7 +46,9 @@ export function transactions(sql: Pg) {
 				)
 				select
 					ps.period,
-					json_object_agg(category_name, total) filter (where category_name is not null) as categories
+					json_object_agg(category_name, total) filter (where category_name is not null) as categories,
+					coalesce(sum(total_plus), 0) as total_plus,
+					coalesce(sum(total_minus), 0) as total_minus
 				from period_series ps
 				left join processed_transactions pt
 					on ps.period = pt.period
@@ -64,9 +68,15 @@ export function transactions(sql: Pg) {
 			const uniqueNegativeCategories = new Set<string>();
 			const uniquePositiveCategories = new Set<string>();
 
+			let totalPos = 0;
+			let totalNeg = 0;
+
 			const resolved = rows.map((row) => {
 				const period = row[0];
 				const categories = row[1];
+				totalPos += row[2];
+				totalNeg += row[2];
+
 				if (categories) {
 					const categoryNames = Object.keys(categories);
 					for (let i = 0; i < categoryNames.length; i++) {
@@ -88,6 +98,8 @@ export function transactions(sql: Pg) {
 
 			return {
 				stats: resolved,
+				totalNeg,
+				totalPos,
 				negCategories: [...uniqueNegativeCategories],
 				posCategories: [...uniquePositiveCategories],
 			};

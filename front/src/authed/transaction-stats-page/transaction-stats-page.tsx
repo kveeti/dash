@@ -108,6 +108,17 @@ function ChartWrapper({ timeframe }: { timeframe: { start: Date; end: Date } }) 
 
 	if (!q.data) throw new Error("no data");
 
+	if (q.data.totalPos === 0 && q.data.totalNeg === 0) {
+		return (
+			<div
+				style={{ height: 350 }}
+				className="text-gray-11 border-gray-5 flex w-full items-center justify-center border border-dashed"
+			>
+				no data
+			</div>
+		);
+	}
+
 	return <Chart data={q.data} />;
 }
 
@@ -171,47 +182,52 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 
 						return (
 							<div className="bg-gray-4/50 p-2 backdrop-blur-sm">
-								<p className="mb-1 font-medium">{label}</p>
-								<ul className="mb-1.5">
-									{pos.map((p) => {
-										return (
-											<li className="flex items-center justify-between gap-4">
-												<div className="flex items-center">
-													<div
-														style={{ backgroundColor: p.color }}
-														className="me-2 size-3"
-													></div>
-													<span className="me-2 text-sm">
-														{p.dataKey}
+								<p className="mb-2 leading-none font-medium">{label}</p>
+								{!!pos.length && (
+									<ul>
+										{pos.map((p) => {
+											return (
+												<li className="flex items-center justify-between gap-4">
+													<div className="flex items-center">
+														<div
+															style={{ backgroundColor: p.color }}
+															className="me-2 size-3"
+														></div>
+														<span className="leading-none">
+															{p.dataKey}
+														</span>
+													</div>
+													<span className="leading-none">
+														{Math.round(p.value as number)} €
 													</span>
-												</div>
-												<span className="text-sm">
-													{Math.round(p.value as number)} €
-												</span>
-											</li>
-										);
-									})}
-								</ul>
-								<ul>
-									{neg.map((p) => {
-										return (
-											<li className="flex items-center justify-between gap-2">
-												<div className="flex items-center">
-													<div
-														style={{ backgroundColor: p.color }}
-														className="me-2 size-3"
-													></div>
-													<span className="me-2 text-sm">
-														{p.dataKey}
+												</li>
+											);
+										})}
+									</ul>
+								)}
+
+								{!!neg.length && (
+									<ul className="mt-1.5">
+										{neg.map((p) => {
+											return (
+												<li className="flex items-center justify-between gap-2">
+													<div className="flex items-center">
+														<div
+															style={{ backgroundColor: p.color }}
+															className="me-2 size-3"
+														></div>
+														<span className="leading-none">
+															{p.dataKey}
+														</span>
+													</div>
+													<span className="leading-none">
+														{Math.round(p.value as number)} €
 													</span>
-												</div>
-												<span className="text-sm">
-													{Math.round(p.value as number)} €
-												</span>
-											</li>
-										);
-									})}
-								</ul>
+												</li>
+											);
+										})}
+									</ul>
+								)}
 							</div>
 						);
 					}}
