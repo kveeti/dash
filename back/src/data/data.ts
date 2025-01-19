@@ -31,7 +31,7 @@ async function migratePg(pg: Pg) {
 create table users (
 	id varchar(30) primary key not null,
 	username varchar(30) not null unique,
-	password_hash varchar(255) not null,
+	password_hash text not null,
 	created_at timestamptz not null
 );
 

@@ -3,7 +3,6 @@ import * as v from "valibot";
 
 import { createAuthCookie, createCsrfCookie } from "../auth.ts";
 import { id } from "../data/id.ts";
-import { envs } from "../envs.ts";
 import { authProc, publicProcedure, router } from "../trpc.ts";
 
 const schema = v.object({

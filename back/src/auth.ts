@@ -1,18 +1,8 @@
-import argon2 from "argon2";
-
 import { envs } from "./envs.ts";
 
 const authCookieName = "auth";
 const dataSplitter = ":";
 const signatureSplitter = ".";
-
-export async function hashPassword(plaintext: string) {
-	return await argon2.hash(plaintext);
-}
-
-export async function verifyPassword(plaintext: string, hash: string) {
-	return await argon2.verify(hash, plaintext);
-}
 
 export function createAuthCookie(token: string, expiry: Date) {
 	return (
@@ -69,6 +59,12 @@ export async function hmacSha256(data: string, key: string) {
 	);
 	const signature = await crypto.subtle.sign("HMAC", keyBytes, encodedData);
 	return new Uint8Array(signature);
+}
+
+export async function sha256(data: string) {
+	const utf8 = new TextEncoder().encode(data);
+	const hash = await crypto.subtle.digest("SHA-256", utf8);
+	return new Uint8Array(hash);
 }
 
 export function timingSafeEqual(a: Uint8Array, b: Uint8Array) {

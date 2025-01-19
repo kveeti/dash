@@ -1,8 +1,9 @@
 import { addDays } from "date-fns";
 
-import { createToken, hashPassword, verifyPassword } from "../auth.ts";
+import { createToken } from "../auth.ts";
 import type { Data } from "../data/data.ts";
 import { id } from "../data/id.ts";
+import { passwords } from "../password.ts";
 
 export function auth(data: Data) {
 	return {
@@ -12,8 +13,14 @@ export function auth(data: Data) {
 				return [null, "user not found"] as const;
 			}
 
-			if (!(await verifyPassword(password, user.password_hash))) {
+			const verifyRes = await passwords.verify(password, user.password_hash);
+			if (verifyRes === "failed") {
 				return [null, "invalid password"] as const;
+			}
+
+			if (verifyRes === "successRehashNeeded") {
+				const newHash = await passwords.hash(password);
+				console.log("rehash done");
 			}
 
 			const expiry = addDays(new Date(), 1);
@@ -36,7 +43,7 @@ export function auth(data: Data) {
 
 		register: async (username: string, password: string) => {
 			const userId = id("user");
-			const passwordHash = await hashPassword(password);
+			const passwordHash = await passwords.hash(password);
 			const createdAt = new Date();
 
 			const upserted = await data.users.upsert({
