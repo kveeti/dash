@@ -1,18 +1,18 @@
 {
-  "compilerOptions": {
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "module": "nodenext",
-    "target": "esnext"
-    "lib": ["esnext"],
-    "moduleDetection": "force",
-    "allowJs": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "strict": true,
-    "noImplicitOverride": true,
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
-  }
+	"compilerOptions": {
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"module": "nodenext",
+		"target": "esnext",
+		"lib": ["esnext"],
+		"moduleDetection": "force",
+		"allowJs": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"verbatimModuleSyntax": true,
+		"strict": true,
+		"noImplicitOverride": true,
+		"allowImportingTsExtensions": true,
+		"noEmit": true
+	}
 }

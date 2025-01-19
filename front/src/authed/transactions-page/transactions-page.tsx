@@ -62,7 +62,7 @@ export default function TransactionsPage() {
 
 	return (
 		<div className="w-full max-w-sm">
-			<div className="sticky top-0 bg-gray-1 p-1 flex gap-1">
+			<div className="sticky top-1 bg-gray-1 flex gap-1">
 				<Search currentSearchParams={searchParams} />
 
 				<Button>
