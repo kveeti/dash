@@ -32,24 +32,22 @@ export function transactions(sql: Pg) {
 				processed_transactions as (
 					select
 						${period} as period,
-						sum(t.amount) as total,
 						coalesce(sum(case when t.amount > 0 then t.amount else 0 end), 0) as total_pos,
 						coalesce(sum(case when t.amount < 0 then t.amount else 0 end), 0) as total_neg,
-						c.name as category_name
+						coalesce(c.name, '__uncategorized__') as category_name
 					from transactions t
 					left join transaction_categories c
 						on t.category_id = c.id
 					where t.user_id = ${userId}
 						and t.date at time zone ${timezone} >= ${start}
 						and t.date at time zone ${timezone} <= ${end}
-					group by period, c.name
+					group by period, category_name
 				)
 				select
 					ps.period,
 					json_object_agg(category_name, total) filter (where category_name is not null) as categories,
 					sum(total_pos),
-					sum(total_neg),
-					sum(total)
+					sum(total_neg)
 				from period_series ps
 				left join processed_transactions pt
 					on ps.period = pt.period
@@ -80,7 +78,6 @@ export function transactions(sql: Pg) {
 				const categories = row[1];
 				const _totalPos = row[2];
 				const _totalNeg = row[3];
-				const total = row[4];
 
 				totalPos += _totalPos;
 				totalNeg += _totalNeg;
@@ -100,7 +97,6 @@ export function transactions(sql: Pg) {
 
 				return {
 					__period__: period,
-					__total__: total,
 					...categories,
 				};
 			});

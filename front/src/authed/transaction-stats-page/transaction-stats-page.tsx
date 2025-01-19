@@ -48,12 +48,12 @@ export function TransactionStatsPage() {
 		newSearchParams.set(input, value.toISOString());
 
 		startTransition(() => {
-			navigate(location + "?" + newSearchParams.toString(), { replace: true });
+			navigate(location + "?" + newSearchParams.toString());
 		});
 	}
 
 	return (
-		<div className="h-full w-full">
+		<div className="h-full w-full px-2">
 			<div className="mx-5 mb-5 flex items-center">
 				<div className="flex w-full gap-2">
 					<Input
@@ -124,8 +124,8 @@ function ChartWrapper({ timeframe }: { timeframe: { start: Date; end: Date } }) 
 
 const numberFormatter = new Intl.NumberFormat("fi-FI", {
 	signDisplay: "auto",
-	minimumSignificantDigits: 2,
-	maximumSignificantDigits: 2,
+	minimumFractionDigits: 0,
+	maximumFractionDigits: 2,
 	currencyDisplay: "symbol",
 	style: "currency",
 	currency: "EUR",
@@ -162,7 +162,11 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 					className="text-gray-10 text-xs"
 					tickFormatter={(date) => format(date, "MMM yy")}
 				/>
-				<YAxis stroke="currentColor" className="text-gray-11 text-xs" />
+				<YAxis
+					stroke="currentColor"
+					className="text-gray-11 text-xs"
+					tickFormatter={(value) => numberFormatter.format(value)}
+				/>
 
 				<Tooltip
 					isAnimationActive={false}
@@ -170,15 +174,14 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 					content={(props) => {
 						if (!props.label || !props.payload) return null;
 						const label = format(props.label, "MMM yy");
-						const things = [...props.payload]; // TODO: dont like this
 
 						const pos = [];
 						const neg = [];
 
 						let total = 0;
 
-						for (let i = 0; i < things.length; i++) {
-							const thing = things[i];
+						for (let i = 0; i < props.payload.length; i++) {
+							const thing = props.payload[i];
 							if (typeof thing?.value !== "number") continue;
 
 							total += thing.value;
@@ -202,7 +205,9 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 																className="me-2 size-3"
 															></div>
 															<span className="leading-none">
-																{p.dataKey}
+																{p.dataKey === "__uncategorized__"
+																	? "uncategorized"
+																	: p.dataKey}
 															</span>
 														</div>
 														<span className="leading-none">
@@ -214,33 +219,40 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 												);
 											})}
 										</ul>
-
-										<hr className="border-gray-4 -mx-2 my-2 border-t" />
 									</>
 								)}
 
 								{!!neg.length && (
-									<ul className="space-y-1.5">
-										{neg.map((p) => {
-											return (
-												<li className="flex items-center justify-between gap-4">
-													<div className="flex items-center">
-														<div
-															style={{ backgroundColor: p.color }}
-															className="me-2 size-3"
-														></div>
+									<>
+										<hr className="border-gray-4 -mx-2 my-2 border-t" />
+
+										<ul className="space-y-1.5">
+											{neg.map((p) => {
+												return (
+													<li className="flex items-center justify-between gap-4">
+														<div className="flex items-center">
+															<div
+																style={{ backgroundColor: p.color }}
+																className="me-2 size-3"
+															></div>
+															<span className="leading-none">
+																{p.dataKey === "__uncategorized__"
+																	? "uncategorized"
+																	: p.dataKey}
+															</span>
+														</div>
 														<span className="leading-none">
-															{p.dataKey}
+															{numberFormatter.format(
+																p.value as number
+															)}
 														</span>
-													</div>
-													<span className="leading-none">
-														{numberFormatter.format(p.value as number)}
-													</span>
-												</li>
-											);
-										})}
-									</ul>
+													</li>
+												);
+											})}
+										</ul>
+									</>
 								)}
+
 								<hr className="border-gray-4 -mx-2 my-2 border-t" />
 								<div className="flex justify-end leading-none">
 									<span>{numberFormatter.format(total as number)}</span>
