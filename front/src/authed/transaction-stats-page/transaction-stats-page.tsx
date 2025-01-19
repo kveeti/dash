@@ -122,6 +122,15 @@ function ChartWrapper({ timeframe }: { timeframe: { start: Date; end: Date } }) 
 	return <Chart data={q.data} />;
 }
 
+const numberFormatter = new Intl.NumberFormat("fi-FI", {
+	signDisplay: "auto",
+	minimumSignificantDigits: 2,
+	maximumSignificantDigits: 2,
+	currencyDisplay: "symbol",
+	style: "currency",
+	currency: "EUR",
+});
+
 function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 	const { posCategories, negCategories, stats } = props.data;
 
@@ -145,21 +154,15 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 				<CartesianGrid
 					strokeDasharray="3 3"
 					stroke="currentColor"
-					className="text-gray-6"
+					className="text-gray-7"
 				/>
-				<XAxis dataKey="period" tickFormatter={(date) => format(date, "MMM yy")} />
-				<YAxis
-					domain={[
-						(dataMin: number) => {
-							const nearest = Math.round(dataMin / 1000) * 1000;
-							return Math.min(nearest - 1000, 3000);
-						},
-						(dataMax: number) => {
-							const nearest = Math.round(dataMax / 1000) * 1000;
-							return Math.max(nearest + 1000, 3000);
-						},
-					]}
+				<XAxis
+					dataKey="__period__"
+					stroke="currentColor"
+					className="text-gray-10 text-xs"
+					tickFormatter={(date) => format(date, "MMM yy")}
 				/>
+				<YAxis stroke="currentColor" className="text-gray-11 text-xs" />
 
 				<Tooltip
 					isAnimationActive={false}
@@ -172,20 +175,53 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 						const pos = [];
 						const neg = [];
 
+						let total = 0;
+
 						for (let i = 0; i < things.length; i++) {
 							const thing = things[i];
 							if (typeof thing?.value !== "number") continue;
+
+							total += thing.value;
 
 							if (thing.value > 0) pos.push(thing);
 							else neg.push(thing);
 						}
 
 						return (
-							<div className="bg-gray-4/50 p-2 backdrop-blur-sm">
-								<p className="mb-2 leading-none font-medium">{label}</p>
+							<div className="bg-gray-1 border-gray-4 border p-2 shadow-lg">
+								<p className="mb-3 leading-none font-medium">{label}</p>
 								{!!pos.length && (
-									<ul>
-										{pos.map((p) => {
+									<>
+										<ul className="space-y-1.5">
+											{pos.map((p) => {
+												return (
+													<li className="flex items-center justify-between gap-4">
+														<div className="flex items-center">
+															<div
+																style={{ backgroundColor: p.color }}
+																className="me-2 size-3"
+															></div>
+															<span className="leading-none">
+																{p.dataKey}
+															</span>
+														</div>
+														<span className="leading-none">
+															{numberFormatter.format(
+																p.value as number
+															)}
+														</span>
+													</li>
+												);
+											})}
+										</ul>
+
+										<hr className="border-gray-4 -mx-2 my-2 border-t" />
+									</>
+								)}
+
+								{!!neg.length && (
+									<ul className="space-y-1.5">
+										{neg.map((p) => {
 											return (
 												<li className="flex items-center justify-between gap-4">
 													<div className="flex items-center">
@@ -198,36 +234,17 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 														</span>
 													</div>
 													<span className="leading-none">
-														{Math.round(p.value as number)} €
+														{numberFormatter.format(p.value as number)}
 													</span>
 												</li>
 											);
 										})}
 									</ul>
 								)}
-
-								{!!neg.length && (
-									<ul className="mt-1.5">
-										{neg.map((p) => {
-											return (
-												<li className="flex items-center justify-between gap-2">
-													<div className="flex items-center">
-														<div
-															style={{ backgroundColor: p.color }}
-															className="me-2 size-3"
-														></div>
-														<span className="leading-none">
-															{p.dataKey}
-														</span>
-													</div>
-													<span className="leading-none">
-														{Math.round(p.value as number)} €
-													</span>
-												</li>
-											);
-										})}
-									</ul>
-								)}
+								<hr className="border-gray-4 -mx-2 my-2 border-t" />
+								<div className="flex justify-end leading-none">
+									<span>{numberFormatter.format(total as number)}</span>
+								</div>
 							</div>
 						);
 					}}
