@@ -5,7 +5,7 @@ export const labelStyles = "text-gray-11 block";
 export const inputStyles =
 	"min-w-0 max-w-full w-full" +
 	" " +
-	"px-3 h-10 leading-10 border border-gray-6 rounded-none" +
+	"px-3 h-10 border border-gray-6 rounded-none" +
 	" " +
 	"bg-transparent text-inherit" +
 	" " +

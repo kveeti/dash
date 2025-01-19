@@ -3,8 +3,8 @@ import c from "./button.module.css";
 import { Spinner } from "./spinner";
 
 type Props = {
-	size?: "default" | "lg";
-	variant?: "default" | "destructive";
+	size?: "default" | "lg" | "icon";
+	variant?: "default" | "destructive" | "ghost";
 	isLoading?: boolean;
 } & ComponentProps<"button">;
 

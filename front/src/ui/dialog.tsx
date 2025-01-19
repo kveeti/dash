@@ -10,11 +10,11 @@ export const Close = _Dialog.Close;
 export function Content(props: ComponentProps<typeof _Dialog.Content>) {
 	return (
 		<_Dialog.Portal>
-			<_Dialog.Overlay className="bg-black-a9 fixed inset-0 backdrop-blur-xs" />
+			<_Dialog.Overlay className="bg-gray-a4 dark:bg-black-a5 fixed inset-0 backdrop-blur-xs" />
 			<_Dialog.Content
 				{...props}
 				className={
-					"bg-gray-1 border-gray-5 fixed top-[50%] left-[50%] max-h-[85vh] w-[90vw] max-w-[24rem] transform-[translate(-50%,_-50%)] border p-4 outline-none" +
+					"bg-gray-1 border-gray-a5 fixed top-[50%] left-[50%] max-h-[85vh] w-[90vw] max-w-[24rem] transform-[translate(-50%,_-50%)] border p-4 outline-none" +
 					" " +
 					props.className
 				}

@@ -16,7 +16,7 @@ export function Item(props: ComponentProps<typeof _Dropdown.Item>) {
 	return (
 		<_Dropdown.Item
 			{...props}
-			className="hover:bg-gray-5 inline-flex w-full cursor-default items-center p-2 outline-none select-none"
+			className="data-highlighted:bg-gray-a5 inline-flex w-full cursor-default items-center p-2 outline-none select-none"
 		/>
 	);
 }

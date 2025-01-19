@@ -25,7 +25,7 @@ export function CategoriesPage() {
 
 			<ul className="divide-gray-3 divide-y">
 				{q.data?.map((c) => (
-					<li key={c.id} className="flex items-center justify-between gap-2 p-1">
+					<li key={c.id} className="flex items-center justify-between gap-2">
 						{c.name}
 						<div className="flex items-center gap-2">
 							<CategoryMenu category={c} />
@@ -41,7 +41,7 @@ function CategoryMenu({ category }: { category: Category }) {
 	return (
 		<Dropdown.Root>
 			<Dropdown.Trigger asChild>
-				<Button>
+				<Button variant="ghost" size="icon">
 					<DotsVerticalIcon />
 				</Button>
 			</Dropdown.Trigger>
@@ -79,9 +79,9 @@ function DeleteCategory({ category }: { category: Category }) {
 
 				<div className="mt-5 flex justify-end gap-3">
 					<Dialog.Close asChild>
-						<Button>cancel</Button>
+						<Button variant="ghost">cancel</Button>
 					</Dialog.Close>
-					<Button>yes, delete</Button>
+					<Button variant="destructive">yes, delete</Button>
 				</div>
 			</Dialog.Content>
 		</Dialog.Root>
@@ -114,7 +114,7 @@ function EditCategory({ category }: { category: Category }) {
 
 				<div className="flex justify-end gap-3">
 					<Dialog.Close asChild>
-						<Button>cancel</Button>
+						<Button variant="ghost">cancel</Button>
 					</Dialog.Close>
 					<Button>save</Button>
 				</div>
