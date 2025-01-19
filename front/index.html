@@ -13,7 +13,11 @@
 
 		<link rel="manifest" href="manifest.json" />
 
+		<link rel="preconnect" href="%PUBLIC_API_URL%" />
+
 		<script>
+			const key = "__ME_LOADER__";
+
 			const p = fetch("%PUBLIC_API_URL%" + "/v1.auth.me", {
 				credentials: "include",
 			})
@@ -24,25 +28,23 @@
 					}
 
 					try {
-						return await res.json();
+						const json = await res.json();
+						const data = json?.result?.data?.json;
+						window[key] = {
+							data,
+							promise: null,
+						};
+
+						return data;
 					} catch (e) {
 						return null;
 					}
 				});
 
-			window.__data__ = {
+			window[key] = {
 				data: null,
 				promise: p,
 			};
-
-			p.then((json) => {
-				window.__data__ = {
-					data: json?.result?.data?.json,
-					promise: null,
-				};
-
-				return json;
-			});
 		</script>
 
 		<style>
