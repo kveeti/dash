@@ -2,19 +2,22 @@
 	"name": "back",
 	"type": "module",
 	"scripts": {
-		"dev": "node --watch-preserve-output --watch src/index.ts"
+		"dev": "node --watch-preserve-output --watch src/index.ts",
+		"build": "rolldown --minify --format esm --platform node src/index.ts --file dist/server.js",
+		"preview": "node ./dist/server.js"
 	},
 	"dependencies": {
 		"@trpc/server": "11.0.0-rc.700",
 		"date-fns": "^4.1.0",
 		"nanoid": "^5.0.9",
 		"postgres": "^3.4.5",
+		"rolldown": "1.0.0-beta.1",
 		"superjson": "^2.2.2",
 		"valibot": "1.0.0-beta.11"
 	},
 	"devDependencies": {
 		"@trivago/prettier-plugin-sort-imports": "^5.2.1",
-		"@types/node": "^22.10.5",
+		"@types/node": "^22.10.7",
 		"dotenv": "^16.4.7",
 		"prettier": "^3.4.2"
 	}
