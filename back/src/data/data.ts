@@ -9,6 +9,9 @@ export async function getData() {
 	const pg = postgres(envs.pgUrl, {
 		connect_timeout: 2.5,
 		max: 20,
+		types: {
+			bigint: postgres.BigInt,
+		},
 	});
 	await migratePg(pg);
 

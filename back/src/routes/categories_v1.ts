@@ -17,4 +17,36 @@ export const categories_v1 = router({
 				query: input.query ?? "",
 			});
 		}),
+
+	delete: authProc
+		.input(
+			v.parser(
+				v.object({
+					id: v.string(),
+				})
+			)
+		)
+		.mutation(async ({ ctx, input }) => {
+			await ctx.data.categories.delete({
+				id: input.id,
+				userId: ctx.userId,
+			});
+		}),
+
+	edit: authProc
+		.input(
+			v.parser(
+				v.object({
+					id: v.string(),
+					name: v.string(),
+				})
+			)
+		)
+		.mutation(async ({ ctx, input }) => {
+			await ctx.data.categories.update({
+				id: input.id,
+				name: input.name,
+				userId: ctx.userId,
+			});
+		}),
 });

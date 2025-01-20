@@ -13,7 +13,7 @@
 }
 
 .button.variant-destructive {
-	@apply text-red-12 border-red-a6 bg-red-4 focus-visible:outline-red-10 border;
+	@apply text-red-12 border-red-a5 bg-red-4 focus-visible:outline-red-10 border;
 }
 
 .button.size-default {

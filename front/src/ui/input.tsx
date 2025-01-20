@@ -1,4 +1,4 @@
-import { useId, type ComponentProps } from "react";
+import { type ComponentProps, useId } from "react";
 
 export const labelStyles = "text-gray-11 block";
 
@@ -21,13 +21,7 @@ export const inputStyles =
 type DefaultInputProps = ComponentProps<"input">;
 type Props = { label?: string; error?: string } & DefaultInputProps;
 
-export const Input = function Input({
-	label,
-	error,
-	id,
-	className,
-	...rest
-}: Props) {
+export const Input = function Input({ label, error, id, className, required, ...rest }: Props) {
 	// eslint-disable-next-line react-hooks/rules-of-hooks -- the hook is not conditional
 	const innerId = id || useId();
 
@@ -39,13 +33,11 @@ export const Input = function Input({
 					<LabelWrapper>
 						{!!label && (
 							<label htmlFor={innerId} className={labelStyles}>
-								{label}
+								{label} {required ? <span className="text-red-10">*</span> : ""}
 							</label>
 						)}
 
-						{!!error && errorId && (
-							<Error id={errorId}>{error}</Error>
-						)}
+						{!!error && errorId && <Error id={errorId}>{error}</Error>}
 					</LabelWrapper>
 				)}
 
@@ -58,23 +50,14 @@ export const Input = function Input({
 };
 
 function _Input({ className, ...rest }: DefaultInputProps) {
-	return (
-		<input
-			className={inputStyles + (className ? " " + className : "")}
-			{...rest}
-		/>
-	);
+	return <input className={inputStyles + (className ? " " + className : "")} {...rest} />;
 }
 
 export function LabelWrapper({ className, ...props }: ComponentProps<"div">) {
 	return (
 		<div
 			{...props}
-			className={
-				"mb-2 flex cursor-default items-center justify-between" +
-				" " +
-				className
-			}
+			className={"mb-2 flex cursor-default items-center justify-between" + " " + className}
 		/>
 	);
 }
@@ -83,9 +66,6 @@ export function Label({ className, ...props }: ComponentProps<"label">) {
 	return <label {...props} className={labelStyles + " " + className} />;
 }
 
-export function Error({
-	className,
-	...props
-}: ComponentProps<"span"> & { id: string }) {
+export function Error({ className, ...props }: ComponentProps<"span"> & { id: string }) {
 	return <span {...props} className={"color-red-10" + " " + className} />;
 }

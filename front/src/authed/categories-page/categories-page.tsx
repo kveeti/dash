@@ -1,12 +1,23 @@
 import { DotsVerticalIcon, Pencil1Icon, TrashIcon } from "@radix-ui/react-icons";
+import type { FormEvent } from "react";
 
-import type { Category } from "../../../../back/src/data/transactions";
+import { errorToast } from "../../lib/error-toast";
 import { trpc } from "../../lib/trpc";
 import { Button } from "../../ui/button";
 import * as Dialog from "../../ui/dialog";
 import * as Dropdown from "../../ui/dropdown";
 import { Input } from "../../ui/input";
 import { useDialog } from "../../ui/use-dialog";
+
+type Category = {
+	id: string;
+	name: string;
+};
+
+const countFormat = new Intl.NumberFormat(undefined, {
+	notation: "compact",
+	maximumFractionDigits: 1,
+});
 
 export function CategoriesPage() {
 	const q = trpc.v1.categories.query.useQuery({});
@@ -25,11 +36,15 @@ export function CategoriesPage() {
 
 			<ul className="divide-gray-3 divide-y">
 				{q.data?.map((c) => (
-					<li key={c.id} className="flex items-center justify-between gap-2">
-						{c.name}
-						<div className="flex items-center gap-2">
-							<CategoryMenu category={c} />
+					<li key={c.id} className="flex items-center justify-between gap-2 py-1 ps-2">
+						<div>
+							<p>{c.name}</p>
+							<p className="text-gray-10 mt-0.5 text-xs">
+								{countFormat.format(c.transaction_count)}{" "}
+								{c.transaction_count === 1n ? "transaction" : "transactions"}
+							</p>
 						</div>
+						<CategoryMenu category={c} />
 					</li>
 				))}
 			</ul>
@@ -57,6 +72,18 @@ function CategoryMenu({ category }: { category: Category }) {
 function DeleteCategory({ category }: { category: Category }) {
 	const dialog = useDialog();
 
+	const t = trpc.useUtils();
+	const mutation = trpc.v1.categories.delete.useMutation({
+		onSuccess: () => {
+			t.v1.categories.query.invalidate();
+		},
+	});
+
+	function onDelete() {
+		if (mutation.isPending) return;
+		mutation.mutateAsync({ id: category.id }).catch(errorToast("error deleting category"));
+	}
+
 	return (
 		<Dialog.Root {...dialog.props}>
 			<Dialog.Trigger asChild>
@@ -81,7 +108,9 @@ function DeleteCategory({ category }: { category: Category }) {
 					<Dialog.Close asChild>
 						<Button variant="ghost">cancel</Button>
 					</Dialog.Close>
-					<Button variant="destructive">yes, delete</Button>
+					<Button variant="destructive" onClick={onDelete}>
+						yes, delete
+					</Button>
 				</div>
 			</Dialog.Content>
 		</Dialog.Root>
@@ -90,6 +119,28 @@ function DeleteCategory({ category }: { category: Category }) {
 
 function EditCategory({ category }: { category: Category }) {
 	const dialog = useDialog();
+
+	const t = trpc.useUtils();
+	const mutation = trpc.v1.categories.edit.useMutation({
+		onSuccess: () => {
+			t.v1.categories.query.invalidate();
+		},
+	});
+
+	function onEdit(e: FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+		if (mutation.isPending) return;
+
+		const formData = new FormData(e.currentTarget);
+
+		mutation
+			.mutateAsync({
+				id: category.id,
+				name: formData.get("name") as string,
+			})
+			.then(dialog.close)
+			.catch(errorToast("error saving"));
+	}
 
 	return (
 		<Dialog.Root {...dialog.props}>
@@ -108,16 +159,16 @@ function EditCategory({ category }: { category: Category }) {
 			<Dialog.Content>
 				<Dialog.Title>edit category</Dialog.Title>
 
-				<form className="mt-3 mb-5">
-					<Input label="name" defaultValue={category.name} />
-				</form>
+				<form className="mt-3" onSubmit={onEdit}>
+					<Input required label="name" name="name" defaultValue={category.name} />
 
-				<div className="flex justify-end gap-3">
-					<Dialog.Close asChild>
-						<Button variant="ghost">cancel</Button>
-					</Dialog.Close>
-					<Button>save</Button>
-				</div>
+					<div className="mt-5 flex justify-end gap-3">
+						<Dialog.Close asChild disabled={mutation.isPending}>
+							<Button variant="ghost">cancel</Button>
+						</Dialog.Close>
+						<Button isLoading={mutation.isPending}>save</Button>
+					</div>
+				</form>
 			</Dialog.Content>
 		</Dialog.Root>
 	);

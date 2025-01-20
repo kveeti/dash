@@ -462,3 +462,7 @@ export type Category = {
 	id: string;
 	name: string;
 };
+
+export type CategoryWithTxCount = Category & {
+	transaction_count: bigint;
+};
