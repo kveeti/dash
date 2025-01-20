@@ -39,7 +39,7 @@ function NavLink({ href, children }: { href: string; children: ReactNode }) {
 	const [isActive] = useRoute(href);
 
 	return (
-		<Link className={cn("p-2 hover:bg-gray-a3 block", isActive && "bg-gray-a3")} href={href}>
+		<Link className={cn("hover:bg-gray-a3 block p-2", isActive && "bg-gray-a3")} href={href}>
 			{children}
 		</Link>
 	);
@@ -53,7 +53,7 @@ function TransactionsNavRow() {
 		<li className="relative flex items-stretch">
 			<Link
 				className={cn(
-					"p-2 hover:bg-gray-a3",
+					"hover:bg-gray-a3 p-2",
 					(isTransactions || isTransactionsNew) && "bg-gray-a3"
 				)}
 				href="/transactions"
@@ -62,7 +62,7 @@ function TransactionsNavRow() {
 			</Link>
 			<Link
 				className={cn(
-					"p-2 flex items-center justify-center",
+					"flex items-center justify-center p-2",
 					isTransactionsNew && "bg-gray-a3"
 				)}
 				href="/transactions/new"
