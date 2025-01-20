@@ -1,6 +1,7 @@
 import type { ComponentProps } from "react";
+
 import c from "./button.module.css";
-import { Spinner } from "./spinner";
+import { ConditionalSpinner } from "./spinner";
 
 type Props = {
 	size?: "default" | "lg" | "icon";
@@ -31,12 +32,8 @@ export function Button({
 	}
 
 	return (
-		<button
-			className={_className}
-			{...props}
-			aria-busy={isLoading && "true"}
-		>
-			<Spinner isLoading={isLoading}>{children}</Spinner>
+		<button className={_className} {...props} aria-busy={isLoading && "true"}>
+			<ConditionalSpinner isLoading={isLoading}>{children}</ConditionalSpinner>
 		</button>
 	);
 }

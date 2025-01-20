@@ -5,6 +5,7 @@ import { useLocation, useSearch } from "wouter";
 
 import { type ApiRes, trpc } from "../../lib/trpc";
 import { Input } from "../../ui/input";
+import { Spinner } from "../../ui/spinner";
 
 export function TransactionStatsPage() {
 	const [location, navigate] = useLocation();
@@ -103,7 +104,14 @@ function ChartWrapper({ timeframe }: { timeframe: { start: Date; end: Date } }) 
 	}
 
 	if (q.isPending) {
-		return <div>loading...</div>;
+		return (
+			<div
+				style={{ height: 350 }}
+				className="text-gray-11 border-gray-5 flex w-full items-center justify-center border border-dashed"
+			>
+				<Spinner />
+			</div>
+		);
 	}
 
 	if (!q.data) throw new Error("no data");
