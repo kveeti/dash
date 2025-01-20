@@ -1,5 +1,6 @@
 services:
   db:
+    container_name: dash_db
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: db
