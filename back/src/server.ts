@@ -18,7 +18,7 @@ export function createServer({ port, data }: { port: number; data: Data }) {
 
 	const s = _createServer((req, res) => {
 		res.setHeader("Access-Control-Allow-Origin", "http://localhost:3000");
-		res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+		res.setHeader("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
 		res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-csrf");
 		res.setHeader("Access-Control-Allow-Credentials", "true");
 

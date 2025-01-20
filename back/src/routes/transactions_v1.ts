@@ -96,6 +96,45 @@ export const transactions_v1 = router({
 			}
 		}),
 
+	edit: authProc
+		.input(
+			v.parser(
+				v.object({
+					id: v.string(),
+					counter_party: v.pipe(v.string(), v.nonEmpty("required")),
+					amount: v.pipe(v.number("required")),
+					currency: v.pipe(v.string(), v.nonEmpty("required")),
+					date: v.date(),
+					additional: v.nullable(v.string()),
+					category_name: v.nullable(v.string()),
+				})
+			)
+		)
+		.mutation(async ({ ctx, input }) => {
+			if (input.category_name) {
+				await ctx.data.transactions.updateWithCategory({
+					id: input.id,
+					userId: ctx.userId,
+					counterParty: input.counter_party,
+					amount: input.amount,
+					currency: input.currency,
+					date: input.date,
+					additional: input.additional,
+					categoryName: input.category_name,
+				});
+			} else {
+				await ctx.data.transactions.update({
+					id: input.id,
+					userId: ctx.userId,
+					counterParty: input.counter_party,
+					amount: input.amount,
+					currency: input.currency,
+					date: input.date,
+					additional: input.additional,
+				});
+			}
+		}),
+
 	gen: authProc.mutation(async ({ ctx }) => {
 		const types = [
 			{

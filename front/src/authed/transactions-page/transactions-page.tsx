@@ -1,28 +1,20 @@
-import { ArrowLeftIcon, ArrowRightIcon, MixerHorizontalIcon } from "@radix-ui/react-icons";
-import { format } from "date-fns";
+import { MixerHorizontalIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 
-import {
-	useLinkTransactions,
-	useTransactions,
-	useUpdateTransaction,
-} from "../../lib/api/transactions";
+import type { TransactionWithLinks } from "../../../../back/src/data/transactions";
 import { errorToast } from "../../lib/error-toast";
-import { formatCurrency } from "../../lib/format";
 import { trpc } from "../../lib/trpc";
 import { cn } from "../../lib/utils";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { Link } from "../../ui/link";
+import { TextLink } from "../../ui/link";
+import * as Sidebar from "../../ui/sidebar";
 import {
 	AmountAndCurrencyField,
 	CategoryField,
 	DateField,
 } from "../new-transaction-page/new-transaction-fields";
-import c from "./transactions-page.module.css";
-
-type Transaction = NonNullable<ReturnType<typeof useTransactions>["data"]>["transactions"][number];
 
 const shortDateFormatter = Intl.DateTimeFormat(undefined, {
 	month: "short",
@@ -35,34 +27,42 @@ const longDateFormatter = Intl.DateTimeFormat(undefined, {
 	year: "2-digit",
 });
 
+const sidebarDateFormatter = Intl.DateTimeFormat(undefined, {
+	month: "short",
+	day: "numeric",
+	year: "numeric",
+});
+
+const amountFormatter = new Intl.NumberFormat(undefined, {
+	signDisplay: "auto",
+	minimumFractionDigits: 2,
+	maximumFractionDigits: 2,
+	currencyDisplay: "symbol",
+	style: "currency",
+	currency: "EUR",
+});
+
 export default function TransactionsPage() {
 	const thisYear = new Date().getFullYear();
 	const search = useSearch();
 	const searchParams = new URLSearchParams(search);
 
 	const q = trpc.v1.transactions.query.useQuery({});
-	const linking = useTransactionLinking();
 
 	const nextId = q.data?.next_id;
 	const prevId = q.data?.prev_id;
 
-	let lastDate = "";
-
-	const [selectedTxId, setSelectedTxId] = useState<Transaction | null>(null);
+	const [selectedTxId, setSelectedTxId] = useState<TransactionWithLinks | null>(null);
 	const selectedTx = q.data?.transactions.find((t) => t.id === selectedTxId?.id);
 
-	function onTransactionClick(tx: Transaction) {
-		if (selectedTxId?.id === tx.id) {
-			setSelectedTxId(null);
-			return;
-		}
-
-		setSelectedTxId(tx);
+	function onTxClick(this: TransactionWithLinks) {
+		setSelectedTxId((p) => (p?.id === this.id ? null : this));
 	}
 
+	let lastDate = "";
 	return (
 		<div className="w-full max-w-sm">
-			<div className="sticky top-1 bg-gray-1 flex gap-1">
+			<div className="bg-gray-1 sticky top-1 flex gap-1">
 				<Search currentSearchParams={searchParams} />
 
 				<Button>
@@ -77,77 +77,81 @@ export default function TransactionsPage() {
 			) : !q.data.transactions.length ? (
 				<div className="flex w-full flex-col gap-2 p-4">
 					<p className="text-gray-11">no transactions yet</p>
-					<Link href="/transactions/new">add one</Link>
+					<TextLink href="/transactions/new">add one</TextLink>
 				</div>
 			) : (
-				<ul className="grid grid-cols-[max-content_1fr_auto] items-center">
-					{q.data.transactions.map((t) => {
-						const asDate = new Date(t.date);
-						const year = asDate.getFullYear();
-						const showYear = year !== thisYear;
+				<>
+					{selectedTx && (
+						<div
+							className="fixed top-4 right-8 max-h-full w-full max-w-[28rem] overflow-y-auto pb-10"
+							style={{ scrollbarGutter: "stable" }}
+						>
+							<SelectedTx unselect={() => setSelectedTxId(null)} tx={selectedTx} />
+						</div>
+					)}
 
-						const date = showYear
-							? longDateFormatter.format(asDate)
-							: shortDateFormatter.format(asDate);
+					<ul className="grid grid-cols-[max-content_1fr_auto] items-center">
+						{q.data.transactions.map((t) => {
+							const asDate = new Date(t.date);
+							const year = asDate.getFullYear();
+							const showYear = year !== thisYear;
 
-						const showDate = date !== lastDate;
-						lastDate = date;
+							const date = showYear
+								? longDateFormatter.format(asDate)
+								: shortDateFormatter.format(asDate);
 
-						const isPositive = t.amount > 0;
+							const showDate = date !== lastDate;
+							lastDate = date;
 
-						return (
-							<li
-								key={t.id}
-								data-id={t.id}
-								className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
-							>
-								<div className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm">
-									<span
-										className={cn(
-											"border-t-gray-3 col-[1] flex h-full items-center border-t px-2 py-3 text-sm",
-											!showDate && "invisible"
-										)}
-									>
-										{date}
-									</span>
+							const isPositive = t.amount > 0;
 
-									<span className="border-t-gray-3 col-[2] flex items-center border-t px-3 py-3">
-										<span className="truncate">{t.counter_party}</span>
-									</span>
+							return (
+								<li
+									key={t.id}
+									data-id={t.id}
+									className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
+									onClick={onTxClick.bind(t)}
+								>
+									<div className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm">
+										<span
+											className={cn(
+												"border-t-gray-3 col-[1] flex h-full items-center border-t px-2 py-3 text-sm",
+												!showDate && "invisible"
+											)}
+										>
+											{date}
+										</span>
 
-									<div
-										className={cn(
-											"border-t-gray-3 col-[3] border-t px-2 py-3 text-right tabular-nums",
-											isPositive && "text-green-10"
-										)}
-									>
-										{t.amount.toFixed(2)}
+										<span className="border-t-gray-3 col-[2] flex items-center border-t p-3">
+											<span className="truncate">{t.counter_party}</span>
+										</span>
+
+										<div
+											className={cn(
+												"border-t-gray-3 col-[3] border-t px-2 py-3 text-right tabular-nums",
+												isPositive && "text-green-10"
+											)}
+										>
+											{amountFormatter.format(t.amount)}
+										</div>
 									</div>
-								</div>
-							</li>
-						);
-					})}
-				</ul>
+								</li>
+							);
+						})}
+					</ul>
+				</>
 			)}
 		</div>
 	);
 }
 
-function TransactionDetails({
-	tx,
-}: {
-	tx: {
-		id: string;
-		counter_party: string;
-		amount: number;
-		currency: string;
-		date: Date;
-		formattedAmount: string;
-		category?: { name: string };
-		additional: string;
-	};
-}) {
-	const mutation = useUpdateTransaction(tx.id);
+function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () => void }) {
+	const t = trpc.useUtils();
+	const mutation = trpc.v1.transactions.edit.useMutation({
+		onSuccess: () => {
+			t.v1.transactions.query.invalidate();
+		},
+	});
 
 	function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -155,13 +159,10 @@ function TransactionDetails({
 
 		const formData = new FormData(event.currentTarget);
 
-		// convert date to ISO string
-		const date = new Date(formData.get("date") as string).toISOString();
-		formData.set("date", date);
-
 		mutation
 			.mutateAsync({
-				date,
+				id: tx.id,
+				date: new Date(formData.get("date") as string),
 				amount: Number(formData.get("amount")),
 				currency: formData.get("currency") as string,
 				counter_party: formData.get("counter_party") as string,
@@ -172,39 +173,48 @@ function TransactionDetails({
 	}
 
 	return (
-		<div className={c.txDetails}>
-			<h2>{tx.counter_party}</h2>
+		<Sidebar.Root modal={false} defaultOpen onOpenChange={unselect}>
+			<Sidebar.Content className="space-y-2" onInteractOutside={(e) => e.preventDefault()}>
+				<Sidebar.Title>{tx.counter_party}</Sidebar.Title>
 
-			<h3>{tx.formattedAmount}</h3>
+				<p className="text-base">{amountFormatter.format(tx.amount)}</p>
 
-			<h4>
-				{Intl.DateTimeFormat(undefined, {
-					month: "short",
-					day: "numeric",
-					year: "numeric",
-					hour: "numeric",
-					minute: "numeric",
-				}).format(tx.date)}
-			</h4>
+				<p>{sidebarDateFormatter.format(tx.date)}</p>
 
-			<form onSubmit={onSubmit}>
-				<Input name="counter_party" label="counter party" defaultValue={tx.counter_party} />
+				<p className="text-gray-11 break-words">{tx.additional}</p>
 
-				<AmountAndCurrencyField defaultValue={tx.amount} defaultCurrency={tx.currency} />
+				<details>
+					<summary className="border-gray-5 focus mt-3 border p-3">
+						<span className="leading-none select-none">edit</span>
+					</summary>
 
-				<DateField defaultValue={tx.date} />
+					<form onSubmit={onSubmit} className="space-y-4 pt-2">
+						<Input
+							name="counter_party"
+							label="counter party"
+							defaultValue={tx.counter_party}
+						/>
 
-				<CategoryField defaultValue={tx.category?.name} />
+						<AmountAndCurrencyField
+							defaultValue={tx.amount}
+							defaultCurrency={tx.currency}
+						/>
 
-				<Input name="additional" label="additional" defaultValue={tx.additional} />
+						<DateField defaultValue={tx.date} />
 
-				<div className={c.buttons}>
-					<Button type="submit" isLoading={mutation.isPending}>
-						save
-					</Button>
-				</div>
-			</form>
-		</div>
+						<CategoryField defaultValue={tx.category?.name} />
+
+						<Input name="additional" label="additional" defaultValue={tx.additional} />
+
+						<div className="flex justify-end">
+							<Button type="submit" isLoading={mutation.isPending}>
+								save
+							</Button>
+						</div>
+					</form>
+				</details>
+			</Sidebar.Content>
+		</Sidebar.Root>
 	);
 }
 
@@ -235,178 +245,4 @@ function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams 
 			/>
 		</form>
 	);
-}
-
-// function Loading() {
-// 	return (
-// 		<div className={c.loadingList} aria-hidden="true">
-// 			{Array.from({ length: 50 }).map((_, i) => (
-// 				<div key={i}>0</div>
-// 			))}
-// 		</div>
-// 	);
-// }
-
-function Pagination({
-	nextId,
-	prevId,
-	currentSearchParams,
-}: {
-	nextId?: string | null;
-	prevId?: string | null;
-	currentSearchParams: URLSearchParams;
-}) {
-	const prevParams = new URLSearchParams(currentSearchParams);
-	const nextParams = new URLSearchParams(currentSearchParams);
-
-	if (prevId) {
-		prevParams.set("before", prevId);
-		prevParams.delete("after");
-	}
-
-	if (nextId) {
-		nextParams.set("after", nextId);
-		nextParams.delete("before");
-	}
-
-	return (
-		<div className={c.pg}>
-			<div className={c.pgLink}>
-				<Link href={prevId && "?" + prevParams.toString()}>
-					<ArrowLeftIcon aria-hidden="true" />
-					<span className="sr-only">previous page</span>
-				</Link>
-			</div>
-
-			<div className={c.pgLink}>
-				<Link href={nextId && "?" + nextParams.toString()}>
-					<ArrowRightIcon aria-hidden="true" />
-					<span className="sr-only">next page</span>
-				</Link>
-			</div>
-		</div>
-	);
-}
-
-function LinkTransactions({
-	transactionA,
-	transactionB,
-	onTransactionClick,
-}: {
-	transactionA: Transaction | null;
-	transactionB: Transaction | null;
-	onTransactionClick: (transaction: Transaction) => void;
-}) {
-	const mutation = useLinkTransactions();
-
-	if (!transactionA && !transactionB) return;
-
-	function onClick() {
-		if (!transactionA || !transactionB) return;
-
-		let plus = null;
-		let minus = null;
-
-		if (transactionA.amount > 0 && transactionB.amount < 0) {
-			plus = transactionA;
-			minus = transactionB;
-		} else if (transactionA.amount < 0 && transactionB.amount > 0) {
-			plus = transactionB;
-			minus = transactionA;
-		}
-
-		if (!plus || !minus) {
-			return;
-		}
-
-		mutation
-			.mutateAsync({
-				transaction_a_id: plus.id,
-				transaction_b_id: minus.id,
-			})
-			.catch(errorToast("error linking"));
-	}
-
-	return (
-		<div className={c.linkingWrapper}>
-			<div className={c.linking}>
-				<div className={c.txList}>
-					{transactionA && (
-						<div
-							className={c.tx}
-							onClick={() => onTransactionClick(transactionA)}
-							onKeyDown={() => onTransactionClick(transactionA)}
-						>
-							<span className={c.date + " " + c.alwaysVisible}>
-								{format(transactionA.date, "MMM d")}
-							</span>
-
-							<span className={c.counterParty}>
-								<span>{transactionA.counter_party}</span>
-							</span>
-
-							<div className={c.amount}>
-								{formatCurrency(transactionA.amount, transactionA.currency)}
-							</div>
-						</div>
-					)}
-					{transactionB && (
-						<div
-							className={c.tx}
-							onClick={() => onTransactionClick(transactionB)}
-							onKeyDown={() => onTransactionClick(transactionB)}
-						>
-							<span className={c.date + " " + c.alwaysVisible}>
-								{format(transactionB.date, "MMM d")}
-							</span>
-
-							<span className={c.counterParty}>
-								<span>{transactionB.counter_party}</span>
-							</span>
-
-							<div className={c.amount}>
-								{formatCurrency(transactionB.amount, transactionB.currency)}
-							</div>
-						</div>
-					)}
-				</div>
-
-				<div className={c.buttons}>
-					<p>link + and -</p>
-					<Button onClick={onClick}>link</Button>
-				</div>
-			</div>
-		</div>
-	);
-}
-
-function useTransactionLinking() {
-	const [transactionA, setTransactionA] = useState<Transaction | null>(null);
-	const [transactionB, setTransactionB] = useState<Transaction | null>(null);
-
-	function onTransactionClick(transaction: Transaction) {
-		if (transactionA?.id === transaction.id) {
-			setTransactionA(null);
-			return;
-		}
-
-		if (transactionB?.id === transaction.id) {
-			setTransactionB(null);
-			return;
-		}
-
-		if (transactionA && transactionA.id !== transaction.id) {
-			setTransactionB(transaction);
-			return;
-		}
-
-		if (transactionA) {
-			setTransactionB(transaction);
-			return;
-		}
-
-		setTransactionA(transaction);
-	}
-
-	return { onTransactionClick, transactionA, transactionB };
 }

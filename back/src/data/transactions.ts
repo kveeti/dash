@@ -32,6 +32,7 @@ export function transactions(sql: Pg) {
 				processed_transactions as (
 					select
 						${period} as period,
+						sum(t.amount) as total,
 						coalesce(sum(case when t.amount > 0 then t.amount else 0 end), 0) as total_pos,
 						coalesce(sum(case when t.amount < 0 then t.amount else 0 end), 0) as total_neg,
 						coalesce(c.name, '__uncategorized__') as category_name
@@ -272,32 +273,55 @@ export function transactions(sql: Pg) {
 
 		insertWithCategory: async (props: {
 			id: string;
+			userId: string;
 			date: Date;
 			amount: number;
 			currency: string;
 			counterParty: string;
 			additional: string | null;
 			categoryName: string;
-			userId: string;
 		}) => {
-			const category_id = await sql.begin(async (sql) => {
-				const [{ id: category_id }]: [{ id: string }] = await sql`
+			const categoryId = id("transaction_category");
+			await sql`
+				with category as (
 					insert into transaction_categories (id, name, user_id)
-					values (${id("transaction_category")}, ${props.categoryName}, ${props.userId})
+					values (${categoryId}, ${props.categoryName}, ${props.userId})
 					on conflict (user_id, lower(name))
 					do update set name = excluded.name
-					returning id;
-				`;
+					returning id
+				)
+				insert into transactions (id, date, amount, currency, counter_party, additional, user_id, category_id)
+				values (
+					${props.id}, 
+					${props.date}, 
+					${props.amount}, 
+					${props.currency}, 
+					${props.counterParty}, 
+					${props.additional}, 
+					${props.userId}, 
+					coalesce((select id from category), ${categoryId})
+				)
+				returning id;
+			`;
 
-				await sql`
-					insert into transactions (id, date, amount, currency, counter_party, additional, user_id, category_id)
-					values (${props.id}, ${props.date}, ${props.amount}, ${props.currency}, ${props.counterParty}, ${props.additional}, ${props.userId}, ${category_id});
-				`;
-
-				return category_id;
-			});
-
-			return { category_id };
+			// const category_id = await sql.begin(async (sql) => {
+			// 	const [{ id: category_id }]: [{ id: string }] = await sql`
+			// 		insert into transaction_categories (id, name, user_id)
+			// 		values (${id("transaction_category")}, ${props.categoryName}, ${props.userId})
+			// 		on conflict (user_id, lower(name))
+			// 		do update set name = excluded.name
+			// 		returning id;
+			// 	`;
+			//
+			// 	await sql`
+			// 		insert into transactions (id, date, amount, currency, counter_party, additional, user_id, category_id)
+			// 		values (${props.id}, ${props.date}, ${props.amount}, ${props.currency}, ${props.counterParty}, ${props.additional}, ${props.userId}, ${category_id});
+			// 	`;
+			//
+			// 	return category_id;
+			// });
+			//
+			// return { category_id };
 		},
 
 		insert: async (props: {
@@ -363,12 +387,66 @@ export function transactions(sql: Pg) {
 
 			await sql`insert into transactions ${sql(transactions)}`;
 		},
+
+		updateWithCategory: async (props: {
+			id: string;
+			date: Date;
+			amount: number;
+			currency: string;
+			counterParty: string;
+			additional: string | null;
+			categoryName: string;
+			userId: string;
+		}) => {
+			const categoryId = id("transaction_category");
+			await sql`
+				with category as (
+					insert into transaction_categories (id, name, user_id)
+					values (${categoryId}, ${props.categoryName}, ${props.userId})
+					on conflict (user_id, lower(name))
+					do update set name = excluded.name
+					returning id
+				)
+				update transactions
+				set
+					date = ${props.date},
+					amount = ${props.amount},
+					currency = ${props.currency},
+					counter_party = ${props.counterParty},
+					additional = ${props.additional},
+					category_id = coalesce((select id from category), ${categoryId})
+				where id = ${props.id}
+				and user_id = ${props.userId};
+			`;
+		},
+
+		update: async (props: {
+			id: string;
+			date: Date;
+			amount: number;
+			currency: string;
+			counterParty: string;
+			additional: string | null;
+			userId: string;
+		}) => {
+			await sql`
+				update transactions
+				set
+					date = ${props.date},
+					amount = ${props.amount},
+					currency = ${props.currency},
+					counter_party = ${props.counterParty},
+					additional = ${props.additional}
+				where id = ${props.id}
+				and user_id = ${props.userId};
+			`;
+		},
 	};
 }
 
 export type Transaction = {
 	id: string;
-	date: string;
+	date: Date;
 	amount: number;
 	currency: string;
 	additional: string;
