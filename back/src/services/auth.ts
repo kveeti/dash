@@ -13,7 +13,7 @@ export function auth(data: Data) {
 				return [null, "user not found"] as const;
 			}
 
-			const verifyRes = await passwords.verify(password, user.password_hash);
+			const verifyRes = await passwords.verify(user.password_hash, password);
 			if (verifyRes === "failed") {
 				return [null, "invalid password"] as const;
 			}

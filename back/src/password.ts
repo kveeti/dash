@@ -30,7 +30,7 @@ function PBKDF2_001() {
 	const iterations = 1_000_000;
 	const keySize = 64;
 	const saltSize = 64;
-	const hashAlgo = "SHA512";
+	const hashAlgo = "SHA-512";
 
 	return {
 		id: "PBKDF2_001",
@@ -57,7 +57,7 @@ function PBKDF2_001() {
 					name: "PBKDF2",
 					salt: saltBytes,
 					iterations: iterations,
-					hash: "SHA-512",
+					hash: hashAlgo,
 				},
 				keyMaterial,
 				keySize * 8
@@ -69,7 +69,7 @@ function PBKDF2_001() {
 		},
 
 		verify: async (hash: string, plaintext: string) => {
-			const hashedPasswordBytes = Uint8Array.from(atob(hash), (c) => c.charCodeAt(0));
+			const hashedPasswordBytes = Uint8Array.from(hash, (c) => c.charCodeAt(0));
 			if (hashedPasswordBytes.length === 0) return false;
 
 			const saltBytes = hashedPasswordBytes.subarray(1, 1 + saltSize);
@@ -87,7 +87,7 @@ function PBKDF2_001() {
 					name: "PBKDF2",
 					salt: saltBytes,
 					iterations: iterations,
-					hash: { name: hashAlgo },
+					hash: hashAlgo,
 				},
 				keyMaterial,
 				keySize * 8
