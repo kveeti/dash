@@ -11,5 +11,5 @@ const things = {
 };
 
 export function id(thing: keyof typeof things) {
-	return things[thing] + splitter + _id(25);
+	return things[thing] + splitter + _id();
 }
