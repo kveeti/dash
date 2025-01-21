@@ -6,8 +6,8 @@ import type { ApiRes } from "./trpc";
 export type Me = ApiRes["v1"]["auth"]["me"];
 
 const [useMe, meContext] = createContext<{
-	me: { id: string; username: string } | null;
-	setMe: (user: { id: string; username: string } | null) => void;
+	me: Me | null;
+	setMe: (me: Me | null) => void;
 }>();
 
 export { useMe };
@@ -19,7 +19,7 @@ export function MeProvider({
 	children: React.ReactNode;
 	initialMe: Me | null;
 }) {
-	const [me, setMe] = useState<{ id: string; username: string } | null>(initialMe);
+	const [me, setMe] = useState<Me | null>(initialMe);
 
 	return <meContext.Provider value={{ setMe, me }}>{children}</meContext.Provider>;
 }

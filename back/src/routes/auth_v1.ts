@@ -24,9 +24,11 @@ export const auth_v1 = router({
 
 		const cookie = createAuthCookie(token.value, token.expiry);
 		ctx.res.appendHeader("set-cookie", cookie);
-		ctx.res.appendHeader("set-cookie", createCsrfCookie(id("csrf")));
 
-		return user;
+		const csrf = id("csrf");
+		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
+
+		return { ...user, csrf };
 	}),
 
 	register: publicProcedure.input(v.parser(schema)).mutation(async ({ input, ctx }) => {
@@ -46,9 +48,11 @@ export const auth_v1 = router({
 
 		const cookie = createAuthCookie(token.value, token.expiry);
 		ctx.res.appendHeader("set-cookie", cookie);
-		ctx.res.appendHeader("set-cookie", createCsrfCookie(id("csrf")));
 
-		return user;
+		const csrf = id("csrf");
+		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
+
+		return { ...user, csrf };
 	}),
 
 	logout: publicProcedure.mutation(async ({ ctx }) => {

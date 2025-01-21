@@ -39,7 +39,7 @@ export const users = (sql: Pg) => ({
 export type User = {
 	id: string;
 	username: string;
-	created_at: string;
+	created_at: Date;
 };
 
 export type UserWithPasswordHash = User & { password_hash: string };

@@ -7,7 +7,10 @@ import { TextLink } from "../ui/link";
 import { Heading } from "../ui/typography";
 
 export default function RegisterPage() {
-	const register = trpc.v1.auth.register.useMutation();
+	const t = trpc.useUtils();
+	const register = trpc.v1.auth.register.useMutation({
+		onSuccess: () => t.v1.auth.me.invalidate(),
+	});
 	const { setMe } = useMe();
 
 	function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -22,7 +25,7 @@ export default function RegisterPage() {
 		register
 			.mutateAsync({ username, password })
 			.then(setMe)
-			.catch(errorToast("error logging in"));
+			.catch(errorToast("error registering"));
 	}
 
 	return (

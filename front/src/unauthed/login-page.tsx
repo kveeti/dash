@@ -7,7 +7,10 @@ import { TextLink } from "../ui/link";
 import { Heading } from "../ui/typography";
 
 export default function LoginPage() {
-	const login = trpc.v1.auth.login.useMutation();
+	const t = trpc.useUtils();
+	const login = trpc.v1.auth.login.useMutation({
+		onSuccess: () => t.v1.auth.me.invalidate(),
+	});
 	const { setMe } = useMe();
 
 	function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
