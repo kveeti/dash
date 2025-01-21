@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, loggerLink } from "@trpc/client";
-import { StrictMode, useState } from "react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 import SuperJSON from "superjson";
@@ -11,22 +11,11 @@ import { AuthLayout } from "./authed/layout";
 import NewTransactionPage from "./authed/new-transaction-page/new-transaction-page";
 import { TransactionStatsPage } from "./authed/transaction-stats-page/transaction-stats-page";
 import TransactionsPage from "./authed/transactions-page/transactions-page";
-import { createContext } from "./lib/create-context";
-import { type ApiRes, trpc } from "./lib/trpc";
+import { type Me, MeProvider, useMe } from "./lib/me";
+import { trpc } from "./lib/trpc";
 import "./styles.css";
 import LoginPage from "./unauthed/login-page";
 import RegisterPage from "./unauthed/register-page";
-
-const [useMe, meContext] = createContext<{
-	me: { id: string; username: string } | null;
-	setMe: (user: { id: string; username: string } | null) => void;
-}>();
-
-function MeProvider({ children, initialMe }: { children: React.ReactNode; initialMe: Me | null }) {
-	const [me, setMe] = useState<{ id: string; username: string } | null>(initialMe);
-
-	return <meContext.Provider value={{ setMe, me }}>{children}</meContext.Provider>;
-}
 
 function Entry() {
 	const { me } = useMe();
@@ -101,7 +90,6 @@ function main(initialMe: Me | null) {
 	);
 }
 
-type Me = ApiRes["v1"]["auth"]["me"];
 const me = (window as any).__ME_LOADER__;
 const mePromise = me?.promise;
 

@@ -1,4 +1,5 @@
 import { errorToast } from "../lib/error-toast";
+import { useMe } from "../lib/me";
 import { trpc } from "../lib/trpc";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -7,6 +8,7 @@ import { Heading } from "../ui/typography";
 
 export default function LoginPage() {
 	const login = trpc.v1.auth.login.useMutation();
+	const { setMe } = useMe();
 
 	function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -17,7 +19,7 @@ export default function LoginPage() {
 		const username = form.username.value as string;
 		const password = form.password.value as string;
 
-		login.mutateAsync({ username, password }).catch(errorToast("error logging in"));
+		login.mutateAsync({ username, password }).then(setMe).catch(errorToast("error logging in"));
 	}
 
 	return (
