@@ -1,4 +1,4 @@
-import { MixerHorizontalIcon } from "@radix-ui/react-icons";
+import { ArrowLeftIcon, ArrowRightIcon, MixerHorizontalIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 
@@ -8,7 +8,7 @@ import { trpc } from "../../lib/trpc";
 import { cn } from "../../lib/utils";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { TextLink } from "../../ui/link";
+import { Link, TextLink } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
 import {
 	AmountAndCurrencyField,
@@ -47,7 +47,13 @@ export default function TransactionsPage() {
 	const search = useSearch();
 	const searchParams = new URLSearchParams(search);
 
-	const q = trpc.v1.transactions.query.useQuery({});
+	const before = searchParams.get("before") ?? undefined;
+	const after = searchParams.get("after") ?? undefined;
+
+	const q = trpc.v1.transactions.query.useQuery({
+		before,
+		after,
+	});
 
 	const nextId = q.data?.next_id;
 	const prevId = q.data?.prev_id;
@@ -62,12 +68,21 @@ export default function TransactionsPage() {
 	let lastDate = "";
 	return (
 		<div className="w-full max-w-sm">
-			<div className="bg-gray-1 sticky top-1 flex gap-1">
-				<Search currentSearchParams={searchParams} />
+			<div className="bg-gray-1 border-b-gray-5 sticky top-0 border-b pt-1 shadow-lg">
+				<div className="flex gap-1">
+					<Search currentSearchParams={searchParams} />
 
-				<Button>
-					<MixerHorizontalIcon />
-				</Button>
+					<Button>
+						<MixerHorizontalIcon />
+					</Button>
+				</div>
+
+				<Pagination
+					currentSearchParams={searchParams}
+					nextId={nextId}
+					prevId={prevId}
+					className="justify-end py-2"
+				/>
 			</div>
 
 			{q.isPending ? (
@@ -244,5 +259,50 @@ function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams 
 				id="query"
 			/>
 		</form>
+	);
+}
+
+function Pagination({
+	nextId,
+	prevId,
+	currentSearchParams,
+	className,
+}: {
+	nextId?: string | null;
+	prevId?: string | null;
+	currentSearchParams: URLSearchParams;
+	className?: string;
+}) {
+	const prevParams = new URLSearchParams(currentSearchParams);
+	const nextParams = new URLSearchParams(currentSearchParams);
+
+	if (prevId) {
+		prevParams.set("before", prevId);
+		prevParams.delete("after");
+	}
+
+	if (nextId) {
+		nextParams.set("after", nextId);
+		nextParams.delete("before");
+	}
+
+	return (
+		<div className={"flex gap-1" + (className ? " " + className : "")}>
+			<Link
+				href={prevId && "?" + prevParams.toString()}
+				className="border-gray-4 flex size-8 items-center justify-center rounded-full border"
+			>
+				<ArrowLeftIcon aria-hidden="true" />
+				<span className="sr-only">previous page</span>
+			</Link>
+
+			<Link
+				href={nextId && "?" + nextParams.toString()}
+				className="border-gray-4 flex size-8 items-center justify-center rounded-full border"
+			>
+				<ArrowRightIcon aria-hidden="true" />
+				<span className="sr-only">next page</span>
+			</Link>
+		</div>
 	);
 }

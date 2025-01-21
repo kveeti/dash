@@ -1,10 +1,10 @@
-import type { ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Link as FWLink, useLocation } from "wouter";
 
 export const textLinkStyles =
 	"focus text-xs md:text-sm text-current underline -m-2 p-2 hover:bg-gray-a3 inline-block max-w-max";
 
-export const linkStyles = "focus text-xs md:text-sm text-current underline max-w-max";
+export const linkStyles = "focus text-xs md:text-sm text-current underline";
 
 export function Link({
 	children,
@@ -20,7 +20,11 @@ export function Link({
 
 	if (!href) {
 		return (
-			<a role="link" aria-disabled="true" className={linkStyles}>
+			<a
+				role="link"
+				aria-disabled="true"
+				className={linkStyles + (className ? " " + className : "")}
+			>
 				{children}
 			</a>
 		);
@@ -29,9 +33,10 @@ export function Link({
 	return (
 		<FWLink
 			href={href}
-			className={linkStyles + " " + className}
+			className={linkStyles + (className ? " " + className : "")}
 			onClick={(e) => {
-				if (e.defaultPrevented) return false;
+				e.preventDefault();
+				return false;
 			}}
 			onMouseDown={(e) => {
 				const url = new URL(String(href), window.location.href);
@@ -48,6 +53,8 @@ export function Link({
 				}
 			}}
 			onTouchStart={(e) => {
+				console.log("onTouchStart");
+
 				const url = new URL(String(href), window.location.href);
 				if (url.origin === window.location.origin) {
 					e.preventDefault();

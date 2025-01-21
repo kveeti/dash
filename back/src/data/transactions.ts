@@ -251,21 +251,26 @@ export function transactions(sql: Pg) {
 				transactions.set(id, t);
 			}
 
-			const lastId = rows.at(-1)?.tx_id;
-			const firstId = rows.at(0)?.tx_id;
+			const list_transactions = [...transactions.values()];
+
+			const lastId = list_transactions.at(-1)?.id;
+			const firstId = list_transactions.at(0)?.id;
 
 			let nextId = null;
 			let prevId = null;
 
 			if (hasMore && !cursor) {
 				nextId = lastId;
-			} else if (cursor) {
+			} else if (cursor?.dir === "left" || (hasMore && cursor?.dir === "right")) {
 				nextId = lastId;
+			}
+
+			if (cursor?.dir === "right" || (hasMore && cursor?.dir === "left")) {
 				prevId = firstId;
 			}
 
 			return {
-				transactions: Array.from(transactions.values()),
+				transactions: list_transactions,
 				next_id: nextId,
 				prev_id: prevId,
 			};
