@@ -34,6 +34,14 @@ export const users = (sql: Pg) => ({
 
 		return row;
 	},
+
+	async updatePasswordHash(userId: string, newPasswordHash: string) {
+		await sql`
+			update users
+			set password_hash = ${newPasswordHash}
+			where id = ${userId};
+		`;
+	},
 });
 
 export type User = {

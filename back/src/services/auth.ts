@@ -20,7 +20,7 @@ export function auth(data: Data) {
 
 			if (verifyRes === "successRehashNeeded") {
 				const newHash = await passwords.hash(password);
-				console.log("rehash done");
+				await data.users.updatePasswordHash(user.id, newHash);
 			}
 
 			const expiry = addDays(new Date(), 1);
