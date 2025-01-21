@@ -303,25 +303,6 @@ export function transactions(sql: Pg) {
 				)
 				returning id;
 			`;
-
-			// const category_id = await sql.begin(async (sql) => {
-			// 	const [{ id: category_id }]: [{ id: string }] = await sql`
-			// 		insert into transaction_categories (id, name, user_id)
-			// 		values (${id("transaction_category")}, ${props.categoryName}, ${props.userId})
-			// 		on conflict (user_id, lower(name))
-			// 		do update set name = excluded.name
-			// 		returning id;
-			// 	`;
-			//
-			// 	await sql`
-			// 		insert into transactions (id, date, amount, currency, counter_party, additional, user_id, category_id)
-			// 		values (${props.id}, ${props.date}, ${props.amount}, ${props.currency}, ${props.counterParty}, ${props.additional}, ${props.userId}, ${category_id});
-			// 	`;
-			//
-			// 	return category_id;
-			// });
-			//
-			// return { category_id };
 		},
 
 		insert: async (props: {
