@@ -31,3 +31,6 @@ backpre:
 
 pre:
 	@make -j2 backpre frontpre
+
+db:
+	@docker exec -it dash_db psql -U pg -d db
