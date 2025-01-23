@@ -38,7 +38,7 @@ export const categories_v1 = router({
 			v.parser(
 				v.object({
 					id: v.string(),
-					name: v.string(),
+					name: v.pipe(v.string(), v.nonEmpty("required")),
 				})
 			)
 		)
