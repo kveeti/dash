@@ -53,8 +53,6 @@ export function Link({
 				}
 			}}
 			onTouchStart={(e) => {
-				console.log("onTouchStart");
-
 				const url = new URL(String(href), window.location.href);
 				if (url.origin === window.location.origin) {
 					e.preventDefault();

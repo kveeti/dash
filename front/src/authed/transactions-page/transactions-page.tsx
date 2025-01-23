@@ -10,6 +10,7 @@ import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Link, TextLink } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
+import { Spinner } from "../../ui/spinner";
 import {
 	AmountAndCurrencyField,
 	CategoryField,
@@ -68,7 +69,7 @@ export default function TransactionsPage() {
 	let lastDate = "";
 	return (
 		<div className="w-full max-w-sm">
-			<div className="bg-gray-1 border-b-gray-5 sticky top-0 border-b pt-1 shadow-lg">
+			<div className="bg-gray-1 border-b-gray-4 sticky top-0 border-b pt-1 shadow-lg">
 				<div className="flex gap-1">
 					<Search currentSearchParams={searchParams} />
 
@@ -77,16 +78,20 @@ export default function TransactionsPage() {
 					</Button>
 				</div>
 
-				<Pagination
-					currentSearchParams={searchParams}
-					nextId={nextId}
-					prevId={prevId}
-					className="justify-end py-2"
-				/>
+				<div className="flex items-center justify-between py-2">
+					{q.isPending && <Spinner />}
+
+					<Pagination
+						className="ml-auto"
+						currentSearchParams={searchParams}
+						nextId={nextId}
+						prevId={prevId}
+					/>
+				</div>
 			</div>
 
 			{q.isPending ? (
-				"loading"
+				Loading
 			) : q.isError ? (
 				"error"
 			) : !q.data.transactions.length ? (
@@ -100,6 +105,7 @@ export default function TransactionsPage() {
 						<div
 							className="fixed top-4 right-8 max-h-full w-full max-w-[28rem] overflow-y-auto pb-10"
 							style={{ scrollbarGutter: "stable" }}
+							key={selectedTx.id}
 						>
 							<SelectedTx unselect={() => setSelectedTxId(null)} tx={selectedTx} />
 						</div>
@@ -125,7 +131,8 @@ export default function TransactionsPage() {
 									key={t.id}
 									data-id={t.id}
 									className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
-									onClick={onTxClick.bind(t)}
+									onMouseDown={onTxClick.bind(t)}
+									onTouchStart={onTxClick.bind(t)}
 								>
 									<div className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm">
 										<span
@@ -306,3 +313,13 @@ function Pagination({
 		</div>
 	);
 }
+
+const Loading = (
+	<div className="divide-gray-3 divide-y">
+		{Array.from({ length: 3 }).map((_, i) => (
+			<div key={i} className="p-3">
+				<span className="invisible">0</span>
+			</div>
+		))}
+	</div>
+);
