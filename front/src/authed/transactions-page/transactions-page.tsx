@@ -17,18 +17,18 @@ import {
 	DateField,
 } from "../new-transaction-page/new-transaction-fields";
 
-const shortDateFormatter = Intl.DateTimeFormat(undefined, {
+const shortDateFormatter = new Intl.DateTimeFormat(undefined, {
 	month: "short",
 	day: "numeric",
 });
 
-const longDateFormatter = Intl.DateTimeFormat(undefined, {
+const longDateFormatter = new Intl.DateTimeFormat(undefined, {
 	month: "numeric",
 	day: "numeric",
 	year: "2-digit",
 });
 
-const sidebarDateFormatter = Intl.DateTimeFormat(undefined, {
+const sidebarDateFormatter = new Intl.DateTimeFormat(undefined, {
 	month: "short",
 	day: "numeric",
 	year: "numeric",

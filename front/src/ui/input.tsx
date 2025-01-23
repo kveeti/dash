@@ -41,12 +41,12 @@ export const Input = function Input({ label, error, id, className, required, ...
 					</LabelWrapper>
 				)}
 
-				<_Input id={innerId} {...rest} aria-describedby={errorId} />
+				<_Input id={innerId} required={required} {...rest} aria-describedby={errorId} />
 			</div>
 		);
 	}
 
-	return <_Input id={innerId} {...rest} />;
+	return <_Input id={innerId} required={required} {...rest} />;
 };
 
 function _Input({ className, ...rest }: DefaultInputProps) {

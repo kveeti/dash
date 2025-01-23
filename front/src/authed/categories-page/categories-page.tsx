@@ -160,7 +160,7 @@ function EditCategory({ category }: { category: Category }) {
 				<Dialog.Title>edit category</Dialog.Title>
 
 				<form className="mt-3" onSubmit={onEdit}>
-					<Input required label="name" name="name" defaultValue={category.name} />
+					<Input required label="name" name="name" defaultValue={category.name ?? ""} />
 
 					<div className="mt-5 flex justify-end gap-3">
 						<Dialog.Close asChild disabled={mutation.isPending}>
