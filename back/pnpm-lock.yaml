@@ -11,18 +11,21 @@ importers:
       '@trpc/server':
         specifier: 11.0.0-rc.700
         version: 11.0.0-rc.700(typescript@5.7.3)
+      busboy:
+        specifier: ^1.6.0
+        version: 1.6.0
       date-fns:
         specifier: ^4.1.0
         version: 4.1.0
       nanoid:
         specifier: ^5.0.9
         version: 5.0.9
+      papaparse:
+        specifier: ^5.5.1
+        version: 5.5.1
       postgres:
         specifier: ^3.4.5
         version: 3.4.5
-      rolldown:
-        specifier: 1.0.0-beta.1
-        version: 1.0.0-beta.1
       superjson:
         specifier: ^2.2.2
         version: 2.2.2
@@ -33,15 +36,24 @@ importers:
       '@trivago/prettier-plugin-sort-imports':
         specifier: ^5.2.1
         version: 5.2.1(prettier@3.4.2)
+      '@types/busboy':
+        specifier: ^1.5.4
+        version: 1.5.4
       '@types/node':
         specifier: ^22.10.7
         version: 22.10.7
+      '@types/papaparse':
+        specifier: ^5.3.15
+        version: 5.3.15
       dotenv:
         specifier: ^16.4.7
         version: 16.4.7
       prettier:
         specifier: ^3.4.2
         version: 3.4.2
+      rolldown:
+        specifier: 1.0.0-beta.1
+        version: 1.0.0-beta.1
 
 packages:
 
@@ -192,8 +204,18 @@ packages:
   '@tybys/wasm-util@0.9.0':
     resolution: {integrity: sha512-6+7nlbMVX/PVDCwaIQ8nTOPveOcFLSt8GcXdx8hD0bt39uWxYT88uXzqTd4fTvqta7oeUJqudepapKNt2DYJFw==}
 
+  '@types/busboy@1.5.4':
+    resolution: {integrity: sha512-kG7WrUuAKK0NoyxfQHsVE6j1m01s6kMma64E+OZenQABMQyTJop1DumUWcLwAQ2JzpefU7PDYoRDKl8uZosFjw==}
+
   '@types/node@22.10.7':
     resolution: {integrity: sha512-V09KvXxFiutGp6B7XkpaDXlNadZxrzajcY50EuoLIpQ6WWYCSvf19lVIazzfIzQvhUN2HjX12spLojTnhuKlGg==}
+
+  '@types/papaparse@5.3.15':
+    resolution: {integrity: sha512-JHe6vF6x/8Z85nCX4yFdDslN11d+1pr12E526X8WAfhadOeaOTx5AuIkvDKIBopfvlzpzkdMx4YyvSKCM9oqtw==}
+
+  busboy@1.6.0:
+    resolution: {integrity: sha512-8SFQbg/0hQ9xy3UNTB0YEnsNBbWfhf7RtnzpL7TkBiTBRfrQ9Fxcnz7VJsleJpyp6rVLvXiuORqjlHi5q+PYuA==}
+    engines: {node: '>=10.16.0'}
 
   copy-anything@3.0.5:
     resolution: {integrity: sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==}
@@ -245,6 +267,9 @@ packages:
     engines: {node: ^18 || >=20}
     hasBin: true
 
+  papaparse@5.5.1:
+    resolution: {integrity: sha512-EuEKUhyxrHVozD7g3/ztsJn6qaKse8RPfR6buNB2dMJvdtXNhcw8jccVi/LxNEY3HVrV6GO6Z4OoeCG9Iy9wpA==}
+
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
 
@@ -265,6 +290,10 @@ packages:
     peerDependenciesMeta:
       '@babel/runtime':
         optional: true
+
+  streamsearch@1.1.0:
+    resolution: {integrity: sha512-Mcc5wHehp9aXz1ax6bZUyY5afg9u2rv5cqQI3mRrYkGC8rW2hM02jWuwjtL++LS5qinSyhj2QfLyNsuc+VsExg==}
+    engines: {node: '>=10.0.0'}
 
   superjson@2.2.2:
     resolution: {integrity: sha512-5JRxVqC8I8NuOUjzBbvVJAKNM8qoVuH0O77h4WInc/qC2q5IreqKxYwgkga3PfA22OayK2ikceb/B26dztPl+Q==}
@@ -438,9 +467,21 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
+  '@types/busboy@1.5.4':
+    dependencies:
+      '@types/node': 22.10.7
+
   '@types/node@22.10.7':
     dependencies:
       undici-types: 6.20.0
+
+  '@types/papaparse@5.3.15':
+    dependencies:
+      '@types/node': 22.10.7
+
+  busboy@1.6.0:
+    dependencies:
+      streamsearch: 1.1.0
 
   copy-anything@3.0.5:
     dependencies:
@@ -470,6 +511,8 @@ snapshots:
 
   nanoid@5.0.9: {}
 
+  papaparse@5.5.1: {}
+
   picocolors@1.1.1: {}
 
   postgres@3.4.5: {}
@@ -492,6 +535,8 @@ snapshots:
       '@rolldown/binding-win32-arm64-msvc': 1.0.0-beta.1
       '@rolldown/binding-win32-ia32-msvc': 1.0.0-beta.1
       '@rolldown/binding-win32-x64-msvc': 1.0.0-beta.1
+
+  streamsearch@1.1.0: {}
 
   superjson@2.2.2:
     dependencies:

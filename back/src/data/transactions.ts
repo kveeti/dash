@@ -331,7 +331,7 @@ export function transactions(sql: Pg) {
 			`;
 		},
 
-		insertMany: async (props: {
+		insertMany: async (
 			transactions: Array<{
 				id: string;
 				date: Date;
@@ -341,10 +341,10 @@ export function transactions(sql: Pg) {
 				additional: string | null;
 				user_id: string;
 				category_name: string;
-			}>;
-		}) => {
+			}>
+		) => {
 			const uniqueCategories = new Set<string>();
-			for (const t of props.transactions) {
+			for (const t of transactions) {
 				uniqueCategories.add(t.category_name);
 			}
 
@@ -354,7 +354,7 @@ export function transactions(sql: Pg) {
 				const c = {
 					id: id("transaction_category"),
 					name: category,
-					user_id: props.transactions[0].user_id,
+					user_id: transactions[0].user_id,
 				};
 
 				const [{ id: categoryId }] = await sql`
@@ -368,7 +368,7 @@ export function transactions(sql: Pg) {
 				categoryIds.set(category, categoryId);
 			}
 
-			const transactions = props.transactions.map(({ category_name, ...t }) => {
+			const mapped = transactions.map(({ category_name, ...t }) => {
 				const category_id = categoryIds.get(category_name);
 
 				return {
@@ -377,7 +377,7 @@ export function transactions(sql: Pg) {
 				};
 			});
 
-			await sql`insert into transactions ${sql(transactions)}`;
+			await sql`insert into transactions ${sql(mapped)}`;
 		},
 
 		updateWithCategory: async (props: {

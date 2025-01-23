@@ -7,6 +7,7 @@ import SuperJSON from "superjson";
 import { Redirect, Route, Switch } from "wouter";
 
 import { CategoriesPage } from "./authed/categories-page/categories-page";
+import { ImportTransactions as ImportTransactionsPage } from "./authed/import-transactions-page";
 import { AuthLayout } from "./authed/layout";
 import NewTransactionPage from "./authed/new-transaction-page/new-transaction-page";
 import { TransactionStatsPage } from "./authed/transaction-stats-page/transaction-stats-page";
@@ -25,6 +26,7 @@ function Entry() {
 			<Switch>
 				<Route path="/transactions" component={TransactionsPage} />
 				<Route path="/transactions/new" component={NewTransactionPage} />
+				<Route path="/transactions/import" component={ImportTransactionsPage} />
 				<Route path="/transactions/stats" component={TransactionStatsPage} />
 
 				<Route path="/categories" component={CategoriesPage} />
