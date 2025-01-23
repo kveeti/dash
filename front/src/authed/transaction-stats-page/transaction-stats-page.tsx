@@ -177,6 +177,7 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 				/>
 
 				<Tooltip
+					allowEscapeViewBox={{ x: true, y: true }}
 					isAnimationActive={false}
 					cursor={false}
 					content={(props) => {
