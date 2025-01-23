@@ -115,8 +115,9 @@ export function transactions(sql: Pg) {
 			userId: string;
 			cursor?: { id: string; dir: "left" | "right" };
 			limit?: number;
+			query?: string;
 		}) => {
-			const { userId } = opts;
+			const { userId, query } = opts;
 
 			let cursorClause = null;
 			let order = sql`desc`;
@@ -149,6 +150,10 @@ export function transactions(sql: Pg) {
 					`;
 				}
 			}
+
+			const queryClause = query
+				? sql`and t.ts @@ plainto_tsquery('english', ${query})`
+				: null;
 
 			const rows = await sql`
 				select
@@ -185,6 +190,7 @@ export function transactions(sql: Pg) {
 					or (t.id = tl_b.transaction_b_id and linked_tx.id = tl_b.transaction_a_id)
 
 				where t.user_id = ${userId}
+				${queryClause ? sql`${queryClause}` : sql``}
 				${cursorClause ? sql`and ${cursorClause}` : sql``}
 				order by t.date ${order}, t.id ${order}
 				limit ${limit};

@@ -50,10 +50,12 @@ export default function TransactionsPage() {
 
 	const before = searchParams.get("before") ?? undefined;
 	const after = searchParams.get("after") ?? undefined;
+	const query = searchParams.get("query") ?? undefined;
 
 	const q = trpc.v1.transactions.query.useQuery({
 		before,
 		after,
+		query,
 	});
 
 	const nextId = q.data?.next_id;

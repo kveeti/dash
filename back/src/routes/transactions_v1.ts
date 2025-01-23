@@ -32,6 +32,7 @@ export const transactions_v1 = router({
 				v.object({
 					before: v.optional(v.string()),
 					after: v.optional(v.string()),
+					query: v.optional(v.string()),
 					limit: v.optional(v.number()),
 				})
 			)
@@ -55,6 +56,7 @@ export const transactions_v1 = router({
 				userId: ctx.userId,
 				limit,
 				cursor,
+				query: input.query,
 			});
 		}),
 

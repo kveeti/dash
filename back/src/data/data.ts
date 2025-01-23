@@ -64,6 +64,20 @@ create index idx_transactions_date on transactions(date);
 create index idx_transactions_category_id on transactions(category_id);
 create index idx_transactions_user_id_id on transactions(user_id, id);
 
+alter table transactions add column ts tsvector;
+create index idx_transactions_ts on transactions using gin(ts);
+
+create function update_search_vector() returns trigger as $$
+begin
+    new.ts := to_tsvector('english', coalesce(new.counter_party, '') || ' ' || coalesce(new.additional, ''));
+    return new;
+end;
+$$ language plpgsql;
+
+create trigger transactions_search_vector_trigger
+before insert or update on transactions
+for each row execute function update_search_vector();
+
 create table if not exists transaction_tags (
     id varchar(30) not null,
     user_id varchar(30) not null,
