@@ -1,5 +1,5 @@
-import { endOfDay, format, startOfMonth, subYears } from "date-fns";
-import { type ChangeEvent, startTransition } from "react";
+import { endOfDay, format, isAfter, isBefore, startOfMonth, startOfYear, subYears } from "date-fns";
+import { type ChangeEvent } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useLocation, useSearch } from "wouter";
 
@@ -7,17 +7,27 @@ import { type ApiRes, trpc } from "../../lib/trpc";
 import { Input } from "../../ui/input";
 import { Spinner } from "../../ui/spinner";
 
+const CHART_HEIGHT = 450;
+
 export function TransactionStatsPage() {
 	const [location, navigate] = useLocation();
 	const searchParams = new URLSearchParams(useSearch());
+
 	const pStart = searchParams.get("start");
 	const pEnd = searchParams.get("end");
 
 	const now = new Date();
+	const max = endOfDay(now);
+	const f_time_max = format(max, "HH:mm");
+	const f_date_max = format(max, "yyyy-MM-dd");
+
+	const min = subYears(startOfYear(now), 10);
+	const f_time_min = format(min, "HH:mm");
+	const f_date_min = format(min, "yyyy-MM-dd");
 
 	const timeframe = {
 		start: pStart ? new Date(pStart) : startOfMonth(subYears(now, 2)),
-		end: pEnd ? new Date(pEnd) : endOfDay(now),
+		end: pEnd ? new Date(pEnd) : max,
 	};
 
 	const startDate = format(timeframe.start, "yyyy-MM-dd");
@@ -27,11 +37,10 @@ export function TransactionStatsPage() {
 	const endTime = format(timeframe.end, "HH:ss");
 
 	function onTimeframeChange(
-		this: "start" | "end",
+		input: "start" | "end",
 		valueType: "date" | "time",
 		event: ChangeEvent<HTMLInputElement>
 	) {
-		const input = this;
 		const newValue = event.target.valueAsDate;
 		if (!newValue) return;
 
@@ -45,12 +54,14 @@ export function TransactionStatsPage() {
 			value.setUTCMinutes(newValue.getUTCMinutes());
 		}
 
+		if (isBefore(value, min) || isAfter(value, max)) {
+			return;
+		}
+
 		const newSearchParams = new URLSearchParams(searchParams);
 		newSearchParams.set(input, value.toISOString());
 
-		startTransition(() => {
-			navigate(location + "?" + newSearchParams.toString());
-		});
+		navigate(location + "?" + newSearchParams.toString());
 	}
 
 	return (
@@ -59,14 +70,18 @@ export function TransactionStatsPage() {
 				<div className="flex w-full gap-2">
 					<Input
 						type="date"
+						min={f_date_min}
+						max={f_date_max}
 						defaultValue={startDate}
-						onChange={onTimeframeChange.bind("start", "date")}
+						onChange={(e) => onTimeframeChange("start", "date", e)}
 					/>
 					<div className="w-max">
 						<Input
 							type="time"
+							min={f_date_min}
+							max={f_date_max}
 							defaultValue={startTime}
-							onChange={onTimeframeChange.bind("start", "time")}
+							onChange={(e) => onTimeframeChange("start", "time", e)}
 						/>
 					</div>
 				</div>
@@ -74,14 +89,18 @@ export function TransactionStatsPage() {
 				<div className="flex w-full gap-2">
 					<Input
 						type="date"
+						min={f_date_min}
+						max={f_date_max}
 						defaultValue={endDate}
-						onChange={onTimeframeChange.bind("end", "date")}
+						onChange={(e) => onTimeframeChange("end", "date", e)}
 					/>
 					<div className="w-max">
 						<Input
 							type="time"
+							min={f_time_min}
+							max={f_time_max}
 							defaultValue={endTime}
-							onChange={onTimeframeChange.bind("end", "time")}
+							onChange={(e) => onTimeframeChange("end", "time", e)}
 						/>
 					</div>
 				</div>
@@ -106,7 +125,7 @@ function ChartWrapper({ timeframe }: { timeframe: { start: Date; end: Date } }) 
 	if (q.isPending) {
 		return (
 			<div
-				style={{ height: 350 }}
+				style={{ height: CHART_HEIGHT }}
 				className="text-gray-11 border-gray-5 flex w-full items-center justify-center border border-dashed"
 			>
 				<Spinner />
@@ -119,7 +138,7 @@ function ChartWrapper({ timeframe }: { timeframe: { start: Date; end: Date } }) 
 	if (q.data.totalPos === 0 && q.data.totalNeg === 0) {
 		return (
 			<div
-				style={{ height: 350 }}
+				style={{ height: CHART_HEIGHT }}
 				className="text-gray-11 border-gray-5 flex w-full items-center justify-center border border-dashed"
 			>
 				no data
@@ -157,7 +176,7 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 	});
 
 	return (
-		<ResponsiveContainer width={"100%"} height={350}>
+		<ResponsiveContainer width={"100%"} height={CHART_HEIGHT}>
 			<BarChart data={stats} stackOffset="sign">
 				<CartesianGrid
 					strokeDasharray="3 3"
