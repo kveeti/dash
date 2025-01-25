@@ -1,4 +1,5 @@
 import type { Pg } from "./data.ts";
+import { idDb } from "./id.ts";
 import type { CategoryWithTxCount } from "./transactions.ts";
 
 export function categories(sql: Pg) {
@@ -7,7 +8,7 @@ export function categories(sql: Pg) {
 			const filter = query ? sql`and lower(c.name) like ${query}` : sql``;
 
 			const rows: Array<CategoryWithTxCount> = await sql`
-				select c.id, c.name, count(*) as transaction_count
+				select concat('${sql.unsafe(idDb("transaction_category"))}', c.id) as id, c.name, count(*) as transaction_count
 				from transaction_categories c
 				left join transactions t on t.category_id = c.id
 				where c.user_id = ${userId}
@@ -22,7 +23,9 @@ export function categories(sql: Pg) {
 		update: async (props: { userId: string; id: string; name: string }) => {
 			const [row]: Array<{ id: string } | undefined> = await sql`
 				update transaction_categories
-				set name = ${props.name}
+				set
+					name = ${props.name},
+					updated_at = now()
 				where id = ${props.id}
 				and user_id = ${props.userId}
 				returning id;

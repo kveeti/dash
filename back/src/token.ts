@@ -38,7 +38,7 @@ function arrayBufferToBase64(bytes: Uint8Array) {
 	let binary = "";
 	const len = bytes.length;
 	for (let i = 0; i < len; i++) {
-		binary += String.fromCharCode(bytes[i]!);
+		binary += String.fromCharCode(bytes[i]);
 	}
 	return btoa(binary);
 }
@@ -74,7 +74,7 @@ export function timingSafeEqual(a: Uint8Array, b: Uint8Array) {
 
 	let result = 0;
 	for (let i = 0; i < a.length; i++) {
-		result |= a[i]! ^ b[i]!;
+		result |= a[i] ^ b[i];
 	}
 
 	return result === 0;

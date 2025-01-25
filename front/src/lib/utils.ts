@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import * as v from "valibot";
 
-export function cn(...args: any[]): string {
+export function cn(...args: Array<string | boolean>): string {
 	return args.filter(Boolean).join(" ");
 }
 
-export function useDebounce(value: any, delay: number) {
+export function useDebounce<T extends string | number>(value: T, delay: number) {
 	const [debouncedValue, setDebouncedValue] = useState(value);
 
 	useEffect(() => {

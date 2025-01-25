@@ -10,20 +10,23 @@ export function Link({
 	children,
 	href,
 	className,
+	variant = "default",
 	...props
 }: {
 	children: ReactNode;
 	href?: string | null;
 	className?: string;
+	variant?: "text" | "default";
 }) {
 	const [, setLocation] = useLocation();
+	const baseStyles = variant === "default" ? linkStyles : textLinkStyles;
 
 	if (!href) {
 		return (
 			<a
 				role="link"
 				aria-disabled="true"
-				className={linkStyles + (className ? " " + className : "")}
+				className={baseStyles + (className ? " " + className : "")}
 			>
 				{children}
 			</a>
@@ -33,8 +36,19 @@ export function Link({
 	return (
 		<FWLink
 			href={href}
-			className={linkStyles + (className ? " " + className : "")}
+			className={baseStyles + (className ? " " + className : "")}
 			onClick={(e) => {
+				// onClick has to be cancelled:
+				// for example on transaction pagination, users paginating
+				// without moving the mouse will end up more pages ahead
+				// than intended
+				// - user presses the link -> onMouseDown -> navigation
+				// - pagination happens, actual anchor tag changes while
+				//   the mouse button is still pressed
+				// - user lets go of the mouse button on the anchor
+				//   -> onClick triggers on the new anchor tag
+				//   triggering another pagination
+				// - user is now two pages ahead after "clicking" once
 				e.preventDefault();
 				return false;
 			}}
@@ -59,55 +73,8 @@ export function Link({
 					setLocation(href);
 				}
 			}}
-			{...props}
-		>
-			{children}
-		</FWLink>
-	);
-}
-
-export function TextLink({
-	children,
-	href,
-	className,
-	...props
-}: {
-	children: ReactNode;
-	href?: string | null;
-	className?: string;
-}) {
-	const [, setLocation] = useLocation();
-
-	if (!href) {
-		return (
-			<a role="link" aria-disabled="true" className={textLinkStyles}>
-				{children}
-			</a>
-		);
-	}
-
-	return (
-		<FWLink
-			href={href}
-			className={textLinkStyles + " " + className}
-			onClick={(e) => {
-				if (e.defaultPrevented) return false;
-			}}
-			onMouseDown={(e) => {
-				const url = new URL(String(href), window.location.href);
-				if (
-					url.origin === window.location.origin &&
-					e.button === 0 &&
-					!e.altKey &&
-					!e.ctrlKey &&
-					!e.metaKey &&
-					!e.shiftKey
-				) {
-					e.preventDefault();
-					setLocation(href);
-				}
-			}}
-			onTouchStart={(e) => {
+			onKeyUp={(e) => {
+				if (e.key !== "Enter" && e.key !== "Space") return;
 				const url = new URL(String(href), window.location.href);
 				if (url.origin === window.location.origin) {
 					e.preventDefault();

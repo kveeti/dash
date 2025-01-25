@@ -1,7 +1,7 @@
 import { addDays, subYears } from "date-fns";
 import * as v from "valibot";
 
-import { id } from "../data/id.ts";
+import { id, idSchema } from "../data/id.ts";
 import { authProc, router } from "../trpc.ts";
 
 export const transactions_v1 = router({
@@ -12,7 +12,7 @@ export const transactions_v1 = router({
 					start: v.date(),
 					end: v.date(),
 					timezone: v.string(),
-					frequency: v.string(),
+					frequency: v.picklist(["yearly", "monthly"]),
 				})
 			)
 		)
@@ -22,7 +22,7 @@ export const transactions_v1 = router({
 				timezone: input.timezone,
 				start: input.start,
 				end: input.end,
-				frequency: input.frequency as any,
+				frequency: input.frequency,
 			});
 		}),
 
@@ -30,8 +30,8 @@ export const transactions_v1 = router({
 		.input(
 			v.parser(
 				v.object({
-					before: v.optional(v.string()),
-					after: v.optional(v.string()),
+					right: v.optional(idSchema("transaction")),
+					left: v.optional(idSchema("transaction")),
 					query: v.optional(v.string()),
 					limit: v.optional(v.number()),
 				})
@@ -39,10 +39,10 @@ export const transactions_v1 = router({
 		)
 		.query(async ({ ctx, input }) => {
 			let cursor = undefined;
-			if (input.before) {
-				cursor = { id: input.before, dir: "left" as const };
-			} else if (input.after) {
-				cursor = { id: input.after, dir: "right" as const };
+			if (input.left) {
+				cursor = { id: input.left, dir: "left" as const };
+			} else if (input.right) {
+				cursor = { id: input.right, dir: "right" as const };
 			}
 			let limit = 50;
 			if (input.limit) {
@@ -76,7 +76,7 @@ export const transactions_v1 = router({
 		.mutation(async ({ ctx, input }) => {
 			if (input.category_name) {
 				await ctx.data.transactions.insertWithCategory({
-					id: id("transaction"),
+					id: id(),
 					userId: ctx.userId,
 					counterParty: input.counter_party,
 					amount: input.amount,
@@ -87,7 +87,7 @@ export const transactions_v1 = router({
 				});
 			} else {
 				await ctx.data.transactions.insert({
-					id: id("transaction"),
+					id: id(),
 					userId: ctx.userId,
 					counterParty: input.counter_party,
 					amount: input.amount,
@@ -102,7 +102,7 @@ export const transactions_v1 = router({
 		.input(
 			v.parser(
 				v.object({
-					id: v.string(),
+					id: idSchema("transaction"),
 					counter_party: v.pipe(v.string(), v.nonEmpty("required")),
 					amount: v.pipe(v.number("required")),
 					currency: v.pipe(v.string(), v.nonEmpty("required")),
@@ -194,7 +194,7 @@ export const transactions_v1 = router({
 
 					while (transactionDate <= now) {
 						transactions.push({
-							id: id("transaction"),
+							id: id(),
 							user_id: ctx.userId,
 							counter_party: counterParty,
 							amount,
@@ -206,7 +206,7 @@ export const transactions_v1 = router({
 
 						transactionDate = addDays(transactionDate, frequencies[type.frequency]);
 						if (transactions.length >= 5000) {
-							await ctx.data.transactions.insertMany({ transactions });
+							await ctx.data.transactions.insertMany(transactions);
 							transactions = [];
 						}
 					}
@@ -215,7 +215,7 @@ export const transactions_v1 = router({
 		});
 
 		if (transactions.length > 0) {
-			await ctx.data.transactions.insertMany({ transactions });
+			await ctx.data.transactions.insertMany(transactions);
 		}
 	}),
 });

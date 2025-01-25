@@ -1,6 +1,13 @@
+@variant pwa (@media (display-mode: standalone));
+
+@utility focus {
+	@apply focus-visible:outline-gray-a10 outline-offset-4;
+}
+
 @theme {
 	--color-*: initial;
 	--spacing: 0.25rem;
+	--font-default: "JetBrainsMono Nerd Font", "JetBrainsMono", jbmono, monospace;
 
 	--color-gray-1: var(--gray-1);
 	--color-gray-2: var(--gray-2);

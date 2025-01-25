@@ -1,8 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import * as v from "valibot";
 
-import { createAuthCookie, createCsrfCookie } from "../auth.ts";
 import { id } from "../data/id.ts";
+import { createAuthCookie, createCsrfCookie } from "../token.ts";
 import { authProc, publicProcedure, router } from "../trpc.ts";
 
 const schema = v.object({
@@ -25,7 +25,7 @@ export const auth_v1 = router({
 		const cookie = createAuthCookie(token.value, token.expiry);
 		ctx.res.appendHeader("set-cookie", cookie);
 
-		const csrf = id("csrf");
+		const csrf = id();
 		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
 
 		return { ...user, csrf };
@@ -49,13 +49,13 @@ export const auth_v1 = router({
 		const cookie = createAuthCookie(token.value, token.expiry);
 		ctx.res.appendHeader("set-cookie", cookie);
 
-		const csrf = id("csrf");
+		const csrf = id();
 		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
 
 		return { ...user, csrf };
 	}),
 
-	logout: publicProcedure.mutation(async ({ ctx }) => {
+	logout: publicProcedure.mutation(({ ctx }) => {
 		ctx.res.appendHeader("set-cookie", createAuthCookie("", new Date(0)));
 	}),
 

@@ -1,12 +1,6 @@
 @import "tailwindcss";
 @import "./theme.css";
 
-@utility focus {
-	@apply focus-visible:outline-gray-10 outline-hidden;
-}
-
-@variant pwa (@media (display-mode: standalone));
-
 @font-face {
 	font-family: jbmono;
 	src: url("/fonts/jbmono.ttf") format("truetype-variations");
@@ -15,9 +9,7 @@
 }
 
 body {
-	@apply bg-gray-1 text-gray-12 text-sm;
-
-	font-family: "JetBrainsMono Nerd Font", "JetBrainsMono", jbmono, monospace;
+	@apply bg-gray-1 text-gray-12 font-default text-sm;
 }
 
 :root {
@@ -98,6 +90,7 @@ body {
 	--gray-10: #838383;
 	--gray-11: #646464;
 	--gray-12: #202020;
+
 	--gray-a1: #00000003;
 	--gray-a2: #00000006;
 	--gray-a3: #0000000f;
@@ -163,6 +156,7 @@ body {
 		--gray-10: #7b7b7b;
 		--gray-11: #b4b4b4;
 		--gray-12: #eeeeee;
+
 		--gray-a1: #00000000;
 		--gray-a2: #ffffff09;
 		--gray-a3: #ffffff12;

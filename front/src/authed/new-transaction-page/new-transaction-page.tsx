@@ -47,7 +47,8 @@ export default function NewTransactionPage() {
 		mutation.mutateAsync(res.output).then(() => setLocalErrors(null));
 	}
 
-	const errors = mutation.error?.data?.details ?? localErrors;
+	// TODO: server errors ?? localErrors
+	const errors = localErrors;
 
 	return (
 		<main className="w-full px-2 py-6 md:pt-4">

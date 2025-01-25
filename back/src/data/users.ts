@@ -1,12 +1,13 @@
 import type { Pg } from "./data.ts";
+import { idDb } from "./id.ts";
 
 export const users = (sql: Pg) => ({
-	async upsert(user: { id: string; username: string; passwordHash: string; created_at: Date }) {
+	async upsert(user: UserWithPasswordHash) {
 		const [row] = await sql`
 			insert into users
 				(id, username, password_hash, created_at)
 			values
-				(${user.id}, ${user.username}, ${user.passwordHash}, ${user.created_at})
+				(${user.id}, ${user.username}, ${user.password_hash}, ${user.created_at})
 			on conflict (username)
 			do nothing
 			returning id;
@@ -17,7 +18,7 @@ export const users = (sql: Pg) => ({
 
 	async getByUsername(username: string) {
 		const [row]: [UserWithPasswordHash?] = await sql`
-		      select id, username, password_hash, created_at from users
+		      select concat('${sql.unsafe(idDb("user"))}', id) as id, username, password_hash, created_at from users
 		      where username = ${username}
 		      limit 1;
 		`;
@@ -27,7 +28,7 @@ export const users = (sql: Pg) => ({
 
 	async getById(id: string) {
 		const [row]: [User?] = await sql`
-		      select id, username, created_at from users
+		      select concat('${sql.unsafe(idDb("user"))}', id) as id, username, created_at from users
 		      where id = ${id}
 		      limit 1;
 		`;

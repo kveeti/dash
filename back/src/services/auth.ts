@@ -1,6 +1,6 @@
 import { addDays } from "date-fns";
 
-import { createToken } from "../auth.ts";
+import { createToken } from "../token.ts";
 import type { Data } from "../data/data.ts";
 import { id } from "../data/id.ts";
 import { passwords } from "../password.ts";
@@ -42,14 +42,14 @@ export function auth(data: Data) {
 		},
 
 		register: async (username: string, password: string) => {
-			const userId = id("user");
+			const userId = id();
 			const passwordHash = await passwords.hash(password);
 			const createdAt = new Date();
 
 			const upserted = await data.users.upsert({
 				id: userId,
 				username,
-				passwordHash,
+				password_hash: passwordHash,
 				created_at: createdAt,
 			});
 			if (!upserted) {

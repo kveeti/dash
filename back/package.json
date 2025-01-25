@@ -4,7 +4,8 @@
 	"scripts": {
 		"dev": "node --watch-preserve-output --watch src/index.ts",
 		"build": "rolldown --minify --format esm --platform node src/index.ts --file dist/server.js",
-		"preview": "node ./dist/server.js"
+		"preview": "node ./dist/server.js",
+		"lint": "eslint ."
 	},
 	"dependencies": {
 		"@trpc/server": "11.0.0-rc.700",
@@ -14,15 +15,22 @@
 		"papaparse": "^5.5.1",
 		"postgres": "^3.4.5",
 		"superjson": "^2.2.2",
-		"valibot": "1.0.0-beta.11"
+		"ulid": "^2.3.0",
+		"valibot": "1.0.0-beta.14"
 	},
 	"devDependencies": {
+		"@eslint/js": "^9.19.0",
 		"@trivago/prettier-plugin-sort-imports": "^5.2.1",
 		"@types/busboy": "^1.5.4",
-		"@types/node": "^22.10.7",
+		"@types/node": "^22.10.10",
 		"@types/papaparse": "^5.3.15",
+		"@typescript-eslint/eslint-plugin": "^8.21.0",
+		"@typescript-eslint/parser": "^8.21.0",
 		"dotenv": "^16.4.7",
+		"eslint": "^9.19.0",
+		"globals": "^15.14.0",
 		"prettier": "^3.4.2",
-		"rolldown": "1.0.0-beta.1"
+		"rolldown": "1.0.0-beta.3",
+		"typescript-eslint": "^8.21.0"
 	}
 }

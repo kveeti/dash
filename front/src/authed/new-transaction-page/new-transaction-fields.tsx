@@ -2,7 +2,7 @@ import * as Ariakit from "@ariakit/react";
 import { parseDateTime } from "@internationalized/date";
 import { CheckIcon } from "@radix-ui/react-icons";
 import { format } from "date-fns";
-import { ComponentProps, startTransition, useId, useMemo, useState } from "react";
+import { type ComponentProps, startTransition, useId, useMemo, useState } from "react";
 import * as Rac from "react-aria-components";
 
 import { trpc } from "../../lib/trpc";
@@ -101,13 +101,13 @@ export function DateField({
 	error?: string;
 	defaultValue?: Date | string;
 }) {
-	const _defaultValue = parseDateTime(format(defaultValue, "yyyy-MM-dd'T'HH:mm"));
+	const _defaultValue = parseDateTime(format(defaultValue, "yyyy-MM-dd'T'HH:mm:ss"));
 
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;
 
 	return (
-		<Rac.DateField granularity="minute" defaultValue={_defaultValue} name="date">
+		<Rac.DateField granularity="second" defaultValue={_defaultValue} name="date">
 			<LabelWrapper>
 				<Rac.Label className={labelStyles}>date</Rac.Label>
 
@@ -209,7 +209,8 @@ function SelectItem({ className, ...props }: ComponentProps<typeof Ariakit.Selec
 				" " +
 				"data-active-item:bg-gray-a5" +
 				" " +
-				"hover:bg-gray-a5"
+				"hover:bg-gray-a5" +
+				(className ? " " + className : "")
 			}
 		/>
 	);

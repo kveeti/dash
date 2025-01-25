@@ -2,10 +2,9 @@ import { TRPCError, initTRPC } from "@trpc/server";
 import type { CreateHTTPContextOptions } from "@trpc/server/adapters/standalone";
 import SuperJSON from "superjson";
 
-import { timingSafeEqual } from "./auth.ts";
-import { verifyToken } from "./auth.ts";
 import type { Data } from "./data/data.ts";
 import type { Auth } from "./services/auth.ts";
+import { timingSafeEqual, verifyToken } from "./token.ts";
 
 const t = initTRPC.context<Context>().create({ transformer: SuperJSON });
 export function createContext(data: Data, services: { auth: Auth }) {

@@ -19,7 +19,7 @@ const countFormat = new Intl.NumberFormat(undefined, {
 	maximumFractionDigits: 1,
 });
 
-export function CategoriesPage() {
+export default function CategoriesPage() {
 	const q = trpc.v1.categories.query.useQuery({});
 
 	if (q.isError) {

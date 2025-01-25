@@ -3,7 +3,7 @@ import { useMe } from "../lib/me";
 import { trpc } from "../lib/trpc";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { TextLink } from "../ui/link";
+import { Link } from "../ui/link";
 import { Heading } from "../ui/typography";
 
 export default function RegisterPage() {
@@ -17,7 +17,7 @@ export default function RegisterPage() {
 		event.preventDefault();
 		if (register.isPending) return;
 
-		const form = event.currentTarget as HTMLFormElement;
+		const form = event.currentTarget;
 
 		const username = form.username.value as string;
 		const password = form.password.value as string;
@@ -34,7 +34,10 @@ export default function RegisterPage() {
 				<Heading>register</Heading>
 
 				<p className="text-gray-11">
-					already have an account? <TextLink href="/login">login</TextLink>
+					already have an account?{" "}
+					<Link variant="text" href="/login">
+						login
+					</Link>
 				</p>
 			</hgroup>
 

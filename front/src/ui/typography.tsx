@@ -15,6 +15,6 @@ export function Heading({
 } & Omit<ComponentProps<"h1">, "className">) {
 	const Tag = `h${level}`;
 
-	// @ts-ignore TODO
-	return <Tag className={headings[level]} {...props} />;
+	// @ts-expect-error TODO
+	return <Tag className={headings[visualLevel ?? level]} {...props} />;
 }

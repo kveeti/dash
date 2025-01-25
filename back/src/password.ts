@@ -1,20 +1,25 @@
+import { timingSafeEqual } from "./token.ts";
+
 const hashVersions = [PBKDF2_001()];
 
-const defaultHashVersion = hashVersions[0]!;
+const defaultHashVersion = hashVersions[0];
 
 export const passwords = {
 	hash: async (plaintext: string) => {
 		const hash = await defaultHashVersion.hash(plaintext);
-		return defaultHashVersion.id + "__" + hash;
+		const withVersion = defaultHashVersion.id + "__" + hash;
+
+		return withVersion;
 	},
 	verify: async (hash: string, plaintext: string) => {
 		const hashVersion = hashVersions.find((v) => hash.startsWith(v.id));
 		if (!hashVersion) {
 			throw new Error("hash not supported");
 		}
+		const withoutVersion = hash.slice(hashVersion.id.length + 2);
 
-		const isOk = hashVersion.verify(hash, plaintext);
-		if (!isOk) {
+		const isOk = await hashVersion.verify(withoutVersion, plaintext);
+		if (isOk === false) {
 			return "failed" as const;
 		}
 
@@ -65,11 +70,11 @@ function PBKDF2_001() {
 
 			keyBytes.set(new Uint8Array(derivedBits));
 
-			return btoa(String.fromCharCode(...hashedPasswordBytes));
+			return bufferToBase64(hashedPasswordBytes);
 		},
 
 		verify: async (hash: string, plaintext: string) => {
-			const hashedPasswordBytes = Uint8Array.from(hash, (c) => c.charCodeAt(0));
+			const hashedPasswordBytes = base64ToBuffer(hash);
 			if (hashedPasswordBytes.length === 0) return false;
 
 			const saltBytes = hashedPasswordBytes.subarray(1, 1 + saltSize);
@@ -94,12 +99,29 @@ function PBKDF2_001() {
 			);
 
 			const actualKeyBytes = new Uint8Array(derivedBits);
-			const isEqual =
-				actualKeyBytes.length === expectedKeyBytes.length &&
-				actualKeyBytes.every((byte, i) => byte === expectedKeyBytes[i]);
-			if (!isEqual) return false;
 
-			return true;
+			return timingSafeEqual(actualKeyBytes, expectedKeyBytes);
 		},
 	};
+}
+
+function bufferToBase64(buffer: Uint8Array) {
+	return btoa(String.fromCharCode(...new Uint8Array(buffer)));
+}
+
+function base64ToBuffer(base64: string) {
+	let binaryString = null;
+	try {
+		binaryString = atob(base64);
+	} catch (_) {
+		return new Uint8Array();
+	}
+
+	const length = binaryString.length;
+	const buffer = new ArrayBuffer(length);
+	const view = new Uint8Array(buffer);
+	for (let i = 0; i < length; i++) {
+		view[i] = binaryString.charCodeAt(i);
+	}
+	return view;
 }

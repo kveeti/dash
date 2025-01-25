@@ -1,40 +1,48 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, loggerLink } from "@trpc/client";
-import { type ReactNode, StrictMode } from "react";
+import { type ReactNode, StrictMode, Suspense, lazy, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 import SuperJSON from "superjson";
+import { registerSW } from "virtual:pwa-register";
 import { Redirect, Route, Switch } from "wouter";
 
-import { CategoriesPage } from "./authed/categories-page/categories-page";
-import { ImportTransactions as ImportTransactionsPage } from "./authed/import-transactions-page";
 import { AuthLayout } from "./authed/layout";
-import NewTransactionPage from "./authed/new-transaction-page/new-transaction-page";
-import { TransactionStatsPage } from "./authed/transaction-stats-page/transaction-stats-page";
-import TransactionsPage from "./authed/transactions-page/transactions-page";
+import { envs } from "./lib/envs";
 import { type Me, MeProvider, useMe } from "./lib/me";
 import { trpc } from "./lib/trpc";
-import "./styles.css";
+import { Button } from "./ui/button";
+/**
+ * LoginPage imported eagerly since its the usual landing page
+ */
 import LoginPage from "./unauthed/login-page";
-import RegisterPage from "./unauthed/register-page";
+
+const RegisterPage = lazy(() => import("./unauthed/register-page"));
+const NewTransactionPage = lazy(() => import("./authed/new-transaction-page/new-transaction-page"));
+const ImportTransactionsPage = lazy(() => import("./authed/import-transactions-page"));
+const CategoriesPage = lazy(() => import("./authed/categories-page/categories-page"));
+const TransactionsPage = lazy(() => import("./authed/transactions-page/transactions-page"));
+const TransactionStatsPage = lazy(
+	() => import("./authed/transaction-stats-page/transaction-stats-page")
+);
 
 function Entry() {
 	const { me } = useMe();
 
 	return me ? (
 		<AuthLayout>
-			<Switch>
-				<Route path="/transactions" component={TransactionsPage} />
-				<Route path="/transactions/new" component={NewTransactionPage} />
-				<Route path="/transactions/import" component={ImportTransactionsPage} />
-				<Route path="/transactions/stats" component={TransactionStatsPage} />
-
-				<Route path="/categories" component={CategoriesPage} />
-
-				<Route path="*">
-					<Redirect href="/transactions" />
-				</Route>
-			</Switch>
+			<Suspense>
+				<Switch>
+					<Route path="/transactions" component={TransactionsPage} />
+					<Route path="/transactions/new" component={NewTransactionPage} />
+					<Route path="/transactions/import" component={ImportTransactionsPage} />
+					<Route path="/transactions/stats" component={TransactionStatsPage} />
+					<Route path="/categories" component={CategoriesPage} />
+					<Route path="*">
+						<Redirect href="/transactions" />
+					</Route>
+				</Switch>
+			</Suspense>
 		</AuthLayout>
 	) : (
 		<Switch>
@@ -42,9 +50,10 @@ function Entry() {
 				<LoginPage />
 			</Route>
 			<Route path="/register">
-				<RegisterPage />
+				<Suspense>
+					<RegisterPage />
+				</Suspense>
 			</Route>
-
 			<Route path="*">
 				<Redirect href="/login" />
 			</Route>
@@ -74,11 +83,10 @@ function Trpc({ children }: { children: ReactNode }) {
 		links: [
 			loggerLink({
 				enabled: (op) =>
-					process.env.NODE_ENV === "development" ||
-					(op.direction === "down" && op.result instanceof Error),
+					!envs.isProd || (op.direction === "down" && op.result instanceof Error),
 			}),
 			httpBatchLink({
-				url: "http://localhost:8000",
+				url: envs.apiUrl,
 				fetch: async (url, init) =>
 					fetch(url, {
 						...init,
@@ -100,7 +108,46 @@ function Trpc({ children }: { children: ReactNode }) {
 	);
 }
 
+function UpdateToast({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+	const [isLoading, setIsLoading] = useState(false);
+	return (
+		<div className="font-default border-gray-a4 bg-gray-1 flex w-[300px] flex-col gap-4 border p-3 text-sm shadow-lg">
+			<p>update available!</p>
+
+			<div className="flex justify-end gap-2">
+				<Button variant="ghost" size="sm" onClick={onCancel}>
+					not yet!
+				</Button>
+				<Button
+					size="sm"
+					onClick={() => {
+						setIsLoading(true);
+						onConfirm();
+					}}
+					isLoading={isLoading}
+				>
+					update
+				</Button>
+			</div>
+		</div>
+	);
+}
+const updateSW = registerSW({
+	onNeedRefresh() {
+		toast.custom(
+			(toastId) => (
+				<UpdateToast onConfirm={updateSW} onCancel={() => toast.dismiss(toastId)} />
+			),
+			{ duration: 20000, position: "bottom-right" }
+		);
+	},
+});
+
 const me = (window as any).__ME_LOADER__;
 const mePromise = me?.promise;
 
-mePromise ? mePromise.then(main) : main(me?.data);
+if (mePromise) {
+	mePromise.then(main);
+} else {
+	main(me?.data);
+}

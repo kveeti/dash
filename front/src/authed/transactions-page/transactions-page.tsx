@@ -5,10 +5,9 @@ import { useLocation, useSearch } from "wouter";
 import type { TransactionWithLinks } from "../../../../back/src/data/transactions";
 import { errorToast } from "../../lib/error-toast";
 import { trpc } from "../../lib/trpc";
-import { cn } from "../../lib/utils";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
-import { Link, TextLink } from "../../ui/link";
+import { Link } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
 import { Spinner } from "../../ui/spinner";
 import {
@@ -32,6 +31,9 @@ const sidebarDateFormatter = new Intl.DateTimeFormat(undefined, {
 	month: "short",
 	day: "numeric",
 	year: "numeric",
+	minute: "numeric",
+	hour: "numeric",
+	second: "numeric",
 });
 
 const amountFormatter = new Intl.NumberFormat(undefined, {
@@ -48,18 +50,18 @@ export default function TransactionsPage() {
 	const search = useSearch();
 	const searchParams = new URLSearchParams(search);
 
-	const before = searchParams.get("before") ?? undefined;
-	const after = searchParams.get("after") ?? undefined;
+	const right = searchParams.get("right") ?? undefined;
+	const left = searchParams.get("left") ?? undefined;
 	const query = searchParams.get("query") ?? undefined;
 
 	const q = trpc.v1.transactions.query.useQuery({
-		before,
-		after,
+		left,
+		right,
 		query,
 	});
 
-	const nextId = q.data?.next_id;
-	const prevId = q.data?.prev_id;
+	const leftId = q.data?.prev_id;
+	const rightId = q.data?.next_id;
 
 	const [selectedTxId, setSelectedTxId] = useState<TransactionWithLinks | null>(null);
 	const selectedTx = q.data?.transactions.find((t) => t.id === selectedTxId?.id);
@@ -86,8 +88,8 @@ export default function TransactionsPage() {
 					<Pagination
 						className="ml-auto"
 						currentSearchParams={searchParams}
-						nextId={nextId}
-						prevId={prevId}
+						leftId={leftId}
+						rightId={rightId}
 					/>
 				</div>
 			</div>
@@ -99,13 +101,15 @@ export default function TransactionsPage() {
 			) : !q.data.transactions.length ? (
 				<div className="flex w-full flex-col gap-2 p-4">
 					<p className="text-gray-11">no transactions yet</p>
-					<TextLink href="/transactions/new">add one</TextLink>
+					<Link variant="text" href="/transactions/new">
+						add one
+					</Link>
 				</div>
 			) : (
 				<>
 					{selectedTx && (
 						<div
-							className="fixed top-4 right-8 max-h-full w-full max-w-[28rem] overflow-y-auto pb-10"
+							className="fixed top-4 right-4 max-h-full w-full max-w-[28rem] overflow-y-auto pb-10"
 							style={{ scrollbarGutter: "stable" }}
 							key={selectedTx.id}
 						>
@@ -138,10 +142,10 @@ export default function TransactionsPage() {
 								>
 									<div className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm">
 										<span
-											className={cn(
-												"border-t-gray-3 col-[1] flex h-full items-center border-t px-2 py-3 text-sm",
-												!showDate && "invisible"
-											)}
+											className={
+												"border-t-gray-3 col-[1] flex h-full items-center border-t px-2 py-3 text-sm" +
+												(!showDate ? " invisible" : "")
+											}
 										>
 											{date}
 										</span>
@@ -151,10 +155,10 @@ export default function TransactionsPage() {
 										</span>
 
 										<div
-											className={cn(
-												"border-t-gray-3 col-[3] border-t px-2 py-3 text-right tabular-nums",
-												isPositive && "text-green-10"
-											)}
+											className={
+												"border-t-gray-3 col-[3] border-t px-2 py-3 text-right tabular-nums" +
+												(isPositive ? " text-green-10" : "")
+											}
 										>
 											{amountFormatter.format(t.amount)}
 										</div>
@@ -191,7 +195,7 @@ function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () =
 				currency: formData.get("currency") as string,
 				counter_party: formData.get("counter_party") as string,
 				additional: formData.get("additional") as string,
-				category_name: formData.get("category_name") as string,
+				category_name: formData.get("category_name") as string | null,
 			})
 			.catch(errorToast("error updating transaction"));
 	}
@@ -252,6 +256,8 @@ function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams 
 
 		const query = formData.get("query") as string;
 		currentSearchParams.set("query", query);
+		currentSearchParams.delete("before");
+		currentSearchParams.delete("after");
 
 		setLocation(location + "?" + currentSearchParams.toString());
 	}
@@ -272,45 +278,45 @@ function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams 
 }
 
 function Pagination({
-	nextId,
-	prevId,
+	rightId,
+	leftId,
 	currentSearchParams,
 	className,
 }: {
-	nextId?: string | null;
-	prevId?: string | null;
+	rightId?: string | null;
+	leftId?: string | null;
 	currentSearchParams: URLSearchParams;
 	className?: string;
 }) {
 	const prevParams = new URLSearchParams(currentSearchParams);
 	const nextParams = new URLSearchParams(currentSearchParams);
 
-	if (prevId) {
-		prevParams.set("before", prevId);
-		prevParams.delete("after");
+	if (leftId) {
+		prevParams.set("left", leftId);
+		prevParams.delete("right");
 	}
 
-	if (nextId) {
-		nextParams.set("after", nextId);
-		nextParams.delete("before");
+	if (rightId) {
+		nextParams.set("right", rightId);
+		nextParams.delete("left");
 	}
 
 	return (
 		<div className={"flex gap-1" + (className ? " " + className : "")}>
 			<Link
-				href={prevId && "?" + prevParams.toString()}
+				href={leftId && "?" + prevParams.toString()}
 				className="border-gray-4 flex size-8 items-center justify-center rounded-full border"
 			>
 				<ArrowLeftIcon aria-hidden="true" />
-				<span className="sr-only">previous page</span>
+				<span className="sr-only">to the left</span>
 			</Link>
 
 			<Link
-				href={nextId && "?" + nextParams.toString()}
+				href={rightId && "?" + nextParams.toString()}
 				className="border-gray-4 flex size-8 items-center justify-center rounded-full border"
 			>
 				<ArrowRightIcon aria-hidden="true" />
-				<span className="sr-only">next page</span>
+				<span className="sr-only">to the right</span>
 			</Link>
 		</div>
 	);

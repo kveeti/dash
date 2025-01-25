@@ -1,5 +1,5 @@
 import type { Pg } from "./data.ts";
-import { id } from "./id.ts";
+import { id, idDb } from "./id.ts";
 
 export function transactions(sql: Pg) {
 	return {
@@ -75,10 +75,10 @@ export function transactions(sql: Pg) {
 			let totalNeg = 0;
 
 			const resolved = rows.map((row) => {
-				const period = row[0];
-				const categories = row[1];
-				const _totalPos = row[2];
-				const _totalNeg = row[3];
+				const period = row[0] as string;
+				const categories = row[1] as Record<string, number>;
+				const _totalPos = row[2] as number;
+				const _totalNeg = row[3] as number;
 
 				totalPos += _totalPos;
 				totalNeg += _totalNeg;
@@ -121,6 +121,7 @@ export function transactions(sql: Pg) {
 
 			let cursorClause = null;
 			let order = sql`desc`;
+			let orderval = "desc";
 			const limit = (opts?.limit ?? 50) + 1;
 			const cursor = opts?.cursor;
 
@@ -129,6 +130,7 @@ export function transactions(sql: Pg) {
 
 				if (dir === "left") {
 					order = sql`asc`;
+					orderval = "asc";
 					cursorClause = sql`
 					(
 						(
@@ -136,8 +138,7 @@ export function transactions(sql: Pg) {
 							and t.id > ${id}
 						)
 						or t.date > (select date from transactions where id = ${id})
-					)
-					`;
+					)`;
 				} else if (dir === "right") {
 					cursorClause = sql`
 					(
@@ -146,8 +147,7 @@ export function transactions(sql: Pg) {
 							and t.id < ${id}
 						)
 						or t.date < (select date from transactions where id = ${id})
-					)
-					`;
+					)`;
 				}
 			}
 
@@ -155,16 +155,18 @@ export function transactions(sql: Pg) {
 				? sql`and t.ts @@ plainto_tsquery('english', ${query})`
 				: null;
 
+			const swappedOrder = orderval === "desc" ? sql`asc` : sql`desc`;
+
 			const rows = await sql`
 				select
-					t.id            as tx_id,
-					t.date          as tx_date,
-					t.amount        as tx_amount,
-					t.currency      as tx_currency,
-					t.additional    as tx_additional,
-					t.counter_party as tx_counter_party,
-					t.category_id   as category_id,
-					c.name          as category_name,
+					concat('${sql.unsafe(idDb("transaction"))}', t.id) as tx_id,
+					t.date              as tx_date,
+					t.amount			as tx_amount,
+					t.currency          as tx_currency,
+					t.additional        as tx_additional,
+					t.counter_party     as tx_counter_party,
+					t.category_id       as category_id,
+					c.name              as category_name,
 
 					linked_tx.id            as l_tx_id,
 					linked_tx.date          as l_tx_date,
@@ -192,7 +194,7 @@ export function transactions(sql: Pg) {
 				where t.user_id = ${userId}
 				${queryClause ? sql`${queryClause}` : sql``}
 				${cursorClause ? sql`and ${cursorClause}` : sql``}
-				order by t.date ${order}, t.id ${order}
+				order by t.date ${order}, t.id ${swappedOrder}
 				limit ${limit};
 			`.values();
 
@@ -208,28 +210,28 @@ export function transactions(sql: Pg) {
 			const transactions = new Map<string, TransactionWithLinks>();
 
 			for (let i = 0; i < rows.length; i++) {
-				const row = rows[i]!;
+				const row = rows[i];
 
-				const id = row[0];
-				const linkId = row[8];
+				const id = row[0] as string;
+				const linkId = row[8] as string;
 
 				let t = transactions.get(id);
 
 				if (!t) {
 					t = {
 						id,
-						date: row[1],
-						amount: row[2],
-						currency: row[3],
-						additional: row[4],
-						counter_party: row[5],
+						date: row[1] as Date,
+						amount: row[2] as number,
+						currency: row[3] as string,
+						additional: row[4] as string,
+						counter_party: row[5] as string,
 						category: null,
 						links: [],
 					};
 
-					const categoryId = row[6];
+					const categoryId = row[6] as string | undefined;
 					if (categoryId) {
-						const categoryName = row[7];
+						const categoryName = row[7] as string;
 						t.category = {
 							id: categoryId,
 							name: categoryName,
@@ -238,11 +240,11 @@ export function transactions(sql: Pg) {
 				}
 
 				if (linkId) {
-					const lDate = row[9];
-					const lAmount = row[10];
-					const lCurrency = row[11];
-					const lAdditional = row[12];
-					const lCounterParty = row[13];
+					const lDate = row[9] as Date;
+					const lAmount = row[10] as number;
+					const lCurrency = row[11] as string;
+					const lAdditional = row[12] as string;
+					const lCounterParty = row[13] as string;
 
 					t.links.push({
 						id: linkId,
@@ -292,7 +294,7 @@ export function transactions(sql: Pg) {
 			additional: string | null;
 			categoryName: string;
 		}) => {
-			const categoryId = id("transaction_category");
+			const categoryId = id();
 			await sql`
 				with category as (
 					insert into transaction_categories (id, name, user_id)
@@ -352,12 +354,12 @@ export function transactions(sql: Pg) {
 
 			for (const category of uniqueCategories.values()) {
 				const c = {
-					id: id("transaction_category"),
+					id: id(),
 					name: category,
 					user_id: transactions[0].user_id,
 				};
 
-				const [{ id: categoryId }] = await sql`
+				const [{ id: categoryId }]: [{ id: string }] = await sql`
 					insert into transaction_categories (id, name, user_id)
 					values (${c.id}, ${c.name}, ${c.user_id})
 					on conflict (user_id, lower(name))
@@ -390,7 +392,7 @@ export function transactions(sql: Pg) {
 			categoryName: string;
 			userId: string;
 		}) => {
-			const categoryId = id("transaction_category");
+			const categoryId = id();
 			await sql`
 				with category as (
 					insert into transaction_categories (id, name, user_id)
@@ -406,7 +408,8 @@ export function transactions(sql: Pg) {
 					currency = ${props.currency},
 					counter_party = ${props.counterParty},
 					additional = ${props.additional},
-					category_id = coalesce((select id from category), ${categoryId})
+					category_id = coalesce((select id from category), ${categoryId}),
+					updated_at = now()
 				where id = ${props.id}
 				and user_id = ${props.userId};
 			`;
@@ -428,7 +431,8 @@ export function transactions(sql: Pg) {
 					amount = ${props.amount},
 					currency = ${props.currency},
 					counter_party = ${props.counterParty},
-					additional = ${props.additional}
+					additional = ${props.additional},
+					updated_at = now()
 				where id = ${props.id}
 				and user_id = ${props.userId};
 			`;

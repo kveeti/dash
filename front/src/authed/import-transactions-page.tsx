@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { envs } from "../lib/envs";
 import { Button } from "../ui/button";
 
-export function ImportTransactions() {
+export default function ImportTransactions() {
 	function onSubmit(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
 

@@ -25,9 +25,6 @@ export function Nav() {
 					<NavLink href="/transactions/stats">stats</NavLink>
 				</li>
 				<li>
-					<NavLink href="/accounts">accounts</NavLink>
-				</li>
-				<li>
 					<NavLink href="/categories">categories</NavLink>
 				</li>
 			</ul>

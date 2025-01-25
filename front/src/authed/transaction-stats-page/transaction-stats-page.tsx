@@ -9,7 +9,7 @@ import { Spinner } from "../../ui/spinner";
 
 const CHART_HEIGHT = 450;
 
-export function TransactionStatsPage() {
+export default function TransactionStatsPage() {
 	const [location, navigate] = useLocation();
 	const searchParams = new URLSearchParams(useSearch());
 

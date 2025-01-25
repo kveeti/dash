@@ -9,15 +9,15 @@ run --mount=type=cache,id=pnpm,target=/pnpm/store \
 copy package.json .
 run --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm i --frozen-lockfile
-copy . .
+copy src src
 run pnpm run build
 
 from node:23-alpine as runtime
+run apk add --no-cache curl
 run addgroup --system --gid 1001 nodejs
 run adduser --system --uid 1001 nodejs
 copy --from=build --chown=nodejs:nodejs /app/dist/server.js .
 user nodejs
-expose 3000
-env PORT=3000
 env NODE_ENV="production"
 cmd ["node", "server.js"]
+healthcheck --start-period=5s --start-interval=5s cmd curl --fail http://localhost:${PORT:-8000}/health || exit 1

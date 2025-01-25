@@ -3,7 +3,7 @@ import { useMe } from "../lib/me";
 import { trpc } from "../lib/trpc";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { TextLink } from "../ui/link";
+import { Link } from "../ui/link";
 import { Heading } from "../ui/typography";
 
 export default function LoginPage() {
@@ -17,7 +17,7 @@ export default function LoginPage() {
 		event.preventDefault();
 		if (login.isPending) return;
 
-		const form = event.currentTarget as HTMLFormElement;
+		const form = event.currentTarget;
 
 		const username = form.username.value as string;
 		const password = form.password.value as string;
@@ -31,7 +31,10 @@ export default function LoginPage() {
 				<Heading>login</Heading>
 
 				<p className="text-gray-11">
-					no account yet? <TextLink href="/register">register</TextLink>
+					no account yet?{" "}
+					<Link variant="text" href="/register">
+						register
+					</Link>
 				</p>
 			</hgroup>
 

@@ -34,3 +34,6 @@ pre:
 
 db:
 	@docker exec -it dash_db psql -U pg -d db
+
+dbreset:
+	@docker compose down -v -t 1 && docker compose up -d
