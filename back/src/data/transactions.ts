@@ -121,7 +121,6 @@ export function transactions(sql: Pg) {
 
 			let cursorClause = null;
 			let order = sql`desc`;
-			let orderval = "desc";
 			const limit = (opts?.limit ?? 50) + 1;
 			const cursor = opts?.cursor;
 
@@ -130,7 +129,6 @@ export function transactions(sql: Pg) {
 
 				if (dir === "left") {
 					order = sql`asc`;
-					orderval = "asc";
 					cursorClause = sql`
 					(
 						(
@@ -154,8 +152,6 @@ export function transactions(sql: Pg) {
 			const queryClause = query
 				? sql`and t.ts @@ plainto_tsquery('english', ${query})`
 				: null;
-
-			const swappedOrder = orderval === "desc" ? sql`asc` : sql`desc`;
 
 			const rows = await sql`
 				select
@@ -194,7 +190,7 @@ export function transactions(sql: Pg) {
 				where t.user_id = ${userId}
 				${queryClause ? sql`${queryClause}` : sql``}
 				${cursorClause ? sql`and ${cursorClause}` : sql``}
-				order by t.date ${order}, t.id ${swappedOrder}
+				order by t.date ${order}, t.id ${order}
 				limit ${limit};
 			`.values();
 

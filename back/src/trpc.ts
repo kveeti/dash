@@ -3,6 +3,7 @@ import type { CreateHTTPContextOptions } from "@trpc/server/adapters/standalone"
 import SuperJSON from "superjson";
 
 import type { Data } from "./data/data.ts";
+import { ids } from "./data/id.ts";
 import type { Auth } from "./services/auth.ts";
 import { timingSafeEqual, verifyToken } from "./token.ts";
 
@@ -44,13 +45,15 @@ export const authProc = publicProcedure.use(async (opts) => {
 	}
 
 	const authCookie = cookies.split("auth=")?.[1]?.split(";")?.[0];
-	const userId = await verifyToken(authCookie);
+	let userId = await verifyToken(authCookie);
 	if (!userId) {
 		throw new TRPCError({
 			code: "UNAUTHORIZED",
 			message: "invalid auth",
 		});
 	}
+
+	userId = userId.slice(ids["user"].length + 1);
 
 	return opts.next({
 		ctx: { userId, csrf: csrfCookie },
