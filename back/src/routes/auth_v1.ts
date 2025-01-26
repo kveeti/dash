@@ -6,8 +6,8 @@ import { createAuthCookie, createCsrfCookie } from "../token.ts";
 import { authProc, publicProcedure, router } from "../trpc.ts";
 
 const schema = v.object({
-	username: v.pipe(v.string(), v.nonEmpty()),
-	password: v.pipe(v.string(), v.nonEmpty()),
+	username: v.pipe(v.string(), v.nonEmpty(), v.maxLength(30)),
+	password: v.pipe(v.string(), v.nonEmpty(), v.maxLength(300)),
 });
 
 export const auth_v1 = router({
