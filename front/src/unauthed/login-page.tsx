@@ -26,7 +26,7 @@ export default function LoginPage() {
 	}
 
 	return (
-		<div className="fixed right-0 bottom-28 left-0 mx-auto w-full max-w-75 px-2 md:relative md:top-28">
+		<div className="fixed right-0 bottom-65 left-0 mx-auto w-full max-w-75 px-2 md:relative md:top-28">
 			<hgroup className="space-y-2">
 				<Heading>login</Heading>
 

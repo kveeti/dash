@@ -1,7 +1,7 @@
 @variant pwa (@media (display-mode: standalone));
 
 @utility focus {
-	@apply focus-visible:outline-gray-a10 outline-offset-4;
+	@apply focus-visible:outline-gray-a10 outline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-solid;
 }
 
 @theme {

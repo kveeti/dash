@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, loggerLink } from "@trpc/client";
-import { type ReactNode, StrictMode, Suspense, lazy, useState } from "react";
+import { type ReactNode, StrictMode, Suspense, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster, toast } from "sonner";
 import SuperJSON from "superjson";
@@ -9,6 +9,7 @@ import { Redirect, Route, Switch } from "wouter";
 
 import { AuthLayout } from "./authed/layout";
 import { envs } from "./lib/envs";
+import { lazyWithPreload } from "./lib/lazy";
 import { type Me, MeProvider, useMe } from "./lib/me";
 import { trpc } from "./lib/trpc";
 import { Button } from "./ui/button";
@@ -17,14 +18,25 @@ import { Button } from "./ui/button";
  */
 import LoginPage from "./unauthed/login-page";
 
-const RegisterPage = lazy(() => import("./unauthed/register-page"));
-const NewTransactionPage = lazy(() => import("./authed/new-transaction-page/new-transaction-page"));
-const ImportTransactionsPage = lazy(() => import("./authed/import-transactions-page"));
-const CategoriesPage = lazy(() => import("./authed/categories-page/categories-page"));
-const TransactionsPage = lazy(() => import("./authed/transactions-page/transactions-page"));
-const TransactionStatsPage = lazy(
+const RegisterPage = lazyWithPreload(() => import("./unauthed/register-page"));
+const NewTransactionPage = lazyWithPreload(
+	() => import("./authed/new-transaction-page/new-transaction-page")
+);
+const ImportTransactionsPage = lazyWithPreload(() => import("./authed/import-transactions-page"));
+const CategoriesPage = lazyWithPreload(() => import("./authed/categories-page/categories-page"));
+const TransactionsPage = lazyWithPreload(
+	() => import("./authed/transactions-page/transactions-page")
+);
+const TransactionStatsPage = lazyWithPreload(
 	() => import("./authed/transaction-stats-page/transaction-stats-page")
 );
+
+RegisterPage.preload();
+CategoriesPage.preload();
+TransactionsPage.preload();
+TransactionStatsPage.preload();
+ImportTransactionsPage.preload();
+NewTransactionPage.preload();
 
 function Entry() {
 	const { me } = useMe();

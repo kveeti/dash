@@ -1,10 +1,10 @@
-import { type ReactNode } from "react";
+import { type ComponentProps, type ReactNode } from "react";
 import { Link as FWLink, useLocation } from "wouter";
 
 export const textLinkStyles =
-	"focus text-xs md:text-sm text-current underline -m-2 p-2 hover:bg-gray-a3 inline-block max-w-max";
+	"focus text-current underline -m-2 p-2 hover:bg-gray-a3 inline-block max-w-max";
 
-export const linkStyles = "focus text-xs md:text-sm text-current underline";
+export const linkStyles = "focus text-sm text-current underline";
 
 export function Link({
 	children,
@@ -18,16 +18,39 @@ export function Link({
 	className?: string;
 	variant?: "text" | "default";
 }) {
-	const [, setLocation] = useLocation();
 	const baseStyles = variant === "default" ? linkStyles : textLinkStyles;
+	const _className = baseStyles + (className ? " " + className : "");
 
 	if (!href) {
 		return (
-			<a
-				role="link"
-				aria-disabled="true"
-				className={baseStyles + (className ? " " + className : "")}
-			>
+			<a role="link" aria-disabled="true" className={_className}>
+				{children}
+			</a>
+		);
+	}
+
+	return (
+		<FastLink href={href} className={_className} {...props}>
+			{children}
+		</FastLink>
+	);
+}
+
+export function FastLink({
+	children,
+	href,
+	className,
+	...props
+}: {
+	children: ReactNode;
+	href?: string | null;
+	className?: string;
+}) {
+	const [, setLocation] = useLocation();
+
+	if (!href) {
+		return (
+			<a role="link" aria-disabled="true" className={className}>
 				{children}
 			</a>
 		);
@@ -36,7 +59,7 @@ export function Link({
 	return (
 		<FWLink
 			href={href}
-			className={baseStyles + (className ? " " + className : "")}
+			className={className}
 			onClick={(e) => {
 				// onClick has to be cancelled:
 				// for example on transaction pagination, users paginating
@@ -86,4 +109,9 @@ export function Link({
 			{children}
 		</FWLink>
 	);
+}
+
+export function SlowLink(props: ComponentProps<typeof FWLink>) {
+	// TODO: undefined href support if needed
+	return <FWLink {...props} />;
 }

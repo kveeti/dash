@@ -3,7 +3,7 @@ import { type ComponentProps, useId } from "react";
 export const labelStyles = "text-gray-11 block";
 
 export const inputStyles =
-	"focus min-w-0 max-w-full w-full px-3 h-10 border border-gray-6 rounded-none bg-transparent text-inherit placeholder:opacity-50 focus:relative focus:z-10";
+	"focus min-w-0 max-w-full w-full px-3 h-10 border border-gray-6 rounded-none bg-transparent text-inherit placeholder:opacity-80 focus:relative focus:z-10";
 
 type DefaultInputProps = ComponentProps<"input">;
 type Props = { label?: string; error?: string } & DefaultInputProps;

@@ -57,6 +57,7 @@ export const auth_v1 = router({
 
 	logout: publicProcedure.mutation(({ ctx }) => {
 		ctx.res.appendHeader("set-cookie", createAuthCookie("", new Date(0)));
+		ctx.res.appendHeader("set-cookie", createCsrfCookie(""));
 	}),
 
 	me: authProc.query(async ({ ctx }) => {

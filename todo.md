@@ -1,5 +1,3 @@
-- [ ] mobile
-- [ ] transaction import page and link
 - [ ] transaction filters
 - [ ] neutral categories for savings etc
 - [ ] some transaction bulk actions
@@ -9,9 +7,12 @@
 - [ ] category page name truncate
 - [ ] fix category autocomplete
 - [ ] stats page filters
-- [ ] fix input outlines in safari(s)
 - [ ] moor stats
 - [ ] accounts
 - [ ] transaction tags?
+- [ ] improve transaction import page
 - [ ] deploy script
 
+- [x] mobile
+- [x] fix input outlines in safari(s)
+- [x] transaction import page and link

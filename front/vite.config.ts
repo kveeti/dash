@@ -5,8 +5,8 @@ import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
 	clearScreen: false,
-	server: { port: 3000 },
-	preview: { port: 3000 },
+	server: { port: 3000, host: true },
+	preview: { port: 3000, host: true },
 
 	envPrefix: "PUBLIC",
 

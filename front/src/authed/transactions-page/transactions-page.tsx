@@ -73,7 +73,7 @@ export default function TransactionsPage() {
 	let lastDate = "";
 	return (
 		<div className="w-full max-w-md">
-			<div className="bg-gray-1 border-b-gray-4 sticky top-0 border-b pt-1 shadow-lg">
+			<div className="bg-gray-1 border-b-gray-4 sticky top-0 border-b pt-1">
 				<div className="flex gap-1">
 					<Search currentSearchParams={searchParams} />
 
@@ -110,7 +110,6 @@ export default function TransactionsPage() {
 					{selectedTx && (
 						<div
 							className="fixed top-4 right-4 max-h-full w-full max-w-[28rem] overflow-y-auto pb-10"
-							style={{ scrollbarGutter: "stable" }}
 							key={selectedTx.id}
 						>
 							<SelectedTx unselect={() => setSelectedTxId(null)} tx={selectedTx} />

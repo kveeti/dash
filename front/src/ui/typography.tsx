@@ -16,5 +16,5 @@ export function Heading({
 	const Tag = `h${level}`;
 
 	// @ts-expect-error TODO
-	return <Tag className={headings[visualLevel ?? level]} {...props} />;
+	return <Tag className={headings[level ?? visualLevel]} {...props} />;
 }

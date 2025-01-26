@@ -17,12 +17,11 @@ export default function TransactionStatsPage() {
 	const pEnd = searchParams.get("end");
 
 	const now = new Date();
+
 	const max = endOfDay(now);
-	const f_time_max = format(max, "HH:mm");
 	const f_date_max = format(max, "yyyy-MM-dd");
 
 	const min = subYears(startOfYear(now), 10);
-	const f_time_min = format(min, "HH:mm");
 	const f_date_min = format(min, "yyyy-MM-dd");
 
 	const timeframe = {
@@ -31,27 +30,21 @@ export default function TransactionStatsPage() {
 	};
 
 	const startDate = format(timeframe.start, "yyyy-MM-dd");
-	const startTime = format(timeframe.start, "HH:ss");
 
 	const endDate = format(timeframe.end, "yyyy-MM-dd");
-	const endTime = format(timeframe.end, "HH:ss");
 
-	function onTimeframeChange(
-		input: "start" | "end",
-		valueType: "date" | "time",
-		event: ChangeEvent<HTMLInputElement>
-	) {
+	function onTimeframeChange(input: "start" | "end", event: ChangeEvent<HTMLInputElement>) {
 		const newValue = event.target.valueAsDate;
 		if (!newValue) return;
 
 		const value = timeframe[input];
-		if (valueType === "date") {
-			value.setUTCDate(newValue.getUTCDate());
-			value.setUTCFullYear(newValue.getUTCFullYear());
-			value.setUTCMonth(newValue.getUTCMonth());
-		} else {
-			value.setUTCHours(newValue.getUTCHours());
-			value.setUTCMinutes(newValue.getUTCMinutes());
+		value.setUTCDate(newValue.getUTCDate());
+		value.setUTCFullYear(newValue.getUTCFullYear());
+		value.setUTCMonth(newValue.getUTCMonth());
+		if (input === "start") {
+			value.setUTCHours(0, 0, 0, 0);
+		} else if (input === "end") {
+			value.setUTCHours(23, 59, 59, 999);
 		}
 
 		if (isBefore(value, min) || isAfter(value, max)) {
@@ -66,44 +59,23 @@ export default function TransactionStatsPage() {
 
 	return (
 		<div className="h-full w-full px-2">
-			<div className="mx-5 mb-5 flex items-center">
-				<div className="flex w-full gap-2">
-					<Input
-						type="date"
-						min={f_date_min}
-						max={f_date_max}
-						defaultValue={startDate}
-						onChange={(e) => onTimeframeChange("start", "date", e)}
-					/>
-					<div className="w-max">
-						<Input
-							type="time"
-							min={f_date_min}
-							max={f_date_max}
-							defaultValue={startTime}
-							onChange={(e) => onTimeframeChange("start", "time", e)}
-						/>
-					</div>
-				</div>
-				<span className="ms-4 me-4">-</span>
-				<div className="flex w-full gap-2">
-					<Input
-						type="date"
-						min={f_date_min}
-						max={f_date_max}
-						defaultValue={endDate}
-						onChange={(e) => onTimeframeChange("end", "date", e)}
-					/>
-					<div className="w-max">
-						<Input
-							type="time"
-							min={f_time_min}
-							max={f_time_max}
-							defaultValue={endTime}
-							onChange={(e) => onTimeframeChange("end", "time", e)}
-						/>
-					</div>
-				</div>
+			<div className="mx-5 mb-5 flex flex-col items-center gap-2 sm:flex-row">
+				<Input
+					type="date"
+					min={f_date_min}
+					max={f_date_max}
+					defaultValue={startDate}
+					onChange={(e) => onTimeframeChange("start", e)}
+					className="p-2"
+				/>
+				<span className="text-gray-11 hidden sm:inline">-</span>
+				<Input
+					type="date"
+					min={f_date_min}
+					max={f_date_max}
+					defaultValue={endDate}
+					onChange={(e) => onTimeframeChange("end", e)}
+				/>
 			</div>
 			<ChartWrapper timeframe={timeframe} />
 		</div>
