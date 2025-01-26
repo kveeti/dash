@@ -1,6 +1,5 @@
 import * as v from "valibot";
 
-import { idSchema } from "../data/id.ts";
 import { authProc, router } from "../trpc.ts";
 
 export const categories_v1 = router({
@@ -23,7 +22,7 @@ export const categories_v1 = router({
 		.input(
 			v.parser(
 				v.object({
-					id: idSchema("transaction_category"),
+					id: v.string(),
 				})
 			)
 		)
@@ -38,7 +37,7 @@ export const categories_v1 = router({
 		.input(
 			v.parser(
 				v.object({
-					id: idSchema("transaction_category"),
+					id: v.string(),
 					name: v.pipe(v.string(), v.nonEmpty("required")),
 				})
 			)

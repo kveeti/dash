@@ -32,7 +32,7 @@ export const passwords = {
 };
 
 function PBKDF2_001() {
-	const iterations = 1_000_000;
+	const iterations = 4_000_000;
 	const keySize = 64;
 	const saltSize = 64;
 	const hashAlgo = "SHA-512";

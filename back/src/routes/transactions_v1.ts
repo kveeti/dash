@@ -1,7 +1,7 @@
 import { addDays, subYears } from "date-fns";
 import * as v from "valibot";
 
-import { id, idSchema } from "../data/id.ts";
+import { id } from "../data/id.ts";
 import { authProc, router } from "../trpc.ts";
 
 export const transactions_v1 = router({
@@ -30,8 +30,8 @@ export const transactions_v1 = router({
 		.input(
 			v.parser(
 				v.object({
-					right: v.optional(idSchema("transaction")),
-					left: v.optional(idSchema("transaction")),
+					right: v.optional(v.string()),
+					left: v.optional(v.string()),
 					query: v.optional(v.string()),
 					limit: v.optional(v.number()),
 				})
@@ -76,7 +76,7 @@ export const transactions_v1 = router({
 		.mutation(async ({ ctx, input }) => {
 			if (input.category_name) {
 				await ctx.data.transactions.insertWithCategory({
-					id: id(),
+					id: id("transaction"),
 					userId: ctx.userId,
 					counterParty: input.counter_party,
 					amount: input.amount,
@@ -87,7 +87,7 @@ export const transactions_v1 = router({
 				});
 			} else {
 				await ctx.data.transactions.insert({
-					id: id(),
+					id: id("transaction"),
 					userId: ctx.userId,
 					counterParty: input.counter_party,
 					amount: input.amount,
@@ -102,7 +102,7 @@ export const transactions_v1 = router({
 		.input(
 			v.parser(
 				v.object({
-					id: idSchema("transaction"),
+					id: v.string(),
 					counter_party: v.pipe(v.string(), v.nonEmpty("required")),
 					amount: v.pipe(v.number("required")),
 					currency: v.pipe(v.string(), v.nonEmpty("required")),
@@ -194,7 +194,7 @@ export const transactions_v1 = router({
 
 					while (transactionDate <= now) {
 						transactions.push({
-							id: id(),
+							id: id("transaction"),
 							user_id: ctx.userId,
 							counter_party: counterParty,
 							amount,

@@ -1,5 +1,4 @@
 import type { Pg } from "./data.ts";
-import { idDb } from "./id.ts";
 
 export const users = (sql: Pg) => ({
 	async upsert(user: UserWithPasswordHash) {
@@ -18,7 +17,7 @@ export const users = (sql: Pg) => ({
 
 	async getByUsername(username: string) {
 		const [row]: [UserWithPasswordHash?] = await sql`
-		      select concat('${sql.unsafe(idDb("user"))}', id) as id, username, password_hash, created_at from users
+		      select id, username, password_hash, created_at from users
 		      where username = ${username}
 		      limit 1;
 		`;
@@ -28,7 +27,7 @@ export const users = (sql: Pg) => ({
 
 	async getById(id: string) {
 		const [row]: [User?] = await sql`
-		      select concat('${sql.unsafe(idDb("user"))}', id) as id, username, created_at from users
+		      select id, username, created_at from users
 		      where id = ${id}
 		      limit 1;
 		`;

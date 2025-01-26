@@ -5,7 +5,8 @@
 		"dev": "node --watch-preserve-output --watch src/index.ts",
 		"build": "rolldown --minify --format esm --platform node src/index.ts --file dist/server.js",
 		"preview": "node ./dist/server.js",
-		"lint": "eslint ."
+		"lint": "eslint .",
+		"ts": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@trpc/server": "11.0.0-rc.700",

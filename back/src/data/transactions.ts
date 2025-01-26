@@ -1,5 +1,5 @@
 import type { Pg } from "./data.ts";
-import { id, idDb } from "./id.ts";
+import { id } from "./id.ts";
 
 export function transactions(sql: Pg) {
 	return {
@@ -155,14 +155,14 @@ export function transactions(sql: Pg) {
 
 			const rows = await sql`
 				select
-					concat('${sql.unsafe(idDb("transaction"))}', t.id) as tx_id,
-					t.date              as tx_date,
-					t.amount			as tx_amount,
-					t.currency          as tx_currency,
-					t.additional        as tx_additional,
-					t.counter_party     as tx_counter_party,
-					t.category_id       as category_id,
-					c.name              as category_name,
+					t.id            as tx_id,
+					t.date          as tx_date,
+					t.amount		as tx_amount,
+					t.currency      as tx_currency,
+					t.additional    as tx_additional,
+					t.counter_party as tx_counter_party,
+					t.category_id   as category_id,
+					c.name          as category_name,
 
 					linked_tx.id            as l_tx_id,
 					linked_tx.date          as l_tx_date,
@@ -290,7 +290,7 @@ export function transactions(sql: Pg) {
 			additional: string | null;
 			categoryName: string;
 		}) => {
-			const categoryId = id();
+			const categoryId = id("transaction_category");
 			await sql`
 				with category as (
 					insert into transaction_categories (id, name, user_id)
@@ -338,19 +338,19 @@ export function transactions(sql: Pg) {
 				counter_party: string;
 				additional: string | null;
 				user_id: string;
-				category_name: string;
+				category_name?: string;
 			}>
 		) => {
 			const uniqueCategories = new Set<string>();
 			for (const t of transactions) {
-				uniqueCategories.add(t.category_name);
+				if (t.category_name) uniqueCategories.add(t.category_name);
 			}
 
 			const categoryIds = new Map<string, string>();
 
 			for (const category of uniqueCategories.values()) {
 				const c = {
-					id: id(),
+					id: id("transaction_category"),
 					name: category,
 					user_id: transactions[0].user_id,
 				};
@@ -388,7 +388,7 @@ export function transactions(sql: Pg) {
 			categoryName: string;
 			userId: string;
 		}) => {
-			const categoryId = id();
+			const categoryId = id("transaction_category");
 			await sql`
 				with category as (
 					insert into transaction_categories (id, name, user_id)

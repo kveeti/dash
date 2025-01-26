@@ -1,5 +1,4 @@
 import type { Pg } from "./data.ts";
-import { idDb } from "./id.ts";
 import type { CategoryWithTxCount } from "./transactions.ts";
 
 export function categories(sql: Pg) {
@@ -8,7 +7,7 @@ export function categories(sql: Pg) {
 			const filter = query ? sql`and lower(c.name) like ${query}` : sql``;
 
 			const rows: Array<CategoryWithTxCount> = await sql`
-				select concat('${sql.unsafe(idDb("transaction_category"))}', c.id) as id, c.name, count(*) as transaction_count
+				select c.id, c.name, count(*) as transaction_count
 				from transaction_categories c
 				left join transactions t on t.category_id = c.id
 				where c.user_id = ${userId}

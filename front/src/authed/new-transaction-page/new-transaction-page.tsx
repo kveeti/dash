@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
 import * as v from "valibot";
 
+import { envs } from "../../lib/envs";
 import { trpc } from "../../lib/trpc";
 import { valibotToHumanUnderstandable } from "../../lib/utils";
 import { Button } from "../../ui/button";
@@ -55,7 +56,7 @@ export default function NewTransactionPage() {
 			<div className="mx-auto max-w-100">
 				<Heading>new transaction</Heading>
 
-				<Generate />
+				{envs.isProd && <Generate />}
 
 				<form onSubmit={onSubmit} className="flex flex-col gap-4 pt-5">
 					<Input

@@ -25,7 +25,7 @@ export const auth_v1 = router({
 		const cookie = createAuthCookie(token.value, token.expiry);
 		ctx.res.appendHeader("set-cookie", cookie);
 
-		const csrf = id();
+		const csrf = id("csrf");
 		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
 
 		return { ...user, csrf };
@@ -49,7 +49,7 @@ export const auth_v1 = router({
 		const cookie = createAuthCookie(token.value, token.expiry);
 		ctx.res.appendHeader("set-cookie", cookie);
 
-		const csrf = id();
+		const csrf = id("csrf");
 		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
 
 		return { ...user, csrf };
@@ -60,6 +60,8 @@ export const auth_v1 = router({
 	}),
 
 	me: authProc.query(async ({ ctx }) => {
+		console.log(ctx.userId);
+
 		const user = await ctx.services.auth.getUser(ctx.userId);
 		if (!user) {
 			throw new Error("??");

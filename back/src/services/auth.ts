@@ -1,9 +1,9 @@
 import { addDays } from "date-fns";
 
-import { createToken } from "../token.ts";
 import type { Data } from "../data/data.ts";
 import { id } from "../data/id.ts";
 import { passwords } from "../password.ts";
+import { createToken } from "../token.ts";
 
 export function auth(data: Data) {
 	return {
@@ -42,7 +42,7 @@ export function auth(data: Data) {
 		},
 
 		register: async (username: string, password: string) => {
-			const userId = id();
+			const userId = id("user");
 			const passwordHash = await passwords.hash(password);
 			const createdAt = new Date();
 

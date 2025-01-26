@@ -130,7 +130,7 @@ function handleTransactionImport(data: Data): RequestListener {
 				}
 
 				buffer.push({
-					id: id(),
+					id: id("transaction"),
 					...res.output,
 					user_id: userId,
 					currency: "EUR",
