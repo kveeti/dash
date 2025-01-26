@@ -60,8 +60,6 @@ export const auth_v1 = router({
 	}),
 
 	me: authProc.query(async ({ ctx }) => {
-		console.log(ctx.userId);
-
 		const user = await ctx.services.auth.getUser(ctx.userId);
 		if (!user) {
 			throw new Error("??");
