@@ -31,7 +31,7 @@ export function Nav() {
 			className={
 				"bg-gray-1 right-0 left-0 flex h-10 items-center shadow-xs sm:top-0 sm:border-t-0 sm:border-b" +
 				" " +
-				"pwa:pb-10 border-gray-a4 fixed bottom-0 h-max border-t px-4 shadow-xs" +
+				"pwa:pb-10 pwa:sm:pb-0 border-gray-a4 fixed bottom-0 h-max border-t px-4 shadow-xs" +
 				" " +
 				"me-(--removed-body-scroll-bar-size)"
 			}

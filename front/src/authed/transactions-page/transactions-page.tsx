@@ -73,7 +73,7 @@ export default function TransactionsPage() {
 	let lastDate = "";
 	return (
 		<div className="w-full max-w-md">
-			<div className="bg-gray-1 border-b-gray-4 sticky top-0 border-b pt-1">
+			<div className="bg-gray-1 border-b-gray-4 sticky top-10 border-b pt-1">
 				<div className="flex gap-1">
 					<Search currentSearchParams={searchParams} />
 
@@ -136,8 +136,7 @@ export default function TransactionsPage() {
 									key={t.id}
 									data-id={t.id}
 									className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
-									onMouseDown={onTxClick.bind(t)}
-									onTouchStart={onTxClick.bind(t)}
+									onClick={onTxClick.bind(t)}
 								>
 									<div className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm">
 										<span
