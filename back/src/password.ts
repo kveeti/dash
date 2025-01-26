@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "./token.ts";
+import { base64ToBytes, bytesToBase64, timingSafeEqual } from "./token.ts";
 
 const hashVersions = [PBKDF2_001()];
 
@@ -19,7 +19,7 @@ export const passwords = {
 		const withoutVersion = hash.slice(hashVersion.id.length + 2);
 
 		const isOk = await hashVersion.verify(withoutVersion, plaintext);
-		if (isOk === false) {
+		if (isOk !== true) {
 			return "failed" as const;
 		}
 
@@ -70,11 +70,11 @@ function PBKDF2_001() {
 
 			keyBytes.set(new Uint8Array(derivedBits));
 
-			return bufferToBase64(hashedPasswordBytes);
+			return bytesToBase64(hashedPasswordBytes);
 		},
 
 		verify: async (hash: string, plaintext: string) => {
-			const hashedPasswordBytes = base64ToBuffer(hash);
+			const hashedPasswordBytes = base64ToBytes(hash);
 			if (hashedPasswordBytes.length === 0) return false;
 
 			const saltBytes = hashedPasswordBytes.subarray(1, 1 + saltSize);
@@ -98,30 +98,7 @@ function PBKDF2_001() {
 				keySize * 8
 			);
 
-			const actualKeyBytes = new Uint8Array(derivedBits);
-
-			return timingSafeEqual(actualKeyBytes, expectedKeyBytes);
+			return timingSafeEqual(new Uint8Array(derivedBits), expectedKeyBytes);
 		},
 	};
-}
-
-function bufferToBase64(buffer: Uint8Array) {
-	return btoa(String.fromCharCode(...new Uint8Array(buffer)));
-}
-
-function base64ToBuffer(base64: string) {
-	let binaryString = null;
-	try {
-		binaryString = atob(base64);
-	} catch (_) {
-		return new Uint8Array();
-	}
-
-	const length = binaryString.length;
-	const buffer = new ArrayBuffer(length);
-	const view = new Uint8Array(buffer);
-	for (let i = 0; i < length; i++) {
-		view[i] = binaryString.charCodeAt(i);
-	}
-	return view;
 }
