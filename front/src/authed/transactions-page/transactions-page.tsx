@@ -1,4 +1,10 @@
-import { ArrowLeftIcon, ArrowRightIcon, MixerHorizontalIcon } from "@radix-ui/react-icons";
+import {
+	ArrowLeftIcon,
+	ArrowRightIcon,
+	Cross1Icon,
+	MixerHorizontalIcon,
+	TrashIcon,
+} from "@radix-ui/react-icons";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 
@@ -6,6 +12,7 @@ import type { TransactionWithLinks } from "../../../../back/src/data/transaction
 import { errorToast } from "../../lib/error-toast";
 import { trpc } from "../../lib/trpc";
 import { Button } from "../../ui/button";
+import * as Dialog from "../../ui/dialog";
 import { Input } from "../../ui/input";
 import { Link } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
@@ -73,7 +80,8 @@ export default function TransactionsPage() {
 	let lastDate = "";
 	return (
 		<div className="w-full max-w-md">
-			<div className="bg-gray-1 border-b-gray-4 sticky top-10 border-b pt-1">
+			{/* desktop */}
+			<div className="bg-gray-1 border-b-gray-4 order-b sticky top-10 hidden sm:block">
 				<div className="flex gap-1">
 					<Search currentSearchParams={searchParams} />
 
@@ -94,6 +102,28 @@ export default function TransactionsPage() {
 				</div>
 			</div>
 
+			{/* mobile */}
+			<div className="bg-gray-1 border-t-gray-5 pwa:bottom-20 fixed right-0 bottom-10 left-0 block border-t px-1 pb-2 sm:hidden">
+				<div className="flex items-center justify-between py-2">
+					{q.isPending && <Spinner />}
+
+					<Pagination
+						className="ml-auto"
+						currentSearchParams={searchParams}
+						leftId={leftId}
+						rightId={rightId}
+					/>
+				</div>
+
+				<div className="flex gap-1">
+					<Search currentSearchParams={searchParams} />
+
+					<Button>
+						<MixerHorizontalIcon />
+					</Button>
+				</div>
+			</div>
+
 			{q.isPending ? (
 				Loading
 			) : q.isError ? (
@@ -109,7 +139,7 @@ export default function TransactionsPage() {
 				<>
 					{selectedTx && (
 						<div
-							className="fixed top-4 right-4 max-h-full w-full max-w-[28rem] overflow-y-auto pb-10"
+							className="fixed top-0 right-0 max-h-full w-full max-w-[28rem] overflow-y-auto pb-10 sm:top-14 sm:right-4"
 							key={selectedTx.id}
 						>
 							<SelectedTx unselect={() => setSelectedTxId(null)} tx={selectedTx} />
@@ -200,8 +230,17 @@ function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () =
 
 	return (
 		<Sidebar.Root modal={false} defaultOpen onOpenChange={unselect}>
-			<Sidebar.Content className="space-y-2" onInteractOutside={(e) => e.preventDefault()}>
+			<Sidebar.Content
+				className="relative space-y-2"
+				onInteractOutside={(e) => e.preventDefault()}
+			>
 				<Sidebar.Title>{tx.counter_party}</Sidebar.Title>
+
+				<Sidebar.Close className="!absolute top-1 right-1" asChild>
+					<Button size="icon" variant="ghost">
+						<Cross1Icon />
+					</Button>
+				</Sidebar.Close>
 
 				<p className="text-base">{amountFormatter.format(tx.amount)}</p>
 
@@ -354,7 +393,7 @@ function Pagination({
 		<div className={"flex gap-1" + (className ? " " + className : "")}>
 			<Link
 				href={leftId && "?" + prevParams.toString()}
-				className="border-gray-4 flex size-8 items-center justify-center rounded-full border"
+				className="border-gray-5 flex size-8 items-center justify-center rounded-full border"
 			>
 				<ArrowLeftIcon aria-hidden="true" />
 				<span className="sr-only">to the left</span>
@@ -362,7 +401,7 @@ function Pagination({
 
 			<Link
 				href={rightId && "?" + nextParams.toString()}
-				className="border-gray-4 flex size-8 items-center justify-center rounded-full border"
+				className="border-gray-5 flex size-8 items-center justify-center rounded-full border"
 			>
 				<ArrowRightIcon aria-hidden="true" />
 				<span className="sr-only">to the right</span>

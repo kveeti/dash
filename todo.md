@@ -1,4 +1,3 @@
-- [ ] better transaction details
 - [ ] transaction filters
 - [ ] neutral categories for savings etc
 - [ ] some transaction bulk actions
@@ -18,3 +17,4 @@
 - [x] fix category autocomplete
 - [x] category page name truncate
 - [x] transaction deleting
+- [x] better transaction details
