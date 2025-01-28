@@ -12,6 +12,15 @@ body {
 	@apply bg-gray-1 text-gray-12 font-default text-sm;
 }
 
+/* hide scrollbar */
+html {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}
+
 :root {
 	--black-a1: rgba(0, 0, 0, 0.05);
 	--black-a2: rgba(0, 0, 0, 0.1);
