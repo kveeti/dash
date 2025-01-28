@@ -1,7 +1,8 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import * as v from "valibot";
 
 import { envs } from "../../lib/envs";
+import { errorToast } from "../../lib/error-toast";
 import { trpc } from "../../lib/trpc";
 import { valibotToHumanUnderstandable } from "../../lib/utils";
 import { Button } from "../../ui/button";
@@ -29,8 +30,13 @@ const schema = v.object({
 });
 
 export default function NewTransactionPage() {
-	const mutation = trpc.v1.transactions.create.useMutation();
+	const t = trpc.useUtils();
+	const mutation = trpc.v1.transactions.create.useMutation({
+		onSuccess: () => t.v1.transactions.invalidate(),
+	});
+
 	const [localErrors, setLocalErrors] = useState<Record<string, string> | null>(null);
+	const form = useRef<HTMLFormElement>(null);
 
 	async function onSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -45,7 +51,21 @@ export default function NewTransactionPage() {
 			return;
 		}
 
-		mutation.mutateAsync(res.output).then(() => setLocalErrors(null));
+		mutation
+			.mutateAsync(res.output)
+			.then(() => {
+				setLocalErrors(null);
+				form?.current?.reset();
+				queueMicrotask(() => {
+					// queueMicrotask is needed because of react-aria-components'
+					// number field. if form is submitted by pressing enter
+					// while focused on number field the field won't reset
+					// if this focus is ran directly after form.reset(). needs to
+					// be ran in the "next tick"
+					form?.current?.getElementsByTagName("input")?.item(0)?.focus();
+				});
+			})
+			.catch(errorToast("error creating transaction"));
 	}
 
 	// TODO: server errors ?? localErrors
@@ -58,7 +78,7 @@ export default function NewTransactionPage() {
 
 				{envs.isProd && <Generate />}
 
-				<form onSubmit={onSubmit} className="flex flex-col gap-4 pt-5">
+				<form ref={form} onSubmit={onSubmit} className="flex flex-col gap-4 pt-5">
 					<Input
 						label="counter party"
 						error={errors?.counter_party}
