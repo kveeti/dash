@@ -1,5 +1,7 @@
 - [ ] transaction filters
 - [ ] neutral categories for savings etc
+- [ ] choose locale, auto doesn't work
+- [ ] clear button for transaction search (and filters?)
 - [ ] some transaction bulk actions
 - [ ] transaction linking
 - [ ] category page pagination
