@@ -1,10 +1,11 @@
+- [ ] transaction deleting
+- [ ] better transaction details
 - [ ] transaction filters
 - [ ] neutral categories for savings etc
 - [ ] some transaction bulk actions
 - [ ] transaction linking
 - [ ] category page pagination
 - [ ] category search
-- [ ] category page name truncate
 - [ ] stats page filters
 - [ ] moor stats
 - [ ] accounts
@@ -16,3 +17,4 @@
 - [x] fix input outlines in safari(s)
 - [x] transaction import page and link
 - [x] fix category autocomplete
+- [x] category page name truncate

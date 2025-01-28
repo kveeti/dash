@@ -37,8 +37,8 @@ export default function CategoriesPage() {
 			<ul className="divide-gray-3 divide-y">
 				{q.data?.map((c) => (
 					<li key={c.id} className="flex items-center justify-between gap-2 py-1 ps-2">
-						<div>
-							<p>{c.name}</p>
+						<div className="truncate">
+							<p className="truncate">{c.name}</p>
 							<p className="text-gray-10 mt-0.5 text-xs">
 								{countFormat.format(c.transaction_count)}{" "}
 								{c.transaction_count === 1n ? "transaction" : "transactions"}
