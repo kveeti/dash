@@ -4,7 +4,7 @@ import type { CategoryWithTxCount } from "./transactions.ts";
 export function categories(sql: Pg) {
 	return {
 		query: async ({ userId, query }: { userId: string; query: string }) => {
-			const filter = query ? sql`and lower(c.name) like ${query}` : sql``;
+			const filter = query ? sql`and lower(c.name) like ${"%" + query + "%"}` : sql``;
 
 			const rows: Array<CategoryWithTxCount> = await sql`
 				select c.id, c.name, count(*) as transaction_count

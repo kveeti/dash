@@ -5,7 +5,6 @@
 - [ ] category page pagination
 - [ ] category search
 - [ ] category page name truncate
-- [ ] fix category autocomplete
 - [ ] stats page filters
 - [ ] moor stats
 - [ ] accounts
@@ -16,3 +15,4 @@
 - [x] mobile
 - [x] fix input outlines in safari(s)
 - [x] transaction import page and link
+- [x] fix category autocomplete
