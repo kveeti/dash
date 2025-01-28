@@ -1,4 +1,3 @@
-- [ ] transaction deleting
 - [ ] better transaction details
 - [ ] transaction filters
 - [ ] neutral categories for savings etc
@@ -18,3 +17,4 @@
 - [x] transaction import page and link
 - [x] fix category autocomplete
 - [x] category page name truncate
+- [x] transaction deleting

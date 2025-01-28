@@ -137,6 +137,18 @@ export const transactions_v1 = router({
 			}
 		}),
 
+	delete: authProc
+		.input(
+			v.parser(
+				v.object({
+					id: v.string(),
+				})
+			)
+		)
+		.mutation(async ({ ctx, input }) => {
+			await ctx.data.transactions.delete({ id: input.id, userId: ctx.userId });
+		}),
+
 	gen: authProc.mutation(async ({ ctx }) => {
 		const types = [
 			{

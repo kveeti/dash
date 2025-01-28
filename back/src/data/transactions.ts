@@ -433,6 +433,14 @@ export function transactions(sql: Pg) {
 				and user_id = ${props.userId};
 			`;
 		},
+
+		async delete(props: { id: string; userId: string }) {
+			await sql`
+				delete from transactions
+				where id = ${props.id}
+				and user_id = ${props.userId};
+			`;
+		},
 	};
 }
 

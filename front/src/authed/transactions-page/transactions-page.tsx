@@ -209,38 +209,89 @@ function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () =
 
 				<p className="text-gray-11 break-words">{tx.additional}</p>
 
-				<details>
-					<summary className="border-gray-5 focus mt-3 border p-3">
-						<span className="leading-none select-none">edit</span>
-					</summary>
+				<div className="mt-3 flex items-start gap-2">
+					<details className="w-full">
+						<summary className="border-gray-5 focus h-10 border px-3 py-2">
+							<span className="leading-none select-none">edit</span>
+						</summary>
 
-					<form onSubmit={onSubmit} className="space-y-4 pt-2">
-						<Input
-							name="counter_party"
-							label="counter party"
-							defaultValue={tx.counter_party}
-						/>
+						<form onSubmit={onSubmit} className="space-y-4 pt-2">
+							<Input
+								name="counter_party"
+								label="counter party"
+								defaultValue={tx.counter_party}
+							/>
 
-						<AmountAndCurrencyField
-							defaultValue={tx.amount}
-							defaultCurrency={tx.currency}
-						/>
+							<AmountAndCurrencyField
+								defaultValue={tx.amount}
+								defaultCurrency={tx.currency}
+							/>
 
-						<DateField defaultValue={tx.date} />
+							<DateField defaultValue={tx.date} />
 
-						<CategoryField defaultValue={tx.category?.name} />
+							<CategoryField defaultValue={tx.category?.name} />
 
-						<Input name="additional" label="additional" defaultValue={tx.additional} />
+							<Input
+								name="additional"
+								label="additional"
+								defaultValue={tx.additional}
+							/>
 
-						<div className="flex justify-end">
-							<Button type="submit" isLoading={mutation.isPending}>
-								save
-							</Button>
-						</div>
-					</form>
-				</details>
+							<div className="flex justify-between gap-2">
+								<DeleteTransaction id={tx.id} counterParty={tx.counter_party} />
+
+								<Button type="submit" isLoading={mutation.isPending}>
+									save
+								</Button>
+							</div>
+						</form>
+					</details>
+				</div>
 			</Sidebar.Content>
 		</Sidebar.Root>
+	);
+}
+
+function DeleteTransaction({ id, counterParty }: { id: string; counterParty: string }) {
+	const t = trpc.useUtils();
+	const mutation = trpc.v1.transactions.delete.useMutation({
+		onSuccess: () => {
+			t.v1.transactions.invalidate();
+		},
+	});
+
+	function onConfirm() {
+		if (mutation.isPending) return;
+
+		mutation.mutateAsync({ id }).catch(errorToast("error deleting transaction"));
+	}
+
+	return (
+		<Dialog.Root>
+			<Dialog.Trigger>
+				<Button variant="destructive">delete</Button>
+			</Dialog.Trigger>
+
+			<Dialog.Content>
+				<div className="space-y-2">
+					<Dialog.Title>delete transaction</Dialog.Title>
+					<Dialog.Desc>delete "{counterParty}"?</Dialog.Desc>
+				</div>
+
+				<div className="mt-5 flex justify-end gap-3">
+					<Dialog.Close asChild>
+						<Button variant="ghost">cancel</Button>
+					</Dialog.Close>
+					<Button
+						isLoading={mutation.isPending}
+						variant="destructive"
+						onClick={onConfirm}
+					>
+						yes, delete
+					</Button>
+				</div>
+			</Dialog.Content>
+		</Dialog.Root>
 	);
 }
 
