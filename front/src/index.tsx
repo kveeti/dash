@@ -120,6 +120,23 @@ function Trpc({ children }: { children: ReactNode }) {
 	);
 }
 
+function getItem(key: string) {
+	const value = localStorage.getItem(key);
+	if (!value) return undefined;
+
+	return JSON.parse(value);
+}
+
+const optimisticMe = getItem("me") as Me;
+const me = (window as any).__ME_LOADER__;
+const mePromise = me?.promise;
+
+if (!optimisticMe && mePromise) {
+	mePromise.then(main);
+} else {
+	main(me?.data ?? optimisticMe);
+}
+
 function UpdateToast({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
 	const [isLoading, setIsLoading] = useState(false);
 	return (

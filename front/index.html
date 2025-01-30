@@ -34,6 +34,7 @@
 							data,
 							promise: null,
 						};
+						localStorage.setItem("me", JSON.stringify(data));
 
 						return data;
 					} catch (e) {
@@ -121,28 +122,31 @@
 	<body>
 		<div id="root">
 			<noscript>enable javascript</noscript>
-
-			<div
-				style="
-					inset: 0;
-					position: fixed;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-				"
-			>
-				<span class="spinner" aria-busy="true">
-					<span class="spinnerleaf"></span>
-					<span class="spinnerleaf"></span>
-					<span class="spinnerleaf"></span>
-					<span class="spinnerleaf"></span>
-					<span class="spinnerleaf"></span>
-					<span class="spinnerleaf"></span>
-					<span class="spinnerleaf"></span>
-					<span class="spinnerleaf"></span>
-				</span>
-			</div>
 		</div>
-		<script type="module" src="/src/index.tsx"></script>
+		<script>
+			const optimisticMe = localStorage.getItem("me");
+			if (!optimisticMe) {
+				const root = document.getElementById("root");
+				const inset = document.createElement("div");
+				inset.style.inset = "0px";
+				inset.style.position = "fixed";
+				inset.style.display = "flex";
+				inset.style.alignItems = "center";
+				inset.style.justifyContent = "center";
+
+				const spinner = document.createElement("span");
+				spinner.className = "spinner";
+
+				for (let i = 0; i < 8; i++) {
+					const leaf = document.createElement("span");
+					leaf.className = "spinnerleaf";
+
+					spinner.appendChild(leaf);
+				}
+
+				inset.appendChild(spinner);
+				root.appendChild(inset);
+			}
+		</script>
 	</body>
 </html>
