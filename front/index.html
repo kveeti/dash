@@ -7,17 +7,18 @@
 			content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1"
 		/>
 		<meta name="color-scheme" content="dark light" />
-
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-		<link href="./src/styles.css" rel="stylesheet" />
+		<link rel="manifest" href="manifest.json" />
 
-		<link rel="preconnect" href="%PUBLIC_API_URL%" />
+		<link rel="preconnect" href="<%= import.meta.env.PUBLIC_API_URL %>" />
+
+		<title>dash</title>
 
 		<script>
 			const key = "__ME_LOADER__";
 
-			const p = fetch("%PUBLIC_API_URL%" + "/v1.auth.me", {
+			const p = fetch("<%= import.meta.env.PUBLIC_API_URL %>" + "/v1.auth.me", {
 				credentials: "include",
 			})
 				.catch(() => {})

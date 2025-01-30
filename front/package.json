@@ -4,10 +4,10 @@
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {
-		"dev": "vite",
-		"build": "vite build",
+		"dev": "rsbuild dev",
+		"build": "rsbuild build && node gen-sw.js",
+		"preview": "rsbuild preview",
 		"lint": "eslint .",
-		"preview": "vite preview",
 		"wrangler": "pnpm run build && wrangler pages dev ./dist",
 		"depl": "PUBLIC_API_URL=https://dash_api.veetik.com pnpm run build && wrangler pages deploy ./dist"
 	},
@@ -32,13 +32,14 @@
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.19.0",
-		"@tailwindcss/vite": "4.0.0",
+		"@rsbuild/core": "^1.2.3",
+		"@rsbuild/plugin-babel": "^1.0.3",
+		"@rsbuild/plugin-react": "^1.1.0",
+		"@tailwindcss/postcss": "^4.0.1",
 		"@trivago/prettier-plugin-sort-imports": "^5.2.1",
 		"@trpc/server": "11.0.0-rc.700",
 		"@types/react": "^19.0.8",
 		"@types/react-dom": "^19.0.3",
-		"@vitejs/plugin-react": "^4.3.4",
-		"@vitejs/plugin-react-swc": "^3.7.2",
 		"babel-plugin-react-compiler": "19.0.0-beta-e552027-20250112",
 		"eslint": "^9.19.0",
 		"eslint-plugin-react-compiler": "19.0.0-beta-e552027-20250112",
@@ -50,8 +51,7 @@
 		"tailwindcss": "4.0.0",
 		"typescript": "~5.7.3",
 		"typescript-eslint": "^8.21.0",
-		"vite": "^6.0.11",
-		"vite-plugin-pwa": "^0.21.1",
+		"workbox-build": "^7.3.0",
 		"workbox-window": "^7.3.0",
 		"wrangler": "^3.105.1"
 	}

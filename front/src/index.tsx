@@ -4,7 +4,6 @@ import { type ReactNode, StrictMode, Suspense, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster, toast } from "sonner";
 import SuperJSON from "superjson";
-import { registerSW } from "virtual:pwa-register";
 import { Redirect, Route, Switch } from "wouter";
 
 import { AuthLayout } from "./authed/layout";
@@ -12,6 +11,7 @@ import { envs } from "./lib/envs";
 import { lazyWithPreload } from "./lib/lazy";
 import { type Me, MeProvider, useMe } from "./lib/me";
 import { trpc } from "./lib/trpc";
+import "./styles.css";
 import { Button } from "./ui/button";
 /**
  * LoginPage imported eagerly since its the usual landing page
@@ -144,6 +144,58 @@ function UpdateToast({ onConfirm, onCancel }: { onConfirm: () => void; onCancel:
 		</div>
 	);
 }
+
+// this next bit is from `vite-pwa/vite-plugin-pwa`
+export function registerSW({ onNeedRefresh }: { onNeedRefresh: () => void }) {
+	let wb: import("workbox-window").Workbox | undefined;
+	let registerPromise: Promise<void>;
+	let sendSkipWaitingMessage: () => void | undefined;
+
+	const updateServiceWorker = async (_reloadPage = true) => {
+		await registerPromise;
+		sendSkipWaitingMessage?.();
+	};
+
+	async function register() {
+		if ("serviceWorker" in navigator) {
+			wb = await import("workbox-window")
+				.then(({ Workbox }) => {
+					return new Workbox("/sw.js");
+				})
+				.catch((_e) => {
+					return undefined;
+				});
+
+			if (!wb) return;
+
+			sendSkipWaitingMessage = () => {
+				wb?.messageSkipWaiting();
+			};
+			const showSkipWaitingPrompt = () => {
+				wb?.addEventListener("controlling", (event) => {
+					if (event.isUpdate) window.location.reload();
+				});
+
+				onNeedRefresh?.();
+			};
+			wb.addEventListener("installed", (event) => {
+				if (typeof event.isUpdate === "undefined") {
+					if (typeof event.isExternal !== "undefined") {
+						if (event.isExternal) showSkipWaitingPrompt();
+					}
+				}
+			});
+			wb.addEventListener("waiting", showSkipWaitingPrompt);
+
+			wb.register();
+		}
+	}
+
+	registerPromise = register();
+
+	return updateServiceWorker;
+}
+
 const updateSW = registerSW({
 	onNeedRefresh() {
 		toast.custom(
@@ -154,12 +206,3 @@ const updateSW = registerSW({
 		);
 	},
 });
-
-const me = (window as any).__ME_LOADER__;
-const mePromise = me?.promise;
-
-if (mePromise) {
-	mePromise.then(main);
-} else {
-	main(me?.data);
-}
