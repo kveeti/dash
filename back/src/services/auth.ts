@@ -6,6 +6,10 @@ import { passwords } from "../password.ts";
 import { createToken } from "../token.ts";
 
 export function auth(data: Data) {
+	function getExpiry() {
+		return addDays(new Date(), 7);
+	}
+
 	return {
 		login: async (username: string, password: string) => {
 			const user = await data.users.getByUsername(username);
@@ -23,7 +27,7 @@ export function auth(data: Data) {
 				await data.users.updatePasswordHash(user.id, newHash);
 			}
 
-			const expiry = addDays(new Date(), 1);
+			const expiry = getExpiry();
 
 			return [
 				{
@@ -56,7 +60,7 @@ export function auth(data: Data) {
 				return [null, "username taken"] as const;
 			}
 
-			const expiry = addDays(new Date(), 1);
+			const expiry = getExpiry();
 
 			return [
 				{
