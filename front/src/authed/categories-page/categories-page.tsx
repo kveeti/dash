@@ -1,5 +1,6 @@
 import { DotsVerticalIcon, Pencil1Icon, TrashIcon } from "@radix-ui/react-icons";
 import type { FormEvent } from "react";
+import { useSearch, useSearchParams } from "wouter";
 
 import { errorToast } from "../../lib/error-toast";
 import { trpc } from "../../lib/trpc";
@@ -8,6 +9,7 @@ import { Checkbox } from "../../ui/checkbox";
 import * as Dialog from "../../ui/dialog";
 import * as Dropdown from "../../ui/dropdown";
 import { Input } from "../../ui/input";
+import { FastLink, Link } from "../../ui/link";
 import { useDialog } from "../../ui/use-dialog";
 
 type Category = {
@@ -22,38 +24,63 @@ const countFormat = new Intl.NumberFormat(undefined, {
 });
 
 export default function CategoriesPage() {
-	const q = trpc.v1.categories.query.useQuery({});
+	const [searchParams, setSearchParams] = useSearchParams();
+	const query = searchParams.get("query") ?? undefined;
 
-	if (q.isError) {
-		return <div>error</div>;
-	}
+	const q = trpc.v1.categories.query.useQuery({ query });
 
-	if (q.isLoading) {
-		return <div>loading</div>;
+	function onSearch(e: FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+		const formData = new FormData(e.currentTarget);
+		const query = formData.get("query") as string | null;
+
+		const newSearchParams = new URLSearchParams(searchParams);
+		if (query) {
+			newSearchParams.set("query", query);
+		} else {
+			newSearchParams.delete("query");
+		}
+
+		setSearchParams(newSearchParams);
 	}
 
 	return (
-		<div className="w-full max-w-xs space-y-3">
-			<Input placeholder="search categories..." />
+		<div className="w-full max-w-md space-y-3">
+			<form onSubmit={onSearch} className="bg-gray-1 sticky top-10 pt-2">
+				<Input placeholder="search categories..." name="query" />
+			</form>
 
-			<ul className="divide-gray-3 divide-y">
-				{q.data?.map((c) => (
-					<li key={c.id} className="flex items-center justify-between gap-2 py-1 ps-2">
-						<div className="truncate">
-							<p className="truncate">{c.name}</p>
-							<p className="text-gray-10 mt-0.5 text-xs">
-								{countFormat.format(c.transaction_count)}{" "}
-								{c.transaction_count === 1n ? "transaction" : "transactions"}
-							</p>
+			{q.isLoading ? (
+				<p>loading</p>
+			) : q.isError ? (
+				<p>error</p>
+			) : q.data?.length ? (
+				<ul className="divide-gray-3 divide-y">
+					{q.data?.map((c) => (
+						<li
+							key={c.id}
+							className="flex items-center justify-between gap-2 py-1 ps-2"
+						>
+							<div className="truncate">
+								<p className="truncate">{c.name}</p>
+								<p className="text-gray-10 mt-0.5 text-xs">
+									{countFormat.format(c.transaction_count)}{" "}
+									{c.transaction_count === 1n ? "transaction" : "transactions"}
+								</p>
 
-							<p className="text-gray-10 mt-0.5 text-xs">
-								{c.is_neutral ? "neutral" : null}
-							</p>
-						</div>
-						<CategoryMenu category={c} />
-					</li>
-				))}
-			</ul>
+								<p className="text-gray-10 mt-0.5 text-xs">
+									{c.is_neutral ? "neutral" : null}
+								</p>
+							</div>
+							<CategoryMenu category={c} />
+						</li>
+					))}
+				</ul>
+			) : query ? (
+				<p>no matches</p>
+			) : (
+				<p className="text-gray-11">no categories yet</p>
+			)}
 		</div>
 	);
 }

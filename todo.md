@@ -3,8 +3,6 @@
 - [ ] clear button for transaction search (and filters?)
 - [ ] some transaction bulk actions
 - [ ] transaction linking
-- [ ] category page pagination
-- [ ] category search
 - [ ] stats page filters
 - [ ] moor stats
 - [ ] accounts
@@ -20,3 +18,5 @@
 - [x] transaction deleting
 - [x] better transaction details
 - [x] neutral categories for savings etc
+- [-] category page pagination -- not happening
+- [x] category search
