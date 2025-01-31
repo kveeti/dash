@@ -3,7 +3,6 @@ import {
 	ArrowRightIcon,
 	Cross1Icon,
 	MixerHorizontalIcon,
-	TrashIcon,
 } from "@radix-ui/react-icons";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -81,7 +80,7 @@ export default function TransactionsPage() {
 	return (
 		<div className="w-full max-w-md">
 			{/* desktop */}
-			<div className="bg-gray-1 border-b-gray-4 order-b sticky top-10 hidden sm:block">
+			<div className="bg-gray-1 border-b-gray-4 order-b sticky top-10 hidden pt-2 sm:block">
 				<div className="flex gap-1">
 					<Search currentSearchParams={searchParams} />
 

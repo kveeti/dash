@@ -120,22 +120,34 @@ create table if not exists transactions_links (
 create index if not exists idx_transactions_links_user_id_ids on transactions_links(user_id, transaction_a_id, transaction_b_id);
 `.simple();
 
-	await pg.begin(async (pg) => {
-		await pg`create table if not exists __version (v int);`;
+	const script_2 = (pg: Pg) =>
+		pg`
+alter table transaction_categories add column is_neutral boolean not null default false;
+`.simple();
+
+	await pg.begin(async (t) => {
+		await t`create table if not exists __version (v int);`;
 
 		let v = 1;
-		const [row]: [{ v: number }?] = await pg`select v from __version limit 1;`;
+		const [row]: [{ v: number }?] = await t`select v from __version limit 1;`;
 		if (!row) {
-			await pg`insert into __version (v) values (1);`;
+			await t`insert into __version (v) values (1);`;
 		} else {
 			v = row.v;
 		}
 
 		if (v < 2) {
 			console.debug("running script 1");
-			await script_1(pg);
-			await pg`update __version set v = 2;`;
+			await script_1(t);
+			await t`update __version set v = 2;`;
 			console.debug("ran script 1");
+		}
+
+		if (v < 3) {
+			console.debug("running script 2");
+			await script_2(t);
+			await t`update __version set v = 3;`;
+			console.debug("ran script 2");
 		}
 	});
 }

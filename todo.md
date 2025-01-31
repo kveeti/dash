@@ -1,5 +1,4 @@
 - [ ] transaction filters
-- [ ] neutral categories for savings etc
 - [ ] choose locale, auto doesn't work
 - [ ] clear button for transaction search (and filters?)
 - [ ] some transaction bulk actions
@@ -20,3 +19,4 @@
 - [x] category page name truncate
 - [x] transaction deleting
 - [x] better transaction details
+- [x] neutral categories for savings etc

@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import { errorToast } from "../../lib/error-toast";
 import { trpc } from "../../lib/trpc";
 import { Button } from "../../ui/button";
+import { Checkbox } from "../../ui/checkbox";
 import * as Dialog from "../../ui/dialog";
 import * as Dropdown from "../../ui/dropdown";
 import { Input } from "../../ui/input";
@@ -12,6 +13,7 @@ import { useDialog } from "../../ui/use-dialog";
 type Category = {
 	id: string;
 	name: string;
+	is_neutral: boolean;
 };
 
 const countFormat = new Intl.NumberFormat(undefined, {
@@ -42,6 +44,10 @@ export default function CategoriesPage() {
 							<p className="text-gray-10 mt-0.5 text-xs">
 								{countFormat.format(c.transaction_count)}{" "}
 								{c.transaction_count === 1n ? "transaction" : "transactions"}
+							</p>
+
+							<p className="text-gray-10 mt-0.5 text-xs">
+								{c.is_neutral ? "neutral" : null}
 							</p>
 						</div>
 						<CategoryMenu category={c} />
@@ -137,6 +143,7 @@ function EditCategory({ category }: { category: Category }) {
 			.mutateAsync({
 				id: category.id,
 				name: formData.get("name") as string,
+				is_neutral: formData.get("is_neutral") === "on",
 			})
 			.then(dialog.close)
 			.catch(errorToast("error saving"));
@@ -160,7 +167,19 @@ function EditCategory({ category }: { category: Category }) {
 				<Dialog.Title>edit category</Dialog.Title>
 
 				<form className="mt-3" onSubmit={onEdit}>
-					<Input required label="name" name="name" defaultValue={category.name ?? ""} />
+					<div className="space-y-4">
+						<Input
+							required
+							label="name"
+							name="name"
+							defaultValue={category.name ?? ""}
+						/>
+						<Checkbox
+							name="is_neutral"
+							label="is neutral"
+							defaultChecked={category.is_neutral}
+						/>
+					</div>
 
 					<div className="mt-5 flex justify-end gap-3">
 						<Dialog.Close asChild disabled={mutation.isPending}>

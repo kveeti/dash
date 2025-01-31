@@ -39,6 +39,7 @@ export const categories_v1 = router({
 				v.object({
 					id: v.string(),
 					name: v.pipe(v.string(), v.nonEmpty("required")),
+					is_neutral: v.boolean(),
 				})
 			)
 		)
@@ -46,6 +47,7 @@ export const categories_v1 = router({
 			await ctx.data.categories.update({
 				id: input.id,
 				name: input.name,
+				is_neutral: input.is_neutral,
 				userId: ctx.userId,
 			});
 		}),

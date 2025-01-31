@@ -7,7 +7,7 @@ export function categories(sql: Pg) {
 			const filter = query ? sql`and lower(c.name) like ${"%" + query + "%"}` : sql``;
 
 			const rows: Array<CategoryWithTxCount> = await sql`
-				select c.id, c.name, count(*) as transaction_count
+				select c.id, c.name, c.is_neutral, count(*) as transaction_count
 				from transaction_categories c
 				left join transactions t on t.category_id = c.id
 				where c.user_id = ${userId}
@@ -19,11 +19,17 @@ export function categories(sql: Pg) {
 			return rows;
 		},
 
-		update: async (props: { userId: string; id: string; name: string }) => {
+		update: async (props: {
+			userId: string;
+			id: string;
+			name: string;
+			is_neutral: boolean;
+		}) => {
 			const [row]: Array<{ id: string } | undefined> = await sql`
 				update transaction_categories
 				set
 					name = ${props.name},
+					is_neutral = ${props.is_neutral},
 					updated_at = now()
 				where id = ${props.id}
 				and user_id = ${props.userId}

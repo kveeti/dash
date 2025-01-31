@@ -42,6 +42,7 @@ export function transactions(sql: Pg) {
 					where t.user_id = ${userId}
 						and t.date at time zone ${timezone} >= ${start}
 						and t.date at time zone ${timezone} <= ${end}
+						and (c.id is null or c.is_neutral = false)
 					group by period, category_name
 				)
 				select
@@ -461,6 +462,7 @@ export type TransactionWithLinks = Transaction & {
 export type Category = {
 	id: string;
 	name: string;
+	is_neutral: boolean;
 };
 
 export type CategoryWithTxCount = Category & {
