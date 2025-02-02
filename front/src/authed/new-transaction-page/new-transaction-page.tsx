@@ -76,7 +76,7 @@ export default function NewTransactionPage() {
 			<div className="mx-auto max-w-100">
 				<Heading>new transaction</Heading>
 
-				{envs.isProd && <Generate />}
+				{!envs.isProd && <Generate />}
 
 				<form ref={form} onSubmit={onSubmit} className="flex flex-col gap-4 pt-5">
 					<Input
