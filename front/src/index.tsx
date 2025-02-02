@@ -31,12 +31,15 @@ const TransactionStatsPage = lazyWithPreload(
 	() => import("./authed/transaction-stats-page/transaction-stats-page")
 );
 
+const SettingsPage = lazyWithPreload(() => import("./authed/settings-page/settings.page"));
+
 RegisterPage.preload();
 CategoriesPage.preload();
 TransactionsPage.preload();
 TransactionStatsPage.preload();
 ImportTransactionsPage.preload();
 NewTransactionPage.preload();
+SettingsPage.preload();
 
 function Entry() {
 	const { me } = useMe();
@@ -50,6 +53,7 @@ function Entry() {
 					<Route path="/transactions/import" component={ImportTransactionsPage} />
 					<Route path="/transactions/stats" component={TransactionStatsPage} />
 					<Route path="/categories" component={CategoriesPage} />
+					<Route path="/settings" component={SettingsPage} />
 					<Route path="*">
 						<Redirect href="/transactions" />
 					</Route>

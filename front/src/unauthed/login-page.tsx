@@ -9,7 +9,7 @@ import { Heading } from "../ui/typography";
 export default function LoginPage() {
 	const t = trpc.useUtils();
 	const login = trpc.v1.auth.login.useMutation({
-		onSuccess: () => t.v1.auth.me.invalidate(),
+		onSuccess: () => t.v1.users.me.invalidate(),
 	});
 	const { setMe } = useMe();
 

@@ -1,8 +1,9 @@
 import { endOfDay, format, isAfter, isBefore, startOfMonth, startOfYear, subYears } from "date-fns";
-import { type ChangeEvent } from "react";
+import { type ChangeEvent, useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useLocation, useSearch } from "wouter";
 
+import { useMe } from "../../lib/me";
 import { type ApiRes, trpc } from "../../lib/trpc";
 import { Input } from "../../ui/input";
 import { Spinner } from "../../ui/spinner";
@@ -121,16 +122,9 @@ function ChartWrapper({ timeframe }: { timeframe: { start: Date; end: Date } }) 
 	return <Chart data={q.data} />;
 }
 
-const numberFormatter = new Intl.NumberFormat("fi-FI", {
-	signDisplay: "auto",
-	minimumFractionDigits: 0,
-	maximumFractionDigits: 2,
-	currencyDisplay: "symbol",
-	style: "currency",
-	currency: "EUR",
-});
-
 function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
+	const { numberFormatter } = useFormatters();
+
 	const { posCategories, negCategories, stats } = props.data;
 
 	const colorsNegCategories = negCategories.map((_, i) => {
@@ -282,4 +276,23 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 			</BarChart>
 		</ResponsiveContainer>
 	);
+}
+
+function useFormatters() {
+	const { me } = useMe();
+
+	const numberFormatter = useMemo(
+		() =>
+			new Intl.NumberFormat(me?.preferences?.locale, {
+				signDisplay: "auto",
+				minimumFractionDigits: 0,
+				maximumFractionDigits: 2,
+				currencyDisplay: "symbol",
+				style: "currency",
+				currency: "EUR",
+			}),
+		[me?.preferences?.locale]
+	);
+
+	return { numberFormatter };
 }

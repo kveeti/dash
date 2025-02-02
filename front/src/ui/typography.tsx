@@ -8,13 +8,19 @@ const headings = {
 export function Heading({
 	level = 1,
 	visualLevel = 1,
+	className,
 	...props
 }: {
 	level?: 1 | 2;
 	visualLevel?: 1 | 2;
-} & Omit<ComponentProps<"h1">, "className">) {
+} & ComponentProps<"h1">) {
 	const Tag = `h${level}`;
 
-	// @ts-expect-error TODO
-	return <Tag className={headings[level ?? visualLevel]} {...props} />;
+	return (
+		<Tag
+			// @ts-expect-error -- ?
+			className={headings[level ?? visualLevel] + (className ? " " + className : "")}
+			{...props}
+		/>
+	);
 }

@@ -9,7 +9,7 @@ import { Heading } from "../ui/typography";
 export default function RegisterPage() {
 	const t = trpc.useUtils();
 	const register = trpc.v1.auth.register.useMutation({
-		onSuccess: () => t.v1.auth.me.invalidate(),
+		onSuccess: () => t.v1.users.me.invalidate(),
 	});
 	const { setMe } = useMe();
 

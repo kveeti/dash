@@ -4,11 +4,12 @@ import {
 	Cross1Icon,
 	MixerHorizontalIcon,
 } from "@radix-ui/react-icons";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 
 import type { TransactionWithLinks } from "../../../../back/src/data/transactions";
 import { errorToast } from "../../lib/error-toast";
+import { useMe } from "../../lib/me";
 import { trpc } from "../../lib/trpc";
 import { Button } from "../../ui/button";
 import * as Dialog from "../../ui/dialog";
@@ -22,36 +23,9 @@ import {
 	DateField,
 } from "../new-transaction-page/new-transaction-fields";
 
-const shortDateFormatter = new Intl.DateTimeFormat(undefined, {
-	month: "short",
-	day: "numeric",
-});
-
-const longDateFormatter = new Intl.DateTimeFormat(undefined, {
-	month: "numeric",
-	day: "numeric",
-	year: "2-digit",
-});
-
-const sidebarDateFormatter = new Intl.DateTimeFormat(undefined, {
-	month: "short",
-	day: "numeric",
-	year: "numeric",
-	minute: "numeric",
-	hour: "numeric",
-	second: "numeric",
-});
-
-const amountFormatter = new Intl.NumberFormat(undefined, {
-	signDisplay: "auto",
-	minimumFractionDigits: 2,
-	maximumFractionDigits: 2,
-	currencyDisplay: "symbol",
-	style: "currency",
-	currency: "EUR",
-});
-
 export default function TransactionsPage() {
+	const { shortDateFormatter, longDateFormatter, amountFormatter } = useFormatters();
+
 	const thisYear = new Date().getFullYear();
 	const search = useSearch();
 	const searchParams = new URLSearchParams(search);
@@ -201,6 +175,8 @@ export default function TransactionsPage() {
 }
 
 function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () => void }) {
+	const { sidebarDateFormatter, amountFormatter } = useFormatters();
+
 	const t = trpc.useUtils();
 	const mutation = trpc.v1.transactions.edit.useMutation({
 		onSuccess: () => {
@@ -418,3 +394,54 @@ const Loading = (
 		))}
 	</div>
 );
+
+function useFormatters() {
+	const { me } = useMe();
+
+	const shortDateFormatter = useMemo(
+		() =>
+			new Intl.DateTimeFormat(me?.preferences?.locale, {
+				month: "short",
+				day: "numeric",
+			}),
+		[me?.preferences?.locale]
+	);
+
+	const longDateFormatter = useMemo(
+		() =>
+			new Intl.DateTimeFormat(me?.preferences?.locale, {
+				month: "numeric",
+				day: "numeric",
+				year: "2-digit",
+			}),
+		[me?.preferences?.locale]
+	);
+
+	const sidebarDateFormatter = useMemo(
+		() =>
+			new Intl.DateTimeFormat(me?.preferences?.locale, {
+				month: "short",
+				day: "numeric",
+				year: "numeric",
+				minute: "numeric",
+				hour: "numeric",
+				second: "numeric",
+			}),
+		[me?.preferences?.locale]
+	);
+
+	const amountFormatter = useMemo(
+		() =>
+			new Intl.NumberFormat(me?.preferences?.locale, {
+				signDisplay: "auto",
+				minimumFractionDigits: 2,
+				maximumFractionDigits: 2,
+				currencyDisplay: "symbol",
+				style: "currency",
+				currency: "EUR",
+			}),
+		[me?.preferences?.locale]
+	);
+
+	return { shortDateFormatter, longDateFormatter, sidebarDateFormatter, amountFormatter };
+}

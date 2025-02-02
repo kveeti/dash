@@ -16,23 +16,78 @@ export const users = (sql: Pg) => ({
 	},
 
 	async getByUsername(username: string) {
-		const [row]: [UserWithPasswordHash?] = await sql`
-		      select id, username, password_hash, created_at from users
-		      where username = ${username}
-		      limit 1;
+		const [row]: [
+			{
+				id: string;
+				username: string;
+				created_at: Date;
+				password_hash: string;
+				pre_locale: string;
+			}?,
+		] = await sql`
+			select
+				u.id,
+				u.username,
+				u.created_at,
+				u.password_hash,
+				up.locale as pre_locale
+			from users u
+			left join user_preferences up on u.id = up.user_id
+			where u.username = ${username}
+			limit 1;
 		`;
 
-		return row;
+		if (!row) {
+			return null;
+		}
+
+		const user: UserWithPreferences & UserWithPasswordHash = {
+			id: row.id,
+			username: row.username,
+			created_at: row.created_at,
+			password_hash: row.password_hash,
+			preferences: {
+				locale: row.pre_locale,
+			},
+		};
+
+		return user;
 	},
 
 	async getById(id: string) {
-		const [row]: [User?] = await sql`
-		      select id, username, created_at from users
-		      where id = ${id}
-		      limit 1;
+		const [row]: [
+			{
+				id: string;
+				username: string;
+				created_at: Date;
+				pre_locale: string;
+			}?,
+		] = await sql`
+			select
+				u.id,
+				u.username,
+				u.created_at,
+				up.locale as pre_locale
+			from users u
+			left join user_preferences up on u.id = up.user_id
+			where u.id = ${id}
+			limit 1;
 		`;
 
-		return row;
+		if (!row) {
+			return null;
+		}
+
+		const user: UserWithPreferences = {
+			id: row.id,
+			username: row.username,
+			created_at: row.created_at,
+			preferences: {
+				locale: row.pre_locale,
+			},
+		};
+
+		return user;
 	},
 
 	async updatePasswordHash(userId: string, newPasswordHash: string) {
@@ -42,7 +97,25 @@ export const users = (sql: Pg) => ({
 			where id = ${userId};
 		`;
 	},
+
+	async setPreferences(
+		userId: string,
+		preferences: {
+			locale: string;
+		}
+	) {
+		await sql`
+			insert into user_preferences (user_id, locale)
+			values (${userId}, ${preferences.locale})
+			on conflict (user_id)
+			do update set locale = ${preferences.locale};
+		`;
+	},
 });
+
+export type UserPreferences = {
+	locale: string;
+};
 
 export type User = {
 	id: string;
@@ -51,3 +124,4 @@ export type User = {
 };
 
 export type UserWithPasswordHash = User & { password_hash: string };
+export type UserWithPreferences = User & { preferences?: UserPreferences };

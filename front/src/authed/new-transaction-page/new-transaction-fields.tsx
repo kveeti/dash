@@ -64,7 +64,7 @@ export function CategoryField({ error, defaultValue }: { error?: string; default
 	);
 }
 
-function ComboboxItem({ className, ...props }: Ariakit.ComboboxItemProps) {
+export function ComboboxItem({ className, ...props }: Ariakit.ComboboxItemProps) {
 	return (
 		<Ariakit.ComboboxItem
 			className={
@@ -79,7 +79,7 @@ function ComboboxItem({ className, ...props }: Ariakit.ComboboxItemProps) {
 	);
 }
 
-function ComboboxPopover({ className, ...props }: Ariakit.ComboboxPopoverProps) {
+export function ComboboxPopover({ className, ...props }: Ariakit.ComboboxPopoverProps) {
 	return (
 		<Ariakit.ComboboxPopover
 			className={

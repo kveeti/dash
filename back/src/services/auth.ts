@@ -39,6 +39,7 @@ export function auth(data: Data) {
 						id: user.id,
 						username: user.username,
 						created_at: user.created_at,
+						preferences: user.preferences,
 					},
 				},
 				null,
@@ -72,6 +73,7 @@ export function auth(data: Data) {
 						id: userId,
 						username: username,
 						created_at: createdAt,
+						preferences: undefined,
 					},
 				},
 				null,
@@ -88,6 +90,7 @@ export function auth(data: Data) {
 				id: user.id,
 				username: user.username,
 				created_at: user.created_at,
+				preferences: user.preferences,
 			};
 		},
 	};

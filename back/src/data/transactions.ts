@@ -156,14 +156,16 @@ export function transactions(sql: Pg) {
 
 			const rows = await sql`
 				select
-					t.id            as tx_id,
-					t.date          as tx_date,
-					t.amount		as tx_amount,
-					t.currency      as tx_currency,
-					t.additional    as tx_additional,
-					t.counter_party as tx_counter_party,
-					t.category_id   as category_id,
-					c.name          as category_name,
+					t.id                  as tx_id,
+					t.date                as tx_date,
+					t.amount	          as tx_amount,
+					t.currency            as tx_currency,
+					t.additional          as tx_additional,
+					t.counter_party       as tx_counter_party,
+					t.category_id         as category_id,
+
+					c.name       as cat_name,
+					c.is_neutral as cat_is_neutral,
 
 					linked_tx.id            as l_tx_id,
 					linked_tx.date          as l_tx_date,
@@ -210,7 +212,7 @@ export function transactions(sql: Pg) {
 				const row = rows[i];
 
 				const id = row[0] as string;
-				const linkId = row[8] as string;
+				const linkId = row[9] as string;
 
 				let t = transactions.get(id);
 
@@ -229,19 +231,21 @@ export function transactions(sql: Pg) {
 					const categoryId = row[6] as string | undefined;
 					if (categoryId) {
 						const categoryName = row[7] as string;
+						const is_neutral = row[8] as boolean;
 						t.category = {
 							id: categoryId,
 							name: categoryName,
+							is_neutral,
 						};
 					}
 				}
 
 				if (linkId) {
-					const lDate = row[9] as Date;
-					const lAmount = row[10] as number;
-					const lCurrency = row[11] as string;
-					const lAdditional = row[12] as string;
-					const lCounterParty = row[13] as string;
+					const lDate = row[10] as Date;
+					const lAmount = row[11] as number;
+					const lCurrency = row[12] as string;
+					const lAdditional = row[13] as string;
+					const lCounterParty = row[14] as string;
 
 					t.links.push({
 						id: linkId,
@@ -368,7 +372,7 @@ export function transactions(sql: Pg) {
 			}
 
 			const mapped = transactions.map(({ category_name, ...t }) => {
-				const category_id = categoryIds.get(category_name);
+				const category_id = categoryIds.get(category_name ?? "");
 
 				return {
 					...t,

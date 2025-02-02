@@ -123,6 +123,9 @@ function Hamburger() {
 				</Button>
 			</Dropdown.Trigger>
 			<Dropdown.Content>
+				<Dropdown.Item asChild>
+					<SlowLink href="/settings">settings</SlowLink>
+				</Dropdown.Item>
 				<Dropdown.Item onSelect={onLogout}>logout</Dropdown.Item>
 			</Dropdown.Content>
 		</Dropdown.Root>

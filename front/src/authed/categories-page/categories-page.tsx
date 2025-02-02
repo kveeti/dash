@@ -1,6 +1,6 @@
 import { DotsVerticalIcon, Pencil1Icon, TrashIcon } from "@radix-ui/react-icons";
 import type { FormEvent } from "react";
-import { useSearch, useSearchParams } from "wouter";
+import { useSearchParams } from "wouter";
 
 import { errorToast } from "../../lib/error-toast";
 import { trpc } from "../../lib/trpc";
@@ -9,7 +9,6 @@ import { Checkbox } from "../../ui/checkbox";
 import * as Dialog from "../../ui/dialog";
 import * as Dropdown from "../../ui/dropdown";
 import { Input } from "../../ui/input";
-import { FastLink, Link } from "../../ui/link";
 import { useDialog } from "../../ui/use-dialog";
 
 type Category = {

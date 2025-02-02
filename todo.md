@@ -1,5 +1,4 @@
 - [ ] transaction filters
-- [ ] choose locale, auto doesn't work
 - [ ] clear button for transaction search (and filters?)
 - [ ] some transaction bulk actions
 - [ ] transaction linking
@@ -20,3 +19,4 @@
 - [x] neutral categories for savings etc
 - [-] category page pagination -- not happening
 - [x] category search
+- [x] choose locale, auto doesn't work

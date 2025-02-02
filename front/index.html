@@ -9,7 +9,7 @@
 		<meta name="color-scheme" content="dark light" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-		<link rel="manifest" href="manifest.json" />
+		<link rel="manifest" href="/manifest.json" />
 
 		<link rel="preconnect" href="<%= import.meta.env.PUBLIC_API_URL %>" />
 
@@ -18,7 +18,7 @@
 		<script>
 			const key = "__ME_LOADER__";
 
-			const p = fetch("<%= import.meta.env.PUBLIC_API_URL %>" + "/v1.auth.me", {
+			const p = fetch("<%= import.meta.env.PUBLIC_API_URL %>" + "/v1.users.me", {
 				credentials: "include",
 			})
 				.catch(() => {})

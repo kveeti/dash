@@ -125,6 +125,19 @@ create index if not exists idx_transactions_links_user_id_ids on transactions_li
 alter table transaction_categories add column is_neutral boolean not null default false;
 `.simple();
 
+	const script_3 = (pg: Pg) =>
+		pg`
+create table user_preferences (
+	user_id varchar(30) primary key not null,
+
+	locale varchar(5) not null default 'en-FI',
+	created_at timestamptz not null default now(),
+	updated_at timestamptz,
+
+	foreign key (user_id) references users(id)
+);
+`.simple();
+
 	await pg.begin(async (t) => {
 		await t`create table if not exists __version (v int);`;
 
@@ -148,6 +161,13 @@ alter table transaction_categories add column is_neutral boolean not null defaul
 			await script_2(t);
 			await t`update __version set v = 3;`;
 			console.debug("ran script 2");
+		}
+
+		if (v < 4) {
+			console.debug("running script 3");
+			await script_3(t);
+			await t`update __version set v = 4;`;
+			console.debug("ran script 3");
 		}
 	});
 }
