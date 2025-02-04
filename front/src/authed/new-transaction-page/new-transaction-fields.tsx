@@ -7,7 +7,7 @@ import * as Rac from "react-aria-components";
 
 import { trpc } from "../../lib/trpc";
 import { useDebounce } from "../../lib/utils";
-import { Error, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
+import { Error, Input, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 
 export function CategoryField({ error, defaultValue }: { error?: string; defaultValue?: string }) {
 	const [inputValue, setInputValue] = useState(defaultValue ?? "");
@@ -155,19 +155,17 @@ export function AmountAndCurrencyField({
 	];
 	const selectedCurrency = currencyOptions.find((o) => o.value === selectedCurrencyValue);
 
-	const id = useId();
-	const errorId = amountError ? id + "-error" : undefined;
-
 	return (
 		<div className="flex items-end">
-			<Rac.NumberField className="-me-px w-full" name="amount" defaultValue={defaultValue}>
-				<LabelWrapper>
-					<Rac.Label className={labelStyles}>amount</Rac.Label>
-
-					{amountError && errorId && <Error id={errorId}>{amountError}</Error>}
-				</LabelWrapper>
-				<Rac.Input className={inputStyles} aria-describedby={errorId} inputMode="decimal" />
-			</Rac.NumberField>
+			<Input
+				label="amount"
+				name="amount"
+				type="number"
+				className="-me-px w-full"
+				step={0.0000000000000000000000000000000001}
+				defaultValue={defaultValue}
+				error={amountError}
+			/>
 
 			<Ariakit.SelectProvider
 				defaultValue={defaultCurrency}

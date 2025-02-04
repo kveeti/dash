@@ -44,6 +44,7 @@ export default function NewTransactionPage() {
 
 		const formData = new FormData(event.currentTarget);
 		const data = Object.fromEntries(formData);
+		console.log(data);
 
 		const res = v.safeParse(schema, data);
 		if (!res.success) {
@@ -56,14 +57,7 @@ export default function NewTransactionPage() {
 			.then(() => {
 				setLocalErrors(null);
 				form?.current?.reset();
-				queueMicrotask(() => {
-					// queueMicrotask is needed because of react-aria-components'
-					// number field. if form is submitted by pressing enter
-					// while focused on number field the field won't reset
-					// if this focus is ran directly after form.reset(). needs to
-					// be ran in the "next tick"
-					form?.current?.getElementsByTagName("input")?.item(0)?.focus();
-				});
+				form?.current?.getElementsByTagName("input")?.item(0)?.focus();
 			})
 			.catch(errorToast("error creating transaction"));
 	}
