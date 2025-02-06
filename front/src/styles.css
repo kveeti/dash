@@ -74,18 +74,18 @@ html {
 	--red-a11: hsla(358, 100%, 38%, 0.83);
 	--red-a12: hsla(351, 100%, 17%, 0.91);
 
-	--green-1: #fbfefc;
-	--green-2: #f4fbf6;
-	--green-3: #e6f6eb;
-	--green-4: #d6f1df;
-	--green-5: #c4e8d1;
-	--green-6: #adddc0;
-	--green-7: #8eceaa;
-	--green-8: #5bb98b;
-	--green-9: #30a46c;
-	--green-10: #2b9a66;
-	--green-11: #218358;
-	--green-12: #193b2d;
+	--green-1: hsla(120, 60%, 99%, 1);
+	--green-2: hsla(120, 43%, 97%, 1);
+	--green-3: hsla(120, 42%, 94%, 1);
+	--green-4: hsla(123, 45%, 90%, 1);
+	--green-5: hsla(122, 40%, 85%, 1);
+	--green-6: hsla(124, 39%, 78%, 1);
+	--green-7: hsla(126, 37%, 69%, 1);
+	--green-8: hsla(131, 38%, 56%, 1);
+	--green-9: hsla(131, 41%, 46%, 1);
+	--green-10: hsla(131, 43%, 43%, 1);
+	--green-11: hsla(132, 50%, 33%, 1);
+	--green-12: hsla(131, 30%, 18%, 1);
 
 	--gray-1: #fcfcfc;
 	--gray-2: #f9f9f9;
@@ -140,18 +140,18 @@ html {
 		--red-a11: hsl(2, 100%, 79%);
 		--red-a12: hsl(350, 100%, 91%);
 
-		--green-1: #0e1512;
-		--green-2: #121b17;
-		--green-3: #132d21;
-		--green-4: #113b29;
-		--green-5: #174933;
-		--green-6: #20573e;
-		--green-7: #28684a;
-		--green-8: #2f7c57;
-		--green-9: #30a46c;
-		--green-10: #33b074;
-		--green-11: #3dd68c;
-		--green-12: #b1f1cb;
+		--green-1: hsla(154, 20%, 7%, 1);
+		--green-2: hsla(153, 20%, 9%, 1);
+		--green-3: hsla(152, 41%, 13%, 1);
+		--green-4: hsla(154, 55%, 15%, 1);
+		--green-5: hsla(154, 52%, 19%, 1);
+		--green-6: hsla(153, 46%, 23%, 1);
+		--green-7: hsla(152, 44%, 28%, 1);
+		--green-8: hsla(151, 45%, 34%, 1);
+		--green-9: hsla(151, 55%, 42%, 1);
+		--green-10: hsla(151, 55%, 45%, 1);
+		--green-11: hsla(151, 65%, 54%, 1);
+		--green-12: hsla(144, 70%, 82%, 1);
 
 		--gray-1: #111111;
 		--gray-2: #191919;
