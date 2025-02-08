@@ -319,8 +319,8 @@ function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams 
 
 		const query = formData.get("query") as string;
 		currentSearchParams.set("query", query);
-		currentSearchParams.delete("before");
-		currentSearchParams.delete("after");
+		currentSearchParams.delete("right");
+		currentSearchParams.delete("left");
 
 		setLocation(location + "?" + currentSearchParams.toString());
 	}
