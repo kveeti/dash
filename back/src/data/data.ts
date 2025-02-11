@@ -105,19 +105,6 @@ create table if not exists transactions_tags (
 	primary key (transaction_id, tag_id)
 );
 create index if not exists idx_transactions_tags_user_id on transactions_tags(user_id);
-
-create table if not exists transactions_links (
-	transaction_a_id varchar(30) not null,
-	transaction_b_id varchar(30) not null,
-	user_id varchar(30) not null,
-	created_at timestamptz not null default now(),
-	updated_at timestamptz,
-	foreign key (transaction_a_id) references transactions(id),
-	foreign key (transaction_b_id) references transactions(id),
-	foreign key (user_id) references users(id),
-	primary key (transaction_a_id, transaction_b_id)
-);
-create index if not exists idx_transactions_links_user_id_ids on transactions_links(user_id, transaction_a_id, transaction_b_id);
 `.simple();
 
 	const script_2 = (pg: Pg) =>
@@ -138,36 +125,51 @@ create table user_preferences (
 );
 `.simple();
 
+	const script_4 = (pg: Pg) =>
+		pg`
+create table if not exists transactions_links (
+	id varchar(30) not null primary key,
+	transaction_a_id varchar(30) not null,
+	transaction_b_id varchar(30) not null,
+	user_id varchar(30) not null,
+	created_at timestamptz not null default now(),
+	updated_at timestamptz,
+	foreign key (transaction_a_id) references transactions(id),
+	foreign key (transaction_b_id) references transactions(id),
+	foreign key (user_id) references users(id)
+);
+create index if not exists idx_transactions_links_user_id_ids on transactions_links(user_id, transaction_a_id, transaction_b_id);
+create unique index on transactions_links (transaction_a_id, transaction_b_id);
+create unique index on transactions_links (transaction_b_id, transaction_a_id);
+`.simple();
+
+	const scripts = [script_1, script_2, script_3, script_4];
+
 	await pg.begin(async (t) => {
 		await t`create table if not exists __version (v int);`;
-
-		let v = 1;
+		let version = 1;
 		const [row]: [{ v: number }?] = await t`select v from __version limit 1;`;
 		if (!row) {
 			await t`insert into __version (v) values (1);`;
 		} else {
-			v = row.v;
+			version = row.v;
 		}
 
-		if (v < 2) {
-			console.debug("running script 1");
-			await script_1(t);
-			await t`update __version set v = 2;`;
-			console.debug("ran script 1");
+		if (version >= scripts.length) {
+			console.log("no migrations to run", { version });
+			return;
 		}
 
-		if (v < 3) {
-			console.debug("running script 2");
-			await script_2(t);
-			await t`update __version set v = 3;`;
-			console.debug("ran script 2");
+		let latestVersion = 1;
+		for (let i = 0; i < scripts.length; i++) {
+			const newVersion = i + 1;
+
+			const script = scripts[i];
+			await script(t);
+			await t`update __version set v = ${newVersion}`;
+			latestVersion = newVersion;
 		}
 
-		if (v < 4) {
-			console.debug("running script 3");
-			await script_3(t);
-			await t`update __version set v = 4;`;
-			console.debug("ran script 3");
-		}
+		console.log("migrated db to version", latestVersion);
 	});
 }

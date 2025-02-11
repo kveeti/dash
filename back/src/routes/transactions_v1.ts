@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { addDays, subYears } from "date-fns";
 import * as v from "valibot";
 
@@ -147,6 +148,45 @@ export const transactions_v1 = router({
 		)
 		.mutation(async ({ ctx, input }) => {
 			await ctx.data.transactions.delete({ id: input.id, userId: ctx.userId });
+		}),
+
+	link: authProc
+		.input(
+			v.parser(
+				v.object({
+					a_id: v.pipe(v.string(), v.nonEmpty()),
+					b_id: v.pipe(v.string(), v.nonEmpty()),
+				})
+			)
+		)
+		.mutation(async ({ ctx, input }) => {
+			if (input.a_id === input.b_id)
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "cant link with same transaction",
+				});
+
+			await ctx.data.transactions.link({
+				user_id: ctx.userId,
+				a_id: input.a_id,
+				b_id: input.b_id,
+				link_id: id("transactions_links"),
+			});
+		}),
+
+	unlink: authProc
+		.input(
+			v.parser(
+				v.object({
+					link_id: v.pipe(v.string(), v.nonEmpty()),
+				})
+			)
+		)
+		.mutation(async ({ ctx, input }) => {
+			await ctx.data.transactions.unlink({
+				user_id: ctx.userId,
+				link_id: input.link_id,
+			});
 		}),
 
 	gen: authProc.mutation(async ({ ctx }) => {

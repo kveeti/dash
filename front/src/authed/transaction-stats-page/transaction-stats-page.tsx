@@ -280,10 +280,11 @@ function Chart(props: { data: ApiRes["v1"]["transactions"]["stats"] }) {
 
 function useFormatters() {
 	const { me } = useMe();
+	const locale = me?.preferences?.locale ?? "en-US";
 
 	const numberFormatter = useMemo(
 		() =>
-			new Intl.NumberFormat(me?.preferences?.locale, {
+			new Intl.NumberFormat(locale, {
 				signDisplay: "auto",
 				minimumFractionDigits: 0,
 				maximumFractionDigits: 2,
@@ -291,7 +292,7 @@ function useFormatters() {
 				style: "currency",
 				currency: "EUR",
 			}),
-		[me?.preferences?.locale]
+		[locale]
 	);
 
 	return { numberFormatter };

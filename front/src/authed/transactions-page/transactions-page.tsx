@@ -1,10 +1,14 @@
 import {
 	ArrowLeftIcon,
 	ArrowRightIcon,
+	CheckIcon,
+	CopyIcon,
 	Cross1Icon,
 	MixerHorizontalIcon,
 } from "@radix-ui/react-icons";
-import { useMemo, useState } from "react";
+import { Tooltip } from "radix-ui";
+import { useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useLocation, useSearch } from "wouter";
 
 import type { TransactionWithLinks } from "../../../../back/src/data/transactions";
@@ -211,11 +215,14 @@ function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () =
 			>
 				<Sidebar.Title>{tx.counter_party}</Sidebar.Title>
 
-				<Sidebar.Close className="!absolute top-1 right-1" asChild>
-					<Button size="icon" variant="ghost">
-						<Cross1Icon />
-					</Button>
-				</Sidebar.Close>
+				<div className="!absolute top-1 right-1">
+					<CopyButton value={tx.id} label="copy transaction id" />
+					<Sidebar.Close asChild>
+						<Button size="icon" variant="ghost" autoFocus>
+							<Cross1Icon />
+						</Button>
+					</Sidebar.Close>
+				</div>
 
 				<p className="text-base">{amountFormatter.format(tx.amount)}</p>
 
@@ -260,9 +267,135 @@ function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () =
 							</div>
 						</form>
 					</details>
+
+					<LinkTransaction tx={tx} />
+
+					<Links links={tx.links} />
 				</div>
 			</Sidebar.Content>
 		</Sidebar.Root>
+	);
+}
+
+function CopyButton({ label, value }: { label: string; value: string }) {
+	const [Icon, setIcon] = useState(() => CopyIcon);
+	const timeoutRef = useRef<number | null>(null);
+
+	function onClick() {
+		navigator.clipboard.writeText(value);
+
+		if (timeoutRef.current) {
+			clearTimeout(timeoutRef.current);
+		}
+
+		setIcon(CheckIcon);
+		timeoutRef.current = setTimeout(() => {
+			setIcon(CopyIcon);
+		}, 1000);
+	}
+
+	return (
+		<Tooltip.Root>
+			<Tooltip.Trigger>
+				<Button size="icon" variant="ghost" onClick={onClick}>
+					<Icon />
+				</Button>
+			</Tooltip.Trigger>
+			<Tooltip.Portal>
+				<Tooltip.Content className="bg-gray-1 border-gray-5 z-10 border p-2">
+					{label}
+				</Tooltip.Content>
+			</Tooltip.Portal>
+		</Tooltip.Root>
+	);
+}
+
+function LinkTransaction({ tx }: { tx: TransactionWithLinks }) {
+	const t = trpc.useUtils();
+	const mutation = trpc.v1.transactions.link.useMutation({
+		onSuccess: () => {
+			t.v1.transactions.invalidate();
+		},
+	});
+
+	function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		if (mutation.isPending) return;
+
+		const givenId = event.currentTarget.link_id.value as string;
+		if (givenId === tx.id) {
+			toast.error("cant link with same transaction");
+			return;
+		}
+
+		mutation
+			.mutateAsync({ a_id: givenId, b_id: tx.id })
+			.catch(errorToast("error updating transaction"));
+	}
+
+	return (
+		<details className="w-full">
+			<summary className="border-gray-5 focus h-10 border px-3 py-2">
+				<span className="leading-none select-none">link</span>
+			</summary>
+
+			<form onSubmit={onSubmit} className="w-full space-y-4 pt-2">
+				<Input
+					label="tx id"
+					name="link_id"
+					autoCapitalize="off"
+					autoComplete="off"
+					autoCorrect="off"
+				/>
+
+				<div className="flex justify-between gap-2">
+					<Button type="submit" isLoading={mutation.isPending}>
+						save
+					</Button>
+				</div>
+			</form>
+		</details>
+	);
+}
+
+function Links({ links }: { links: TransactionWithLinks["links"] }) {
+	const { sidebarDateFormatter, amountFormatter } = useFormatters();
+	const t = trpc.useUtils();
+	const mutation = trpc.v1.transactions.unlink.useMutation({
+		onSuccess: () => {
+			t.v1.transactions.invalidate();
+		},
+	});
+
+	function onDelete({ link_id }: { link_id: string }) {
+		if (mutation.isPending) return;
+
+		mutation.mutateAsync({ link_id }).catch(errorToast("error deleting link"));
+	}
+
+	return (
+		<details className="w-full">
+			<summary className="border-gray-5 focus h-10 border px-3 py-2">
+				<span className="leading-none select-none">links</span>
+			</summary>
+
+			<ul className="pt-2">
+				{links.map((l) => (
+					<li className="border-gray-5 relative flex flex-col gap-1 border p-2">
+						<Button
+							className="!absolute top-1 right-1 !h-8 !px-1.5 text-xs"
+							variant="destructive"
+							onClick={() => onDelete({ link_id: l.id })}
+						>
+							delete
+						</Button>
+						<span className="truncate pe-14">{l.transaction.counter_party}</span>
+						<span>{amountFormatter.format(l.transaction.amount)}</span>
+						<span>{sidebarDateFormatter.format(l.transaction.date)}</span>
+					</li>
+				))}
+			</ul>
+		</details>
 	);
 }
 
@@ -397,29 +530,30 @@ const Loading = (
 
 function useFormatters() {
 	const { me } = useMe();
+	const locale = me?.preferences?.locale ?? "en-US";
 
 	const shortDateFormatter = useMemo(
 		() =>
-			new Intl.DateTimeFormat(me?.preferences?.locale, {
+			new Intl.DateTimeFormat(locale, {
 				month: "short",
 				day: "numeric",
 			}),
-		[me?.preferences?.locale]
+		[locale]
 	);
 
 	const longDateFormatter = useMemo(
 		() =>
-			new Intl.DateTimeFormat(me?.preferences?.locale, {
+			new Intl.DateTimeFormat(locale, {
 				month: "numeric",
 				day: "numeric",
 				year: "2-digit",
 			}),
-		[me?.preferences?.locale]
+		[locale]
 	);
 
 	const sidebarDateFormatter = useMemo(
 		() =>
-			new Intl.DateTimeFormat(me?.preferences?.locale, {
+			new Intl.DateTimeFormat(locale, {
 				month: "short",
 				day: "numeric",
 				year: "numeric",
@@ -427,12 +561,12 @@ function useFormatters() {
 				hour: "numeric",
 				second: "numeric",
 			}),
-		[me?.preferences?.locale]
+		[locale]
 	);
 
 	const amountFormatter = useMemo(
 		() =>
-			new Intl.NumberFormat(me?.preferences?.locale, {
+			new Intl.NumberFormat(locale, {
 				signDisplay: "auto",
 				minimumFractionDigits: 2,
 				maximumFractionDigits: 2,
@@ -440,7 +574,7 @@ function useFormatters() {
 				style: "currency",
 				currency: "EUR",
 			}),
-		[me?.preferences?.locale]
+		[locale]
 	);
 
 	return { shortDateFormatter, longDateFormatter, sidebarDateFormatter, amountFormatter };

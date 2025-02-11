@@ -44,7 +44,6 @@ export default function NewTransactionPage() {
 
 		const formData = new FormData(event.currentTarget);
 		const data = Object.fromEntries(formData);
-		console.log(data);
 
 		const res = v.safeParse(schema, data);
 		if (!res.success) {

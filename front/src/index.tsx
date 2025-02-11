@@ -32,6 +32,7 @@ const TransactionStatsPage = lazyWithPreload(
 );
 
 const SettingsPage = lazyWithPreload(() => import("./authed/settings-page/settings.page"));
+const Providers = lazyWithPreload(() => import("./authed/providers"));
 
 RegisterPage.preload();
 CategoriesPage.preload();
@@ -40,6 +41,7 @@ TransactionStatsPage.preload();
 ImportTransactionsPage.preload();
 NewTransactionPage.preload();
 SettingsPage.preload();
+Providers.preload();
 
 function Entry() {
 	const { me } = useMe();
@@ -47,17 +49,43 @@ function Entry() {
 	return me ? (
 		<AuthLayout>
 			<Suspense>
-				<Switch>
-					<Route path="/transactions" component={TransactionsPage} />
-					<Route path="/transactions/new" component={NewTransactionPage} />
-					<Route path="/transactions/import" component={ImportTransactionsPage} />
-					<Route path="/transactions/stats" component={TransactionStatsPage} />
-					<Route path="/categories" component={CategoriesPage} />
-					<Route path="/settings" component={SettingsPage} />
-					<Route path="*">
-						<Redirect href="/transactions" />
-					</Route>
-				</Switch>
+				<Providers>
+					<Switch>
+						<Route path="/transactions">
+							<Suspense>
+								<TransactionsPage />
+							</Suspense>
+						</Route>
+						<Route path="/transactions/new">
+							<Suspense>
+								<NewTransactionPage />
+							</Suspense>
+						</Route>
+						<Route path="/transactions/import">
+							<Suspense>
+								<ImportTransactionsPage />
+							</Suspense>
+						</Route>
+						<Route path="/transactions/stats">
+							<Suspense>
+								<TransactionStatsPage />
+							</Suspense>
+						</Route>
+						<Route path="/categories">
+							<Suspense>
+								<CategoriesPage />
+							</Suspense>
+						</Route>
+						<Route path="/settings">
+							<Suspense>
+								<SettingsPage />
+							</Suspense>
+						</Route>
+						<Route path="*">
+							<Redirect href="/transactions" />
+						</Route>
+					</Switch>
+				</Providers>
 			</Suspense>
 		</AuthLayout>
 	) : (
