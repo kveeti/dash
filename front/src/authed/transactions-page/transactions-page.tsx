@@ -230,7 +230,7 @@ function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () =
 
 				<p className="text-gray-11 break-words">{tx.additional}</p>
 
-				<div className="mt-3 flex items-start gap-2">
+				<div className="mt-3 flex flex-col gap-2">
 					<details className="w-full">
 						<summary className="border-gray-5 focus h-10 border px-3 py-2">
 							<span className="leading-none select-none">edit</span>
