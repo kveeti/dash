@@ -525,7 +525,7 @@ function useFormatters() {
 	const shortDateFormatter = useMemo(
 		() =>
 			new Intl.DateTimeFormat(locale, {
-				month: "short",
+				month: "numeric",
 				day: "numeric",
 			}),
 		[locale]
