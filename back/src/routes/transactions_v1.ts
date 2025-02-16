@@ -13,7 +13,6 @@ export const transactions_v1 = router({
 					start: v.date(),
 					end: v.date(),
 					timezone: v.string(),
-					frequency: v.picklist(["yearly", "monthly"]),
 				})
 			)
 		)
@@ -23,7 +22,6 @@ export const transactions_v1 = router({
 				timezone: input.timezone,
 				start: input.start,
 				end: input.end,
-				frequency: input.frequency,
 			});
 		}),
 

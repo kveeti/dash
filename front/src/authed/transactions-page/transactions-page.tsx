@@ -7,7 +7,7 @@ import {
 	MixerHorizontalIcon,
 } from "@radix-ui/react-icons";
 import { Tooltip } from "radix-ui";
-import { useMemo, useRef, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useSearch } from "wouter";
 
@@ -268,9 +268,7 @@ function SelectedTx({ tx, unselect }: { tx: TransactionWithLinks; unselect: () =
 						</form>
 					</details>
 
-					<LinkTransaction tx={tx} />
-
-					<Links links={tx.links} />
+					<Links tx={tx} links={tx.links} />
 				</div>
 			</Sidebar.Content>
 		</Sidebar.Root>
@@ -309,10 +307,16 @@ function CopyButton({ label, value }: { label: string; value: string }) {
 		</Tooltip.Root>
 	);
 }
-
-function LinkTransaction({ tx }: { tx: TransactionWithLinks }) {
+function Links({ tx, links }: { tx: TransactionWithLinks; links: TransactionWithLinks["links"] }) {
 	const t = trpc.useUtils();
-	const mutation = trpc.v1.transactions.link.useMutation({
+	const link = trpc.v1.transactions.link.useMutation({
+		onSuccess: () => {
+			t.v1.transactions.invalidate();
+		},
+	});
+
+	const { sidebarDateFormatter, amountFormatter } = useFormatters();
+	const unlink = trpc.v1.transactions.unlink.useMutation({
 		onSuccess: () => {
 			t.v1.transactions.invalidate();
 		},
@@ -320,7 +324,7 @@ function LinkTransaction({ tx }: { tx: TransactionWithLinks }) {
 
 	function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		if (mutation.isPending) return;
+		if (link.isPending) return;
 
 		const givenId = event.currentTarget.link_id.value as string;
 		if (givenId === tx.id) {
@@ -328,49 +332,15 @@ function LinkTransaction({ tx }: { tx: TransactionWithLinks }) {
 			return;
 		}
 
-		mutation
-			.mutateAsync({ a_id: givenId, b_id: tx.id })
-			.catch(errorToast("error updating transaction"));
+		link.mutateAsync({ a_id: givenId, b_id: tx.id }).catch(
+			errorToast("error updating transaction")
+		);
 	}
 
-	return (
-		<details className="w-full">
-			<summary className="border-gray-5 focus h-10 border px-3 py-2">
-				<span className="leading-none select-none">link</span>
-			</summary>
-
-			<form onSubmit={onSubmit} className="w-full space-y-4 pt-2">
-				<Input
-					label="tx id"
-					name="link_id"
-					autoCapitalize="off"
-					autoComplete="off"
-					autoCorrect="off"
-				/>
-
-				<div className="flex justify-between gap-2">
-					<Button type="submit" isLoading={mutation.isPending}>
-						save
-					</Button>
-				</div>
-			</form>
-		</details>
-	);
-}
-
-function Links({ links }: { links: TransactionWithLinks["links"] }) {
-	const { sidebarDateFormatter, amountFormatter } = useFormatters();
-	const t = trpc.useUtils();
-	const mutation = trpc.v1.transactions.unlink.useMutation({
-		onSuccess: () => {
-			t.v1.transactions.invalidate();
-		},
-	});
-
 	function onDelete({ link_id }: { link_id: string }) {
-		if (mutation.isPending) return;
+		if (unlink.isPending) return;
 
-		mutation.mutateAsync({ link_id }).catch(errorToast("error deleting link"));
+		unlink.mutateAsync({ link_id }).catch(errorToast("error deleting link"));
 	}
 
 	return (
@@ -379,22 +349,42 @@ function Links({ links }: { links: TransactionWithLinks["links"] }) {
 				<span className="leading-none select-none">links</span>
 			</summary>
 
-			<ul className="pt-2">
-				{links.map((l) => (
-					<li className="border-gray-5 relative flex flex-col gap-1 border p-2">
-						<Button
-							className="!absolute top-1 right-1 !h-8 !px-1.5 text-xs"
-							variant="destructive"
-							onClick={() => onDelete({ link_id: l.id })}
-						>
-							delete
-						</Button>
-						<span className="truncate pe-14">{l.transaction.counter_party}</span>
-						<span>{amountFormatter.format(l.transaction.amount)}</span>
-						<span>{sidebarDateFormatter.format(l.transaction.date)}</span>
-					</li>
-				))}
-			</ul>
+			<form onSubmit={onSubmit} className="flex w-full items-end gap-2 pt-2">
+				<Input
+					label="tx id"
+					name="link_id"
+					className="w-full"
+					autoCapitalize="off"
+					autoComplete="off"
+					autoCorrect="off"
+				/>
+
+				<Button type="submit" isLoading={link.isPending}>
+					add
+				</Button>
+			</form>
+
+			{!!links.length && (
+				<ul className="space-y-2 pt-4">
+					{links.map((l) => (
+						<li className="border-gray-5 relative flex flex-col gap-1 border p-2">
+							<div className="absolute top-1 right-1">
+								<Button
+									className="!h-8 !px-1.5 text-xs"
+									variant="destructive"
+									onClick={() => onDelete({ link_id: l.id })}
+									isLoading={unlink.isPending}
+								>
+									delete
+								</Button>
+							</div>
+							<span className="truncate pe-14">{l.transaction.counter_party}</span>
+							<span>{amountFormatter.format(l.transaction.amount)}</span>
+							<span>{sidebarDateFormatter.format(l.transaction.date)}</span>
+						</li>
+					))}
+				</ul>
+			)}
 		</details>
 	);
 }
@@ -445,7 +435,7 @@ function DeleteTransaction({ id, counterParty }: { id: string; counterParty: str
 function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams }) {
 	const [location, setLocation] = useLocation();
 
-	function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+	function onSubmit(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
 
 		const formData = new FormData(e.currentTarget);

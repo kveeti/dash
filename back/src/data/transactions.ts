@@ -1,3 +1,6 @@
+import { tz } from "@date-fns/tz";
+import { eachMonthOfInterval, parse } from "date-fns";
+
 import type { Pg } from "./data.ts";
 import { id } from "./id.ts";
 
@@ -8,140 +11,219 @@ export function transactions(sql: Pg) {
 			start,
 			end,
 			timezone,
-			frequency,
 		}: {
 			userId: string;
 			start: Date;
 			end: Date;
 			timezone: string;
-			frequency: "monthly" | "yearly";
 		}) => {
-			// TODO: looks complicated
+			// TODO: figure this out purely in SQL
+			// atm loads all transactions & related data in specified time range
+			// and processes them in memory
+
 			const rows = await sql`
-with period_series as (
-	select generate_series(
-		date_trunc('month', ${start} at time zone ${timezone}),
-		date_trunc('month', ${end} at time zone ${timezone}),
-		interval '1 month'
-	) as period
-),
-transaction_link_groups as (
-	select
-		tl.transaction_a_id as transaction_id,
-		tl.transaction_b_id as linked_id
-	from transactions_links tl
-	union all
-	select
-		tl.transaction_b_id as transaction_id,
-		tl.transaction_a_id as linked_id
-	from transactions_links tl
-),
-linked_transaction_sums as (
-	select
-		tg.transaction_id,
-		sum(case when t.amount > 0 then t.amount else 0 end) as total_pos,
-		sum(case when t.amount < 0 then t.amount else 0 end) as total_neg
-	from transaction_link_groups tg
-	join transactions t on tg.linked_id = t.id
-	group by tg.transaction_id
-),
-processed_transactions as (
-	select
-		date_trunc('month', t.date at time zone ${timezone}) as period,
-		coalesce(c.name, '__uncategorized__') as category_name,
-		t.amount as original_amount,
-		coalesce(lt.total_pos, 0) as total_pos,
-		coalesce(lt.total_neg, 0) as total_neg,
-		-- Adjust the amount based on linked transactions
-		case 
-			when t.amount < 0 then t.amount + coalesce(lt.total_pos, 0)  -- Negatives are reduced by linked positives
-			when t.amount > 0 and not exists (
-				select 1 from transaction_link_groups tl
-				where tl.transaction_id = t.id
-			) then t.amount  -- Positives remain unchanged if not linked to a negative
-			else 0  -- Exclude positives that are linked to negatives
-		end as adjusted_amount
-	from transactions t
-	left join transaction_categories c on t.category_id = c.id
-	left join linked_transaction_sums lt on t.id = lt.transaction_id
-	where t.user_id = ${userId}
-		and t.date at time zone ${timezone} between ${start} and ${end}
-		and (c.id is null or c.is_neutral = false)
-),
-aggregated_transactions as (
-	select
-		period,
-		category_name,
-		sum(adjusted_amount) as total,
-		sum(case when adjusted_amount > 0 then adjusted_amount else 0 end) as total_pos,
-		sum(case when adjusted_amount < 0 then adjusted_amount else 0 end) as total_neg
-	from processed_transactions
-	group by period, category_name
-	having sum(adjusted_amount) != 0 -- filter out zero-amount categories
-)
 select
-	ps.period,
-	json_object_agg(at.category_name, at.total) filter (where at.category_name is not null) as categories,
-	coalesce(sum(at.total_pos), 0) as total_pos,
-	coalesce(sum(at.total_neg), 0) as total_neg
-from period_series ps
-left join aggregated_transactions at on ps.period = at.period
-group by ps.period
-order by ps.period;
-`.values();
+	t.id as id,
+	t.date as date,
+	t.amount as amount,
+	t.category_id as category_id,
+	c.name as cat_name,
+	c.is_neutral as cat_is_ne,
 
-			// produces:
-			// [
-			//   "2021-01-01T00:00:00.000Z",
-			//   {
-			//     "{category}": {total},
-			//     "{category}": {total},
-			//   },
-			//   {totalPos},
-			//   {totalNeg},
-			//   {total}
-			// ]
+	link.id as link_id, 
+	link.transaction_a_id as link_transaction_a_id, 
+	link.transaction_b_id as link_transaction_b_id,
 
-			const uniqueNegativeCategories = new Set<string>();
-			const uniquePositiveCategories = new Set<string>();
+	linked.id as linked_id,
+	linked.amount as linked_amount
+from transactions t
+left join transactions_links link on link.transaction_a_id = t.id or link.transaction_b_id = t.id
+left join transactions linked on (
+	link.transaction_b_id = linked.id and link.transaction_a_id = t.id
+) or (
+	link.transaction_a_id = linked.id and link.transaction_b_id = t.id
+)
+left join transaction_categories c on t.category_id = c.id
+where t.user_id = ${userId}
+and t.date at time zone ${timezone} between ${start} and ${end};
+`;
 
-			let totalPos = 0;
-			let totalNeg = 0;
+			const transactions = {} as {
+				[key: string]: {
+					id: string;
+					date: Date;
+					amount: number;
+					category: {
+						id: string;
+						name: string;
+						is_neutral: boolean;
+					} | null;
+					links: Array<{
+						id: string;
+						transaction: {
+							id: string;
+							amount: number;
+						};
+					}>;
+				};
+			};
 
-			const resolved = rows.map((row) => {
-				const period = row[0] as string;
-				const categories = row[1] as Record<string, number>;
-				const _totalPos = row[2] as number;
-				const _totalNeg = row[3] as number;
+			// map rows
+			for (let i = 0; i < rows.length; i++) {
+				const row = rows[i];
 
-				totalPos += _totalPos;
-				totalNeg += _totalNeg;
+				const id = row.id as string;
+				const link_id = row.link_id as string;
 
-				if (categories) {
-					const categoryNames = Object.keys(categories);
-					for (let i = 0; i < categoryNames.length; i++) {
-						const cat = categoryNames[i];
-						const amount = categories[cat];
-						if (amount > 0) {
-							uniquePositiveCategories.add(cat);
-						} else {
-							uniqueNegativeCategories.add(cat);
-						}
+				let t = transactions[id];
+
+				if (!t) {
+					t = {
+						id,
+						date: row.date as Date,
+						amount: row.amount as number,
+						category: null,
+						links: [],
+					};
+
+					const categoryId = row.category_id as string | undefined;
+					if (categoryId && !t.category) {
+						const category_name = row.cat_name as string;
+						const is_neutral = row.cat_is_neutral as boolean;
+						t.category = {
+							id: categoryId,
+							name: category_name,
+							is_neutral,
+						};
 					}
 				}
 
-				return {
-					__period__: period,
-					...categories,
+				if (link_id) {
+					const linked_id = row.linked_id as string;
+					const hasLink = t.links.find(
+						(l) => l.transaction.id === linked_id || l.id === link_id
+					);
+					if (hasLink) continue;
+
+					const amount = row.linked_amount as number;
+
+					t.links.push({
+						id: link_id,
+						transaction: {
+							id: linked_id,
+							amount,
+						},
+					});
+				}
+
+				transactions[id] = t;
+			}
+
+			type YYYYMM = string;
+			type CategoryName = string;
+			type CategoryTotal = number;
+
+			const per_period = {} as Record<YYYYMM, Record<CategoryName, CategoryTotal>>;
+
+			// map category totals to periods
+			// ex: per_period = { "2020-12": { gifts: 100 } }
+			for (const transaction_id in transactions) {
+				const t = transactions[transaction_id];
+				const period = t.date.toISOString().slice(0, 7);
+
+				if (t.category?.is_neutral) continue;
+
+				const category_name = t.category?.name ?? "__uncategorized__";
+
+				// negate linked transactions accordingly
+				let amount;
+				if (t.links.length) {
+					const sum = t.links.reduce((acc, l) => acc + l.transaction.amount, 0);
+
+					// when sum is 0, linked transactions negate each other
+					// no need to include them in stats
+					//
+					// when sum is negative the positive transactions should be
+					// discarded from stats
+					//
+					// when sum is positive the negative transactions should be
+					// discarded from stats, this is handled with `sum + t.amount` below i assume
+					if (sum === 0 || (sum < 0 && t.amount > 0)) continue;
+
+					amount = sum + t.amount;
+				} else {
+					amount = t.amount;
+				}
+
+				const cat_total = per_period[period] ?? {};
+				cat_total[category_name] = (cat_total[category_name] ?? 0) + amount;
+				per_period[period] = cat_total;
+			}
+
+			// generate rest of periods in interval
+			// with totals over individual periods as
+			// well as over the timeframe
+			const timeframe = eachMonthOfInterval({ start, end }, { in: tz(timezone) });
+
+			type ChartData = {
+				__period__: Date;
+				__total_pos__: number;
+				__total_neg__: number;
+			};
+			const data = new Array(timeframe.length) as Array<
+				ChartData | ({ [key: string]: number } & ChartData)
+			>;
+
+			const neg_categories = new Set<string>();
+			const pos_categories = new Set<string>();
+
+			let total_neg = 0;
+			let total_pos = 0;
+
+			for (let i = 0; i < timeframe.length; i++) {
+				const p = timeframe[i];
+				const key = p.toISOString().slice(0, 7);
+				const period_data = per_period[key] ?? {};
+
+				let total_neg_period = 0;
+				let total_pos_period = 0;
+
+				for (const category in period_data) {
+					const value = period_data[category];
+
+					// remove zero-value-categories
+					// these appear when there are linked transactions
+					// that fully negate each other
+					if (value === 0) {
+						delete period_data[category];
+						continue;
+					}
+
+					if (value < 0) {
+						neg_categories.add(category);
+						total_neg_period += value;
+						total_neg += value;
+					} else {
+						pos_categories.add(category);
+						total_pos_period += value;
+						total_pos += value;
+					}
+				}
+
+				data[i] = {
+					__period__: parse(key, "yyyy-MM", new Date()),
+					__total_pos__: total_pos_period,
+					__total_neg__: total_neg_period,
+					...period_data,
 				};
-			});
+			}
 
 			return {
-				stats: resolved,
-				totalNeg,
-				totalPos,
-				negCategories: [...uniqueNegativeCategories],
-				posCategories: [...uniquePositiveCategories],
+				totalNeg: total_neg,
+				totalPos: total_pos,
+				posCategories: [...pos_categories.values()],
+				negCategories: [...neg_categories.values()],
+				stats: data,
 			};
 		},
 
@@ -520,7 +602,7 @@ export type Transaction = {
 export type TransactionLink = {
 	id: string;
 	created_at: Date;
-	updated_at: Date;
+	updated_at: Date | null;
 	transaction: Transaction;
 };
 

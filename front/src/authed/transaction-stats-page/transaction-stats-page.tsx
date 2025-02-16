@@ -88,7 +88,6 @@ function ChartWrapper({ timeframe }: { timeframe: { start: Date; end: Date } }) 
 		timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
 		start: timeframe.start,
 		end: timeframe.end,
-		frequency: "monthly",
 	});
 
 	if (q.error) {
