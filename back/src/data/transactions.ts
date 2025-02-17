@@ -45,7 +45,8 @@ left join transactions linked on (
 )
 left join transaction_categories c on t.category_id = c.id
 where t.user_id = ${userId}
-and t.date at time zone ${timezone} between ${start} and ${end};
+and t.date at time zone ${timezone} between ${start} and ${end}
+and c.is_neutral = false;
 `;
 
 			const transactions = {} as {
