@@ -1,5 +1,5 @@
 import { tz } from "@date-fns/tz";
-import { eachMonthOfInterval, parse } from "date-fns";
+import { eachMonthOfInterval } from "date-fns";
 
 import type { Pg } from "./data.ts";
 import { id } from "./id.ts";
@@ -20,6 +20,7 @@ export function transactions(sql: Pg) {
 			// TODO: figure this out purely in SQL
 			// atm loads all transactions & related data in specified time range
 			// and processes them in memory
+			// brute forcing the logic
 
 			const rows = await sql`
 select
@@ -52,7 +53,7 @@ and c.is_neutral = false;
 			const transactions = {} as {
 				[key: string]: {
 					id: string;
-					date: Date;
+					period: string;
 					amount: number;
 					category: {
 						id: string;
@@ -81,7 +82,7 @@ and c.is_neutral = false;
 				if (!t) {
 					t = {
 						id,
-						date: row.date as Date,
+						period: (row.date as Date).toISOString().slice(0, 7),
 						amount: row.amount as number,
 						category: null,
 						links: [],
@@ -90,7 +91,7 @@ and c.is_neutral = false;
 					const categoryId = row.category_id as string | undefined;
 					if (categoryId && !t.category) {
 						const category_name = row.cat_name as string;
-						const is_neutral = row.cat_is_neutral as boolean;
+						const is_neutral = row.cat_is_ne as boolean;
 						t.category = {
 							id: categoryId,
 							name: category_name,
@@ -120,60 +121,61 @@ and c.is_neutral = false;
 				transactions[id] = t;
 			}
 
-			type YYYYMM = string;
-			type CategoryName = string;
-			type CategoryTotal = number;
-
-			const per_period = {} as Record<YYYYMM, Record<CategoryName, CategoryTotal>>;
-
-			// map category totals to periods
-			// ex: per_period = { "2020-12": { gifts: 100 } }
+			// apply linked transactions
 			for (const transaction_id in transactions) {
 				const t = transactions[transaction_id];
-				const period = t.date.toISOString().slice(0, 7);
 
-				if (t.category?.is_neutral) continue;
-
-				const category_name = t.category?.name ?? "__uncategorized__";
-
-				// negate linked transactions accordingly
-				let amount;
-				if (t.links.length) {
-					const sum = t.links.reduce((acc, l) => acc + l.transaction.amount, 0);
-
-					// when sum is 0, linked transactions negate each other
-					// no need to include them in stats
-					//
-					// when sum is negative the positive transactions should be
-					// discarded from stats
-					//
-					// when sum is positive the negative transactions should be
-					// discarded from stats, this is handled with `sum + t.amount` below i assume
-					if (sum === 0 || (sum < 0 && t.amount > 0)) continue;
-
-					amount = sum + t.amount;
-				} else {
-					amount = t.amount;
+				if (
+					// skip 0 amount transaction, already processed
+					t.amount === 0 ||
+					// skip neutral categories
+					// TODO: maybe show these somehow?
+					t.category?.is_neutral
+				) {
+					continue;
 				}
 
-				const cat_total = per_period[period] ?? {};
-				cat_total[category_name] = (cat_total[category_name] ?? 0) + amount;
-				per_period[period] = cat_total;
+				// negate linked transactions accordingly
+				if (t.links.length) {
+					if (t.amount > 0) {
+						// positive tx
+						// go through each negative link "paying"
+						// for the linked tx with the positive tx
+						// effectively reducing positive tx amount
+						// and increasing linked tx amount
+						for (let i = 0; i < t.links.length; i++) {
+							const link = t.links[i];
+							// interested in negative links only
+							if (link.transaction.amount > 0) continue;
+
+							const linkedTx = transactions[link.transaction.id];
+
+							const newAmount = Math.max(t.amount + linkedTx.amount, 0);
+							const newLinkedAmount = Math.min(linkedTx.amount + t.amount, 0);
+							linkedTx.amount = newLinkedAmount;
+							link.transaction.amount = newLinkedAmount;
+
+							t.amount = newAmount;
+						}
+
+						// above loop is done, `t.amount` is up-to-date
+						// update that amount to linked.links
+						for (let i = 0; i < t.links.length; i++) {
+							const link = t.links[i];
+							// interested in negative links only
+							if (link.transaction.amount > 0) continue;
+
+							const tx = transactions[link.transaction.id];
+							const thisTxLinkIdx = tx.links.findIndex(
+								(l) => l.transaction.id == t.id
+							);
+							tx.links[thisTxLinkIdx].transaction.amount = t.amount;
+						}
+					}
+				}
 			}
 
-			// generate rest of periods in interval
-			// with totals over individual periods as
-			// well as over the timeframe
 			const timeframe = eachMonthOfInterval({ start, end }, { in: tz(timezone) });
-
-			type ChartData = {
-				__period__: Date;
-				__total_pos__: number;
-				__total_neg__: number;
-			};
-			const data = new Array(timeframe.length) as Array<
-				ChartData | ({ [key: string]: number } & ChartData)
-			>;
 
 			const neg_categories = new Set<string>();
 			const pos_categories = new Set<string>();
@@ -181,41 +183,54 @@ and c.is_neutral = false;
 			let total_neg = 0;
 			let total_pos = 0;
 
-			for (let i = 0; i < timeframe.length; i++) {
-				const p = timeframe[i];
-				const key = p.toISOString().slice(0, 7);
-				const period_data = per_period[key] ?? {};
+			type YYYYMM = string;
+			type ChartData = {
+				__period__: YYYYMM;
+				__total_pos__: number;
+				__total_neg__: number;
+			};
+			const period_totals: Record<
+				YYYYMM,
+				ChartData | ({ [key: string]: number } & ChartData)
+			> = {};
 
-				let total_neg_period = 0;
-				let total_pos_period = 0;
+			for (const t_id in transactions) {
+				const t = transactions[t_id];
+				if (t.amount === 0) continue;
+				const category_name = t.category?.name ?? "__uncategorized__";
 
-				for (const category in period_data) {
-					const value = period_data[category];
-
-					// remove zero-value-categories
-					// these appear when there are linked transactions
-					// that fully negate each other
-					if (value === 0) {
-						delete period_data[category];
-						continue;
-					}
-
-					if (value < 0) {
-						neg_categories.add(category);
-						total_neg_period += value;
-						total_neg += value;
-					} else {
-						pos_categories.add(category);
-						total_pos_period += value;
-						total_pos += value;
-					}
+				if (!period_totals[t.period]) {
+					period_totals[t.period] = {
+						__period__: t.period,
+						__total_neg__: 0,
+						__total_pos__: 0,
+					};
 				}
 
-				data[i] = {
-					__period__: parse(key, "yyyy-MM", new Date()),
-					__total_pos__: total_pos_period,
-					__total_neg__: total_neg_period,
-					...period_data,
+				// @ts-expect-error -- index signature etc
+				period_totals[t.period][category_name] =
+					// @ts-expect-error -- index signature etc
+					(period_totals[t.period][category_name] ?? 0) + t.amount;
+
+				if (t.amount > 0) {
+					period_totals[t.period].__total_pos__ += t.amount;
+					pos_categories.add(category_name);
+					total_pos += t.amount;
+				} else {
+					period_totals[t.period].__total_neg__ += t.amount;
+					neg_categories.add(category_name);
+					total_neg += t.amount;
+				}
+			}
+
+			const chart_data = new Array(timeframe.length);
+
+			for (let i = 0; i < timeframe.length; i++) {
+				const p = timeframe[i].toISOString().slice(0, 7);
+				chart_data[i] = period_totals[p] ?? {
+					__period__: p,
+					__total_neg__: 0,
+					__total_pos__: 0,
 				};
 			}
 
@@ -224,7 +239,7 @@ and c.is_neutral = false;
 				totalPos: total_pos,
 				posCategories: [...pos_categories.values()],
 				negCategories: [...neg_categories.values()],
-				stats: data,
+				stats: chart_data,
 			};
 		},
 
