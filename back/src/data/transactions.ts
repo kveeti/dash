@@ -17,11 +17,6 @@ export function transactions(sql: Pg) {
 			end: Date;
 			timezone: string;
 		}) => {
-			// TODO: figure this out purely in SQL
-			// atm loads all transactions & related data in specified time range
-			// and processes them in memory
-			// brute forcing the logic
-
 			const rows = await sql`
 select
 	t.id as id,
@@ -298,37 +293,34 @@ and c.is_neutral = false;
 					c.name       as cat_name,
 					c.is_neutral as cat_is_neutral,
 
-					linked_tx.id            as l_tx_id,
-					linked_tx.date          as l_tx_date,
-					linked_tx.amount        as l_tx_amount,
-					linked_tx.currency      as l_tx_currency,
-					linked_tx.additional    as l_tx_additional,
-					linked_tx.counter_party as l_tx_counter_party,
+					linked.id as linked_id,
+					linked.date as linked_date,
+					linked.amount as linked_amount,
+					linked.currency as linked_currency,
+					linked.additional as linked_additional,
+					linked.counter_party as linked_counter_party,
 
-					coalesce(tl_a.created_at, tl_b.created_at) as link_created_at,
-					coalesce(tl_a.updated_at, tl_b.updated_at) as link_updated_at,
-					coalesce(tl_a.id, tl_b.id) as link_id
+					link.id as link_id,
+					link.created_at as link_created_at,
+					link.updated_at as link_updated_at
 
 				from transactions t
 
 				left join transaction_categories c
 					on t.category_id = c.id
-				left join transactions_links tl_a
-					on t.id = tl_a.transaction_a_id
-					and tl_a.user_id = t.user_id
-				left join transactions_links tl_b
-					on t.id = tl_b.transaction_b_id
-					and tl_b.user_id = t.user_id
-				left join transactions linked_tx
-					on (t.id = tl_a.transaction_a_id and linked_tx.id = tl_a.transaction_b_id)
-					or (t.id = tl_b.transaction_b_id and linked_tx.id = tl_b.transaction_a_id)
+
+				left join transactions_links link
+					on link.transaction_a_id = t.id or link.transaction_b_id = t.id
+				left join transactions linked
+					on link.transaction_b_id = linked.id and link.transaction_a_id = t.id 
+					or link.transaction_a_id = linked.id and link.transaction_b_id = t.id
 
 				where t.user_id = ${userId}
 				${queryClause ? sql`${queryClause}` : sql``}
 				${cursorClause ? sql`and ${cursorClause}` : sql``}
 				order by t.date ${order}, t.id ${order}
 				limit ${limit};
-			`.values();
+			`;
 
 			const hasMore = rows.length === limit;
 			if (hasMore) {
@@ -344,27 +336,27 @@ and c.is_neutral = false;
 			for (let i = 0; i < rows.length; i++) {
 				const row = rows[i];
 
-				const id = row[0] as string;
-				const linkedTransactionId = row[9] as string;
+				const id = row.tx_id as string;
+				const linkedTransactionId = row.linked_id as string;
 
 				let t = transactions.get(id);
 
 				if (!t) {
 					t = {
 						id,
-						date: row[1] as Date,
-						amount: row[2] as number,
-						currency: row[3] as string,
-						additional: row[4] as string,
-						counter_party: row[5] as string,
+						date: row.tx_date as Date,
+						amount: row.tx_amount as number,
+						currency: row.tx_currency as string,
+						additional: row.tx_additional as string,
+						counter_party: row.tx_counter_party as string,
 						category: null,
 						links: [],
 					};
 
-					const categoryId = row[6] as string | undefined;
+					const categoryId = row.category_id as string | undefined;
 					if (categoryId) {
-						const categoryName = row[7] as string;
-						const is_neutral = row[8] as boolean;
+						const categoryName = row.cat_name as string;
+						const is_neutral = row.cat_is_neutral as boolean;
 						t.category = {
 							id: categoryId,
 							name: categoryName,
@@ -374,14 +366,14 @@ and c.is_neutral = false;
 				}
 
 				if (linkedTransactionId) {
-					const lDate = row[10] as Date;
-					const lAmount = row[11] as number;
-					const lCurrency = row[12] as string;
-					const lAdditional = row[13] as string;
-					const lCounterParty = row[14] as string;
-					const linkCreatedAt = row[15] as Date;
-					const linkUpdatedAt = row[16] as Date;
-					const linkId = row[17] as string;
+					const lDate = row.linked_date as Date;
+					const lAmount = row.linked_amount as number;
+					const lCurrency = row.linked_currency as string;
+					const lAdditional = row.linked_additional as string;
+					const lCounterParty = row.linked_counter_party as string;
+					const linkCreatedAt = row.link_created_at as Date;
+					const linkUpdatedAt = row.link_updated_at as Date;
+					const linkId = row.link_id as string;
 
 					t.links.push({
 						created_at: linkCreatedAt,

@@ -1,7 +1,6 @@
 - [ ] transaction filters
 - [ ] clear button for transaction search (and filters?)
 - [ ] some transaction bulk actions
-- [ ] transaction linking
 - [ ] stats page filters
 - [ ] moor stats
 - [ ] accounts
@@ -20,3 +19,4 @@
 - [-] category page pagination -- not happening
 - [x] category search
 - [x] choose locale, auto doesn't work
+- [x] transaction linking
