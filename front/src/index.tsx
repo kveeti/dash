@@ -1,18 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, loggerLink } from "@trpc/client";
-import { type ReactNode, StrictMode, Suspense, useState } from "react";
+import { type ReactNode, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { Toaster, toast } from "sonner";
+import { Toaster } from "sonner";
 import SuperJSON from "superjson";
 import { Redirect, Route, Switch } from "wouter";
 
-import { AuthLayout } from "./authed/layout";
 import { envs } from "./lib/envs";
 import { lazyWithPreload } from "./lib/lazy";
 import { type Me, MeProvider, useMe } from "./lib/me";
 import { trpc } from "./lib/trpc";
 import "./styles.css";
-import { Button } from "./ui/button";
 /**
  * LoginPage imported eagerly since its the usual landing page
  */
@@ -30,9 +28,12 @@ const TransactionsPage = lazyWithPreload(
 const TransactionStatsPage = lazyWithPreload(
 	() => import("./authed/transaction-stats-page/transaction-stats-page")
 );
-
 const SettingsPage = lazyWithPreload(() => import("./authed/settings-page/settings.page"));
 const Providers = lazyWithPreload(() => import("./authed/providers"));
+const AuthLayout = lazyWithPreload(() =>
+	import("./authed/layout").then((m) => ({ default: m.AuthLayout }))
+);
+const Sw = lazyWithPreload(() => import("./sw"));
 
 RegisterPage.preload();
 CategoriesPage.preload();
@@ -42,13 +43,15 @@ ImportTransactionsPage.preload();
 NewTransactionPage.preload();
 SettingsPage.preload();
 Providers.preload();
+AuthLayout.preload();
+Sw.preload();
 
 function Entry() {
 	const { me } = useMe();
 
 	return me ? (
-		<AuthLayout>
-			<Suspense>
+		<Suspense>
+			<AuthLayout>
 				<Providers>
 					<Switch>
 						<Route path="/transactions">
@@ -86,8 +89,8 @@ function Entry() {
 						</Route>
 					</Switch>
 				</Providers>
-			</Suspense>
-		</AuthLayout>
+			</AuthLayout>
+		</Suspense>
 	) : (
 		<Switch>
 			<Route path="/login">
@@ -109,6 +112,9 @@ function main(initialMe: Me | null) {
 	createRoot(document.getElementById("root")!).render(
 		<StrictMode>
 			<Toaster position="top-center" richColors theme="system" />
+			<Suspense>
+				<Sw />
+			</Suspense>
 			<MeProvider initialMe={initialMe}>
 				<Trpc>
 					<Entry />
@@ -168,90 +174,3 @@ if (!optimisticMe && mePromise) {
 } else {
 	main(me?.data ?? optimisticMe);
 }
-
-function UpdateToast({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
-	const [isLoading, setIsLoading] = useState(false);
-	return (
-		<div className="font-default border-gray-a4 bg-gray-1 flex w-[300px] flex-col gap-4 border p-3 text-sm shadow-lg">
-			<p>update available!</p>
-
-			<div className="flex justify-end gap-2">
-				<Button variant="ghost" size="sm" onClick={onCancel}>
-					not yet!
-				</Button>
-				<Button
-					size="sm"
-					onClick={() => {
-						setIsLoading(true);
-						onConfirm();
-					}}
-					isLoading={isLoading}
-				>
-					update
-				</Button>
-			</div>
-		</div>
-	);
-}
-
-// this next bit is from `vite-pwa/vite-plugin-pwa`
-export function registerSW({ onNeedRefresh }: { onNeedRefresh: () => void }) {
-	let wb: import("workbox-window").Workbox | undefined;
-	let registerPromise: Promise<void>;
-	let sendSkipWaitingMessage: () => void | undefined;
-
-	const updateServiceWorker = async (_reloadPage = true) => {
-		await registerPromise;
-		sendSkipWaitingMessage?.();
-	};
-
-	async function register() {
-		if ("serviceWorker" in navigator) {
-			wb = await import("workbox-window")
-				.then(({ Workbox }) => {
-					return new Workbox("/sw.js");
-				})
-				.catch((_e) => {
-					return undefined;
-				});
-
-			if (!wb) return;
-
-			sendSkipWaitingMessage = () => {
-				wb?.messageSkipWaiting();
-			};
-			const showSkipWaitingPrompt = () => {
-				wb?.addEventListener("controlling", (event) => {
-					if (event.isUpdate) window.location.reload();
-				});
-
-				onNeedRefresh?.();
-			};
-			wb.addEventListener("installed", (event) => {
-				if (typeof event.isUpdate === "undefined") {
-					if (typeof event.isExternal !== "undefined") {
-						if (event.isExternal) showSkipWaitingPrompt();
-					}
-				}
-			});
-			wb.addEventListener("waiting", showSkipWaitingPrompt);
-
-			wb.register();
-		}
-	}
-
-	registerPromise = register();
-
-	return updateServiceWorker;
-}
-
-const updateSW = registerSW({
-	onNeedRefresh() {
-		toast.custom(
-			(toastId) => (
-				<UpdateToast onConfirm={updateSW} onCancel={() => toast.dismiss(toastId)} />
-			),
-			{ duration: 20000, position: "bottom-right" }
-		);
-	},
-});

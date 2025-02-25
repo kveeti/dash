@@ -37,3 +37,7 @@ db:
 
 dbreset:
 	@docker compose down -v -t 1 && docker compose up -d
+
+an:
+	@cd front && BUNDLE_ANALYZE=true pnpm build && open dist/report-web.html
+
