@@ -142,31 +142,33 @@ export default function TransactionsPage() {
 								<li
 									key={t.id}
 									data-id={t.id}
-									className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
+									className="group col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
 									onClick={onTxClick.bind(t)}
 								>
-									<div className="col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm">
-										<span
-											className={
-												"border-t-gray-3 col-[1] flex h-full items-center border-t px-2 py-3 text-sm" +
-												(!showDate ? " invisible" : "")
-											}
-										>
-											{date}
-										</span>
+									<span
+										className={
+											"col-[1] flex h-full items-start px-2 py-3 text-sm" +
+											(!showDate
+												? " invisible group-hover:visible"
+												: " border-t-gray-3 border-t")
+										}
+									>
+										{date}
+									</span>
 
-										<span className="border-t-gray-3 col-[2] flex items-center truncate border-t p-3">
+									<span className="border-t-gray-3 col-[2] flex items-center truncate border-t p-3">
+										<div className="flex flex-col gap-0.5 truncate">
 											<span className="truncate">{t.counter_party}</span>
-										</span>
-
-										<div
-											className={
-												"border-t-gray-3 col-[3] border-t px-2 py-3 text-right tabular-nums" +
-												(isPositive ? " text-green-10" : "")
-											}
-										>
-											{amountFormatter.format(t.amount)}
 										</div>
+									</span>
+
+									<div
+										className={
+											"border-t-gray-3 col-[3] border-t px-2 py-3 text-right tabular-nums" +
+											(isPositive ? " text-green-10" : "")
+										}
+									>
+										{amountFormatter.format(t.amount)}
 									</div>
 								</li>
 							);
