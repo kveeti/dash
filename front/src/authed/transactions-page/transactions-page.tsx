@@ -4,7 +4,6 @@ import {
 	CheckIcon,
 	CopyIcon,
 	Cross1Icon,
-	MixerHorizontalIcon,
 } from "@radix-ui/react-icons";
 import { Tooltip } from "radix-ui";
 import { FormEvent, useMemo, useRef, useState } from "react";
@@ -61,10 +60,6 @@ export default function TransactionsPage() {
 			<div className="bg-gray-1 border-b-gray-4 order-b sticky top-10 hidden pt-2 sm:block">
 				<div className="flex gap-1">
 					<Search currentSearchParams={searchParams} />
-
-					<Button>
-						<MixerHorizontalIcon />
-					</Button>
 				</div>
 
 				<div className="flex items-center justify-between py-2">
@@ -94,10 +89,6 @@ export default function TransactionsPage() {
 
 				<div className="flex gap-1">
 					<Search currentSearchParams={searchParams} />
-
-					<Button>
-						<MixerHorizontalIcon />
-					</Button>
 				</div>
 			</div>
 
