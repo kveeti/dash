@@ -41,3 +41,18 @@ dbreset:
 an:
 	@cd front && BUNDLE_ANALYZE=true pnpm build && open dist/report-web.html
 
+backdepl:
+	@cd back && \
+		docker context use orbstack && \
+		docker build . -t veetik/dash_backend:$(shell git rev-parse HEAD) && \
+		docker push veetik/dash_backend:$(shell git rev-parse HEAD) && \
+		cd .. && \
+		docker context use SERVU && \
+		COMMIT_SHA=$(shell git rev-parse HEAD) docker stack deploy -c stack.yml dash && \
+		docker context use orbstack
+
+frontdepl:
+	@cd front && pnpm depl
+
+depl:
+	@make -j2 backdepl frontdepl

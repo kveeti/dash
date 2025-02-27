@@ -5,7 +5,6 @@
 - [ ] accounts
 - [ ] transaction tags?
 - [ ] improve transaction import page
-- [ ] deploy script
 - [ ] moor stats
 
 - [x] mobile
@@ -21,3 +20,4 @@
 - [x] choose locale, auto doesn't work
 - [x] transaction linking
 - [x] moor stats
+- [x] deploy script
