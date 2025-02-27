@@ -205,7 +205,7 @@ and c.is_neutral = false;
 				// @ts-expect-error -- index signature etc
 				period_totals[t.period][category_name] =
 					// @ts-expect-error -- index signature etc
-					(period_totals[t.period][category_name] ?? 0) + t.amount;
+					(period_totals?.[t.period]?.[category_name] ?? 0) + t.amount;
 
 				if (t.amount > 0) {
 					period_totals[t.period].__total_pos__ += t.amount;
@@ -236,6 +236,44 @@ and c.is_neutral = false;
 				negCategories: [...neg_categories.values()],
 				stats: chart_data,
 			};
+		},
+
+		statsCumulative: async ({
+			userId,
+			timezone,
+			start,
+			end,
+		}: {
+			userId: string;
+			timezone: string;
+			start: Date;
+			end: Date;
+		}) => {
+			return await sql`
+with months as (
+	select generate_series(
+		date_trunc('month', ${start} at time zone ${timezone}), 
+		date_trunc('month', ${end} at time zone ${timezone}),
+		'1 month'
+	) as month
+),
+monthly_balances as (
+	select 
+		date_trunc('month', date at time zone ${timezone}) as month, 
+		sum(amount) as monthly_sum
+	from transactions
+	where user_id = ${userId} and date between ${start} and ${end}
+	group by month
+),
+cumulative as (
+	select 
+		m.month as date, 
+		coalesce(sum(mb.monthly_sum) over (order by m.month rows between unbounded preceding and current row), 0) as value
+	from months m
+	left join monthly_balances mb on m.month = mb.month
+)
+select date, value from cumulative order by date;
+			`;
 		},
 
 		query: async (opts: {

@@ -166,7 +166,14 @@ function getItem(key: string) {
 }
 
 const optimisticMe = getItem("me") as Me;
-const me = (window as any).__ME_LOADER__;
+const me = (
+	window as unknown as {
+		__ME_LOADER__: {
+			promise: Promise<Me> | null;
+			data: Me | null;
+		};
+	}
+).__ME_LOADER__;
 const mePromise = me?.promise;
 
 if (!optimisticMe && mePromise) {

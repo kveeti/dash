@@ -25,6 +25,25 @@ export const transactions_v1 = router({
 			});
 		}),
 
+	statsCumulative: authProc
+		.input(
+			v.parser(
+				v.object({
+					start: v.date(),
+					end: v.date(),
+					timezone: v.string(),
+				})
+			)
+		)
+		.query(async ({ ctx, input }) => {
+			return await ctx.data.transactions.statsCumulative({
+				userId: ctx.userId,
+				timezone: input.timezone,
+				start: input.start,
+				end: input.end,
+			});
+		}),
+
 	query: authProc
 		.input(
 			v.parser(

@@ -35,10 +35,10 @@ function UpdateToast({ onConfirm, onCancel }: { onConfirm: () => void; onCancel:
 // this next bit is from `vite-pwa/vite-plugin-pwa`
 export function registerSW({ onNeedRefresh }: { onNeedRefresh: () => void }) {
 	let wb: import("workbox-window").Workbox | undefined;
-	let registerPromise: Promise<void>;
+	let registerPromise: Promise<void> | null = null;
 	let sendSkipWaitingMessage: () => void | undefined;
 
-	const updateServiceWorker = async (_reloadPage = true) => {
+	const updateServiceWorker = async () => {
 		await registerPromise;
 		sendSkipWaitingMessage?.();
 	};
@@ -49,7 +49,7 @@ export function registerSW({ onNeedRefresh }: { onNeedRefresh: () => void }) {
 				.then(({ Workbox }) => {
 					return new Workbox("/sw.js");
 				})
-				.catch((_e) => {
+				.catch(() => {
 					return undefined;
 				});
 

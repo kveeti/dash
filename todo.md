@@ -2,11 +2,11 @@
 - [ ] clear button for transaction search (and filters?)
 - [ ] some transaction bulk actions
 - [ ] stats page filters
-- [ ] moor stats
 - [ ] accounts
 - [ ] transaction tags?
 - [ ] improve transaction import page
 - [ ] deploy script
+- [ ] moor stats
 
 - [x] mobile
 - [x] fix input outlines in safari(s)
@@ -20,3 +20,4 @@
 - [x] category search
 - [x] choose locale, auto doesn't work
 - [x] transaction linking
+- [x] moor stats
