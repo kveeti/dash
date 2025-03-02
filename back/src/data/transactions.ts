@@ -238,7 +238,7 @@ and c.is_neutral = false;
 			};
 		},
 
-		statsCumulative: async ({
+		statsCountAndAverage: async ({
 			userId,
 			timezone,
 			start,
@@ -249,31 +249,44 @@ and c.is_neutral = false;
 			start: Date;
 			end: Date;
 		}) => {
-			return await sql`
+			const rows = await sql`
 with months as (
-	select generate_series(
-		date_trunc('month', ${start} at time zone ${timezone}), 
-		date_trunc('month', ${end} at time zone ${timezone}),
-		'1 month'
-	) as month
+  select generate_series(
+    date_trunc('month', ${start} at time zone ${timezone}), 
+    date_trunc('month', ${end} at time zone ${timezone}),
+    '1 month'
+  ) as month
 ),
-monthly_balances as (
-	select 
-		date_trunc('month', date at time zone ${timezone}) as month, 
-		sum(amount) as monthly_sum
-	from transactions
-	where user_id = ${userId} and date between ${start} and ${end}
-	group by month
-),
-cumulative as (
-	select 
-		m.month as date, 
-		coalesce(sum(mb.monthly_sum) over (order by m.month rows between unbounded preceding and current row), 0) as value
-	from months m
-	left join monthly_balances mb on m.month = mb.month
+monthly_stats as (
+  select 
+    date_trunc('month', date at time zone ${timezone}) as month, 
+    count(*) as transaction_count,
+    avg(case 
+          when amount < 0 
+          and (category_id in (select id from transaction_categories where not is_neutral) 
+               or category_id is null) 
+          then -amount 
+        end) as monthly_avg
+  from transactions
+  where 
+    user_id = ${userId} 
+    and date between ${start} and ${end}
+  group by month
 )
-select date, value from cumulative order by date;
-			`;
+select 
+  m.month as date, 
+  coalesce(ms.transaction_count, 0) as count,
+  ms.monthly_avg as avg
+from months m
+left join monthly_stats ms on m.month = ms.month
+order by date
+`;
+
+			return rows.map((r) => ({
+				date: r.date as Date,
+				count: Number(r.count),
+				avg: Number(r.avg),
+			}));
 		},
 
 		query: async (opts: {

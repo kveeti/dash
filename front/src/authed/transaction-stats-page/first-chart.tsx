@@ -20,7 +20,7 @@ const CHART_HEIGHT = 450;
 export function FirstChart(props: Props) {
 	return (
 		<div>
-			<h2 className="mb-4 text-xl">first chart</h2>
+			<h2 className="mb-4 text-xl">chart1</h2>
 
 			<Chart {...props} />
 		</div>
@@ -81,7 +81,7 @@ function Chart(props: Props) {
 	});
 
 	return (
-		<ResponsiveContainer width={"100%"} height={CHART_HEIGHT}>
+		<ResponsiveContainer width="100%" height={CHART_HEIGHT}>
 			<BarChart syncId={CHART_SYNC_ID} data={stats} stackOffset="sign">
 				<CartesianGrid
 					strokeDasharray="3 3"

@@ -3,7 +3,7 @@ import { type ChangeEvent } from "react";
 import { useLocation, useSearch } from "wouter";
 
 import { Input } from "../../ui/input";
-import { CumulativeChart } from "./cumulative-chart";
+import { CountAndAverageChart } from "./count-and-avg-chart";
 import { FirstChart } from "./first-chart";
 
 export const CHART_SYNC_ID = "hi";
@@ -81,7 +81,7 @@ export default function TransactionStatsPage() {
 
 			<div className="space-y-10">
 				<FirstChart timeframe={timeframe} timezone={timezone} />
-				<CumulativeChart timeframe={timeframe} timezone={timezone} />
+				<CountAndAverageChart timeframe={timeframe} timezone={timezone} />
 			</div>
 		</div>
 	);
