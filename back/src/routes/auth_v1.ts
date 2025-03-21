@@ -66,6 +66,9 @@ export const auth_v1 = router({
 			throw new Error("??");
 		}
 
-		return { ...user, csrf: ctx.csrf };
+		const csrf = id("csrf");
+		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
+
+		return { ...user, csrf };
 	}),
 });
