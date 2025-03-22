@@ -93,6 +93,24 @@ export function auth(data: Data) {
 				preferences: user.preferences,
 			};
 		},
+
+		changePassword: async (props: {
+			userId: string;
+			oldPassword: string;
+			newPassword: string;
+		}) => {
+			const user = await data.users.getById(props.userId);
+			if (!user) throw new Error("no user");
+
+			const verifyRes = await passwords.verify(user.password_hash, props.oldPassword);
+			if (verifyRes === "failed") {
+				return "invalid password" as const;
+			}
+
+			const newHash = await passwords.hash(props.newPassword);
+
+			await data.users.updatePasswordHash(user.id, newHash);
+		},
 	};
 }
 

@@ -6,7 +6,7 @@ export const inputStyles =
 	"focus min-w-0 max-w-full w-full px-3 h-10 border border-gray-6 rounded-none bg-transparent text-inherit placeholder:opacity-80 focus:relative focus:z-10";
 
 type DefaultInputProps = ComponentProps<"input">;
-type Props = { label?: string; error?: string } & DefaultInputProps;
+type Props = { label?: string; error?: string | false } & DefaultInputProps;
 
 export const Input = function Input({ label, error, id, className, required, ...rest }: Props) {
 	// eslint-disable-next-line react-hooks/rules-of-hooks -- the hook is not conditional

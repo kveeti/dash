@@ -1,7 +1,7 @@
 import type { Pg } from "./data.ts";
 
 export const users = (sql: Pg) => ({
-	async upsert(user: UserWithPasswordHash) {
+	async upsert(user: User) {
 		const [row] = await sql`
 			insert into users
 				(id, username, password_hash, created_at)
@@ -41,7 +41,7 @@ export const users = (sql: Pg) => ({
 			return null;
 		}
 
-		const user: UserWithPreferences & UserWithPasswordHash = {
+		const user: UserWithPreferences = {
 			id: row.id,
 			username: row.username,
 			created_at: row.created_at,
@@ -60,6 +60,7 @@ export const users = (sql: Pg) => ({
 				id: string;
 				username: string;
 				created_at: Date;
+				password_hash: string;
 				pre_locale: string;
 			}?,
 		] = await sql`
@@ -67,6 +68,7 @@ export const users = (sql: Pg) => ({
 				u.id,
 				u.username,
 				u.created_at,
+				u.password_hash,
 				up.locale as pre_locale
 			from users u
 			left join user_preferences up on u.id = up.user_id
@@ -82,6 +84,7 @@ export const users = (sql: Pg) => ({
 			id: row.id,
 			username: row.username,
 			created_at: row.created_at,
+			password_hash: row.password_hash,
 			preferences: {
 				locale: row.pre_locale,
 			},
@@ -120,8 +123,8 @@ export type UserPreferences = {
 export type User = {
 	id: string;
 	username: string;
+	password_hash: string;
 	created_at: Date;
 };
 
-export type UserWithPasswordHash = User & { password_hash: string };
 export type UserWithPreferences = User & { preferences?: UserPreferences };

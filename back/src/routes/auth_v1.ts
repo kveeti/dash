@@ -60,6 +60,25 @@ export const auth_v1 = router({
 		ctx.res.appendHeader("set-cookie", createCsrfCookie(""));
 	}),
 
+	changePassword: authProc
+		.input(
+			v.parser(
+				v.object({
+					oldPassword: v.string(),
+					newPassword: v.string(),
+				})
+			)
+		)
+		.mutation(async ({ ctx, input }) => {
+			const error = await ctx.services.auth.changePassword({
+				userId: ctx.userId,
+				oldPassword: input.oldPassword,
+				newPassword: input.newPassword,
+			});
+			if (error === "invalid password")
+				throw new TRPCError({ code: "BAD_REQUEST", message: "invalid password" });
+		}),
+
 	me: authProc.query(async ({ ctx }) => {
 		const user = await ctx.services.auth.getUser(ctx.userId);
 		if (!user) {

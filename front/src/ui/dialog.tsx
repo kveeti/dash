@@ -23,10 +23,10 @@ export function Content(props: ComponentProps<typeof _Dialog.Content>) {
 	);
 }
 
-export function Title(props: ComponentProps<typeof _Dialog.Title>) {
+export function Title({ children, ...props }: ComponentProps<typeof _Dialog.Title>) {
 	return (
-		<_Dialog.Title asChild>
-			<Heading level={2}>{props.children}</Heading>
+		<_Dialog.Title asChild {...props}>
+			<Heading level={2}>{children}</Heading>
 		</_Dialog.Title>
 	);
 }

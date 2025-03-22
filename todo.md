@@ -21,3 +21,4 @@
 - [x] transaction linking
 - [x] moor stats
 - [x] deploy script
+- [x] password change
