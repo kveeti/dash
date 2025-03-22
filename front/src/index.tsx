@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, loggerLink } from "@trpc/client";
-import { type ReactNode, StrictMode, Suspense } from "react";
+import { type ReactNode, StrictMode, Suspense, useMemo } from "react";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "sonner";
 import SuperJSON from "superjson";
@@ -126,6 +126,13 @@ function main(initialMe: Me | null) {
 
 const qc = new QueryClient();
 
+const win = window as unknown as {
+	__ME_LOADER__: {
+		promise: Promise<Me> | null;
+		data: Me | null;
+	};
+};
+
 function Trpc({ children }: { children: ReactNode }) {
 	const { me } = useMe();
 
@@ -137,15 +144,22 @@ function Trpc({ children }: { children: ReactNode }) {
 			}),
 			httpBatchLink({
 				url: envs.apiUrl,
-				fetch: async (url, init) =>
-					fetch(url, {
+				fetch: async (url, init) => {
+					return fetch(url, {
 						...init,
 						credentials: "include",
 						headers: {
 							...init?.headers,
-							"x-csrf": me?.csrf ?? "",
+							// two cases, me loader gets used when user is coming logged in
+							// me.csrf when user logins or registers and me state is set to context after
+							// this approach requires localStorage and window.__ME_LOADER__ to be cleaned up on logout
+							// this is like this because context me can sometimes be the optimisticMe loaded from localStorage and that has an older invalid csrf token most of the time
+							// so app is read-only until csrf value is populated providing the fastest possible exp for logged in users
+							// not proud of this, TODO: figure out a better approach
+							"x-csrf": win.__ME_LOADER__.data?.csrf ?? me?.csrf ?? "",
 						},
-					}),
+					});
+				},
 				transformer: SuperJSON,
 			}),
 		],
@@ -166,18 +180,14 @@ function getItem(key: string) {
 }
 
 const optimisticMe = getItem("me") as Me;
-const me = (
-	window as unknown as {
-		__ME_LOADER__: {
-			promise: Promise<Me> | null;
-			data: Me | null;
-		};
-	}
-).__ME_LOADER__;
-const mePromise = me?.promise;
+const mePromise = win.__ME_LOADER__?.promise;
 
-if (!optimisticMe && mePromise) {
-	mePromise.then(main);
-} else {
-	main(me?.data ?? optimisticMe);
-}
+mePromise?.then((meData: Me | null) => {
+	if (meData) {
+		localStorage.setItem("me", JSON.stringify(meData));
+	} else {
+		localStorage.removeItem("me");
+	}
+});
+
+main(win.__ME_LOADER__.data ?? optimisticMe ?? null);

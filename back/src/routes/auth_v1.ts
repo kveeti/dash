@@ -78,16 +78,4 @@ export const auth_v1 = router({
 			if (error === "invalid password")
 				throw new TRPCError({ code: "BAD_REQUEST", message: "invalid password" });
 		}),
-
-	me: authProc.query(async ({ ctx }) => {
-		const user = await ctx.services.auth.getUser(ctx.userId);
-		if (!user) {
-			throw new Error("??");
-		}
-
-		const csrf = id("csrf");
-		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
-
-		return { ...user, csrf };
-	}),
 });

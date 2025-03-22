@@ -106,6 +106,8 @@ function Hamburger() {
 				t.invalidate(undefined, undefined, { cancelRefetch: true }).catch(() => {});
 				setMe(null);
 				localStorage.clear();
+				// @ts-expect-error -- yea
+				delete window.__ME_LOADER__;
 				toast.custom(() => (
 					<div className="font-default border-gray-a4 bg-gray-1 flex w-(--width) flex-col gap-4 border p-3 text-sm shadow-lg">
 						<p>logged out</p>

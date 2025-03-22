@@ -3,7 +3,7 @@ import { useState } from "react";
 import { createContext } from "./create-context";
 import type { ApiRes } from "./trpc";
 
-export type Me = ApiRes["v1"]["auth"]["me"];
+export type Me = ApiRes["v1"]["users"]["me"];
 
 const [useMe, meContext] = createContext<{
 	me: Me | null;

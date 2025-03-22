@@ -1,5 +1,7 @@
 import * as v from "valibot";
 
+import { id } from "../data/id.ts";
+import { createCsrfCookie } from "../token.ts";
 import { authProc, router } from "../trpc.ts";
 
 export const users_v1 = router({
@@ -9,7 +11,10 @@ export const users_v1 = router({
 			throw new Error("??");
 		}
 
-		return { ...user, csrf: ctx.csrf };
+		const csrf = id("csrf");
+		ctx.res.appendHeader("set-cookie", createCsrfCookie(csrf));
+
+		return { ...user, csrf };
 	}),
 
 	updateSettings: authProc
