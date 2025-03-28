@@ -80,24 +80,8 @@ function Chart(props: Props) {
 					className="text-gray-11 text-xs"
 				/>
 
-				<Bar
-					isAnimationActive={false}
-					dataKey="count"
-					fill="#8884d8"
-					yAxisId="right"
-					name="# of tx"
-				/>
-				<Bar
-					isAnimationActive={false}
-					dataKey="avg"
-					fill="#82ca9d"
-					yAxisId="left"
-					name="avg"
-				/>
-
 				<Tooltip
 					isAnimationActive={false}
-					cursor={false}
 					content={(props) => {
 						if (!props.active) return null;
 
@@ -137,6 +121,21 @@ function Chart(props: Props) {
 							</div>
 						);
 					}}
+				/>
+
+				<Bar
+					isAnimationActive={false}
+					dataKey="count"
+					fill="#8884d8"
+					yAxisId="right"
+					name="# of tx"
+				/>
+				<Bar
+					isAnimationActive={false}
+					dataKey="avg"
+					fill="#82ca9d"
+					yAxisId="left"
+					name="avg"
 				/>
 			</BarChart>
 		</ResponsiveContainer>
