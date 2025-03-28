@@ -1,3 +1,4 @@
+import * as d3 from "d3";
 import { format } from "date-fns";
 import { useMemo } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -64,148 +65,152 @@ function Chart(props: Props) {
 		);
 	}
 
-	const { posCategories, negCategories, stats } = q.data;
+	const { positives, negatives, categories } = q.data;
 
-	const colorsNegCategories = negCategories.map((_, i) => {
-		const hue = ((i + 0.9) * 360) / negCategories.length;
-		const lightness = i % 2 === 0 ? 40 : 60;
-		const saturation = 70;
-		return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-	});
-
-	const colorsPosCategories = posCategories.map((_, i) => {
-		const hue = (i - 0.1 * 360) / posCategories.length;
-		const lightness = i % 2 === 0 ? 60 : 40;
-		const saturation = 70;
-		return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-	});
+	const color = d3
+		.scaleSequential(d3.interpolateRainbow)
+		.domain([0, categories.length])
+		.clamp(true);
 
 	return (
-		<ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-			<BarChart syncId={CHART_SYNC_ID} data={stats} stackOffset="sign">
-				<CartesianGrid
-					strokeDasharray="3 3"
-					stroke="currentColor"
-					className="text-gray-7"
-				/>
-				<XAxis
-					dataKey="__period__"
-					stroke="currentColor"
-					className="text-gray-10 text-xs"
-					tickFormatter={(date) => format(date, "MMM yy")}
-				/>
-				<YAxis
-					stroke="currentColor"
-					className="text-gray-11 text-xs"
-					tickFormatter={(value) => numberFormatter.format(value)}
-				/>
+		<>
+			<ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+				<BarChart syncId={CHART_SYNC_ID} data={negatives}>
+					<CartesianGrid
+						strokeDasharray="3 3"
+						stroke="currentColor"
+						className="text-gray-7"
+					/>
+					<XAxis
+						dataKey="__period__"
+						stroke="currentColor"
+						className="text-gray-10 text-xs"
+						tickFormatter={(date) => format(date, "MMM yy")}
+					/>
+					<YAxis
+						stroke="currentColor"
+						className="text-gray-11 text-xs"
+						tickFormatter={(value) => numberFormatter.format(value)}
+					/>
 
-				<Tooltip
-					isAnimationActive={false}
-					cursor={false}
-					content={(props) => {
-						if (!props.label || !props.payload) return null;
-						const label = format(props.label, "MMM yy");
+					<Tooltip isAnimationActive={false} content={TooltipContent} />
 
-						const pos = [];
-						const neg = [];
+					{categories.map((category, i) => (
+						<Bar
+							key={category}
+							dataKey={category}
+							stackId="a"
+							isAnimationActive={false}
+							fill={color(i)}
+						/>
+					))}
+				</BarChart>
+			</ResponsiveContainer>
 
-						let total = 0;
+			<ResponsiveContainer width="100%" height={300}>
+				<BarChart syncId={CHART_SYNC_ID} data={positives}>
+					<CartesianGrid
+						strokeDasharray="3 3"
+						stroke="currentColor"
+						className="text-gray-7"
+					/>
+					<XAxis
+						dataKey="__period__"
+						stroke="currentColor"
+						className="text-gray-10 text-xs"
+						tickFormatter={(date) => format(date, "MMM yy")}
+					/>
+					<YAxis
+						stroke="currentColor"
+						className="text-gray-11 text-xs"
+						tickFormatter={(value) => numberFormatter.format(value)}
+					/>
 
-						for (let i = 0; i < props.payload.length; i++) {
-							const thing = props.payload[i];
-							if (typeof thing?.value !== "number") continue;
+					<Tooltip isAnimationActive={false} content={TooltipContent} />
+					{categories.map((category, i) => (
+						<Bar
+							key={category}
+							dataKey={category}
+							stackId="a"
+							isAnimationActive={false}
+							fill={color(i)}
+						/>
+					))}
+				</BarChart>
+			</ResponsiveContainer>
 
-							total += thing.value;
+			<ResponsiveContainer width="100%" height={300}>
+				<BarChart syncId={CHART_SYNC_ID} data={q.data.totals}>
+					<CartesianGrid
+						strokeDasharray="3 3"
+						stroke="currentColor"
+						className="text-gray-7"
+					/>
+					<XAxis
+						dataKey="__period__"
+						stroke="currentColor"
+						className="text-gray-10 text-xs"
+						tickFormatter={(date) => format(date, "MMM yy")}
+					/>
+					<YAxis
+						stroke="currentColor"
+						className="text-gray-11 text-xs"
+						tickFormatter={(value) => numberFormatter.format(value)}
+					/>
 
-							if (thing.value > 0) pos.push(thing);
-							else neg.push(thing);
-						}
+					<Tooltip isAnimationActive={false} content={TooltipContent} />
 
-						return (
-							<div className="bg-gray-1 border-gray-4 border shadow-lg">
-								<p className="border-b-gray-3 border-b p-2 leading-none font-medium">
-									{label}
-								</p>
+					<Bar isAnimationActive={false} dataKey="expenses" fill="#000" />
+					<Bar isAnimationActive={false} dataKey="income" fill="hsla(131, 38%, 56%, 1)" />
+				</BarChart>
+			</ResponsiveContainer>
+		</>
+	);
+}
 
-								{!!pos.length && (
-									<ul className="border-gray-4 space-y-1.5 border-b p-2">
-										{pos.map((p) => {
-											return (
-												<li className="flex items-center justify-between gap-4">
-													<div className="flex items-center">
-														<div
-															style={{ backgroundColor: p.color }}
-															className="me-2 size-3"
-														></div>
-														<span className="leading-none">
-															{p.dataKey === "__uncategorized__"
-																? "uncategorized"
-																: p.dataKey}
-														</span>
-													</div>
-													<span className="leading-none">
-														{numberFormatter.format(p.value as number)}
-													</span>
-												</li>
-											);
-										})}
-									</ul>
-								)}
+function TooltipContent(props: any) {
+	const { numberFormatter } = useFormatters();
 
-								{!!neg.length && (
-									<ul className="border-gray-4 space-y-1.5 border-b p-2">
-										{neg.map((p) => {
-											return (
-												<li className="flex items-center justify-between gap-4">
-													<div className="flex items-center">
-														<div
-															style={{ backgroundColor: p.color }}
-															className="me-2 size-3"
-														></div>
-														<span className="leading-none">
-															{p.dataKey === "__uncategorized__"
-																? "uncategorized"
-																: p.dataKey}
-														</span>
-													</div>
-													<span className="leading-none">
-														{numberFormatter.format(p.value as number)}
-													</span>
-												</li>
-											);
-										})}
-									</ul>
-								)}
+	if (!props.label || !props.payload) return null;
+	const label = format(props.label, "MMM yy");
 
-								<div className="flex justify-end p-2 leading-none">
-									<span>{numberFormatter.format(total as number)}</span>
+	return (
+		<div className="bg-gray-1 border-gray-4 border shadow-lg">
+			<p className="border-b-gray-3 border-b p-2 leading-none font-medium">{label}</p>
+
+			{props.payload.length && (
+				<>
+					<ul className="border-gray-4 space-y-1.5 border-b p-2">
+						{props.payload.map((p) => (
+							<li key={p.dataKey} className="flex items-center justify-between gap-4">
+								<div className="flex items-center">
+									<div
+										style={{ backgroundColor: p.color }}
+										className="me-2 size-3"
+									></div>
+									<span className="leading-none">
+										{p.dataKey === "__uncategorized__"
+											? "uncategorized"
+											: p.dataKey}
+									</span>
 								</div>
-							</div>
-						);
-					}}
-				/>
-				{negCategories.map((p, i) => (
-					<Bar
-						key={p}
-						dataKey={p}
-						stackId="a"
-						fill={colorsNegCategories[i]}
-						isAnimationActive={false}
-					/>
-				))}
+								<span className="leading-none">
+									{numberFormatter.format(p.value as number)}
+								</span>
+							</li>
+						))}
+					</ul>
 
-				{posCategories.map((p, i) => (
-					<Bar
-						key={p}
-						dataKey={p}
-						stackId="a"
-						fill={colorsPosCategories[i]}
-						isAnimationActive={false}
-					/>
-				))}
-			</BarChart>
-		</ResponsiveContainer>
+					{props.payload.length > 1 && (
+						<div className="flex items-center justify-end gap-4 p-2">
+							<span className="leading-none">
+								{numberFormatter.format(props.payload[0].payload.__total__)}
+							</span>
+						</div>
+					)}
+				</>
+			)}
+		</div>
 	);
 }
 

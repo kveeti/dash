@@ -45,6 +45,7 @@ and t.date at time zone ${timezone} between ${start} and ${end}
 and c.is_neutral = false;
 `;
 
+			const categories = new Set<string>();
 			const transactions = {} as {
 				[key: string]: {
 					id: string;
@@ -86,6 +87,7 @@ and c.is_neutral = false;
 					const categoryId = row.category_id as string | undefined;
 					if (categoryId && !t.category) {
 						const category_name = row.cat_name as string;
+						categories.add(category_name);
 						const is_neutral = row.cat_is_ne as boolean;
 						t.category = {
 							id: categoryId,
@@ -172,69 +174,96 @@ and c.is_neutral = false;
 
 			const timeframe = eachMonthOfInterval({ start, end }, { in: tz(timezone) });
 
-			const neg_categories = new Set<string>();
-			const pos_categories = new Set<string>();
-
 			let total_neg = 0;
 			let total_pos = 0;
 
 			type YYYYMM = string;
 			type ChartData = {
 				__period__: YYYYMM;
-				__total_pos__: number;
-				__total_neg__: number;
+				__total__: number;
 			};
-			const period_totals: Record<
-				YYYYMM,
-				ChartData | ({ [key: string]: number } & ChartData)
-			> = {};
+
+			const positives: Record<YYYYMM, ChartData | ({ [key: string]: number } & ChartData)> =
+				{};
+			const negatives: Record<YYYYMM, ChartData | ({ [key: string]: number } & ChartData)> =
+				{};
+
+			type TotalsData = {
+				__period__: YYYYMM;
+				expenses: number;
+				income: number;
+				__total__: number;
+			};
+			const totals: Record<YYYYMM, TotalsData | ({ [key: string]: number } & TotalsData)> =
+				{};
 
 			for (const t_id in transactions) {
 				const t = transactions[t_id];
 				if (t.amount === 0) continue;
 				const category_name = t.category?.name ?? "__uncategorized__";
 
-				if (!period_totals[t.period]) {
-					period_totals[t.period] = {
+				if (!totals[t.period]) {
+					totals[t.period] = {
 						__period__: t.period,
-						__total_neg__: 0,
-						__total_pos__: 0,
+						expenses: 0,
+						income: 0,
+						__total__: 0,
 					};
 				}
 
-				// @ts-expect-error -- index signature etc
-				period_totals[t.period][category_name] =
-					// @ts-expect-error -- index signature etc
-					(period_totals?.[t.period]?.[category_name] ?? 0) + t.amount;
-
+				let sign = null;
 				if (t.amount > 0) {
-					period_totals[t.period].__total_pos__ += t.amount;
-					pos_categories.add(category_name);
+					sign = positives;
 					total_pos += t.amount;
+					totals[t.period].income += t.amount;
 				} else {
-					period_totals[t.period].__total_neg__ += t.amount;
-					neg_categories.add(category_name);
+					sign = negatives;
 					total_neg += t.amount;
+					totals[t.period].expenses += Math.abs(t.amount);
 				}
+
+				totals[t.period].__total__ += t.amount;
+
+				if (!sign[t.period]) {
+					sign[t.period] = {
+						__period__: t.period,
+						__total__: 0,
+					};
+				}
+				// @ts-expect-error -- index signature etc
+				sign[t.period][category_name] =
+					// @ts-expect-error -- index signature etc
+					(sign?.[t.period]?.[category_name] ?? 0) + t.amount;
+
+				sign[t.period]["__total__"] = (sign?.[t.period]["__total__"] ?? 0) + t.amount;
 			}
 
-			const chart_data = new Array(timeframe.length);
+			const positives_chart_data = new Array(timeframe.length);
+			const negatives_chart_data = new Array(timeframe.length);
+			const totals_chart_data = new Array(timeframe.length);
 
 			for (let i = 0; i < timeframe.length; i++) {
 				const p = timeframe[i].toISOString().slice(0, 7);
-				chart_data[i] = period_totals[p] ?? {
+				positives_chart_data[i] = positives[p] ?? {
 					__period__: p,
-					__total_neg__: 0,
-					__total_pos__: 0,
+				};
+
+				negatives_chart_data[i] = negatives[p] ?? {
+					__period__: p,
+				};
+
+				totals_chart_data[i] = totals[p] ?? {
+					__period__: p,
 				};
 			}
 
 			return {
 				totalNeg: total_neg,
 				totalPos: total_pos,
-				posCategories: [...pos_categories.values()],
-				negCategories: [...neg_categories.values()],
-				stats: chart_data,
+				positives: positives_chart_data,
+				negatives: negatives_chart_data,
+				totals: totals_chart_data,
+				categories: [...categories],
 			};
 		},
 
