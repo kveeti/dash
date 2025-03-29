@@ -181,89 +181,56 @@ and c.is_neutral = false;
 			type ChartData = {
 				__period__: YYYYMM;
 				__total__: number;
+				/** positive value for charts */
+				__total_neg__: number;
+				__total_pos__: number;
+
+				// [key: string]: number
+				// so categories like: [category_name]: <category_value>
 			};
 
-			const positives: Record<YYYYMM, ChartData | ({ [key: string]: number } & ChartData)> =
-				{};
-			const negatives: Record<YYYYMM, ChartData | ({ [key: string]: number } & ChartData)> =
-				{};
-
-			type TotalsData = {
-				__period__: YYYYMM;
-				expenses: number;
-				income: number;
-				__total__: number;
-			};
-			const totals: Record<YYYYMM, TotalsData | ({ [key: string]: number } & TotalsData)> =
-				{};
+			const data: Record<YYYYMM, ChartData> = {};
 
 			for (const t_id in transactions) {
 				const t = transactions[t_id];
 				if (t.amount === 0) continue;
 				const category_name = t.category?.name ?? "__uncategorized__";
 
-				if (!totals[t.period]) {
-					totals[t.period] = {
+				if (!data[t.period]) {
+					data[t.period] = {
 						__period__: t.period,
-						expenses: 0,
-						income: 0,
 						__total__: 0,
+						__total_neg__: 0,
+						__total_pos__: 0,
 					};
 				}
 
-				let sign = null;
-				if (t.amount > 0) {
-					sign = positives;
-					total_pos += t.amount;
-					totals[t.period].income += t.amount;
-				} else {
-					sign = negatives;
-					total_neg += t.amount;
-					totals[t.period].expenses += Math.abs(t.amount);
-				}
-
-				totals[t.period].__total__ += t.amount;
-
-				if (!sign[t.period]) {
-					sign[t.period] = {
-						__period__: t.period,
-						__total__: 0,
-					};
-				}
 				// @ts-expect-error -- index signature etc
-				sign[t.period][category_name] =
-					// @ts-expect-error -- index signature etc
-					(sign?.[t.period]?.[category_name] ?? 0) + t.amount;
+				data[t.period][category_name] = (data[t.period][category_name] ?? 0) + t.amount;
+				data[t.period].__total__ = (data[t.period].__total__ ?? 0) + t.amount;
 
-				sign[t.period]["__total__"] = (sign?.[t.period]["__total__"] ?? 0) + t.amount;
+				if (t.amount > 0) {
+					total_pos += t.amount;
+					data[t.period].__total_pos__ = (data[t.period].__total_pos__ ?? 0) + t.amount;
+				} else {
+					total_neg += t.amount;
+					data[t.period].__total_neg__ =
+						(data[t.period].__total_neg__ ?? 0) + Math.abs(t.amount);
+				}
 			}
 
-			const positives_chart_data = new Array(timeframe.length);
-			const negatives_chart_data = new Array(timeframe.length);
-			const totals_chart_data = new Array(timeframe.length);
+			const chart_data = new Array(timeframe.length);
 
 			for (let i = 0; i < timeframe.length; i++) {
 				const p = timeframe[i].toISOString().slice(0, 7);
-				positives_chart_data[i] = positives[p] ?? {
-					__period__: p,
-				};
-
-				negatives_chart_data[i] = negatives[p] ?? {
-					__period__: p,
-				};
-
-				totals_chart_data[i] = totals[p] ?? {
-					__period__: p,
-				};
+				chart_data[i] = data[p];
 			}
 
 			return {
 				totalNeg: total_neg,
 				totalPos: total_pos,
-				positives: positives_chart_data,
-				negatives: negatives_chart_data,
-				totals: totals_chart_data,
 				categories: [...categories],
+				data: chart_data,
 			};
 		},
 

@@ -19,16 +19,6 @@ type Props = {
 const CHART_HEIGHT = 450;
 
 export function FirstChart(props: Props) {
-	return (
-		<div>
-			<h2 className="mb-4 text-xl">chart1</h2>
-
-			<Chart {...props} />
-		</div>
-	);
-}
-
-function Chart(props: Props) {
 	const { numberFormatter } = useFormatters();
 
 	const q = trpc.v1.transactions.stats.useQuery({
@@ -65,17 +55,15 @@ function Chart(props: Props) {
 		);
 	}
 
-	const { positives, negatives, categories } = q.data;
+	const { data, categories } = q.data;
 
-	const color = d3
-		.scaleSequential(d3.interpolateRainbow)
-		.domain([0, categories.length])
-		.clamp(true);
+	const color = d3.scaleSequential(d3.interpolateInferno).domain([0, categories.length]);
 
 	return (
 		<>
-			<ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-				<BarChart syncId={CHART_SYNC_ID} data={negatives}>
+			{/* income & expenses */}
+			<ResponsiveContainer width="100%" height={250}>
+				<BarChart syncId={CHART_SYNC_ID} data={data}>
 					<CartesianGrid
 						strokeDasharray="3 3"
 						stroke="currentColor"
@@ -95,20 +83,23 @@ function Chart(props: Props) {
 
 					<Tooltip isAnimationActive={false} content={TooltipContent} />
 
-					{categories.map((category, i) => (
-						<Bar
-							key={category}
-							dataKey={category}
-							stackId="a"
-							isAnimationActive={false}
-							fill={color(i)}
-						/>
-					))}
+					<Bar
+						isAnimationActive={false}
+						name="expenses"
+						dataKey="__total_neg__"
+						fill="#000"
+					/>
+					<Bar
+						isAnimationActive={false}
+						name="income"
+						dataKey="__total_pos__"
+						fill="hsla(131, 38%, 56%, 1)"
+					/>
 				</BarChart>
 			</ResponsiveContainer>
 
-			<ResponsiveContainer width="100%" height={300}>
-				<BarChart syncId={CHART_SYNC_ID} data={positives}>
+			<ResponsiveContainer width="100%" height={550}>
+				<BarChart syncId={CHART_SYNC_ID} data={data} stackOffset="sign">
 					<CartesianGrid
 						strokeDasharray="3 3"
 						stroke="currentColor"
@@ -127,41 +118,10 @@ function Chart(props: Props) {
 					/>
 
 					<Tooltip isAnimationActive={false} content={TooltipContent} />
-					{categories.map((category, i) => (
-						<Bar
-							key={category}
-							dataKey={category}
-							stackId="a"
-							isAnimationActive={false}
-							fill={color(i)}
-						/>
+
+					{categories.map((c, i) => (
+						<Bar isAnimationActive={false} dataKey={c} stackId="a" fill={color(i)} />
 					))}
-				</BarChart>
-			</ResponsiveContainer>
-
-			<ResponsiveContainer width="100%" height={300}>
-				<BarChart syncId={CHART_SYNC_ID} data={q.data.totals}>
-					<CartesianGrid
-						strokeDasharray="3 3"
-						stroke="currentColor"
-						className="text-gray-7"
-					/>
-					<XAxis
-						dataKey="__period__"
-						stroke="currentColor"
-						className="text-gray-10 text-xs"
-						tickFormatter={(date) => format(date, "MMM yy")}
-					/>
-					<YAxis
-						stroke="currentColor"
-						className="text-gray-11 text-xs"
-						tickFormatter={(value) => numberFormatter.format(value)}
-					/>
-
-					<Tooltip isAnimationActive={false} content={TooltipContent} />
-
-					<Bar isAnimationActive={false} dataKey="expenses" fill="#000" />
-					<Bar isAnimationActive={false} dataKey="income" fill="hsla(131, 38%, 56%, 1)" />
 				</BarChart>
 			</ResponsiveContainer>
 		</>
@@ -169,9 +129,13 @@ function Chart(props: Props) {
 }
 
 function TooltipContent(props: any) {
+	// TODO: this may not be ideal to call here
+	// this component rerenders everytime mouse is moved
+	// on top of a chart
 	const { numberFormatter } = useFormatters();
 
 	if (!props.label || !props.payload) return null;
+
 	const label = format(props.label, "MMM yy");
 
 	return (
@@ -189,9 +153,7 @@ function TooltipContent(props: any) {
 										className="me-2 size-3"
 									></div>
 									<span className="leading-none">
-										{p.dataKey === "__uncategorized__"
-											? "uncategorized"
-											: p.dataKey}
+										{p.name === "__uncategorized__" ? "uncategorized" : p.name}
 									</span>
 								</div>
 								<span className="leading-none">

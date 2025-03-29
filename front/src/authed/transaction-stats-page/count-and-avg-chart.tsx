@@ -1,16 +1,6 @@
 import { format } from "date-fns";
 import { useMemo } from "react";
-import {
-	Area,
-	AreaChart,
-	Bar,
-	BarChart,
-	CartesianGrid,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { useMe } from "../../lib/me";
 import { trpc } from "../../lib/trpc";
@@ -126,14 +116,14 @@ function Chart(props: Props) {
 				<Bar
 					isAnimationActive={false}
 					dataKey="count"
-					fill="#8884d8"
+					fill="#386cb0"
 					yAxisId="right"
 					name="# of tx"
 				/>
 				<Bar
 					isAnimationActive={false}
 					dataKey="avg"
-					fill="#82ca9d"
+					fill="#4daf4a"
 					yAxisId="left"
 					name="avg"
 				/>
