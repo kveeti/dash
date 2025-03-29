@@ -177,6 +177,9 @@ and c.is_neutral = false;
 			let total_neg = 0;
 			let total_pos = 0;
 
+			let most_negative = 0;
+			let most_positive = 0;
+
 			type YYYYMM = string;
 			type ChartData = {
 				__period__: YYYYMM;
@@ -212,10 +215,19 @@ and c.is_neutral = false;
 				if (t.amount > 0) {
 					total_pos += t.amount;
 					data[t.period].__total_pos__ = (data[t.period].__total_pos__ ?? 0) + t.amount;
+
+					const cur = data[t.period].__total_pos__;
+					if (cur > most_positive) {
+						most_positive = cur;
+					}
 				} else {
 					total_neg += t.amount;
 					data[t.period].__total_neg__ =
 						(data[t.period].__total_neg__ ?? 0) + Math.abs(t.amount);
+					const cur = -data[t.period].__total_neg__;
+					if (cur < most_negative) {
+						most_negative = cur;
+					}
 				}
 			}
 
@@ -231,6 +243,8 @@ and c.is_neutral = false;
 				totalPos: total_pos,
 				categories: [...categories],
 				data: chart_data,
+				domain_start: most_negative,
+				domain_end: most_positive,
 			};
 		},
 
