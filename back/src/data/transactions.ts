@@ -235,7 +235,9 @@ and c.is_neutral = false;
 
 			for (let i = 0; i < timeframe.length; i++) {
 				const p = timeframe[i].toISOString().slice(0, 7);
-				chart_data[i] = data[p];
+				chart_data[i] = data[p] ?? {
+					__period__: p,
+				};
 			}
 
 			return {

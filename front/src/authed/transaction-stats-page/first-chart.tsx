@@ -19,16 +19,16 @@ const CHART_HEIGHT = 450;
 
 // prettier-ignore
 const colors = [
-  "#b4d1b7", "#a88c6f", "#3e8e7e", "#93d05f", "#7c466d",
-  "#5a4b2e", "#b8cfcf", "#ed817d", "#8a9b66", "#d1f1ea",
-  "#b0d84d", "#ca5e8a", "#5c3e7a", "#617ecf", "#df2d5d",
-  "#57c9d9", "#b363bb", "#edc463", "#18f4f5", "#7a5929",
-  "#8f6c8b", "#3f4981", "#659e5c", "#4dbda4", "#e02e1f",
-  "#6b925b", "#c97b58", "#2fdb34", "#89a7de", "#aa6147",
-  "#5b369e", "#fe6c4e", "#2acfd1", "#c5b2b5", "#c7f49f",
-  "#755494", "#d4798b", "#e5c7c0", "#378986", "#cbe4cc",
-  "#b08bb1", "#1e563a", "#d08559", "#7eae6b", "#ff5e3a",
-  "#f3c9af", "#b3c28f", "#7bc9d0", "#db5b1a", "#d7b3e3"
+	"#b4d1b7", "#a88c6f", "#3e8e7e", "#93d05f", "#7c466d",
+	"#5a4b2e", "#b8cfcf", "#ed817d", "#8a9b66", "#d1f1ea",
+	"#b0d84d", "#ca5e8a", "#5c3e7a", "#617ecf", "#df2d5d",
+	"#57c9d9", "#b363bb", "#edc463", "#18f4f5", "#7a5929",
+	"#8f6c8b", "#3f4981", "#659e5c", "#4dbda4", "#e02e1f",
+	"#6b925b", "#c97b58", "#2fdb34", "#89a7de", "#aa6147",
+	"#5b369e", "#fe6c4e", "#2acfd1", "#c5b2b5", "#c7f49f",
+	"#755494", "#d4798b", "#e5c7c0", "#378986", "#cbe4cc",
+	"#b08bb1", "#1e563a", "#d08559", "#7eae6b", "#ff5e3a",
+	"#f3c9af", "#b3c28f", "#7bc9d0", "#db5b1a", "#d7b3e3"
 ];
 
 export function FirstChart(props: Props) {
@@ -218,8 +218,6 @@ function TooltipContent(props: any) {
 	const { numberFormatter } = useFormatters();
 
 	if (!props.label || !props.payload) return null;
-
-	console.log(props.payload);
 
 	const label = format(props.label, "MMM yy");
 
