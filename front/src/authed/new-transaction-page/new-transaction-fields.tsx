@@ -8,6 +8,8 @@ import * as Rac from "react-aria-components";
 import { trpc } from "../../lib/trpc";
 import { useDebounce } from "../../lib/utils";
 import { buttonStyles } from "../../ui/button";
+import { IconChevronLeft } from "../../ui/icons/chevron-left";
+import { IconChevronRight } from "../../ui/icons/chevron-right";
 import { Error, Input, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 
 export function CategoryField({ error, defaultValue }: { error?: string; defaultValue?: string }) {
@@ -107,6 +109,9 @@ export function DateField({
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;
 
+	const calCellStyles =
+		buttonStyles({ variant: "ghost", size: "icon" }) + " data-selected:bg-gray-a4";
+
 	return (
 		<Rac.DatePicker granularity="second" defaultValue={_defaultValue} name="date">
 			<LabelWrapper>
@@ -125,12 +130,9 @@ export function DateField({
 							segment={segment}
 							className={
 								"inline p-1 leading-4 caret-transparent outline-none" +
-								" " +
-								"data-[type=literal]:p-0" +
-								" " +
-								"data-[type=year]:-me-1" +
-								" " +
-								"data-focused:bg-gray-a7 data-focused:text-white"
+								" data-[type=literal]:p-0" +
+								" data-[type=year]:-me-1" +
+								" data-focused:bg-gray-a7 data-focused:text-white"
 							}
 						/>
 					)}
@@ -142,29 +144,24 @@ export function DateField({
 
 			<Rac.Popover>
 				<Rac.Dialog>
-					<Rac.Calendar className="bg-gray-1 border-gray-4 border">
+					<Rac.Calendar className="bg-gray-1 border-gray-4 border shadow-sm">
 						<header className="mb-2 flex items-center justify-between gap-2">
 							<Rac.Button
 								slot="previous"
-								className={buttonStyles({ variant: "ghost" })}
+								className={buttonStyles({ variant: "ghost", size: "icon" })}
 							>
-								◀
+								<IconChevronLeft />
 							</Rac.Button>
 							<Rac.Heading />
 							<Rac.Button
 								slot="next"
-								className="focus hover:bg-gray-3 flex h-10 cursor-default items-center justify-center px-4"
+								className={buttonStyles({ variant: "ghost", size: "icon" })}
 							>
-								▶
+								<IconChevronRight />
 							</Rac.Button>
 						</header>
 						<Rac.CalendarGrid>
-							{(date) => (
-								<Rac.CalendarCell
-									className="focus hover:bg-gray-3 data-selected:bg-gray-a4 flex cursor-default items-center justify-center p-2"
-									date={date}
-								/>
-							)}
+							{(date) => <Rac.CalendarCell className={calCellStyles} date={date} />}
 						</Rac.CalendarGrid>
 					</Rac.Calendar>
 				</Rac.Dialog>
