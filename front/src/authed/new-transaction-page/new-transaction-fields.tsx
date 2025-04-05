@@ -1,12 +1,13 @@
 import * as Ariakit from "@ariakit/react";
 import { parseDateTime } from "@internationalized/date";
-import { CheckIcon } from "@radix-ui/react-icons";
+import { CalendarIcon, CheckIcon } from "@radix-ui/react-icons";
 import { format } from "date-fns";
 import { type ComponentProps, startTransition, useId, useMemo, useState } from "react";
 import * as Rac from "react-aria-components";
 
 import { trpc } from "../../lib/trpc";
 import { useDebounce } from "../../lib/utils";
+import { buttonStyles } from "../../ui/button";
 import { Error, Input, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 
 export function CategoryField({ error, defaultValue }: { error?: string; defaultValue?: string }) {
@@ -107,33 +108,68 @@ export function DateField({
 	const errorId = error ? id + "-error" : undefined;
 
 	return (
-		<Rac.DateField granularity="second" defaultValue={_defaultValue} name="date">
+		<Rac.DatePicker granularity="second" defaultValue={_defaultValue} name="date">
 			<LabelWrapper>
 				<Rac.Label className={labelStyles}>date</Rac.Label>
 
 				{error && errorId && <Error id={errorId}>{error}</Error>}
 			</LabelWrapper>
 
-			<Rac.DateInput
-				className={inputStyles + " inline-flex items-center"}
-				aria-describedby={errorId}
-			>
-				{(segment) => (
-					<Rac.DateSegment
-						segment={segment}
-						className={
-							"inline p-1 leading-4 caret-transparent outline-none" +
-							" " +
-							"data-[type=literal]:p-0" +
-							" " +
-							"data-[type=year]:-me-1" +
-							" " +
-							"data-focused:bg-gray-a7 data-focused:text-white"
-						}
-					/>
-				)}
-			</Rac.DateInput>
-		</Rac.DateField>
+			<Rac.Group className="flex gap-2">
+				<Rac.DateInput
+					className={inputStyles + " inline-flex items-center"}
+					aria-describedby={errorId}
+				>
+					{(segment) => (
+						<Rac.DateSegment
+							segment={segment}
+							className={
+								"inline p-1 leading-4 caret-transparent outline-none" +
+								" " +
+								"data-[type=literal]:p-0" +
+								" " +
+								"data-[type=year]:-me-1" +
+								" " +
+								"data-focused:bg-gray-a7 data-focused:text-white"
+							}
+						/>
+					)}
+				</Rac.DateInput>
+				<Rac.Button className={buttonStyles({ variant: "outline", size: "icon" })}>
+					<CalendarIcon className="size-4" />
+				</Rac.Button>
+			</Rac.Group>
+
+			<Rac.Popover>
+				<Rac.Dialog>
+					<Rac.Calendar className="bg-gray-1 border-gray-4 border">
+						<header className="mb-2 flex items-center justify-between gap-2">
+							<Rac.Button
+								slot="previous"
+								className={buttonStyles({ variant: "ghost" })}
+							>
+								◀
+							</Rac.Button>
+							<Rac.Heading />
+							<Rac.Button
+								slot="next"
+								className="focus hover:bg-gray-3 flex h-10 cursor-default items-center justify-center px-4"
+							>
+								▶
+							</Rac.Button>
+						</header>
+						<Rac.CalendarGrid>
+							{(date) => (
+								<Rac.CalendarCell
+									className="focus hover:bg-gray-3 data-selected:bg-gray-a4 flex cursor-default items-center justify-center p-2"
+									date={date}
+								/>
+							)}
+						</Rac.CalendarGrid>
+					</Rac.Calendar>
+				</Rac.Dialog>
+			</Rac.Popover>
+		</Rac.DatePicker>
 	);
 }
 
