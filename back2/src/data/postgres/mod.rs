@@ -7,10 +7,14 @@ pub use users::*;
 mod sessions;
 pub use sessions::*;
 
+mod transactions;
+pub use transactions::*;
+
 type Pool = PgPool;
 pub struct Postgres {
     pub users: Users,
     pub sessions: Sessions,
+    pub transactions: Transactions,
 }
 
 impl Postgres {
@@ -22,6 +26,7 @@ impl Postgres {
         return Ok(Self {
             users: Users::new(pool.clone()),
             sessions: Sessions::new(pool.clone()),
+            transactions: Transactions::new(pool.clone()),
         });
     }
 }
