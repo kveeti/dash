@@ -1,6 +1,7 @@
 use anyhow::Context;
 use dotenv::dotenv;
 use serde::Deserialize;
+use tracing::warn;
 
 #[derive(Deserialize)]
 pub struct Config {
@@ -18,7 +19,7 @@ pub struct Config {
 
 impl Config {
     pub fn new() -> Result<Self, anyhow::Error> {
-        dotenv().expect("error loading environment variables from .env");
+        let _ = dotenv().map_err(|err| warn!("error loading .env: {:?}", err));
 
         let envs = envy::from_env::<Self>().context("invalid environment variables")?;
 
