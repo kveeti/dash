@@ -1,7 +1,7 @@
 create table users (
     id varchar(30) primary key not null,
     external_id varchar(36) not null unique,
-	locale text not null
+    locale text not null
 );
 
 create table sessions (
@@ -11,13 +11,13 @@ create table sessions (
 
 -- transaction_categories
 create table transaction_categories (
-	id varchar(30) primary key not null,
-	user_id varchar(30) not null,
+    id varchar(30) primary key not null,
+    user_id varchar(30) not null,
 
     is_neutral boolean not null,
-	name varchar(100) not null,
-	created_at timestamptz not null,
-	updated_at timestamptz
+    name varchar(100) not null,
+    created_at timestamptz not null,
+    updated_at timestamptz
 );
 
 create index idx_transaction_categories_user_id_lower_name on transaction_categories(user_id, lower(name));
@@ -30,14 +30,14 @@ create table transactions (
     id varchar(30) primary key not null,
     user_id varchar(30) not null,
 
-	date timestamptz not null,
-	amount real not null,
-	currency varchar(3) not null,
-	counter_party varchar(255) not null,
-	additional text,
-	category_id varchar(30),
-	created_at timestamptz not null,
-	updated_at timestamptz
+    date timestamptz not null,
+    amount real not null,
+    currency varchar(3) not null,
+    counter_party varchar(255) not null,
+    additional text,
+    category_id varchar(30),
+    created_at timestamptz not null,
+    updated_at timestamptz
 );
 
 create index idx_transactions_user_id on transactions(user_id);

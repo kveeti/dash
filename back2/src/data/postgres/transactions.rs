@@ -1,7 +1,8 @@
 use chrono::{DateTime, Utc};
+use futures::TryStreamExt;
 use rustc_hash::{FxHashMap, FxHashSet};
 use serde::Serialize;
-use sqlx::query;
+use sqlx::{prelude::FromRow, query_as};
 
 use super::Pool;
 
@@ -20,12 +21,14 @@ impl Transactions {
         timezone: String,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<(), sqlx::Error> {
-        let rows = query!(
+    ) -> Result<ComputeResult, sqlx::Error> {
+        let mut rows = query_as!(
+            TxRow,
             r#"
 select
 	t.id as id,
 	t.date as date,
+	t.counter_party as counter_party,
 	t.amount as amount,
 	t.category_id as category_id,
 	c.name as cat_name,
@@ -57,10 +60,43 @@ and c.is_neutral = false;
             start.naive_utc(),
             end.naive_utc()
         )
-        .fetch_all(&self.pool)
-        .await?;
+        .fetch(&self.pool);
 
-        Ok(())
+        let mut tx_map: FxHashMap<String, Tx> = FxHashMap::default();
+
+        while let Some(row) = rows.try_next().await? {
+            let tx = tx_map.get_mut(&row.id);
+
+            if let Some(tx) = tx {
+                if let Some(linked_id) = row.linked_id {
+                    tx.links.push(linked_id);
+                }
+            } else {
+                tx_map.insert(
+                    row.id.to_owned(),
+                    Tx {
+                        id: row.id,
+                        date: row.date,
+                        counter_party: row.counter_party,
+                        amount: row.amount,
+                        links: vec![],
+                        category: if let Some(cat_id) = row.category_id {
+                            Some(Category {
+                                id: cat_id,
+                                name: row.cat_name.expect("checked cat_name"),
+                                is_neutral: row.cat_is_ne.expect("checked is_ne"),
+                            })
+                        } else {
+                            None
+                        },
+                    },
+                );
+            }
+        }
+
+        let result = compute(tx_map);
+
+        return Ok(result);
     }
 }
 
@@ -68,9 +104,9 @@ and c.is_neutral = false;
 struct Tx {
     id: String,
     date: DateTime<Utc>,
-    name: String,
+    counter_party: String,
     category: Option<Category>,
-    amount: f64,
+    amount: f32,
     links: Vec<String>,
 }
 
@@ -81,69 +117,55 @@ struct Category {
     is_neutral: bool,
 }
 
-struct TxLink {
-    a_id: String,
-    b_id: String,
-}
-
-fn compute(transactions: Vec<Tx>) -> ComputeResult {
-    let mut tx_map: FxHashMap<String, Tx> = FxHashMap::default();
+fn compute(mut tx_map: FxHashMap<String, Tx>) -> ComputeResult {
     let mut unique_categories: FxHashSet<String> = FxHashSet::default();
 
-    for tx in transactions {
-        tx_map.insert(tx.id.clone(), tx.clone());
-        if let Some(cat) = tx.category {
-            unique_categories.insert(cat.name);
-        }
-    }
-
-    println!("{:#?}", tx_map);
-
-    let mut amounts: FxHashMap<String, f64> = FxHashMap::default();
-    let mut seen: FxHashSet<String> = FxHashSet::default();
+    let mut adjustments: FxHashMap<String, f32> = FxHashMap::default();
 
     for tx in tx_map.values() {
+        if tx.amount <= 0.0 || tx.links.is_empty() {
+            continue;
+        }
         if let Some(cat) = &tx.category {
             if cat.is_neutral {
                 continue;
             }
         }
 
-        if tx.amount <= 0.0 {
-            continue;
-        }
-        if seen.get(&tx.id).is_some() {
-            continue;
+        if let Some(cat) = &tx.category {
+            unique_categories.insert(cat.name.to_owned());
         }
 
-        let mut amount = tx.amount;
-        if tx.links.len() <= 0 {
-            continue;
-        }
-        for link in tx.links.iter() {
-            if let Some(linked_tx) = tx_map.get(link) {
-                if linked_tx.amount > 0.0 {
+        let mut remaining_amount = tx.amount;
+
+        for link_id in &tx.links {
+            if let Some(linked_tx) = tx_map.get(link_id) {
+                if linked_tx.amount >= 0.0 {
                     continue;
                 }
 
-                let diff = (amount + linked_tx.amount).max(-amount);
-                amounts.insert(linked_tx.id.to_owned(), amount);
-                amount = amount + linked_tx.amount;
-                amounts.insert(tx.id.to_owned(), diff);
+                let linked_abs = linked_tx.amount.abs();
+                let amount_to_use = remaining_amount.min(linked_abs);
+
+                if amount_to_use > 0.0 {
+                    *adjustments.entry(tx.id.clone()).or_default() -= amount_to_use;
+                    *adjustments.entry(link_id.clone()).or_default() += amount_to_use;
+
+                    remaining_amount -= amount_to_use;
+
+                    if remaining_amount <= 0.0 {
+                        break;
+                    }
+                }
             }
         }
-
-        seen.insert(tx.id.to_owned());
     }
 
-    println!("amounts: {:#?}", amounts);
-
-    for (id, amount) in amounts.into_iter() {
+    for (id, adjustment) in adjustments {
         if let Some(tx) = tx_map.get_mut(&id) {
-            tx.amount += amount;
+            tx.amount += adjustment;
         }
     }
-    println!("tx: {:#?}", tx_map);
 
     let mut data: FxHashMap<String, FxHashMap<String, ChartDataValue>> = FxHashMap::default();
 
@@ -226,24 +248,25 @@ fn compute(transactions: Vec<Tx>) -> ComputeResult {
 #[derive(Debug, Serialize)]
 enum ChartDataValue {
     Period(String),
-    Value(f64),
+    Value(f32),
 }
 
 #[derive(Debug, Serialize)]
 struct ComputeResult {
-    total_pos: f64,
-    total_neg: f64,
+    total_pos: f32,
+    total_neg: f32,
     categories: Vec<String>,
     data: FxHashMap<String, FxHashMap<String, ChartDataValue>>,
-    domain_start: f64,
-    domain_end: f64,
+    domain_start: f32,
+    domain_end: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, FromRow)]
 struct TxRow {
     id: String,
     date: DateTime<Utc>,
-    amount: f64,
+    amount: f32,
+    counter_party: String,
     category_id: Option<String>,
     cat_name: Option<String>,
     cat_is_ne: Option<bool>,
@@ -251,7 +274,7 @@ struct TxRow {
     link_id: Option<String>,
 
     linked_id: Option<String>,
-    linked_amount: Option<f64>,
+    linked_amount: Option<f32>,
 }
 
 #[cfg(test)]
@@ -259,10 +282,11 @@ mod test {
     use std::vec;
 
     use chrono::{DateTime, Utc};
+    use rustc_hash::FxHashMap;
 
     use crate::data::{
         create_id,
-        postgres::transactions::{Category, TxRow, compute},
+        postgres::transactions::{Category, compute},
     };
 
     use super::Tx;
@@ -275,11 +299,16 @@ mod test {
             is_neutral: false,
         };
 
+        let electronics = Category {
+            id: create_id(),
+            name: "electronics".to_owned(),
+            is_neutral: false,
+        };
+
         let passthrough_credit_1_1 =
             tx(from_ts("2025-01-03T12:00:00Z"), 15.0, "credit_1_1").cat(&passthrough);
         let passthrough_credit_1_2 =
             tx(from_ts("2025-01-28T12:00:00Z"), 20.0, "credit_1_2").cat(&passthrough);
-
         let passthrough_debit_1_1 =
             tx(from_ts("2025-01-15T12:00:00Z"), -32.3, "debit_1").cat(&passthrough);
 
@@ -289,11 +318,26 @@ mod test {
             .linkb(&passthrough_credit_1_1)
             .linkb(&passthrough_credit_1_2);
 
-        let result = compute(vec![
-            passthrough_credit_1_1.build(),
-            passthrough_debit_1_1.build(),
-            passthrough_credit_1_2.build(),
-        ]);
+        let passthrough_credit_1_1 = passthrough_credit_1_1.build();
+        let passthrough_credit_1_2 = passthrough_credit_1_2.build();
+        let passthrough_debit_1_1 = passthrough_debit_1_1.build();
+
+        let electronics_debit =
+            tx(from_ts("2025-01-01T12:00:00Z"), -150.0, "electronics_debit").cat(&electronics);
+        let electronics_credit =
+            tx(from_ts("2025-02-01T12:00:00Z"), 150.0, "electronics_credit").cat(&electronics);
+
+        let electronics_debit = electronics_debit.linkb(&electronics_credit).build();
+        let electronics_credit = electronics_credit.link(&electronics_debit).build();
+
+        let mut tx_map: FxHashMap<String, Tx> = FxHashMap::default();
+        tx_map.insert(passthrough_credit_1_1.id.to_owned(), passthrough_credit_1_1);
+        tx_map.insert(passthrough_credit_1_2.id.to_owned(), passthrough_credit_1_2);
+        tx_map.insert(passthrough_debit_1_1.id.to_owned(), passthrough_debit_1_1);
+        tx_map.insert(electronics_debit.id.to_owned(), electronics_debit);
+        tx_map.insert(electronics_credit.id.to_owned(), electronics_credit);
+
+        let result = compute(tx_map);
         println!("result: {:#?}", result);
     }
 
@@ -301,11 +345,11 @@ mod test {
         return DateTime::parse_from_rfc3339(ts).expect("from_ts").to_utc();
     }
 
-    fn tx(date: DateTime<Utc>, amount: f64, name: &str) -> TxBuilder {
+    fn tx(date: DateTime<Utc>, amount: f32, name: &str) -> TxBuilder {
         TxBuilder::new(Tx {
             id: create_id(),
             date,
-            name: name.to_owned(),
+            counter_party: name.to_owned(),
             amount,
             links: vec![],
             category: None,
