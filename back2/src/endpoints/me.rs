@@ -1,10 +1,10 @@
 use axum::{Json, response::IntoResponse};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::{auth_middleware::User, error::ApiError};
 
-#[derive(Deserialize, Serialize, ToSchema)]
+#[derive(Serialize, ToSchema)]
 pub struct Me {
     pub id: String,
 }

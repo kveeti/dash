@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::endpoints::*;
-use axum::{Router, routing::get};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 use config::Config;
 use data::Data;
 use http::{HeaderValue, Method, header};
@@ -35,9 +38,18 @@ async fn main() {
         data,
     };
 
+    let auth_base = Router::new()
+        .route("/init", get(auth::init))
+        .route("/callback", get(auth::callback));
+
+    // dev login in debug mode
+    #[cfg(debug_assertions)]
+    let auth = auth_base.route("/auth/___dev_login___", post(auth::___dev_login___));
+    #[cfg(not(debug_assertions))]
+    let auth = auth_base;
+
     let routes = Router::new()
-        .route("/auth/init", get(auth::init))
-        .route("/auth/callback", get(auth::callback))
+        .nest("/auth", auth)
         .route("/@me", get(me::get_me))
         .route("/openapi.json", get(openapi))
         .layer(cors(&config))

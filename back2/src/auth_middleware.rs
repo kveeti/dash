@@ -8,11 +8,10 @@ use axum::{
 use axum_extra::{TypedHeader, headers, typed_header::TypedHeaderRejectionReason};
 use http::request::Parts;
 use hyper::header;
-use serde::{Deserialize, Serialize};
 
 use crate::{error::ApiError, services::auth::verify_token, state::AppState};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug)]
 pub struct User {
     pub id: String,
 }

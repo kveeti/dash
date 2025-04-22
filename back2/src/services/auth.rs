@@ -115,6 +115,27 @@ pub async fn callback(
     return Ok(token);
 }
 
+pub async fn ___dev_login___(config: &Config, data: &Data) -> Result<String, ApiError> {
+    let user = User {
+        external_id: create_id(),
+        id: create_id(),
+    };
+
+    let session = Session {
+        id: create_id(),
+        user_id: user.id.to_owned(),
+    };
+
+    data.users
+        .upsert_with_session(&user, &session)
+        .await
+        .context("error upserting user and session")?;
+
+    let token = create_token(&config.secret, &user.id, &session.id);
+
+    return Ok(token);
+}
+
 pub struct Token {
     pub user_id: String,
     pub session_id: String,
