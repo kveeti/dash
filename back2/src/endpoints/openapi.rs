@@ -6,7 +6,8 @@ use utoipa::OpenApi;
 #[openapi(paths(
     endpoints::auth::init,
     endpoints::auth::callback,
-    endpoints::me::get_me
+    endpoints::me::get_me,
+    endpoints::transactions::get_stats::get_stats,
 ))]
 struct ApiDoc;
 

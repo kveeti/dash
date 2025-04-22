@@ -4,7 +4,7 @@ use postgres::Postgres;
 use crate::config::Config;
 
 mod postgres;
-pub use postgres::{Session, User};
+pub use postgres::*;
 
 mod id;
 pub use id::create_id;
@@ -13,6 +13,7 @@ pub use id::create_id;
 pub struct Data {
     pub users: postgres::Users,
     pub sessions: postgres::Sessions,
+    pub transactions: postgres::Transactions,
 }
 
 impl Data {
@@ -24,6 +25,7 @@ impl Data {
         return Ok(Self {
             users: postgres.users,
             sessions: postgres.sessions,
+            transactions: postgres.transactions,
         });
     }
 }

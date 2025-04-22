@@ -11,7 +11,7 @@ mod transactions;
 pub use transactions::*;
 
 type Pool = PgPool;
-pub struct Postgres {
+pub(crate) struct Postgres {
     pub users: Users,
     pub sessions: Sessions,
     pub transactions: Transactions,

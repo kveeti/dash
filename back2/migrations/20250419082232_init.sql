@@ -53,8 +53,8 @@ create index idx_transactions_ts on transactions using gin(ts);
 
 create function update_search_vector() returns trigger as $$
 begin
-	new.ts := to_tsvector('english', coalesce(new.counter_party, '') || ' ' || coalesce(new.additional, ''));
-	return new;
+    new.ts := to_tsvector('english', coalesce(new.counter_party, '') || ' ' || coalesce(new.additional, ''));
+    return new;
 end;
 $$ language plpgsql;
 
@@ -65,10 +65,10 @@ for each row execute function update_search_vector();
 
 -- transaction_tags
 create table if not exists transaction_tags (
-	id varchar(30) primary key not null,
-	user_id varchar(30) not null,
-	created_at timestamptz not null,
-	updated_at timestamptz
+    id varchar(30) primary key not null,
+    user_id varchar(30) not null,
+    created_at timestamptz not null,
+    updated_at timestamptz
 );
 
 create index if not exists idx_transaction_tags_user_id on transaction_tags(user_id);
@@ -76,13 +76,13 @@ create index if not exists idx_transaction_tags_user_id on transaction_tags(user
 
 -- transaction_links
 create table if not exists transactions_links (
-	id varchar(30) primary key not null,
-	user_id varchar(30) not null,
+    id varchar(30) primary key not null,
+    user_id varchar(30) not null,
 
-	transaction_a_id varchar(30) not null,
-	transaction_b_id varchar(30) not null,
-	created_at timestamptz not null,
-	updated_at timestamptz
+    transaction_a_id varchar(30) not null,
+    transaction_b_id varchar(30) not null,
+    created_at timestamptz not null,
+    updated_at timestamptz
 );
 
 create index if not exists idx_transactions_links_user_id_ids on transactions_links(user_id, transaction_a_id, transaction_b_id);
