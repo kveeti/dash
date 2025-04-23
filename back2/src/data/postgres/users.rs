@@ -29,9 +29,10 @@ impl Users {
         let mut tx = self.pool.begin().await.context("error starting tx")?;
 
         query!(
-            "insert into users (id, external_id) values ($1, $2) on conflict (external_id) do nothing;",
+            "insert into users (id, external_id, locale) values ($1, $2, $3) on conflict (external_id) do nothing;",
             user.id,
-            user.external_id
+            user.external_id,
+            user.locale
         )
             .execute(&mut *tx)
             .await
@@ -55,4 +56,5 @@ impl Users {
 pub struct User {
     pub id: String,
     pub external_id: String,
+    pub locale: String,
 }

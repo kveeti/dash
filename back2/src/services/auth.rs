@@ -96,8 +96,9 @@ pub async fn callback(
         .context("error parsing userinfo res json")?;
 
     let user = User {
-        external_id: userinfo_res.sub.to_string(),
         id: create_id(),
+        external_id: userinfo_res.sub.to_string(),
+        locale: "en-FI".to_owned(),
     };
 
     let session = Session {
@@ -117,8 +118,9 @@ pub async fn callback(
 
 pub async fn ___dev_login___(config: &Config, data: &Data) -> Result<String, ApiError> {
     let user = User {
-        external_id: create_id(),
         id: create_id(),
+        external_id: create_id(),
+        locale: "en-FI".to_owned(),
     };
 
     let session = Session {

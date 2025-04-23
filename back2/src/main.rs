@@ -44,7 +44,7 @@ async fn main() {
 
     // dev login in debug mode
     #[cfg(debug_assertions)]
-    let auth = auth_base.route("/auth/___dev_login___", post(auth::___dev_login___));
+    let auth = auth_base.route("/___dev_login___", post(auth::___dev_login___));
     #[cfg(not(debug_assertions))]
     let auth = auth_base;
 

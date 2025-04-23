@@ -102,16 +102,13 @@ pub async fn callback(
 #[cfg(debug_assertions)]
 #[utoipa::path(
     get,
-    path = "/auth/___DEV_LOGIN___",
+    path = "/auth/___dev_login___",
     responses(
         (status = 200)
     )
 )]
-pub async fn ___dev_login___(
-    State(state): State<AppState>,
-    State(data): State<Data>,
-) -> Result<impl IntoResponse, ApiError> {
-    let auth_token = services::auth::___dev_login___(&state.config, &data).await?;
+pub async fn ___dev_login___(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    let auth_token = services::auth::___dev_login___(&state.config, &state.data).await?;
 
     let empty_state_cookie = create_empty_state_cookie(state.config.use_secure_cookies);
 
