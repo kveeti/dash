@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1"
+		/>
+		<meta name="color-scheme" content="dark light" />
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+		<link rel="manifest" href="/manifest.json" />
+
+		<link rel="preconnect" href="<%= import.meta.env.PUBLIC_API_BASE_URL %>" />
+
+		<title>dash</title>
+
+		<script>
+			const key = "__ME_LOADER__";
+
+			window[key] = { data: null, promise: null };
+			const p = fetch("<%= import.meta.env.PUBLIC_API_BASE_URL %>" + "/@me", {
+				credentials: "include",
+			})
+				.catch(() => {})
+				.then(async (res) => {
+					if (!res?.ok) {
+						localStorage.removeItem("me");
+						return null;
+					}
+
+					try {
+						const json = await res.json();
+						window[key] = { data: json, promise: null };
+						localStorage.setItem("me", JSON.stringify(json));
+						return json;
+					} catch (e) {
+						return null;
+					}
+				});
+
+			window[key].promise = p;
+		</script>
+
+		<style>
+			.spinner {
+				display: block;
+				position: relative;
+				opacity: 0.5;
+				--anim-speed: 800ms;
+				width: 1.15rem;
+				height: 1.15rem;
+			}
+
+			.spinnerleaf {
+				position: absolute;
+				top: 0;
+				left: calc(50% - 12.5% / 2);
+				width: 12.5%;
+				height: 100%;
+				animation: leaf-fade var(--anim-speed) linear infinite;
+
+				&::before {
+					content: "";
+					display: block;
+					width: 100%;
+					height: 30%;
+					border-radius: 0.125rem;
+					background-color: currentColor;
+				}
+
+				&:where(:nth-child(1)) {
+					transform: rotate(0deg);
+					animation-delay: calc(-8 / 8 * var(--anim-speed));
+				}
+				&:where(:nth-child(2)) {
+					transform: rotate(45deg);
+					animation-delay: calc(-7 / 8 * var(--anim-speed));
+				}
+				&:where(:nth-child(3)) {
+					transform: rotate(90deg);
+					animation-delay: calc(-6 / 8 * var(--anim-speed));
+				}
+				&:where(:nth-child(4)) {
+					transform: rotate(135deg);
+					animation-delay: calc(-5 / 8 * var(--anim-speed));
+				}
+				&:where(:nth-child(5)) {
+					transform: rotate(180deg);
+					animation-delay: calc(-4 / 8 * var(--anim-speed));
+				}
+				&:where(:nth-child(6)) {
+					transform: rotate(225deg);
+					animation-delay: calc(-3 / 8 * var(--anim-speed));
+				}
+				&:where(:nth-child(7)) {
+					transform: rotate(270deg);
+					animation-delay: calc(-2 / 8 * var(--anim-speed));
+				}
+				&:where(:nth-child(8)) {
+					transform: rotate(315deg);
+					animation-delay: calc(-1 / 8 * var(--anim-speed));
+				}
+			}
+
+			@keyframes leaf-fade {
+				from {
+					opacity: 1;
+				}
+				to {
+					opacity: 0.25;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div id="root">
+			<noscript>enable javascript</noscript>
+		</div>
+		<script>
+			const optimisticMe = localStorage.getItem("me");
+			if (!optimisticMe) {
+				const root = document.getElementById("root");
+				const inset = document.createElement("div");
+				inset.style.inset = "0px";
+				inset.style.position = "fixed";
+				inset.style.display = "flex";
+				inset.style.alignItems = "center";
+				inset.style.justifyContent = "center";
+
+				const spinner = document.createElement("span");
+				spinner.className = "spinner";
+
+				for (let i = 0; i < 8; i++) {
+					const leaf = document.createElement("span");
+					leaf.className = "spinnerleaf";
+
+					spinner.appendChild(leaf);
+				}
+
+				inset.appendChild(spinner);
+				root.appendChild(inset);
+			}
+		</script>
+	</body>
+</html>
