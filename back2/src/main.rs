@@ -7,6 +7,7 @@ use axum::{
 };
 use config::Config;
 use data::Data;
+use endpoints::banks::gocardless_nordigen_test;
 use http::{HeaderValue, Method, header};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
@@ -50,6 +51,7 @@ async fn main() {
 
     let routes = Router::new()
         .nest("/auth", auth)
+        .route("/test", get(gocardless_nordigen_test))
         .route("/@me", get(me::get_me))
         .route("/openapi.json", get(openapi))
         .layer(cors(&config))

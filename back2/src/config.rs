@@ -15,6 +15,10 @@ pub struct Config {
     pub auth_client_id: String,
     pub auth_client_secret: String,
     pub use_secure_cookies: bool,
+
+    // gocardless nordigen
+    pub gcn_secret_id: String,
+    pub gcn_secret_key: String,
 }
 
 impl Config {

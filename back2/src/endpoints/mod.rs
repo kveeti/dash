@@ -8,3 +8,5 @@ pub mod categories;
 pub mod me;
 
 pub mod transactions;
+
+pub mod banks;

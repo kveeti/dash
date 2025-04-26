@@ -14,6 +14,7 @@ pub struct Data {
     pub users: postgres::Users,
     pub sessions: postgres::Sessions,
     pub transactions: postgres::Transactions,
+    pub user_bank_integrations: postgres::UserBankIntegrations,
 }
 
 impl Data {
@@ -26,6 +27,7 @@ impl Data {
             users: postgres.users,
             sessions: postgres.sessions,
             transactions: postgres.transactions,
+            user_bank_integrations: postgres.user_bank_integrations,
         });
     }
 }
