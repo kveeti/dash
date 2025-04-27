@@ -1,11 +1,17 @@
-import { useMemo } from "react";
+import { ReactNode, useMemo } from "react";
+import { createContext } from "../lib/create-context";
 
-function useLocale() {
-	return "fi-FI";
+const [useContext, context] =
+	createContext<ReturnType<typeof useLocaleStuffValue>>();
+
+export const useLocaleStuff = useContext;
+export function LocaleStuff({ children }: { children: ReactNode }) {
+	const value = useLocaleStuffValue();
+	return <context.Provider value={value}>{children}</context.Provider>;
 }
 
-export function useFormatAmount() {
-	const locale = useLocale();
+function useLocaleStuffValue() {
+	const locale = "fi-FI";
 
 	const amountFormatter = useMemo(
 		() =>
@@ -20,5 +26,7 @@ export function useFormatAmount() {
 		[locale],
 	);
 
-	return amountFormatter.format;
+	return {
+		formatAmount: amountFormatter.format,
+	};
 }

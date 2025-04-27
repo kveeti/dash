@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 	<head>
+		<link rel="preconnect" href="<%= import.meta.env.PUBLIC_API_BASE_URL %>" />
 		<meta charset="UTF-8" />
 		<meta
 			name="viewport"
@@ -9,23 +10,23 @@
 		<meta name="color-scheme" content="dark light" />
 		<meta name="mobile-web-app-capable" content="yes" />
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-		<link rel="manifest" href="/manifest.json" />
-
-		<link rel="preconnect" href="<%= import.meta.env.PUBLIC_API_BASE_URL %>" />
+		<link rel="manifest" href="/public/manifest.json" />
 
 		<title>dash</title>
 
 		<script>
 			const key = "__ME_LOADER__";
+			const apiBase = "<%= import.meta.env.PUBLIC_API_BASE_URL %>";
 
 			window[key] = { data: null, promise: null };
-			const p = fetch("<%= import.meta.env.PUBLIC_API_BASE_URL %>" + "/@me", {
-				credentials: "include",
-			})
+			const p = fetch(apiBase + "/@me", { credentials: "include" })
 				.catch(() => {})
 				.then(async (res) => {
 					if (!res?.ok) {
 						localStorage.removeItem("me");
+						if (res?.status === 401) {
+							window.location.href = apiBase + "/auth/init";
+						}
 						return null;
 					}
 

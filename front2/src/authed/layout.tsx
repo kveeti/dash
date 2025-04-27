@@ -35,13 +35,13 @@ export function Nav() {
 						<NavLink href="/">home</NavLink>
 					</li>
 					<li>
-						<NavLink href="/transactions/stats">stats</NavLink>
+						<NavLink href="/stats">stats</NavLink>
 					</li>
 					<li>
-						<NavLink href="/transactions">txs</NavLink>
+						<NavLink href="/txs">txs</NavLink>
 					</li>
 					<li>
-						<NavLink href="/categories">cats</NavLink>
+						<NavLink href="/cats">cats</NavLink>
 					</li>
 				</div>
 

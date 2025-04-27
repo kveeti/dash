@@ -11,5 +11,13 @@ services:
     volumes:
       - data:/var/lib/postgresql/data
 
+  proxy:
+    container_name: dash_proxy
+    image: caddy
+    ports:
+      - "3000:3000"
+    volumes:
+      - "./Caddyfile:/etc/caddy/Caddyfile"
+
 volumes:
   data:

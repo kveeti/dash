@@ -1,12 +1,12 @@
 import { ReactNode } from "react";
-import { useFormatAmount } from "./use-formatting";
+import { useLocaleStuff } from "./use-formatting";
 
 export default function IndexPage() {
-	const amountFormat = useFormatAmount();
+	const { formatAmount } = useLocaleStuff();
 
-	const spendingToday = amountFormat(31);
-	const spendingThisWeek = amountFormat(126);
-	const spendingThisMonth = amountFormat(1003);
+	const spendingToday = formatAmount(31);
+	const spendingThisWeek = formatAmount(126);
+	const spendingThisMonth = formatAmount(1003);
 
 	return (
 		<div className="flex flex-col gap-4 mt-12">

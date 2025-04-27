@@ -2,6 +2,8 @@ import { Redirect, Route, Switch } from "wouter";
 import { useMe } from "./api";
 import { lazyWithPreload } from "./lib/lazy-with-preload";
 import { Suspense, useEffect } from "react";
+import { things } from "./things";
+import { LocaleStuff } from "./authed/use-formatting";
 
 export function Entrypoint() {
 	const me = useMe();
@@ -13,14 +15,16 @@ export function Entrypoint() {
 	return <UnAuthed />;
 }
 
+const AuthLayout = lazyWithPreload(() => import("./authed/layout"));
+AuthLayout.preload();
 const IndexPage = lazyWithPreload(() => import("./authed/index"));
 IndexPage.preload();
 const TransactionsPage = lazyWithPreload(
 	() => import("./authed/transactions/transactions"),
 );
 TransactionsPage.preload();
-const AuthLayout = lazyWithPreload(() => import("./authed/layout"));
-AuthLayout.preload();
+const StatsPage = lazyWithPreload(() => import("./authed/stats/statspage"));
+StatsPage.preload();
 
 function Log({ toLog }: { toLog: string }) {
 	useEffect(() => {
@@ -32,33 +36,31 @@ function Log({ toLog }: { toLog: string }) {
 
 function Authed() {
 	return (
-		<Suspense fallback={<Log toLog="upmost" />}>
-			<AuthLayout>
-				<Suspense fallback={<Log toLog="inner" />}>
-					<Switch>
-						<Route path="/">
-							<IndexPage />
-						</Route>
-						<Route path="/transactions">
-							<TransactionsPage />
-						</Route>
-						<Route path="*">
-							<Redirect href="/" />
-						</Route>
-					</Switch>
-				</Suspense>
-			</AuthLayout>
-		</Suspense>
+		<LocaleStuff>
+			<Suspense fallback={<Log toLog="upmost" />}>
+				<AuthLayout>
+					<Suspense fallback={<Log toLog="inner" />}>
+						<Switch>
+							<Route path="/">
+								<IndexPage />
+							</Route>
+							<Route path="/txs">
+								<TransactionsPage />
+							</Route>
+							<Route path="/stats">
+								<StatsPage />
+							</Route>
+							<Route path="*">
+								<Redirect href="/" />
+							</Route>
+						</Switch>
+					</Suspense>
+				</AuthLayout>
+			</Suspense>
+		</LocaleStuff>
 	);
 }
 
 function UnAuthed() {
-	return (
-		<Switch>
-			<Route path="/auth/login"></Route>
-			<Route path="*">
-				<Redirect href="/auth/login" />
-			</Route>
-		</Switch>
-	);
+	return <Redirect href={things.apiBase + "/auth/init"} />;
 }
