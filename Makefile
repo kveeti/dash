@@ -6,10 +6,10 @@ endif
 .PHONY: all
 
 frontdev: 
-	@cd front && pnpm dev
+	@cd front2 && bun run dev
 
 backdev:
-	@cd back && pnpm dev
+	@cd back2 && cargo watch -x run
 
 dev: 
 	@make -j2 backdev frontdev
@@ -18,7 +18,7 @@ frontbuild:
 	@cd front && pnpm build
 
 backbuild:
-	@cd back && pnpm build
+	@cd back && cargo build --release
 
 build:
 	@make -j2 backbuild frontbuild
@@ -27,7 +27,7 @@ frontpre:
 	@cd front && pnpm preview
 
 backpre:
-	@cd back && pnpm preview
+	@cd back && cargo run --release
 
 pre:
 	@make -j2 backpre frontpre
@@ -42,17 +42,18 @@ an:
 	@cd front && BUNDLE_ANALYZE=true pnpm build && open dist/report-web.html
 
 backdepl:
-	@cd back && \
-		docker context use orbstack && \
-		docker build . -t veetik/dash_backend:$(shell git rev-parse HEAD) && \
+	@docker build ./back2 -t veetik/dash_backend:$(shell git rev-parse HEAD) && \
 		docker push veetik/dash_backend:$(shell git rev-parse HEAD) && \
-		cd .. && \
-		docker context use SERVU && \
-		COMMIT_SHA=$(shell git rev-parse HEAD) docker stack deploy -c stack.yml dash && \
-		docker context use orbstack
+		COMMIT_SHA=$(shell git rev-parse HEAD) docker --context=SERVU stack deploy -c stack.yml dash
 
 frontdepl:
 	@cd front && pnpm depl
 
 depl:
 	@make -j2 backdepl frontdepl
+
+e2e:
+	@cd back2 && cargo run &
+	bash -c 'for i in {1..30}; do curl -s http://localhost:8000/api/health && break || (sleep 1 && echo "Waiting for server..."); done'
+	cd front2 && bunx playwright test --ui
+	pkill -f backend
