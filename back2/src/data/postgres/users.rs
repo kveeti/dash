@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chrono::{DateTime, Utc};
 use sqlx::query;
 
 use super::{Pool, Session};
@@ -13,35 +14,27 @@ impl Users {
         return Self { pool };
     }
 
-    pub async fn upsert(&self, input: &User) -> Result<(), sqlx::Error> {
-        query!(
-            "insert into users (id, external_id) values ($1, $2) on conflict (external_id) do nothing;",
-            input.id,
-            input.external_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        return Ok(());
-    }
-
     pub async fn upsert_with_session(&self, user: &User, session: &Session) -> Result<()> {
         let mut tx = self.pool.begin().await.context("error starting tx")?;
 
         query!(
-            "insert into users (id, external_id, locale) values ($1, $2, $3) on conflict (external_id) do nothing;",
+            "insert into users (id, external_id, locale, created_at, updated_at) values ($1, $2, $3, $4, $5) on conflict (external_id) do nothing;",
             user.id,
             user.external_id,
-            user.locale
+            user.locale,
+            user.created_at,
+            user.updated_at
         )
             .execute(&mut *tx)
             .await
             .context("error upserting user")?;
 
         query!(
-            "insert into sessions (id, user_id) values ($1, $2)",
+            "insert into sessions (id, user_id, created_at, updated_at) values ($1, $2, $3, $4)",
             session.id,
-            user.id
+            user.id,
+            session.created_at,
+            session.updated_at,
         )
         .execute(&mut *tx)
         .await
@@ -57,4 +50,6 @@ pub struct User {
     pub id: String,
     pub external_id: String,
     pub locale: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
 }

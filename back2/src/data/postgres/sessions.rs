@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::query_as;
 
 use super::Pool;
@@ -19,7 +20,7 @@ impl Sessions {
     ) -> Result<Option<Session>, sqlx::Error> {
         let session = query_as!(
             Session,
-            "select id, user_id from sessions where id = $1 and user_id = $2 limit 1;",
+            "select id, user_id, created_at, updated_at from sessions where id = $1 and user_id = $2 limit 1;",
             session_id,
             user_id,
         )
@@ -33,4 +34,6 @@ impl Sessions {
 pub struct Session {
     pub id: String,
     pub user_id: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
 }

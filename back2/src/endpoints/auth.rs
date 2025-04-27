@@ -29,6 +29,7 @@ pub async fn init(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
     let state_cookie = CookieBuilder::new(AUTH_STATE, state_str)
         .secure(state.config.use_secure_cookies)
         .same_site(cookie::SameSite::Lax)
+        .path("/api")
         .http_only(true)
         .expires(cookie::Expiration::from(
             OffsetDateTime::now_utc().saturating_add(Duration::minutes(5)),
@@ -69,7 +70,7 @@ pub async fn callback(
 ) -> Result<impl IntoResponse, ApiError> {
     let stored_state = cookies
         .get(AUTH_STATE)
-        .ok_or(ApiError::BadRequest("no state".to_owned()))?;
+        .ok_or(ApiError::BadRequest("no state cookie".to_owned()))?;
 
     let auth_token = services::auth::callback(
         &state.config,
@@ -143,7 +144,7 @@ fn create_auth_cookie(is_secure: bool, auth_token: &str) -> String {
 }
 
 fn create_empty_state_cookie(is_secure: bool) -> String {
-    CookieBuilder::new("state", "")
+    CookieBuilder::new(AUTH_STATE, "")
         .secure(is_secure)
         .same_site(cookie::SameSite::Lax)
         .http_only(true)

@@ -6,6 +6,7 @@ use crate::{
 
 use anyhow::{Context, Result};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::Utc;
 use hmac::{Hmac, Mac};
 use once_cell::sync::Lazy;
 use rand::{TryRngCore, rngs::OsRng};
@@ -95,15 +96,22 @@ pub async fn callback(
         .await
         .context("error parsing userinfo res json")?;
 
+    let created_at = Utc::now();
+    let updated_at = None;
+
     let user = User {
         id: create_id(),
         external_id: userinfo_res.sub.to_string(),
         locale: "en-FI".to_owned(),
+        created_at,
+        updated_at,
     };
 
     let session = Session {
         id: create_id(),
         user_id: user.id.to_owned(),
+        created_at,
+        updated_at,
     };
 
     data.users
@@ -117,15 +125,22 @@ pub async fn callback(
 }
 
 pub async fn ___dev_login___(config: &Config, data: &Data) -> Result<String, ApiError> {
+    let created_at = Utc::now();
+    let updated_at = None;
+
     let user = User {
         id: create_id(),
         external_id: create_id(),
         locale: "en-FI".to_owned(),
+        created_at,
+        updated_at,
     };
 
     let session = Session {
         id: create_id(),
         user_id: user.id.to_owned(),
+        created_at,
+        updated_at,
     };
 
     data.users

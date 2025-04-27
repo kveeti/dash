@@ -43,8 +43,8 @@ where
             .get("auth")
             .ok_or(ApiError::NoAuth("no cookie".to_owned()))?;
 
-        let auth_token =
-            verify_token(&state.config.secret, auth_cookie).context("error verifying token")?;
+        let auth_token = verify_token(&state.config.secret, auth_cookie)
+            .map_err(|_err| ApiError::NoAuth("invalid token".to_owned()))?;
 
         let session = state
             .data
