@@ -36,7 +36,10 @@ db:
 	@docker exec -it dash_db psql -U pg -d db
 
 dbreset:
-	@docker compose down -v -t 1 && docker compose up -d
+	@docker compose down -v -t 1 && \
+	docker compose up -d && \
+	sleep 2 && \
+	cd back2 && sqlx migrate run
 
 an:
 	@cd front && BUNDLE_ANALYZE=true pnpm build && open dist/report-web.html
