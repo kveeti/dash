@@ -1,12 +1,88 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 
 use crate::{
-    data::{Data, Tx},
-    endpoints::transactions::get_stats::{Output, OutputDataValue},
+    data::{Data, InsertTx, Tx, UpdateTx, create_id},
+    endpoints,
+    error::ApiError,
 };
+
+pub async fn create(
+    data: &Data,
+    user_id: &str,
+    input: &endpoints::transactions::create::Input,
+) -> anyhow::Result<()> {
+    let tx = InsertTx {
+        id: &create_id(),
+        amount: input.amount,
+        counter_party: &input.counter_party,
+        date: input.date,
+        additional: input.additional.as_deref(),
+        currency: "EUR",
+    };
+
+    data.transactions.insert(user_id, &tx).await?;
+
+    Ok(())
+}
+
+pub async fn delete(data: &Data, user_id: &str, tx_id: &str) -> anyhow::Result<()> {
+    data.transactions.delete(user_id, tx_id).await?;
+
+    Ok(())
+}
+
+pub async fn update(
+    data: &Data,
+    user_id: &str,
+    tx_id: &str,
+    input: &endpoints::transactions::update::Input,
+) -> anyhow::Result<()> {
+    let tx = UpdateTx {
+        amount: input.amount,
+        counter_party: &input.counter_party,
+        date: input.date,
+        additional: input.additional.as_deref(),
+        currency: "EUR",
+    };
+
+    data.transactions.update(user_id, tx_id, &tx).await?;
+
+    Ok(())
+}
+
+pub async fn link(data: &Data, user_id: &str, tx1_id: &str, tx2_id: &str) -> Result<(), ApiError> {
+    if tx1_id == tx2_id {
+        return Err(ApiError::BadRequest("Cannot link to itself".into()));
+    }
+
+    data.transactions
+        .link(user_id, tx1_id, tx2_id)
+        .await
+        .context("error creating link")?;
+
+    Ok(())
+}
+
+pub async fn unlink(
+    data: &Data,
+    user_id: &str,
+    tx1_id: &str,
+    tx2_id: &str,
+) -> Result<(), ApiError> {
+    if tx1_id == tx2_id {
+        return Err(ApiError::BadRequest("Cannot unlink self".into()));
+    }
+
+    data.transactions
+        .unlink(user_id, tx1_id, tx2_id)
+        .await
+        .context("error unlinking")?;
+
+    Ok(())
+}
 
 pub async fn stats(
     data: &Data,
@@ -14,7 +90,7 @@ pub async fn stats(
     timezone: &str,
     start: &DateTime<Utc>,
     end: &DateTime<Utc>,
-) -> anyhow::Result<Output> {
+) -> anyhow::Result<endpoints::transactions::get_stats::Output> {
     let tx_map = data
         .transactions
         .stats(user_id, timezone, start, end)
@@ -26,9 +102,7 @@ pub async fn stats(
     return Ok(result);
 }
 
-fn compute(mut tx_map: HashMap<String, Tx>) -> Output {
-    let mut unique_categories: HashSet<String> = HashSet::default();
-
+fn compute(mut tx_map: HashMap<String, Tx>) -> endpoints::transactions::get_stats::Output {
     let mut adjustments: HashMap<String, f32> = HashMap::default();
 
     for tx in tx_map.values() {
@@ -39,10 +113,6 @@ fn compute(mut tx_map: HashMap<String, Tx>) -> Output {
             if cat.is_neutral {
                 continue;
             }
-        }
-
-        if let Some(cat) = &tx.category {
-            unique_categories.insert(cat.name.to_owned());
         }
 
         let mut remaining_amount = tx.amount;
@@ -76,81 +146,66 @@ fn compute(mut tx_map: HashMap<String, Tx>) -> Output {
         }
     }
 
-    let mut data: HashMap<String, HashMap<String, OutputDataValue>> = HashMap::default();
+    let mut dates: Vec<String> = Vec::new();
+    let mut i_cats: Vec<Vec<String>> = Vec::new();
+    let mut i: Vec<Vec<f32>> = Vec::new();
+    let mut e_cats: Vec<Vec<String>> = Vec::new();
+    let mut e: Vec<Vec<f32>> = Vec::new();
 
-    let mut total_neg = 0.0;
-    let mut total_pos = 0.0;
-
+    let mut period_txs: HashMap<String, Vec<&Tx>> = HashMap::new();
     for tx in tx_map.values() {
         if tx.amount == 0.0 {
             continue;
         }
-
-        let cat_name = tx
-            .category
-            .as_ref()
-            .map(|c| c.name.to_owned())
-            .unwrap_or("__uncategorized__".into());
-
         let period = tx.date.format("%Y-%m").to_string();
-
-        if tx.amount > 0.0 {
-            total_pos += tx.amount;
-        } else {
-            total_neg += tx.amount;
-        }
-
-        if let Some(entry) = data.get_mut(&period) {
-            entry.entry("__total__".into()).and_modify(|val| match val {
-                OutputDataValue::Value(inner) => *inner += tx.amount,
-                _ => unreachable!(),
-            });
-            entry.entry(cat_name).and_modify(|val| match val {
-                OutputDataValue::Value(inner) => *inner += tx.amount,
-                _ => unreachable!(),
-            });
-            if tx.amount > 0.0 {
-                entry
-                    .entry("__total_pos__".into())
-                    .and_modify(|val| match val {
-                        OutputDataValue::Value(inner) => *inner += tx.amount,
-                        _ => unreachable!(),
-                    });
-            } else {
-                entry
-                    .entry("__total_neg__".into())
-                    .and_modify(|val| match val {
-                        OutputDataValue::Value(inner) => *inner += tx.amount,
-                        _ => unreachable!(),
-                    });
-            }
-        } else {
-            let (neg, pos) = match tx.amount > 0.0 {
-                true => (0.0, tx.amount),
-                false => (tx.amount, 0.0),
-            };
-
-            let mut map = HashMap::default();
-            map.insert(
-                "__period__".into(),
-                OutputDataValue::Period(period.to_owned()),
-            );
-            map.insert("__total__".into(), OutputDataValue::Value(tx.amount));
-            map.insert("__total_neg__".into(), OutputDataValue::Value(neg));
-            map.insert("__total_pos__".into(), OutputDataValue::Value(pos));
-            map.insert(cat_name.to_owned(), OutputDataValue::Value(tx.amount));
-
-            data.insert(period.clone(), map);
-        }
+        period_txs.entry(period).or_default().push(tx);
     }
 
-    return Output {
-        total_neg,
-        total_pos,
-        domain_start: 0.0,
-        domain_end: 0.0,
-        categories: unique_categories.iter().cloned().collect(),
-        data,
+    let mut periods: Vec<String> = period_txs.keys().cloned().collect();
+    periods.sort();
+
+    for period in periods {
+        dates.push(period.clone());
+
+        let mut period_i_cats: Vec<String> = Vec::new();
+        let mut period_i_vals: Vec<f32> = Vec::new();
+
+        let mut period_e_cats: Vec<String> = Vec::new();
+        let mut period_e_vals: Vec<f32> = Vec::new();
+
+        let mut cat_amounts: HashMap<String, f32> = HashMap::new();
+        for tx in &period_txs[&period] {
+            let cat_name = tx
+                .category
+                .as_ref()
+                .map(|c| c.name.to_owned())
+                .unwrap_or("__uncategorized__".into());
+
+            *cat_amounts.entry(cat_name).or_default() += tx.amount;
+        }
+
+        for (cat, amount) in cat_amounts {
+            if amount > 0.0 {
+                period_i_cats.push(cat);
+                period_i_vals.push(amount);
+            } else if amount < 0.0 {
+                period_e_cats.push(cat);
+                period_e_vals.push(amount.abs());
+            }
+        }
+
+        i_cats.push(period_i_cats);
+        i.push(period_i_vals);
+        e_cats.push(period_e_cats);
+        e.push(period_e_vals);
+    }
+
+    return endpoints::transactions::get_stats::Output {
+        dates,
+        e,
+        e_cats,
+        i,
+        i_cats,
     };
 }
 
@@ -226,6 +281,8 @@ mod test {
             amount,
             links: vec![],
             category: None,
+            additional: None,
+            currency: "EUR".to_owned(),
         })
     }
 

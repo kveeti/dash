@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::endpoints::*;
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{delete, get, patch, post},
 };
 use config::Config;
 use data::Data;
@@ -39,6 +39,14 @@ async fn main() {
         data,
     };
 
+    let transactions = Router::new()
+        .route("/stats", get(transactions::get_stats))
+        .route("/", post(transactions::create))
+        .route("/{id}", patch(transactions::update))
+        .route("/{id}", delete(transactions::delete))
+        .route("/{id}/linked", post(transactions::link))
+        .route("/{id}/linked/{id}", delete(transactions::unlink));
+
     let auth_base = Router::new()
         .route("/init", get(auth::init))
         .route("/callback", get(auth::callback));
@@ -50,6 +58,7 @@ async fn main() {
     let auth = auth_base;
 
     let routes = Router::new()
+        .nest("/transactions", transactions)
         .nest("/auth", auth)
         .route("/test", post(gocardless_nordigen_test))
         .route("/@me", get(me::get_me))

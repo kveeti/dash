@@ -8,6 +8,11 @@ use utoipa::OpenApi;
     endpoints::auth::callback,
     endpoints::me::get_me,
     endpoints::transactions::get_stats::get_stats,
+    endpoints::transactions::create::create,
+    endpoints::transactions::update::update,
+    endpoints::transactions::delete::delete,
+    endpoints::transactions::links::link,
+    endpoints::transactions::links::unlink,
 ))]
 struct ApiDoc;
 

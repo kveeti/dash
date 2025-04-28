@@ -81,20 +81,16 @@ create index if not exists idx_transaction_tags_user_id on transaction_tags(user
 
 -- transaction_links
 create table if not exists transactions_links (
-    id varchar(30) primary key not null,
     user_id varchar(30) not null,
     created_at timestamptz not null,
     updated_at timestamptz,
 
     transaction_a_id varchar(30) not null,
-    transaction_b_id varchar(30) not null
+    transaction_b_id varchar(30) not null,
+
+    primary key (user_id, transaction_a_id, transaction_b_id)
 );
-
-create index if not exists idx_transactions_links_user_id_ids on transactions_links(user_id, transaction_a_id, transaction_b_id);
-
-create unique index on transactions_links (transaction_a_id, transaction_b_id);
-
-create unique index on transactions_links (transaction_b_id, transaction_a_id);
+create unique index on transactions_links (user_id, transaction_a_id, transaction_b_id);
 -- transaction_links
 
 -- user_bank_integrations

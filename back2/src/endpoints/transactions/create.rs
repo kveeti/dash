@@ -1,0 +1,40 @@
+use axum::{
+    extract::{self, State},
+    response::IntoResponse,
+};
+use chrono::{DateTime, Utc};
+use http::StatusCode;
+use serde::Deserialize;
+use utoipa::ToSchema;
+
+use crate::{auth_middleware::User, error::ApiError, services, state::AppState};
+
+#[derive(Deserialize, ToSchema)]
+pub struct Input {
+    pub counter_party: String,
+    pub date: DateTime<Utc>,
+    pub amount: f32,
+    pub additional: Option<String>,
+    pub category_id: Option<String>,
+}
+
+#[utoipa::path(
+    post,
+    path = "/transactions",
+    request_body(
+        content = Input,
+        content_type = "application/json",
+    ),
+    responses(
+        (status = 201, body = ())
+    )
+)]
+pub async fn create(
+    State(state): State<AppState>,
+    user: User,
+    extract::Json(input): extract::Json<Input>,
+) -> Result<impl IntoResponse, ApiError> {
+    services::transactions::create(&state.data, &user.id, &input).await?;
+
+    return Ok(StatusCode::CREATED);
+}
