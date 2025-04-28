@@ -9,7 +9,7 @@
 		"preview": "rsbuild preview",
 		"format": "biome format --write",
 		"check": "biome check --write",
-		"api": "openapi-typescript http://localhost:8000/api/openapi.json -o ./src/api_types.d.ts"
+		"api": "openapi-typescript http://localhost:3000/api/openapi.json -o ./src/api_types.d.ts"
 	},
 	"dependencies": {
 		"@ariakit/react": "^0.4.17",
