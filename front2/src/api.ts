@@ -1,10 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import createFetchClient from "openapi-fetch";
 import createClient from "openapi-react-query";
-import type { paths } from "./api_types.d.ts";
-import { useQuery } from "@tanstack/react-query";
 
-type Me =
-	paths["/@me"]["get"]["responses"]["200"]["content"]["application/json"];
+import type { paths } from "./api_types.d.ts";
+
+type Me = paths["/@me"]["get"]["responses"]["200"]["content"]["application/json"];
 const win = window as unknown as {
 	__ME_LOADER__: {
 		promise: Promise<Me> | null;

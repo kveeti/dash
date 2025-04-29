@@ -7,7 +7,7 @@ export type PreloadableComponent<T extends ComponentType<any>> = T & {
 };
 
 export function lazyWithPreload<T extends ComponentType<any>>(
-	factory: () => Promise<{ default: T }>,
+	factory: () => Promise<{ default: T }>
 ): PreloadableComponent<T> {
 	const ReactLazyComponent = lazy(factory);
 	let PreloadedComponent: T | undefined;

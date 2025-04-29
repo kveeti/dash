@@ -136,6 +136,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        CreateTransactionInput: {
+            additional?: string | null;
+            /** Format: float */
+            amount: number;
+            category_id?: string | null;
+            counter_party: string;
+            /** Format: date-time */
+            date: string;
+        };
         Input: {
             id: string;
         };
@@ -223,7 +232,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Input"];
+                "application/json": components["schemas"]["CreateTransactionInput"];
             };
         };
         responses: {

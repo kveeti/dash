@@ -1,4 +1,4 @@
-import { test, expect, Page } from "@playwright/test";
+import { Page, expect, test } from "@playwright/test";
 
 test("dev login", async ({ page }) => {
 	await page.goto("/", { waitUntil: "networkidle" });

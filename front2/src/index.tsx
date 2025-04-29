@@ -1,7 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { Providers } from "./providers";
+
 import { Entrypoint } from "./entrypoint";
+import { Providers } from "./providers";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -9,5 +10,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
 		<Providers>
 			<Entrypoint />
 		</Providers>
-	</React.StrictMode>,
+	</React.StrictMode>
 );

@@ -1,9 +1,10 @@
-import { Redirect, Route, Switch } from "wouter";
-import { useMe } from "./api";
-import { lazyWithPreload } from "./lib/lazy-with-preload";
 import { Suspense, useEffect } from "react";
-import { things } from "./things";
+import { Redirect, Route, Switch } from "wouter";
+
+import { useMe } from "./api";
 import { LocaleStuff } from "./authed/use-formatting";
+import { lazyWithPreload } from "./lib/lazy-with-preload";
+import { things } from "./things";
 
 export function Entrypoint() {
 	const me = useMe();
@@ -17,11 +18,11 @@ export function Entrypoint() {
 
 const AuthLayout = lazyWithPreload(() => import("./authed/layout"));
 AuthLayout.preload();
+
 const IndexPage = lazyWithPreload(() => import("./authed/index"));
 IndexPage.preload();
-const TransactionsPage = lazyWithPreload(
-	() => import("./authed/transactions/transactions"),
-);
+
+const TransactionsPage = lazyWithPreload(() => import("./authed/transactions/transactions"));
 TransactionsPage.preload();
 
 const NewTransactionPage = lazyWithPreload(() => import("./authed/transactions/new"));
@@ -33,7 +34,7 @@ StatsPage.preload();
 function Log({ toLog }: { toLog: string }) {
 	useEffect(() => {
 		console.log(toLog);
-	});
+	}, []);
 
 	return <></>;
 }

@@ -12,7 +12,7 @@ use crate::{
 pub async fn create(
     data: &Data,
     user_id: &str,
-    input: &endpoints::transactions::create::Input,
+    input: &endpoints::transactions::create::CreateTransactionInput,
 ) -> anyhow::Result<()> {
     let tx = InsertTx {
         id: &create_id(),

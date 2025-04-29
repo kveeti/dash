@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+
 import { useLocaleStuff } from "./use-formatting";
 
 export default function IndexPage() {
@@ -9,7 +10,7 @@ export default function IndexPage() {
 	const spendingThisMonth = formatAmount(1003);
 
 	return (
-		<div className="flex flex-col gap-4 mt-12">
+		<div className="mt-12 flex flex-col gap-4">
 			<h2>
 				<span className="sr-only">spent today</span>
 				<span className="text-5xl">
@@ -19,14 +20,14 @@ export default function IndexPage() {
 			</h2>
 			<h2>
 				<span className="sr-only">spent today</span>
-				<span className="text-5xl text-gray-12/70">
+				<span className="text-gray-12/70 text-5xl">
 					<Indicator>w</Indicator>
 					{spendingThisWeek}
 				</span>
 			</h2>
 			<h2>
 				<span className="sr-only">spent today</span>
-				<span className="text-5xl text-gray-12/50">
+				<span className="text-gray-12/50 text-5xl">
 					<Indicator>d</Indicator>
 					{spendingToday}
 				</span>
@@ -37,7 +38,7 @@ export default function IndexPage() {
 
 function Indicator({ children }: { children: ReactNode }) {
 	return (
-		<span className="opacity-90 text-4xl">
+		<span className="text-4xl opacity-90">
 			{children}
 			<span className="opacity-40">...</span>
 		</span>

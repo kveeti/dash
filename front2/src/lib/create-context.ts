@@ -1,7 +1,4 @@
-import {
-	createContext as react_createContext,
-	useContext as react_useContext,
-} from "react";
+import { createContext as react_createContext, useContext as react_useContext } from "react";
 
 export const createContext = <ContextType>() => {
 	const context = react_createContext<ContextType | undefined>(undefined);
