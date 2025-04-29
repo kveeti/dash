@@ -23,6 +23,10 @@ const TransactionsPage = lazyWithPreload(
 	() => import("./authed/transactions/transactions"),
 );
 TransactionsPage.preload();
+
+const NewTransactionPage = lazyWithPreload(() => import("./authed/transactions/new"));
+NewTransactionPage.preload();
+
 const StatsPage = lazyWithPreload(() => import("./authed/stats/statspage"));
 StatsPage.preload();
 
@@ -46,6 +50,9 @@ function Authed() {
 							</Route>
 							<Route path="/txs">
 								<TransactionsPage />
+							</Route>
+							<Route path="/txs/new">
+								<NewTransactionPage />
 							</Route>
 							<Route path="/stats">
 								<StatsPage />

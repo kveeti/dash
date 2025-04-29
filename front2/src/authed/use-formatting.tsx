@@ -1,8 +1,8 @@
 import { ReactNode, useMemo } from "react";
+
 import { createContext } from "../lib/create-context";
 
-const [useContext, context] =
-	createContext<ReturnType<typeof useLocaleStuffValue>>();
+const [useContext, context] = createContext<ReturnType<typeof useLocaleStuffValue>>();
 
 export const useLocaleStuff = useContext;
 export function LocaleStuff({ children }: { children: ReactNode }) {
@@ -12,6 +12,13 @@ export function LocaleStuff({ children }: { children: ReactNode }) {
 
 function useLocaleStuffValue() {
 	const locale = "fi-FI";
+	const timeZone = undefined;
+	const hourCycle: 12 | 24 = 24;
+
+	const resolvedOptions = useMemo(
+		() => new Intl.DateTimeFormat(locale, { timeZone }).resolvedOptions(),
+		[locale, timeZone]
+	);
 
 	const amountFormatter = useMemo(
 		() =>
@@ -23,10 +30,12 @@ function useLocaleStuffValue() {
 				style: "currency",
 				currency: "EUR",
 			}),
-		[locale],
+		[locale]
 	);
 
 	return {
 		formatAmount: amountFormatter.format,
+		hourCycle,
+		timeZone: resolvedOptions.timeZone,
 	};
 }
