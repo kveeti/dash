@@ -3,6 +3,7 @@ import createFetchClient from "openapi-fetch";
 import createClient from "openapi-react-query";
 
 import type { paths } from "./api_types.d.ts";
+import { things } from "./things.ts";
 
 type Me = paths["/@me"]["get"]["responses"]["200"]["content"]["application/json"];
 const win = window as unknown as {
@@ -13,7 +14,7 @@ const win = window as unknown as {
 };
 
 const fetchClient = createFetchClient<paths>({
-	baseUrl: "http://localhost:8000/api",
+	baseUrl: things.apiBase,
 	credentials: "include",
 });
 export const api = createClient(fetchClient);
