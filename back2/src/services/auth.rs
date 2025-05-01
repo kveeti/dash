@@ -88,7 +88,7 @@ pub async fn callback(
 
     let userinfo_res = AUTH_CLIENT
         .get(&config.auth_userinfo_url)
-        .bearer_auth(token_res.access_token)
+        .bearer_auth(&token_res.access_token)
         .send()
         .await
         .context("error executing token req")?

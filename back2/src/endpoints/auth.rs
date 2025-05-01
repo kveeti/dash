@@ -26,16 +26,7 @@ const AUTH_STATE: &str = "auth_state";
 pub async fn init(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let (url, state_str) = services::auth::init(&state.config)?;
 
-    let state_cookie = CookieBuilder::new(AUTH_STATE, state_str)
-        .secure(state.config.use_secure_cookies)
-        .same_site(cookie::SameSite::Lax)
-        .path("/api")
-        .http_only(true)
-        .expires(cookie::Expiration::from(
-            OffsetDateTime::now_utc().saturating_add(Duration::minutes(5)),
-        ))
-        .build()
-        .to_string();
+    let state_cookie = create_state_cookie(state.config.use_secure_cookies, &state_str);
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -81,18 +72,18 @@ pub async fn callback(
     )
     .await?;
 
-    let empty_state_cookie = create_empty_state_cookie(state.config.use_secure_cookies);
+    let empty_state_cookie = create_state_cookie(state.config.use_secure_cookies, "");
 
     let auth_cookie = create_auth_cookie(state.config.use_secure_cookies, &auth_token);
 
     let mut headers = HeaderMap::new();
-    headers.insert(
+    headers.append(
         header::SET_COOKIE,
         empty_state_cookie
             .parse()
             .context("error parsing state cookie")?,
     );
-    headers.insert(
+    headers.append(
         header::SET_COOKIE,
         auth_cookie.parse().context("error parsing auth cookie")?,
     );
@@ -111,18 +102,18 @@ pub async fn callback(
 pub async fn ___dev_login___(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let auth_token = services::auth::___dev_login___(&state.config, &state.data).await?;
 
-    let empty_state_cookie = create_empty_state_cookie(state.config.use_secure_cookies);
+    let empty_state_cookie = create_state_cookie(state.config.use_secure_cookies, "");
 
     let auth_cookie = create_auth_cookie(state.config.use_secure_cookies, &auth_token);
 
     let mut headers = HeaderMap::new();
-    headers.insert(
+    headers.append(
         header::SET_COOKIE,
         empty_state_cookie
             .parse()
             .context("error parsing state cookie")?,
     );
-    headers.insert(
+    headers.append(
         header::SET_COOKIE,
         auth_cookie.parse().context("error parsing auth cookie")?,
     );
@@ -143,14 +134,22 @@ fn create_auth_cookie(is_secure: bool, auth_token: &str) -> String {
         .to_string()
 }
 
-fn create_empty_state_cookie(is_secure: bool) -> String {
-    CookieBuilder::new(AUTH_STATE, "")
+fn create_state_cookie(is_secure: bool, val: &str) -> String {
+    let cookie = CookieBuilder::new(AUTH_STATE, val)
         .secure(is_secure)
         .same_site(cookie::SameSite::Lax)
         .http_only(true)
-        .expires(cookie::Expiration::from(
+        .path("/");
+
+    let cookie = if val.is_empty() {
+        cookie.expires(cookie::Expiration::from(
             OffsetDateTime::from_unix_timestamp(0).expect("epoch"),
         ))
-        .build()
-        .to_string()
+    } else {
+        cookie.expires(cookie::Expiration::from(
+            OffsetDateTime::now_utc().saturating_add(Duration::minutes(5)),
+        ))
+    };
+
+    cookie.build().to_string()
 }
