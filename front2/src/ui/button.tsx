@@ -44,18 +44,10 @@ export function Button({
 	children,
 	...props
 }: Props) {
-	let _className = baseButtonStyles;
+	let _className = buttonStyles({ variant, size });
 
 	if (className) {
 		_className += " " + className;
-	}
-
-	if (variant) {
-		_className += " " + variants[variant];
-	}
-
-	if (size) {
-		_className += " " + sizes[size];
 	}
 
 	return (
