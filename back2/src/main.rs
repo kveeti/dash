@@ -41,6 +41,7 @@ async fn main() {
 
     let transactions = Router::new()
         .route("/stats", get(transactions::get_stats))
+        .route("/", get(transactions::query))
         .route("/", post(transactions::create))
         .route("/{id}", patch(transactions::update))
         .route("/{id}", delete(transactions::delete))

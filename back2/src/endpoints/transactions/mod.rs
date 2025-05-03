@@ -14,6 +14,9 @@ pub mod links;
 pub use links::link;
 pub use links::unlink;
 
+pub mod query;
+pub use query::query;
+
 // pub async fn query() -> Result<impl IntoResponse, ApiError> {
 //     Ok(())
 // }

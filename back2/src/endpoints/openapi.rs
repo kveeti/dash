@@ -8,6 +8,7 @@ use utoipa::OpenApi;
     endpoints::auth::callback,
     endpoints::me::get_me,
     endpoints::transactions::get_stats::get_stats,
+    endpoints::transactions::query::query,
     endpoints::transactions::create::create,
     endpoints::transactions::update::update,
     endpoints::transactions::delete::delete,

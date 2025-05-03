@@ -4,8 +4,8 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 
 use crate::{
-    data::{Data, InsertTx, Tx, UpdateTx, create_id},
-    endpoints,
+    data::{Data, InsertTx, QueryTx, Tx, UpdateTx, create_id},
+    endpoints::{self},
     error::ApiError,
 };
 
@@ -82,6 +82,16 @@ pub async fn unlink(
         .context("error unlinking")?;
 
     Ok(())
+}
+
+pub async fn query(data: &Data, user_id: &str) -> anyhow::Result<Vec<QueryTx>> {
+    let txs = data
+        .transactions
+        .query(user_id)
+        .await
+        .context("error getting transactions")?;
+
+    Ok(txs)
 }
 
 pub async fn stats(

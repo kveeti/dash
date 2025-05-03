@@ -2,7 +2,9 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
+use serde::Serialize;
 use sqlx::{prelude::FromRow, query, query_as};
+use utoipa::ToSchema;
 
 use crate::data::create_id;
 
@@ -16,6 +18,98 @@ pub struct Transactions {
 impl Transactions {
     pub(crate) fn new(pool: Pool) -> Self {
         return Self { pool };
+    }
+
+    pub async fn query(&self, user_id: &str) -> Result<Vec<QueryTx>, sqlx::Error> {
+        let rows = query_as!(
+            QueryTxRow,
+            r#"
+            select
+                t.id as id,
+                t.date as date,
+                t.counter_party as counter_party,
+                t.amount as amount,
+                t.category_id as category_id,
+                t.currency as currency,
+                t.additional as additional,
+
+                c.name as "cat_name?",
+                c.is_neutral as "cat_is_ne?",
+
+                link.created_at as "link_created_at?",
+                link.updated_at as "link_updated_at?",
+
+                linked.id as "l_id?",
+                linked.amount as "l_amount?",
+                linked.date as "l_date?",
+                linked.counter_party as "l_counter_party?",
+                linked.additional as "l_additional?",
+                linked.currency as "l_currency?",
+                linked.category_id as "l_category_id?"
+            from transactions t
+
+            left join transaction_categories c on t.category_id = c.id
+
+            left join transactions_links link
+              on link.transaction_a_id = t.id or link.transaction_b_id = t.id
+            left join transactions linked
+              on (linked.id = CASE WHEN link.transaction_a_id = t.id THEN link.transaction_b_id ELSE link.transaction_a_id END)
+
+            where t.user_id = $1
+            "#,
+            user_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut tx_map: HashMap<String, QueryTx> = HashMap::default();
+
+        for row in rows {
+            let tx = tx_map.get_mut(&row.id);
+
+            if let Some(tx) = tx {
+                if let Some(l_id) = row.l_id {
+                    tx.links.push(Link {
+                        created_at: row.link_created_at.expect("checked created_at"),
+                        updated_at: row.link_updated_at.expect("checked updated_at"),
+                        tx: LinkedTx {
+                            id: l_id,
+                            date: row.l_date.expect("checked linked_date"),
+                            counter_party: row
+                                .l_counter_party
+                                .expect("checked linked_counter_party"),
+                            additional: row.l_additional,
+                            currency: row.l_currency.expect("checked linked_currency"),
+                            amount: row.l_amount.expect("checked linked_amount"),
+                        },
+                    });
+                }
+            } else {
+                tx_map.insert(
+                    row.id.to_owned(),
+                    QueryTx {
+                        id: row.id,
+                        date: row.date,
+                        counter_party: row.counter_party,
+                        amount: row.amount,
+                        additional: row.additional,
+                        currency: row.currency,
+                        links: vec![],
+                        category: if let Some(cat_id) = row.category_id {
+                            Some(Category {
+                                id: cat_id,
+                                name: row.cat_name.expect("checked cat_name"),
+                                is_neutral: row.cat_is_ne.expect("checked is_ne"),
+                            })
+                        } else {
+                            None
+                        },
+                    },
+                );
+            }
+        }
+
+        Ok(tx_map.into_values().collect())
     }
 
     pub async fn insert_with_category<'a>(
@@ -235,6 +329,8 @@ impl Transactions {
                 linked.id as linked_id,
                 linked.amount as linked_amount
             from transactions t
+            left join transaction_categories c on t.category_id = c.id
+
             left join transactions_links link on link.transaction_a_id = t.id or link.transaction_b_id = t.id
             left join transactions linked on (
                 link.transaction_b_id = linked.id and link.transaction_a_id = t.id
@@ -247,7 +343,6 @@ impl Transactions {
             -- left join transactions linked
             --   on (linked.id = CASE WHEN link.transaction_a_id = t.id THEN link.transaction_b_id ELSE link.transaction_a_id END)
 
-            left join transaction_categories c on t.category_id = c.id
             where t.user_id = $1
             and t.date at time zone $2 between $3 and $4;
             "#,
@@ -378,6 +473,60 @@ struct TxRow {
     linked_amount: Option<f32>,
 }
 
+#[derive(Debug, FromRow)]
+struct QueryTxRow {
+    id: String,
+    date: DateTime<Utc>,
+    amount: f32,
+    counter_party: String,
+    additional: Option<String>,
+    currency: String,
+    category_id: Option<String>,
+
+    cat_name: Option<String>,
+    cat_is_ne: Option<bool>,
+
+    link_created_at: Option<DateTime<Utc>>,
+    link_updated_at: Option<DateTime<Utc>>,
+
+    l_id: Option<String>,
+    l_date: Option<DateTime<Utc>>,
+    l_amount: Option<f32>,
+    l_counter_party: Option<String>,
+    l_additional: Option<String>,
+    l_currency: Option<String>,
+    l_category_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct QueryTx {
+    pub id: String,
+    pub date: DateTime<Utc>,
+    pub counter_party: String,
+    pub additional: Option<String>,
+    pub currency: String,
+    pub category: Option<Category>,
+    pub amount: f32,
+    pub links: Vec<Link>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Link {
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub tx: LinkedTx,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct LinkedTx {
+    pub id: String,
+    pub date: DateTime<Utc>,
+    pub counter_party: String,
+    pub additional: Option<String>,
+    pub currency: String,
+    pub amount: f32,
+}
+
 #[derive(Debug, Clone)]
 pub struct Tx {
     pub id: String,
@@ -409,7 +558,7 @@ pub struct UpdateTx<'a> {
     pub amount: f32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Category {
     pub id: String,
     pub name: String,
