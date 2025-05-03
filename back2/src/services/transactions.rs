@@ -15,12 +15,12 @@ pub async fn create(
     input: &endpoints::transactions::create::CreateTransactionInput,
 ) -> anyhow::Result<()> {
     let tx = InsertTx {
-        id: &create_id(),
+        id: create_id(),
         amount: input.amount,
-        counter_party: &input.counter_party,
+        counter_party: input.counter_party.to_owned(),
         date: input.date,
-        additional: input.additional.as_deref(),
-        currency: "EUR",
+        additional: input.additional.to_owned(),
+        currency: "EUR".to_owned(),
     };
 
     data.transactions.insert(user_id, &tx).await?;

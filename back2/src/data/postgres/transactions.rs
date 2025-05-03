@@ -112,10 +112,34 @@ impl Transactions {
         Ok(tx_map.into_values().collect())
     }
 
-    pub async fn insert_with_category<'a>(
+    pub async fn get_by_account_for_sync(
         &self,
         user_id: &str,
-        tx: &InsertTx<'a>,
+        account_id: &str,
+    ) -> Result<Vec<SyncTx>, sqlx::Error> {
+        let rows = query_as!(
+            SyncTx,
+            r#"
+            select
+                t.date,
+                t.og_counter_party,
+                t.amount as amount
+            from transactions t
+            where t.user_id = $1 and t.account_id = $2
+            "#,
+            user_id,
+            account_id
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows)
+    }
+
+    pub async fn insert_with_category(
+        &self,
+        user_id: &str,
+        tx: &InsertTx,
         category_name: &str,
     ) -> Result<(), sqlx::Error> {
         let category_id = create_id();
@@ -147,10 +171,11 @@ impl Transactions {
                 amount,
                 currency,
                 counter_party,
+                og_counter_party,
                 additional,
                 category_id
             )
-            values ($1, $6, $3, $4, $7, $8, $9, $10, $11, coalesce((select id from category_id), $2))
+            values ($1, $6, $3, $4, $7, $8, $9, $10, $10, $11, coalesce((select id from category_id), $2))
             "#,
             user_id,
             category_id,
@@ -170,7 +195,7 @@ impl Transactions {
         Ok(())
     }
 
-    pub async fn insert<'a>(&self, user_id: &str, tx: &InsertTx<'a>) -> Result<(), sqlx::Error> {
+    pub async fn insert(&self, user_id: &str, tx: &InsertTx) -> Result<(), sqlx::Error> {
         let now = Utc::now();
         let updated_at: Option<DateTime<Utc>> = None;
 
@@ -185,9 +210,10 @@ impl Transactions {
                 amount,
                 currency,
                 counter_party,
+                og_counter_party,
                 additional
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9)
             "#,
             user_id,
             tx.id,
@@ -511,6 +537,13 @@ pub struct QueryTx {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
+pub struct SyncTx {
+    pub og_counter_party: String,
+    pub date: DateTime<Utc>,
+    pub amount: f32,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
 pub struct Link {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -540,12 +573,12 @@ pub struct Tx {
 }
 
 #[derive(Debug)]
-pub struct InsertTx<'a> {
-    pub id: &'a str,
+pub struct InsertTx {
+    pub id: String,
     pub date: DateTime<Utc>,
-    pub counter_party: &'a str,
-    pub additional: Option<&'a str>,
-    pub currency: &'a str,
+    pub counter_party: String,
+    pub additional: Option<String>,
+    pub currency: String,
     pub amount: f32,
 }
 

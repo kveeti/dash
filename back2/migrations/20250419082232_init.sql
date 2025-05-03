@@ -30,6 +30,15 @@ create index idx_transaction_categories_user_id_lower_name on transaction_catego
 create unique index on transaction_categories (user_id, lower(name));
 -- transaction_categories
 
+create table accounts (
+    -- actual id of account, comes from bank, usually iban
+    id text not null,
+    user_id varchar(30) not null,
+    created_at timestamptz not null,
+
+    primary key (user_id, id)
+);
+
 -- transactions
 create table transactions (
     id varchar(30) primary key not null,
@@ -40,9 +49,11 @@ create table transactions (
     date timestamptz not null,
     amount real not null,
     currency varchar(3) not null,
-    counter_party varchar(255) not null,
+    counter_party text not null,
+    og_counter_party text not null,
     additional text,
-    category_id varchar(30)
+    category_id varchar(30),
+    account_id text not null
 );
 
 create index idx_transactions_user_id on transactions(user_id);
@@ -100,8 +111,10 @@ create table user_bank_integrations (
     updated_at timestamptz,
 
     name text not null,
-    data jsonb not null
+    data jsonb not null,
+
+    primary key (user_id, name)
 );
 
-create unique index on user_bank_integrations (user_id, name);
+create index idx_user_bank_integrations_user_id on user_bank_integrations (user_id);
 -- user_bank_integrations
