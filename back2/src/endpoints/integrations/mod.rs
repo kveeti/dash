@@ -1,7 +1,7 @@
 use anyhow::{Context, anyhow};
 use axum::extract::State;
 use chrono::{TimeZone, Utc};
-use gocardless_nordigen::{GCNSavedData, GoCardlessNordigen};
+use gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen};
 use tracing::info;
 
 use crate::{
@@ -21,25 +21,30 @@ pub async fn sync_transactions(State(state): State<AppState>, user: User) -> Res
         .await
         .context("error getting user bank integration data")?;
 
+    if datas.is_empty() {
+        info!("user has no connected integrations");
+        return Ok(());
+    }
+
     for data in datas {
         let (integ, _) = data
             .name
             .split_once("::")
-            .ok_or_else(|| anyhow!("error parsing integration name"))?;
+            .ok_or_else(|| anyhow!("error parsing saved name"))?;
 
         match integ {
             "gocardless-nordigen" => {
-                let integ = GoCardlessNordigen::new(&state.config)
-                    .await
-                    .context("error initializing integration")?;
-
-                let data = serde_json::from_value::<GCNSavedData>(data.data)
+                let data = serde_json::from_value::<SavedDataGoCardlessNordigen>(data.data)
                     .context("error parsing saved data")?;
 
                 if data.account_map.is_empty() {
-                    info!("gocardless-nordigen: no accounts to sync");
+                    info!("no accounts to sync");
                     continue;
                 }
+
+                let integ = GoCardlessNordigen::new(&state.config)
+                    .await
+                    .context("error initializing integration")?;
 
                 for account in data.account_map {
                     let account_id = account.0;
@@ -48,14 +53,14 @@ pub async fn sync_transactions(State(state): State<AppState>, user: User) -> Res
                     let remote_transactions = integ
                         .get_transactions(&account_id)
                         .await
-                        .context("error getting transactions")?;
+                        .context("error getting remote transactions")?;
 
                     let local_transactions = state
                         .data
                         .transactions
                         .get_by_account_for_sync(&user.id, &account_iban)
                         .await
-                        .context("error getting stored transactions")?;
+                        .context("error getting local transactions")?;
 
                     let mut new_transactions = vec![];
 
@@ -104,21 +109,24 @@ pub async fn sync_transactions(State(state): State<AppState>, user: User) -> Res
                                         .context("error creating datetime")?,
                                 ),
                                 amount,
+                                account_id: account_iban.to_owned(),
                             });
                         }
                     }
 
                     if new_transactions.is_empty() {
-                        info!("gocardless-nordigen: no new transactions");
+                        info!("no new transactions");
                         continue;
                     }
 
-                    info!(
-                        "gocardless-nordigen: {:?} new transactions",
-                        new_transactions.len()
-                    );
+                    info!("new transactions: {:?}", new_transactions.len());
 
-                    // TODO: insert
+                    state
+                        .data
+                        .transactions
+                        .insert_many(&user.id, new_transactions)
+                        .await
+                        .context("error inserting transactions")?;
                 }
             }
             _ => continue,

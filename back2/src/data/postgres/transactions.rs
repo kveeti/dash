@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use serde::Serialize;
-use sqlx::{prelude::FromRow, query, query_as};
+use sqlx::{Postgres, QueryBuilder, prelude::FromRow, query, query_as};
 use utoipa::ToSchema;
 
 use crate::data::create_id;
@@ -173,9 +173,10 @@ impl Transactions {
                 counter_party,
                 og_counter_party,
                 additional,
-                category_id
+                category_id,
+                account_id
             )
-            values ($1, $6, $3, $4, $7, $8, $9, $10, $10, $11, coalesce((select id from category_id), $2))
+            values ($1, $6, $3, $4, $7, $8, $9, $10, $10, $11, coalesce((select id from category_id), $2), $12)
             "#,
             user_id,
             category_id,
@@ -188,6 +189,7 @@ impl Transactions {
             tx.currency,
             tx.counter_party,
             tx.additional,
+            tx.account_id,
         )
         .execute(&self.pool)
         .await?;
@@ -211,9 +213,10 @@ impl Transactions {
                 currency,
                 counter_party,
                 og_counter_party,
-                additional
+                additional,
+                account_id
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10)
             "#,
             user_id,
             tx.id,
@@ -223,10 +226,55 @@ impl Transactions {
             tx.amount,
             tx.currency,
             tx.counter_party,
-            tx.additional
+            tx.additional,
+            tx.account_id,
         )
         .execute(&self.pool)
         .await?;
+
+        Ok(())
+    }
+
+    pub async fn insert_many(
+        &self,
+        user_id: &str,
+        transactions: Vec<InsertTx>,
+    ) -> Result<(), sqlx::Error> {
+        let now = Utc::now();
+        let updated_at: Option<DateTime<Utc>> = None;
+
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
+            r#"
+                insert into transactions (
+                    user_id,
+                    id,
+                    created_at,
+                    updated_at,
+                    date,
+                    amount,
+                    currency,
+                    counter_party,
+                    og_counter_party,
+                    additional
+                ) 
+            "#,
+        );
+
+        builder.push_values(transactions, |mut b, tx| {
+            b.push_bind(user_id);
+            b.push_bind(tx.id);
+            b.push_bind(now);
+            b.push_bind(updated_at);
+            b.push_bind(tx.date);
+            b.push_bind(tx.amount);
+            b.push_bind(tx.currency);
+            b.push_bind(tx.counter_party.to_owned());
+            b.push_bind(tx.counter_party);
+            b.push_bind(tx.additional);
+        });
+
+        let query = builder.build();
+        query.execute(&self.pool).await?;
 
         Ok(())
     }
@@ -580,6 +628,7 @@ pub struct InsertTx {
     pub additional: Option<String>,
     pub currency: String,
     pub amount: f32,
+    pub account_id: String,
 }
 
 #[derive(Debug)]

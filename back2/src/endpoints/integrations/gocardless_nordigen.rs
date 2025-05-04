@@ -14,17 +14,11 @@ pub struct ConnectBankInitRes {
     pub link: String,
 }
 
-const SUPPORTED_INSTITUTION_IDS: [&str; 1] = ["OP_OKOYFIHH"];
-
 pub async fn connect_init(
     State(state): State<AppState>,
     Path(institution_id): Path<String>,
     user: User,
 ) -> Result<impl IntoResponse, ApiError> {
-    if !SUPPORTED_INSTITUTION_IDS.contains(&institution_id.as_str()) {
-        return Err(ApiError::BadRequest("unsupported bank id".to_string()));
-    }
-
     let data_name = format!("gocardless-nordigen::{institution_id}");
 
     let data = state
@@ -40,7 +34,7 @@ pub async fn connect_init(
 
     match data {
         Some(data) => {
-            let saved = serde_json::from_value::<GCNSavedData>(data.data)
+            let saved = serde_json::from_value::<SavedDataGoCardlessNordigen>(data.data)
                 .context("error parsing saved data")?;
 
             let res = integ
@@ -74,7 +68,7 @@ pub async fn connect_init(
         .await
         .context("error creating requisition")?;
 
-    let to_save = GCNSavedData {
+    let to_save = SavedDataGoCardlessNordigen {
         id: req.id,
         link: req.link.to_owned(),
         account_map: vec![],
@@ -109,7 +103,7 @@ pub async fn connect_callback(
         .context("error getting user bank integration data")?;
 
     if let Some(data) = saved {
-        let saved = serde_json::from_value::<GCNSavedData>(data.data)
+        let saved = serde_json::from_value::<SavedDataGoCardlessNordigen>(data.data)
             .context("error parsing saved data")?;
 
         let integ = GoCardlessNordigen::new(&state.config)
@@ -134,7 +128,7 @@ pub async fn connect_callback(
             .map(|account| (account.id.to_owned(), account.iban.to_owned()))
             .collect::<Vec<_>>();
 
-        let to_save = GCNSavedData {
+        let to_save = SavedDataGoCardlessNordigen {
             id: saved.id,
             link: saved.link,
             account_map,
@@ -192,7 +186,6 @@ impl GoCardlessNordigen {
             .json::<TokenRes>()
             .await
             .context("error parsing token req")?;
-        println!("token res: {token_res:?}");
 
         Ok(Self {
             access_token: token_res.access,
@@ -263,7 +256,7 @@ impl GoCardlessNordigen {
     pub async fn get_accounts(&self, req_id: &str) -> Result<Vec<String>, anyhow::Error> {
         let requisition = self
             .client
-            .get(format!("{BASE_URL}/requisitions/{req_id}"))
+            .get(format!("{BASE_URL}/requisitions/{req_id}/"))
             .bearer_auth(&self.access_token)
             .send()
             .await
@@ -296,7 +289,7 @@ impl GoCardlessNordigen {
     ) -> Result<Vec<Transaction>, anyhow::Error> {
         let res = self
             .client
-            .get(format!("{BASE_URL}/accounts/{account_id}/transactions"))
+            .get(format!("{BASE_URL}/accounts/{account_id}/transactions/"))
             .bearer_auth(&self.access_token)
             .send()
             .await
@@ -342,7 +335,7 @@ pub struct Requisition {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-pub struct GCNSavedData {
+pub struct SavedDataGoCardlessNordigen {
     pub id: String,
     pub link: String,
     pub account_map: Vec<(String, String)>,

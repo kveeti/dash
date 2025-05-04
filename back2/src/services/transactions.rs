@@ -21,6 +21,7 @@ pub async fn create(
         date: input.date,
         additional: input.additional.to_owned(),
         currency: "EUR".to_owned(),
+        account_id: input.account_id.to_owned(),
     };
 
     data.transactions.insert(user_id, &tx).await?;
