@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use anyhow::Context;
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::{IntoResponse, Redirect},
 };
 use futures::future::try_join_all;
@@ -91,8 +93,15 @@ pub async fn connect_init(
 pub async fn connect_callback(
     State(state): State<AppState>,
     Path(institution_id): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
     user: User,
 ) -> Result<(), ApiError> {
+    if let Some(error) = params.get("error") {
+        return Err(ApiError::BadRequest(format!(
+            "error in gocardless-nordigen callback {error}",
+        )));
+    }
+
     let data_name = format!("gocardless-nordigen::{institution_id}");
 
     let saved = state
