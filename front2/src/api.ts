@@ -13,7 +13,7 @@ const win = window as unknown as {
 	};
 };
 
-const fetchClient = createFetchClient<paths>({
+export const fetchClient = createFetchClient<paths>({
 	baseUrl: things.apiBase,
 	credentials: "include",
 });

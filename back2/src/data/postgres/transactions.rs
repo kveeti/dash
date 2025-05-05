@@ -136,60 +136,78 @@ impl Transactions {
         Ok(rows)
     }
 
-    pub async fn insert_with_category(
+    pub async fn insert_with_category_and_account(
         &self,
         user_id: &str,
         tx: &InsertTx,
         category_name: &str,
+        account_name: &str,
     ) -> Result<(), sqlx::Error> {
         let category_id = create_id();
+        let account_id = create_id();
+
         let now = Utc::now();
         let updated_at: Option<DateTime<Utc>> = None;
 
         query!(
             r#"
-            with category_id as (
+            with 
+            account_id as (
+                insert into accounts (
+                    user_id, -- 1
+                    id, -- 2
+                    created_at, -- 4
+                    updated_at, -- 5
+                    name -- 7
+                )
+                values ($1, $2, $4, $5, $7)
+                on conflict (user_id, lower(name))
+                do update set name = excluded.name
+                returning id
+            ),
+            category_id as (
                 insert into transaction_categories (
-                    user_id,
-                    id,
-                    created_at,
-                    updated_at,
-                    name,
+                    user_id, -- 1
+                    id, -- 3
+                    created_at, -- 4
+                    updated_at, -- 5
+                    name, -- 6
                     is_neutral
                 )
-                values ($1, $2, $3, $4, $5, false)
+                values ($1, $3, $4, $5, $6, false)
                 on conflict (user_id, lower(name))
                 do update set name = excluded.name
                 returning id
             )
             insert into transactions (
-                user_id,
-                id,
-                created_at,
-                updated_at,
-                date,
-                amount,
-                currency,
-                counter_party,
-                og_counter_party,
-                additional,
-                category_id,
-                account_id
+                user_id, -- 1
+                id, -- 8
+                created_at, -- 4
+                updated_at, -- 5
+                date, -- 9
+                amount, -- 10
+                currency, -- 11
+                counter_party, -- 12
+                og_counter_party, -- 12
+                additional, -- 13
+                category_id, -- 3
+                account_id -- 2
             )
-            values ($1, $6, $3, $4, $7, $8, $9, $10, $10, $11, coalesce((select id from category_id), $2), $12)
+            values ($1, $8, $4, $5, $9, $10, $11, $12, $12, $13, coalesce((select id from category_id), $3), coalesce((select id from account_id), $2))
             "#,
             user_id,
+            account_id,
             category_id,
             now,
             updated_at,
             category_name,
+            account_name,
             tx.id,
             tx.date,
             tx.amount,
             tx.currency,
             tx.counter_party,
             tx.additional,
-            tx.account_id,
         )
         .execute(&self.pool)
         .await?;
@@ -197,37 +215,58 @@ impl Transactions {
         Ok(())
     }
 
-    pub async fn insert(&self, user_id: &str, tx: &InsertTx) -> Result<(), sqlx::Error> {
+    pub async fn insert_with_account(
+        &self,
+        user_id: &str,
+        tx: &InsertTx,
+        account_name: &str,
+    ) -> Result<(), sqlx::Error> {
+        let account_id = create_id();
         let now = Utc::now();
         let updated_at: Option<DateTime<Utc>> = None;
 
         query!(
             r#"
-            insert into transactions (
-                user_id,
-                id,
-                created_at,
-                updated_at,
-                date,
-                amount,
-                currency,
-                counter_party,
-                og_counter_party,
-                additional,
-                account_id
+            with 
+            account_id as (
+                insert into accounts (
+                    user_id, -- 1
+                    id, -- 2
+                    created_at, -- 3
+                    updated_at, -- 4
+                    name -- 5
+                )
+                values ($1, $2, $3, $4, $5)
+                on conflict (user_id, lower(name))
+                do update set name = excluded.name
+                returning id
             )
-            values ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9, $10)
+            insert into transactions (
+                user_id, -- 1
+                id, -- 6
+                created_at, -- 3
+                updated_at, -- 4
+                date, -- 7
+                amount, -- 8
+                currency, -- 9
+                counter_party, -- 10
+                og_counter_party, -- 10
+                additional, -- 11
+                account_id -- 2
+            )
+            values ($1, $6, $3, $4, $7, $8, $9, $10, $10, $11, coalesce((select id from account_id), $2))
             "#,
             user_id,
-            tx.id,
+            account_id,
             now,
             updated_at,
+            account_name,
+            tx.id,
             tx.date,
             tx.amount,
             tx.currency,
             tx.counter_party,
             tx.additional,
-            tx.account_id,
         )
         .execute(&self.pool)
         .await?;
@@ -628,7 +667,6 @@ pub struct InsertTx {
     pub additional: Option<String>,
     pub currency: String,
     pub amount: f32,
-    pub account_id: String,
 }
 
 #[derive(Debug)]

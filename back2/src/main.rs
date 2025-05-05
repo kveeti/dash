@@ -47,6 +47,10 @@ async fn main() {
         .route("/{id}/linked", post(transactions::link))
         .route("/{id}/linked/{id}", delete(transactions::unlink));
 
+    let categories = Router::new().route("/", get(categories::query));
+
+    let accounts = Router::new().route("/", get(accounts::query));
+
     let auth_base = Router::new()
         .route("/init", get(auth::init))
         .route("/callback", get(auth::callback));
@@ -75,6 +79,8 @@ async fn main() {
     let routes = Router::new()
         .nest("/transactions", transactions)
         .nest("/integrations", integrations)
+        .nest("/categories", categories)
+        .nest("/accounts", accounts)
         .nest("/auth", auth)
         .route("/@me", get(me::get_me))
         .route("/openapi.json", get(openapi))

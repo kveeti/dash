@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use sqlx::PgPool;
+use sqlx::{PgPool, query_as};
 
 mod users;
 pub use users::*;
@@ -15,6 +15,7 @@ pub use user_bank_integrations::*;
 
 type Pool = PgPool;
 pub(crate) struct Postgres {
+    pub pool: Pool,
     pub users: Users,
     pub sessions: Sessions,
     pub transactions: Transactions,
@@ -28,6 +29,7 @@ impl Postgres {
             .context("error connecting to postgres")?;
 
         return Ok(Self {
+            pool: pool.clone(),
             users: Users::new(pool.clone()),
             sessions: Sessions::new(pool.clone()),
             transactions: Transactions::new(pool.clone()),

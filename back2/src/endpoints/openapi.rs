@@ -14,6 +14,8 @@ use utoipa::OpenApi;
     endpoints::transactions::delete::delete,
     endpoints::transactions::links::link,
     endpoints::transactions::links::unlink,
+    endpoints::categories::query::query,
+    endpoints::accounts::query::query,
 ))]
 struct ApiDoc;
 

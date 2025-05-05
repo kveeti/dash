@@ -15,8 +15,8 @@ pub struct CreateTransactionInput {
     pub date: DateTime<Utc>,
     pub amount: f32,
     pub additional: Option<String>,
-    pub category_id: Option<String>,
-    pub account_id: String,
+    pub category_name: Option<String>,
+    pub account_name: String,
 }
 
 #[utoipa::path(

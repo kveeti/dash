@@ -109,7 +109,6 @@ pub async fn sync_transactions(State(state): State<AppState>, user: User) -> Res
                                         .context("error creating datetime")?,
                                 ),
                                 amount,
-                                account_id: account_iban.to_owned(),
                             });
                         }
                     }

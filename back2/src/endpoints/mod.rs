@@ -5,6 +5,8 @@ pub mod auth;
 
 pub mod categories;
 
+pub mod accounts;
+
 pub mod me;
 
 pub mod transactions;

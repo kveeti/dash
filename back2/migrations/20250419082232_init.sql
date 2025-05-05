@@ -30,14 +30,21 @@ create index idx_transaction_categories_user_id_lower_name on transaction_catego
 create unique index on transaction_categories (user_id, lower(name));
 -- transaction_categories
 
+-- accounts
 create table accounts (
-    -- actual id of account, comes from bank, usually iban
-    id text not null,
+    id text primary key not null,
     user_id varchar(30) not null,
     created_at timestamptz not null,
+    updated_at timestamptz,
 
-    primary key (user_id, id)
+    -- actual id of account, comes from bank, usually iban
+    -- null when not synced
+    external_id text,
+    name text not null
 );
+
+create unique index on accounts (user_id, lower(name));
+-- accounts
 
 -- transactions
 create table transactions (

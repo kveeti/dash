@@ -20,6 +20,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["query"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/callback": {
         parameters: {
             query?: never;
@@ -52,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["query"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/transactions": {
         parameters: {
             query?: never;
@@ -59,7 +91,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["query"];
         put?: never;
         post: operations["create"];
         delete?: never;
@@ -136,16 +168,42 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Account: {
+            id: string;
+            name: string;
+        };
+        Category: {
+            id: string;
+            name: string;
+        };
         CreateTransactionInput: {
+            account_name: string;
             additional?: string | null;
             /** Format: float */
             amount: number;
-            category_id?: string | null;
+            category_name?: string | null;
             counter_party: string;
             /** Format: date-time */
             date: string;
         };
         Input: {
+            id: string;
+        };
+        Link: {
+            /** Format: date-time */
+            created_at: string;
+            tx: components["schemas"]["LinkedTx"];
+            /** Format: date-time */
+            updated_at: string;
+        };
+        LinkedTx: {
+            additional?: string | null;
+            /** Format: float */
+            amount: number;
+            counter_party: string;
+            currency: string;
+            /** Format: date-time */
+            date: string;
             id: string;
         };
         Me: {
@@ -157,6 +215,18 @@ export interface components {
             e_cats: string[][];
             i: number[][];
             i_cats: string[][];
+        };
+        QueryTx: {
+            additional?: string | null;
+            /** Format: float */
+            amount: number;
+            category?: null | components["schemas"]["Category"];
+            counter_party: string;
+            currency: string;
+            /** Format: date-time */
+            date: string;
+            id: string;
+            links: components["schemas"]["Link"][];
         };
     };
     responses: never;
@@ -182,6 +252,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Me"];
+                };
+            };
+        };
+    };
+    query: {
+        parameters: {
+            query?: {
+                search_text?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"][];
                 };
             };
         };
@@ -220,6 +311,46 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    query: {
+        parameters: {
+            query?: {
+                search_text?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"][];
+                };
+            };
+        };
+    };
+    query: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryTx"][];
+                };
             };
         };
     };

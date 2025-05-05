@@ -1,15 +1,22 @@
 import { parseDateTime } from "@internationalized/date";
 import { CalendarIcon } from "@radix-ui/react-icons";
 import { format } from "date-fns";
-import { useId, useState } from "react";
+import { useDeferredValue, useId, useState } from "react";
 import * as Rac from "react-aria-components";
+import { useAsyncList } from "react-stately";
 
-import { api } from "../../api";
+import { api, fetchClient } from "../../api";
 import { Button, buttonStyles } from "../../ui/button";
+import { IconCheck } from "../../ui/icons/check";
 import { IconChevronLeft } from "../../ui/icons/chevron-left";
 import { IconChevronRight } from "../../ui/icons/chevron-right";
 import { Error, Input, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 import { useLocaleStuff } from "../use-formatting";
+
+// maybe support creating accounts and categories
+// with a plus button & dialog instead of this monstrosity
+// this works tho
+const custom = "__CUSTOM__DO__NOT__USE__OR__YOU__WILL__BE__FIRED__";
 
 export default function NewTransaction() {
 	const mutation = api.useMutation("post", "/transactions");
@@ -28,7 +35,9 @@ export default function NewTransaction() {
 			amount: Number(data.amount),
 			date: new Date(data.date).toISOString(),
 			additional: data.additional,
-			category_name: data.category_name,
+			// i dont like this
+			category_name: data.category_name.replace(custom, ""),
+			account_name: data.account_name.replace(custom, ""),
 		};
 
 		mutation.mutateAsync({ body: input }).catch((error) => {
@@ -51,8 +60,13 @@ export default function NewTransaction() {
 					/>
 					<Input label="amount" name="amount" error={errors?.amount} />
 					<DateField label="date" name="date" error={errors?.date} />
-					<Input label="category" name="category_name" error={errors?.category_name} />
+					<CategoryField
+						label="category"
+						name="category_name"
+						error={errors?.category_name}
+					/>
 					<Input label="additional" name="additional" error={errors?.additional} />
+					<AccountField label="account" name="account_name" />
 				</fieldset>
 
 				<div className="mt-6 flex justify-end">
@@ -143,5 +157,193 @@ export function DateField({
 				</Rac.Dialog>
 			</Rac.Popover>
 		</Rac.DatePicker>
+	);
+}
+
+function AccountField({ name, label, error }: { name?: string; label: string; error?: string }) {
+	const id = useId();
+	const errorId = error ? id + "-error" : undefined;
+
+	let { contains } = Rac.useFilter({ sensitivity: "base" });
+
+	const list = useAsyncList<{ id: string; name: string }>({
+		load: async ({ signal, filterText }) => {
+			const res = await fetchClient.GET("/accounts", {
+				signal,
+				params: { query: { search_text: filterText } },
+			});
+
+			if (res.error) {
+				throw "error";
+			}
+
+			return {
+				items: res.data,
+			};
+		},
+	});
+
+	const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+	// i dont like this
+	const items = useDeferredValue([
+		...list.items,
+		...(!list.items.length ? [{ id: custom, name: `create "${list.filterText}"` }] : []),
+	]);
+	function onSelectionChange(key: string) {
+		if (key === custom) {
+			list.remove(key);
+			const newKey = custom + list.filterText;
+			list.insert(0, {
+				id: newKey,
+				name: list.filterText,
+			});
+			setSelectedKey(newKey);
+			return;
+		}
+
+		setSelectedKey(key);
+	}
+
+	return (
+		<Rac.Select
+			name={name}
+			placeholder="select an account"
+			selectedKey={selectedKey}
+			onSelectionChange={onSelectionChange}
+		>
+			<LabelWrapper>
+				<Rac.Label className={labelStyles}>{label}</Rac.Label>
+
+				{error && errorId && <Error id={errorId}>{error}</Error>}
+			</LabelWrapper>
+
+			<Rac.Button className={buttonStyles({ variant: "outline" }) + " w-full justify-start"}>
+				<Rac.SelectValue />
+			</Rac.Button>
+
+			<Rac.Popover className="bg-gray-1 border-gray-4 w-(--trigger-width) border outline-hidden">
+				<Rac.Autocomplete
+					inputValue={list.filterText}
+					onInputChange={list.setFilterText}
+					filter={contains}
+				>
+					<Rac.TextField aria-label="search accounts...">
+						<Rac.Input
+							placeholder="search accounts..."
+							autoFocus
+							className="border-gray-4 h-10 w-full border-b px-3 outline-hidden placeholder:opacity-80"
+						/>
+					</Rac.TextField>
+
+					<Rac.ListBox className="w-full" items={items}>
+						{(thing) => <SelectItem>{thing.name}</SelectItem>}
+					</Rac.ListBox>
+				</Rac.Autocomplete>
+			</Rac.Popover>
+		</Rac.Select>
+	);
+}
+
+function CategoryField({ name, label, error }: { name?: string; label: string; error?: string }) {
+	const id = useId();
+	const errorId = error ? id + "-error" : undefined;
+
+	let { contains } = Rac.useFilter({ sensitivity: "base" });
+
+	const list = useAsyncList<{ id: string; name: string }>({
+		load: async ({ signal, filterText }) => {
+			const res = await fetchClient.GET("/categories", {
+				signal,
+				params: { query: { search_text: filterText } },
+			});
+
+			if (res.error) {
+				throw "error";
+			}
+
+			return {
+				items: res.data,
+			};
+		},
+	});
+
+	const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+	// i dont like this
+	const items = useDeferredValue([
+		...list.items,
+		...(!list.items.length ? [{ id: custom, name: `create "${list.filterText}"` }] : []),
+	]);
+	function onSelectionChange(key: string) {
+		if (key === custom) {
+			list.remove(key);
+			const newKey = custom + list.filterText;
+			list.insert(0, {
+				id: newKey,
+				name: list.filterText,
+			});
+			setSelectedKey(newKey);
+			return;
+		}
+
+		setSelectedKey(key);
+	}
+
+	return (
+		<Rac.Select
+			name={name}
+			placeholder="select a category"
+			selectedKey={selectedKey}
+			onSelectionChange={onSelectionChange}
+		>
+			<LabelWrapper>
+				<Rac.Label className={labelStyles}>{label}</Rac.Label>
+
+				{error && errorId && <Error id={errorId}>{error}</Error>}
+			</LabelWrapper>
+
+			<Rac.Button className={buttonStyles({ variant: "outline" }) + " w-full justify-start"}>
+				<Rac.SelectValue />
+			</Rac.Button>
+
+			<Rac.Popover className="bg-gray-1 border-gray-4 w-(--trigger-width) border outline-hidden">
+				<Rac.Autocomplete
+					inputValue={list.filterText}
+					onInputChange={list.setFilterText}
+					filter={contains}
+				>
+					<Rac.TextField aria-label="search categories...">
+						<Rac.Input
+							placeholder="search categories..."
+							autoFocus
+							className="border-gray-4 h-10 w-full border-b px-3 outline-hidden placeholder:opacity-80"
+						/>
+					</Rac.TextField>
+
+					<Rac.ListBox className="w-full" items={items}>
+						{(thing) => <SelectItem>{thing.name}</SelectItem>}
+					</Rac.ListBox>
+				</Rac.Autocomplete>
+			</Rac.Popover>
+		</Rac.Select>
+	);
+}
+function SelectItem(props: Rac.ListBoxItemProps & { children: string }) {
+	return (
+		<Rac.ListBoxItem
+			{...props}
+			textValue={props.children}
+			className="group focus:bg-gray-a5 data-focused:bg-gray-a4 flex w-full cursor-default items-center gap-2 rounded-sm px-4 py-2 outline-hidden select-none"
+		>
+			{({ isSelected }) => (
+				<>
+					<span className="flex flex-1 items-center gap-2 truncate">
+						{props.children}
+					</span>
+					<span className="flex w-5 items-center">{isSelected && <IconCheck />}</span>
+				</>
+			)}
+		</Rac.ListBoxItem>
 	);
 }

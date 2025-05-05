@@ -21,10 +21,17 @@ pub async fn create(
         date: input.date,
         additional: input.additional.to_owned(),
         currency: "EUR".to_owned(),
-        account_id: input.account_id.to_owned(),
     };
 
-    data.transactions.insert(user_id, &tx).await?;
+    if let Some(category_name) = &input.category_name {
+        data.transactions
+            .insert_with_category_and_account(&user_id, &tx, category_name, &input.account_name)
+            .await?;
+    } else {
+        data.transactions
+            .insert_with_account(&user_id, &tx, &input.account_name)
+            .await?;
+    }
 
     Ok(())
 }
