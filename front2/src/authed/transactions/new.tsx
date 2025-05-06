@@ -334,7 +334,7 @@ function SelectItem(props: Rac.ListBoxItemProps & { children: string }) {
 		<Rac.ListBoxItem
 			{...props}
 			textValue={props.children}
-			className="group focus:bg-gray-a5 data-focused:bg-gray-a4 flex w-full cursor-default items-center gap-2 rounded-sm px-4 py-2 outline-hidden select-none"
+			className="group focus:bg-gray-a5 data-focused:bg-gray-a4 flex w-full cursor-default items-center gap-2 px-4 py-2 outline-hidden select-none"
 		>
 			{({ isSelected }) => (
 				<>
