@@ -1,5 +1,6 @@
-import { format, isSameMonth } from "date-fns";
+import { format } from "date-fns";
 import { useState } from "react";
+
 import { useLocaleStuff } from "../use-formatting";
 import { testdata } from "./testdata";
 
@@ -8,186 +9,151 @@ export default function StatsPage() {
 
 	return (
 		<>
-			<Income date={new Date()} />
+			<Thing2 />
 		</>
 	);
 }
 
-function Income({ date }: { date: Date }) {
-	const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+function Thing2() {
+	const { dates, i_cats, e_cats, i: income, e: expenses, tte, tti, ti, te } = testdata;
+
+	const [selectedDateIndex, setSelectedDateIndex] = useState<number | null>(null);
+	const selectedDate = typeof selectedDateIndex === "number" ? dates[selectedDateIndex] : null;
+
 	const { formatAmount } = useLocaleStuff();
-	const data = testdata;
-
-	let totalI = 0;
-	let totalE = 0;
-	for (let i = 0; i < data.data.length; i++) {
-		totalI += data.data[i].i.__total__;
-		totalE += data.data[i].e.__total__;
-	}
-	const totalClamp = getClamp(0, Math.max(totalI, totalE));
-	const total = totalI - totalE;
-
-	const today = new Date();
-
-	const selected = selectedDate
-		? data.data.find((d) => isSameMonth(d.date, selectedDate))
-		: data.data.find((d) => isSameMonth(today, d.date));
-
-	const clamp = getClamp(data.domainStart, data.domainEnd);
 
 	return (
-		<div className="flex gap-2 w-full">
-			<div className="flex flex-col gap-2 w-full">
-				<div className="w-full border border-gray-4">
-					<h2 className="px-3 py-2 font-medium bg-gray-a2">
-						income & expenses
-					</h2>
+		<div className="flex w-full gap-3">
+			<div className="flex w-full flex-col gap-3">
+				<div className="border-gray-4 w-full border">
+					{dates.map((d, dateIndex) => {
+						const date = new Date(d);
+						const i = tti[dateIndex];
+						const e = tte[dateIndex];
 
-					<div className="divide-y divide-gray-4 border-t border-gray-4">
-						{data.data.map((d) => {
-							const formattedDate = format(d.date, "MMM");
+						const clamp = getClamp(0, Math.max(i, e));
 
-							return (
-								<div
-									onMouseEnter={() => {
-										setSelectedDate(d.date);
-									}}
-									className={
-										"space-y-1 py-1 px-1" +
-										(selected?.date === d.date
-											? "  outline-3 outline-gray-10"
-											: "")
-									}
-								>
-									<Row
-										width={clamp(d.i.__total__)}
-										value={formatAmount(d.i.__total__)}
-										label={"+ " + formattedDate}
-									/>
-									<Row
-										width={clamp(d.e.__total__)}
-										value={formatAmount(d.e.__total__)}
-										label={"- " + formattedDate}
-									/>
-								</div>
-							);
-						})}
-					</div>
+						const month = format(date, "MMM");
+
+						return (
+							<div
+								className={
+									"space-y-1 p-1" +
+									(selectedDateIndex === dateIndex
+										? " outline-gray-10 outline-3"
+										: "")
+								}
+								onMouseEnter={() => setSelectedDateIndex(dateIndex)}
+							>
+								<Row
+									width={clamp(i)}
+									value={formatAmount(i)}
+									label={"+ " + month}
+								/>
+								<Row
+									width={clamp(e)}
+									value={formatAmount(e)}
+									label={"- " + month}
+								/>
+							</div>
+						);
+					})}
 				</div>
 
-				<div className="border border-gray-4">
-					<h2 className="font-medium flex gap-2 px-3 py-2 bg-gray-a2">
-						{format(date, "yyyy")} total
-					</h2>
+				<div className="border-gray-4 border">
+					<h2 className="bg-gray-a2 flex gap-3 px-3 py-2 font-medium">total</h2>
 
-					<div className="space-y-1 p-1">
-						<Row
-							width={totalClamp(totalI)}
-							value={formatAmount(totalI)}
-							label={"+"}
-						/>
-						<Row
-							width={totalClamp(totalE)}
-							value={formatAmount(totalE)}
-							label={"-"}
-						/>
+					<div className="divide-gray-4 border-gray-4 divide-y border-t">
+						<div className="space-y-1 p-1">
+							<Row
+								width={getClamp(0, Math.max(ti, te))(ti)}
+								value={formatAmount(ti)}
+								label={"+"}
+							/>
+							<Row
+								width={getClamp(0, Math.max(ti, te))(te)}
+								value={formatAmount(te)}
+								label={"-"}
+							/>
+						</div>
+
+						<div>
+							<span
+								className={
+									"flex justify-end px-3 py-1 text-xs" +
+									(ti - te > 0 ? " text-green-10" : "")
+								}
+							>
+								{formatAmount(ti - te)}
+							</span>
+						</div>
 					</div>
-
-					<span
-						className={
-							"text-xs flex justify-end border-t border-gray-4 px-3 py-2" +
-							(total > 0 ? " text-green-10" : "")
-						}
-					>
-						{formatAmount(total)}
-					</span>
 				</div>
 			</div>
 
-			<div className="flex flex-col gap-2 w-full">
-				<div className="border border-gray-4">
-					<div className="flex justify-between gap-2 items-center px-3 py-2 bg-gray-a2">
-						<h2 className="font-medium">income</h2>
-						{selected && <span>{format(selected.date, "MMM, yyyy")}</span>}
-					</div>
+			<div className="sticky top-14 flex h-max w-full flex-col gap-3 pb-2">
+				{typeof selectedDateIndex === "number" && selectedDate && (
+					<>
+						<div className="border-gray-4 border">
+							<h2 className="bg-gray-a2 flex gap-3 px-3 py-2 font-medium">
+								income {format(selectedDate, "MMM, yyyy")}
+							</h2>
 
-					<div className="divide-y divide-gray-4 border-t border-gray-4">
-						{selected
-							? Object.keys(selected.i)
-									.filter((k) => k !== "__total__")
-									.sort((ak, bk) => {
-										const a = selected.i[ak as keyof typeof selected.i];
-										const b = selected.i[bk as keyof typeof selected.i];
+							<div className="divide-gray-4 border-gray-4 divide-y border-t">
+								{income[selectedDateIndex].map((val, index) => {
+									const cat = i_cats[selectedDateIndex][index];
+									const i = tti[selectedDateIndex];
+									const clamp = getClamp(0, Math.max(i, val));
 
-										return b - a;
-									})
-									.map((k) => {
-										const val = selected.i[k as keyof typeof selected.i];
+									return (
+										<div className="space-y-1 px-1 py-1">
+											<Row
+												width={clamp(val)}
+												value={formatAmount(val)}
+												label={cat}
+											/>
+										</div>
+									);
+								})}
+							</div>
+						</div>
 
-										return (
-											<div className="space-y-1 py-1 px-1">
-												<Row
-													width={clamp(val)}
-													value={formatAmount(val)}
-													label={k}
-												/>
-											</div>
-										);
-									})
-							: "select a month"}
-					</div>
-				</div>
+						<div className="border-gray-4 border">
+							<h2 className="bg-gray-a2 flex gap-3 px-3 py-2 font-medium">
+								expenses {format(selectedDate, "MMM, yyyy")}
+							</h2>
 
-				<div className="border border-gray-4">
-					<div className="flex justify-between gap-2 items-center px-3 py-2 bg-gray-a2">
-						<h2 className="font-medium">expenses</h2>
-						{selected && <span>{format(selected.date, "MMM, yyyy")}</span>}
-					</div>
+							<div className="divide-gray-4 border-gray-4 divide-y border-t">
+								{expenses[selectedDateIndex].map((val, index) => {
+									const cat = e_cats[selectedDateIndex][index];
+									const i = tti[selectedDateIndex];
+									const clamp = getClamp(0, Math.max(i, val));
 
-					<div className="divide-y divide-gray-4 border-t border-gray-4">
-						{selected
-							? Object.keys(selected.e)
-									.filter((k) => k !== "__total__")
-									.sort((ak, bk) => {
-										const a = selected.e[ak as keyof typeof selected.e];
-										const b = selected.e[bk as keyof typeof selected.e];
-
-										return b - a;
-									})
-									.map((k) => {
-										const val = selected.e[k as keyof typeof selected.e];
-
-										return (
-											<div className="space-y-1 py-1 px-1">
-												<Row
-													width={clamp(val)}
-													value={formatAmount(val)}
-													label={k}
-												/>
-											</div>
-										);
-									})
-							: "select a month"}
-					</div>
-				</div>
+									return (
+										<div className="space-y-1 px-1 py-1">
+											<Row
+												width={clamp(val)}
+												value={formatAmount(val)}
+												label={cat}
+											/>
+										</div>
+									);
+								})}
+							</div>
+						</div>
+					</>
+				)}
 			</div>
 		</div>
 	);
 }
 
-function Row({
-	width,
-	label,
-	value,
-}: { width: number; label: string; value: string }) {
+function Row({ width, label, value }: { width: number; label: string; value: string }) {
 	return (
 		<div className="relative">
-			<div
-				className="bg-gray-a6/80 absolute inset-0"
-				style={{ width: width + "%" }}
-			/>
+			<div className="bg-gray-a6/80 absolute inset-0" style={{ width: width + "%" }} />
 
-			<div className="py-1 px-2 text-xs flex gap-2 justify-between">
+			<div className="flex justify-between gap-3 px-2 py-0.5 text-xs">
 				<span>{label}</span>
 				<span>{value}</span>
 			</div>
