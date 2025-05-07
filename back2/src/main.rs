@@ -20,6 +20,7 @@ pub mod endpoints;
 pub mod error;
 mod services;
 pub mod state;
+pub mod statement_parsing;
 
 #[tokio::main]
 async fn main() {
@@ -42,6 +43,7 @@ async fn main() {
         .route("/stats", get(transactions::get_stats))
         .route("/", get(transactions::query))
         .route("/", post(transactions::create))
+        .route("/import", post(transactions::import))
         .route("/{id}", patch(transactions::update))
         .route("/{id}", delete(transactions::delete))
         .route("/{id}/linked", post(transactions::link))

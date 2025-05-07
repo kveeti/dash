@@ -277,6 +277,7 @@ impl Transactions {
     pub async fn insert_many(
         &self,
         user_id: &str,
+        account_id: &str,
         transactions: Vec<InsertTx>,
     ) -> Result<(), sqlx::Error> {
         let now = Utc::now();
@@ -294,7 +295,8 @@ impl Transactions {
                     currency,
                     counter_party,
                     og_counter_party,
-                    additional
+                    additional,
+                    account_id
                 ) 
             "#,
         );
@@ -310,6 +312,7 @@ impl Transactions {
             b.push_bind(tx.counter_party.to_owned());
             b.push_bind(tx.counter_party);
             b.push_bind(tx.additional);
+            b.push_bind(account_id);
         });
 
         let query = builder.build();
@@ -436,11 +439,11 @@ impl Transactions {
                 t.category_id as category_id,
                 t.additional as additional,
                 t.currency as currency,
-                c.name as cat_name,
-                c.is_neutral as cat_is_ne,
+                c.name as "cat_name?",
+                c.is_neutral as "cat_is_ne?",
 
-                linked.id as linked_id,
-                linked.amount as linked_amount
+                linked.id as "linked_id?",
+                linked.amount as "linked_amount?"
             from transactions t
             left join transaction_categories c on t.category_id = c.id
 

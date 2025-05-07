@@ -1,7 +1,8 @@
 use anyhow::{Context, anyhow};
-use axum::extract::State;
+use axum::{Json, extract::State};
 use chrono::{TimeZone, Utc};
 use gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen};
+use serde::Deserialize;
 use tracing::info;
 
 use crate::{
@@ -13,7 +14,16 @@ use crate::{
 
 pub mod gocardless_nordigen;
 
-pub async fn sync_transactions(State(state): State<AppState>, user: User) -> Result<(), ApiError> {
+#[derive(Deserialize, Debug)]
+pub struct Input {
+    pub account_id: String,
+}
+
+pub async fn sync_transactions(
+    State(state): State<AppState>,
+    user: User,
+    Json(input): Json<Input>,
+) -> Result<(), ApiError> {
     let datas = state
         .data
         .user_bank_integrations
@@ -123,7 +133,7 @@ pub async fn sync_transactions(State(state): State<AppState>, user: User) -> Res
                     state
                         .data
                         .transactions
-                        .insert_many(&user.id, new_transactions)
+                        .insert_many(&user.id, &input.account_id, new_transactions)
                         .await
                         .context("error inserting transactions")?;
                 }
