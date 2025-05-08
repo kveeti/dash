@@ -174,6 +174,7 @@ export interface components {
         };
         Category: {
             id: string;
+            is_neutral: boolean;
             name: string;
         };
         CreateTransactionInput: {
@@ -215,6 +216,12 @@ export interface components {
             e_cats: string[][];
             i: number[][];
             i_cats: string[][];
+            /** Format: float */
+            te: number;
+            /** Format: float */
+            ti: number;
+            tte: number[];
+            tti: number[];
         };
         QueryTx: {
             additional?: string | null;
@@ -379,13 +386,13 @@ export interface operations {
     };
     get_stats: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query: {
                 timezone: string;
                 start: string;
                 end: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
