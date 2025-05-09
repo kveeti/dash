@@ -106,20 +106,20 @@ pub async fn sync_transactions(
                         }
 
                         if !found {
-                            new_transactions.push(InsertTx {
-                                id: create_id(),
-                                currency: "EUR".to_owned(),
-                                additional: remote_transaction
-                                    .remittance_information_unstructured
-                                    .to_owned(),
-                                counter_party: counter_party.to_owned(),
-                                date: Utc.from_utc_datetime(
-                                    &date
-                                        .and_hms_opt(0, 0, 0)
-                                        .context("error creating datetime")?,
-                                ),
-                                amount,
-                            });
+                            // new_transactions.push(InsertTx {
+                            //     id: create_id(),
+                            //     currency: "EUR".to_owned(),
+                            //     additional: remote_transaction
+                            //         .remittance_information_unstructured
+                            //         .to_owned(),
+                            //     counter_party: counter_party.to_owned(),
+                            //     date: Utc.from_utc_datetime(
+                            //         &date
+                            //             .and_hms_opt(0, 0, 0)
+                            //             .context("error creating datetime")?,
+                            //     ),
+                            //     amount,
+                            // });
                         }
                     }
 

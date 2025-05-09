@@ -25,7 +25,9 @@ impl RecordParser for OpFormatParser {
             date: date.parse().context("error parsing transaction date")?,
             amount: amount.parse().context("error parsing transaction amount")?,
             counter_party: cleaned_name,
-            additional,
+            og_counter_party: name.to_string(),
+            additional: Some(additional),
+            category_name: None,
         })
     }
 
@@ -87,7 +89,7 @@ fn build_additional_field(record: &csv::StringRecord) -> String {
     additional
 }
 
-fn format_amount(amount: &str) -> String {
+pub fn format_amount(amount: &str) -> String {
     let amount = amount.replace(&['–', '—'][..], "−");
     let amount = amount.replace(',', ".").trim().to_string();
     amount

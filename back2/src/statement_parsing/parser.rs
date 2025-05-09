@@ -6,7 +6,9 @@ pub struct ParsedTransaction {
     pub date: DateTime<Utc>,
     pub amount: f32,
     pub counter_party: String,
-    pub additional: String,
+    pub og_counter_party: String,
+    pub additional: Option<String>,
+    pub category_name: Option<String>,
 }
 
 pub trait RecordParser: Sync + Send {

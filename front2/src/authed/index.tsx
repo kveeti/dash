@@ -1,5 +1,9 @@
 import { ReactNode } from "react";
 
+import { api } from "../api";
+import { things } from "../things";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import { useLocaleStuff } from "./use-formatting";
 
 export default function IndexPage() {
@@ -11,6 +15,23 @@ export default function IndexPage() {
 
 	return (
 		<div className="mt-12 flex flex-col gap-4">
+			<a href={things.apiBase + "/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH"}>
+				connect OP
+			</a>
+
+			<NewAccount />
+
+			<Button
+				onClick={() =>
+					fetch(things.apiBase + "/integrations/sync", {
+						method: "POST",
+						credentials: "include",
+					})
+				}
+			>
+				sync
+			</Button>
+
 			<h2>
 				<span className="sr-only">spent today</span>
 				<span className="text-5xl">
@@ -42,5 +63,26 @@ function Indicator({ children }: { children: ReactNode }) {
 			{children}
 			<span className="opacity-40">...</span>
 		</span>
+	);
+}
+
+function NewAccount() {
+	const mutation = api.useMutation("post", "/accounts");
+
+	function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+
+		const formData = new FormData(e.currentTarget);
+		const name = formData.get("name")?.toString() ?? "";
+
+		mutation.mutateAsync({ body: { name } });
+	}
+
+	return (
+		<form onSubmit={onSubmit} className="flex flex-col gap-2">
+			<Input label="name" name="name" />
+
+			<Button type="submit">create</Button>
+		</form>
 	);
 }

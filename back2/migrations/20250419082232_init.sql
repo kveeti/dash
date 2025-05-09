@@ -125,3 +125,22 @@ create table user_bank_integrations (
 
 create index idx_user_bank_integrations_user_id on user_bank_integrations (user_id);
 -- user_bank_integrations
+
+-- transaction_imports
+create table transaction_imports (
+    id varchar(30) primary key not null,
+    user_id varchar(30) not null,
+    created_at timestamptz not null,
+
+    date timestamptz not null,
+    amount real not null,
+    currency varchar(3) not null,
+    counter_party text not null,
+    og_counter_party text not null,
+    additional text,
+    category_name varchar(100),
+    account_id varchar(30) not null,
+    category_id varchar(30)
+);
+-- TODO: indexes, partitions?
+-- transaction_imports

@@ -6,6 +6,7 @@ import * as Rac from "react-aria-components";
 import { useAsyncList } from "react-stately";
 
 import { api, fetchClient } from "../../api";
+import { things } from "../../things";
 import { Button, buttonStyles } from "../../ui/button";
 import { IconCheck } from "../../ui/icons/check";
 import { IconChevronLeft } from "../../ui/icons/chevron-left";
@@ -50,6 +51,8 @@ export default function NewTransaction() {
 	return (
 		<main className="w-full max-w-[320px]">
 			<h1 className="mb-4 text-lg font-medium">new transaction</h1>
+
+			<Import />
 
 			<form className="w-full" onSubmit={handleSubmit}>
 				<fieldset className="space-y-3">
@@ -245,6 +248,64 @@ function AccountField({ name, label, error }: { name?: string; label: string; er
 	);
 }
 
+function AccountIdField({ name, label, error }: { name?: string; label: string; error?: string }) {
+	const id = useId();
+	const errorId = error ? id + "-error" : undefined;
+
+	let { contains } = Rac.useFilter({ sensitivity: "base" });
+
+	const list = useAsyncList<{ id: string; name: string }>({
+		load: async ({ signal, filterText }) => {
+			const res = await fetchClient.GET("/accounts", {
+				signal,
+				params: { query: { search_text: filterText } },
+			});
+
+			if (res.error) {
+				throw "error";
+			}
+
+			return {
+				items: res.data,
+			};
+		},
+	});
+
+	return (
+		<Rac.Select name={name} placeholder="select an account">
+			<LabelWrapper>
+				<Rac.Label className={labelStyles}>{label}</Rac.Label>
+
+				{error && errorId && <Error id={errorId}>{error}</Error>}
+			</LabelWrapper>
+
+			<Rac.Button className={buttonStyles({ variant: "outline" }) + " w-full justify-start"}>
+				<Rac.SelectValue />
+			</Rac.Button>
+
+			<Rac.Popover className="bg-gray-1 border-gray-4 w-(--trigger-width) border outline-hidden">
+				<Rac.Autocomplete
+					inputValue={list.filterText}
+					onInputChange={list.setFilterText}
+					filter={contains}
+				>
+					<Rac.TextField aria-label="search accounts...">
+						<Rac.Input
+							placeholder="search accounts..."
+							autoFocus
+							className="border-gray-4 h-10 w-full border-b px-3 outline-hidden placeholder:opacity-80"
+						/>
+					</Rac.TextField>
+
+					<Rac.ListBox className="w-full" items={list.items}>
+						{(thing) => <SelectItem>{thing.name}</SelectItem>}
+					</Rac.ListBox>
+				</Rac.Autocomplete>
+			</Rac.Popover>
+		</Rac.Select>
+	);
+}
+
 function CategoryField({ name, label, error }: { name?: string; label: string; error?: string }) {
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;
@@ -345,5 +406,40 @@ function SelectItem(props: Rac.ListBoxItemProps & { children: string }) {
 				</>
 			)}
 		</Rac.ListBoxItem>
+	);
+}
+
+function Import() {
+	async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+
+		const formData = new FormData(e.currentTarget);
+
+		await fetch(things.apiBase + "/transactions/import", {
+			method: "POST",
+			body: formData,
+		})
+			.then((res) => res.json())
+			.then((data) => {
+				if (data.error) {
+					throw "aaaaaaaa";
+				}
+				alert("success");
+			})
+			.catch((error) => {
+				alert(error.message);
+			});
+	}
+
+	return (
+		<form onSubmit={onSubmit}>
+			<input type="file" name="op_file" />
+			<input type="file" name="generic_file" />
+			<AccountIdField name="account_id" label="account" />
+
+			<div className="mt-4 flex justify-end">
+				<Button type="submit">import</Button>
+			</div>
+		</form>
 	);
 }

@@ -99,27 +99,50 @@ pub async fn callback(
     let created_at = Utc::now();
     let updated_at = None;
 
-    let user = User {
-        id: create_id(),
-        external_id: userinfo_res.sub.to_string(),
-        locale: "en-FI".to_owned(),
-        created_at,
-        updated_at,
-    };
+    let external_id = userinfo_res.sub.to_string();
 
-    let session = Session {
-        id: create_id(),
-        user_id: user.id.to_owned(),
-        created_at,
-        updated_at,
-    };
-
-    data.users
-        .upsert_with_session(&user, &session)
+    let existing_user_id = data
+        .users
+        .get_id_by_external_id(&external_id)
         .await
-        .context("error upserting user and session")?;
+        .context("error getting user by external id")?;
 
-    let token = create_token(&config.secret, &user.id, &session.id);
+    let session_id = create_id();
+
+    let user_id = match existing_user_id {
+        Some(user_id) => {
+            data.insert_session(&user_id, &session_id)
+                .await
+                .context("error inserting session")?;
+
+            user_id
+        }
+        None => {
+            let user = User {
+                id: create_id(),
+                external_id,
+                locale: "en-FI".to_owned(),
+                created_at,
+                updated_at,
+            };
+
+            let session = Session {
+                id: session_id.to_owned(),
+                user_id: user.id.to_owned(),
+                created_at,
+                updated_at,
+            };
+
+            data.users
+                .upsert_with_session(&user, &session)
+                .await
+                .context("error upserting user and session")?;
+
+            user.id
+        }
+    };
+
+    let token = create_token(&config.secret, &user_id, &session_id);
 
     return Ok(token);
 }

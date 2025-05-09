@@ -1,7 +1,14 @@
-import { endOfYear, format, startOfYear, subYears } from "date-fns";
+import { parseDate } from "@internationalized/date";
+import { CalendarIcon } from "@radix-ui/react-icons";
+import { format, subYears } from "date-fns";
 import { useState } from "react";
+import * as Rac from "react-aria-components";
 
 import { api } from "../../api";
+import { buttonStyles } from "../../ui/button";
+import { IconChevronLeft } from "../../ui/icons/chevron-left";
+import { IconChevronRight } from "../../ui/icons/chevron-right";
+import { LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 import { useLocaleStuff } from "../use-formatting";
 import { testdata } from "./testdata";
 
@@ -9,14 +16,19 @@ export default function StatsPage() {
 	const [precision, setPrecision] = useState<"month" | "year">("month");
 	const { timeZone } = useLocaleStuff();
 
+	const [value, setValue] = useState<Rac.DateRange | null>({
+		start: parseDate("2023-01-01"),
+		end: parseDate("2023-12-31"),
+	});
+
 	let year = subYears(new Date(), 1);
 
 	const q = api.useQuery("get", "/transactions/stats", {
 		params: {
 			query: {
 				timezone: timeZone,
-				start: startOfYear(year).toISOString(),
-				end: endOfYear(year).toISOString(),
+				start: value.start.toDate(timeZone).toISOString(),
+				end: value.end.toDate(timeZone).toISOString(),
 			},
 		},
 	});
@@ -34,9 +46,94 @@ export default function StatsPage() {
 	}
 
 	return (
-		<>
+		<div className="flex w-full flex-col gap-3">
+			<DateField value={value} setValue={setValue} />
 			<Thing2 data={q.data} />
-		</>
+		</div>
+	);
+}
+
+function DateField({
+	value,
+	setValue,
+}: {
+	value: Rac.DateRange;
+	setValue: (val: Rac.DateRange | null) => void;
+}) {
+	const { hourCycle } = useLocaleStuff();
+
+	const calCellStyles =
+		buttonStyles({ variant: "ghost", size: "icon" }) + " data-selected:bg-gray-a4";
+
+	return (
+		<Rac.DateRangePicker
+			granularity="day"
+			hourCycle={hourCycle}
+			value={value}
+			onChange={setValue}
+		>
+			<LabelWrapper>
+				<Rac.Label className={labelStyles}>start</Rac.Label>
+			</LabelWrapper>
+
+			<Rac.Group className="flex gap-2">
+				<Rac.DateInput slot="start" className={inputStyles + " inline-flex items-center"}>
+					{(segment) => (
+						<Rac.DateSegment
+							segment={segment}
+							className={
+								"inline p-1 leading-4 caret-transparent outline-none" +
+								" data-[type=literal]:p-0" +
+								" data-[type=year]:-me-1" +
+								" data-focused:bg-gray-a7 data-focused:text-white"
+							}
+						/>
+					)}
+				</Rac.DateInput>
+
+				<Rac.DateInput slot="end" className={inputStyles + " inline-flex items-center"}>
+					{(segment) => (
+						<Rac.DateSegment
+							segment={segment}
+							className={
+								"inline p-1 leading-4 caret-transparent outline-none" +
+								" data-[type=literal]:p-0" +
+								" data-[type=year]:-me-1" +
+								" data-focused:bg-gray-a7 data-focused:text-white"
+							}
+						/>
+					)}
+				</Rac.DateInput>
+				<Rac.Button className={buttonStyles({ variant: "outline", size: "icon" })}>
+					<CalendarIcon className="size-4" />
+				</Rac.Button>
+			</Rac.Group>
+
+			<Rac.Popover>
+				<Rac.Dialog>
+					<Rac.RangeCalendar className="bg-gray-1 border-gray-4 border shadow-sm">
+						<header className="mb-2 flex items-center justify-between gap-2">
+							<Rac.Button
+								slot="previous"
+								className={buttonStyles({ variant: "ghost", size: "icon" })}
+							>
+								<IconChevronLeft />
+							</Rac.Button>
+							<Rac.Heading />
+							<Rac.Button
+								slot="next"
+								className={buttonStyles({ variant: "ghost", size: "icon" })}
+							>
+								<IconChevronRight />
+							</Rac.Button>
+						</header>
+						<Rac.CalendarGrid>
+							{(date) => <Rac.CalendarCell className={calCellStyles} date={date} />}
+						</Rac.CalendarGrid>
+					</Rac.RangeCalendar>
+				</Rac.Dialog>
+			</Rac.Popover>
+		</Rac.DateRangePicker>
 	);
 }
 

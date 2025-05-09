@@ -2,7 +2,9 @@ import { api } from "../../api";
 import { Link } from "../../ui/link";
 
 export default function TransactionPage() {
-	const q = api.useQuery("get", "/transactions");
+	const q = api.useQuery("post", "/transactions/query", {
+		body: { search_text: "" },
+	});
 
 	return (
 		<main className="w-full max-w-[320px]">

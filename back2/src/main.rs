@@ -41,7 +41,7 @@ async fn main() {
 
     let transactions = Router::new()
         .route("/stats", get(transactions::get_stats))
-        .route("/", get(transactions::query))
+        .route("/query", post(transactions::query))
         .route("/", post(transactions::create))
         .route("/import", post(transactions::import))
         .route("/{id}", patch(transactions::update))
@@ -51,7 +51,7 @@ async fn main() {
 
     let categories = Router::new().route("/", get(categories::query));
 
-    let accounts = Router::new().route("/", get(accounts::query));
+    let accounts = Router::new().route("/", get(accounts::query).post(accounts::create));
 
     let auth_base = Router::new()
         .route("/init", get(auth::init))
