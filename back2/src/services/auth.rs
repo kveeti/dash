@@ -102,8 +102,7 @@ pub async fn callback(
     let external_id = userinfo_res.sub.to_string();
 
     let existing_user_id = data
-        .users
-        .get_id_by_external_id(&external_id)
+        .get_user_id_by_external_id(&external_id)
         .await
         .context("error getting user by external id")?;
 
@@ -133,8 +132,7 @@ pub async fn callback(
                 updated_at,
             };
 
-            data.users
-                .upsert_with_session(&user, &session)
+            data.upsert_user_with_session(&user, &session)
                 .await
                 .context("error upserting user and session")?;
 
@@ -166,8 +164,7 @@ pub async fn ___dev_login___(config: &Config, data: &Data) -> Result<String, Api
         updated_at,
     };
 
-    data.users
-        .upsert_with_session(&user, &session)
+    data.upsert_user_with_session(&user, &session)
         .await
         .context("error upserting user and session")?;
 

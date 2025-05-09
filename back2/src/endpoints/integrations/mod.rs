@@ -1,16 +1,10 @@
 use anyhow::{Context, anyhow};
 use axum::{Json, extract::State};
-use chrono::{TimeZone, Utc};
 use gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen};
 use serde::Deserialize;
 use tracing::info;
 
-use crate::{
-    auth_middleware::User,
-    data::{InsertTx, create_id},
-    error::ApiError,
-    state::AppState,
-};
+use crate::{auth_middleware::User, error::ApiError, state::AppState};
 
 pub mod gocardless_nordigen;
 
@@ -26,8 +20,7 @@ pub async fn sync_transactions(
 ) -> Result<(), ApiError> {
     let datas = state
         .data
-        .user_bank_integrations
-        .get_by_user(&user.id)
+        .get_user_bank_integrations(&user.id)
         .await
         .context("error getting user bank integration data")?;
 
@@ -67,8 +60,7 @@ pub async fn sync_transactions(
 
                     let local_transactions = state
                         .data
-                        .transactions
-                        .get_by_account_for_sync(&user.id, &account_iban)
+                        .get_transactions_by_account_for_sync(&user.id, &account_iban)
                         .await
                         .context("error getting local transactions")?;
 
@@ -132,8 +124,7 @@ pub async fn sync_transactions(
 
                     state
                         .data
-                        .transactions
-                        .insert_many(&user.id, &input.account_id, new_transactions)
+                        .insert_many_transactions(&user.id, &input.account_id, new_transactions)
                         .await
                         .context("error inserting transactions")?;
                 }

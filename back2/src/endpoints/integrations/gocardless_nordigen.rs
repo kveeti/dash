@@ -25,8 +25,7 @@ pub async fn connect_init(
 
     let data = state
         .data
-        .user_bank_integrations
-        .get(&user.id, &data_name)
+        .get_one_user_bank_integration(&user.id, &data_name)
         .await
         .context("error getting user bank integration data")?;
 
@@ -57,8 +56,7 @@ pub async fn connect_init(
 
             state
                 .data
-                .user_bank_integrations
-                .delete(&user.id, &data_name)
+                .delete_user_bank_integration(&user.id, &data_name)
                 .await
                 .context("error deleting saved data")?;
         }
@@ -78,8 +76,7 @@ pub async fn connect_init(
 
     state
         .data
-        .user_bank_integrations
-        .set(
+        .set_user_bank_integration(
             &user.id,
             &data_name,
             serde_json::to_value(&to_save).expect("to saved req"),
@@ -106,8 +103,7 @@ pub async fn connect_callback(
 
     let saved = state
         .data
-        .user_bank_integrations
-        .get(&user.id, &data_name)
+        .get_one_user_bank_integration(&user.id, &data_name)
         .await
         .context("error getting user bank integration data")?;
 
@@ -145,8 +141,7 @@ pub async fn connect_callback(
 
         state
             .data
-            .user_bank_integrations
-            .set_with_accounts(
+            .set_user_bank_integration_with_accounts(
                 &user.id,
                 &data_name,
                 serde_json::to_value(&to_save).expect("to saved req"),

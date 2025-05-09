@@ -5,7 +5,7 @@ pub async fn query(
     user_id: &str,
     search_text: &Option<String>,
 ) -> anyhow::Result<Vec<Category>> {
-    let categories = data.queryCategories(user_id, search_text).await?;
+    let categories = data.query_categories(user_id, search_text).await?;
 
     Ok(categories)
 }

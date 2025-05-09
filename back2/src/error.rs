@@ -41,3 +41,9 @@ impl IntoResponse for ApiError {
         return (status_code, Json(json!({ "error": error_message }))).into_response();
     }
 }
+
+impl From<sqlx::Error> for ApiError {
+    fn from(err: sqlx::Error) -> Self {
+        return ApiError::UnexpectedError(anyhow::anyhow!(err));
+    }
+}

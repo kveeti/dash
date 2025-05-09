@@ -48,8 +48,7 @@ where
 
         let session = state
             .data
-            .sessions
-            .get_one(&auth_token.user_id, &auth_token.session_id)
+            .get_session(&auth_token.user_id, &auth_token.session_id)
             .await
             .context("error getting session")?
             .ok_or(ApiError::NoAuth("no session".to_string()))?;

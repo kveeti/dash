@@ -32,7 +32,7 @@ pub async fn query(
 ) -> Result<impl IntoResponse, ApiError> {
     let accounts = state
         .data
-        .queryAccounts(&user.id, &input.search_text)
+        .query_accounts(&user.id, &input.search_text)
         .await
         .context("error querying accounts")?;
 

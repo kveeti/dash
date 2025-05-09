@@ -4,7 +4,7 @@ use axum::{
 };
 use http::StatusCode;
 
-use crate::{auth_middleware::User, error::ApiError, services, state::AppState};
+use crate::{auth_middleware::User, error::ApiError, state::AppState};
 
 #[utoipa::path(
     delete,
@@ -21,7 +21,7 @@ pub async fn delete(
     user: User,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    services::transactions::delete(&state.data, &user.id, &id).await?;
+    state.data.delete_tx(&user.id, &id).await?;
 
     return Ok(StatusCode::NO_CONTENT);
 }

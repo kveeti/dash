@@ -4,7 +4,7 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 
 use crate::{
-    data::{Data, InsertTx, QueryTx, Tx, UpdateTx, create_id},
+    data::{Data, Tx, UpdateTx},
     endpoints::{self},
     error::ApiError,
 };
@@ -37,7 +37,7 @@ pub async fn create(
 }
 
 pub async fn delete(data: &Data, user_id: &str, tx_id: &str) -> anyhow::Result<()> {
-    data.transactions.delete(user_id, tx_id).await?;
+    data.delete_tx(user_id, tx_id).await?;
 
     Ok(())
 }
@@ -56,7 +56,7 @@ pub async fn update(
         currency: "EUR",
     };
 
-    data.transactions.update(user_id, tx_id, &tx).await?;
+    data.update_tx(user_id, tx_id, &tx).await?;
 
     Ok(())
 }
@@ -66,8 +66,7 @@ pub async fn link(data: &Data, user_id: &str, tx1_id: &str, tx2_id: &str) -> Res
         return Err(ApiError::BadRequest("Cannot link to itself".into()));
     }
 
-    data.transactions
-        .link(user_id, tx1_id, tx2_id)
+    data.link_tx(user_id, tx1_id, tx2_id)
         .await
         .context("error creating link")?;
 
@@ -84,8 +83,7 @@ pub async fn unlink(
         return Err(ApiError::BadRequest("Cannot unlink self".into()));
     }
 
-    data.transactions
-        .unlink(user_id, tx1_id, tx2_id)
+    data.unlink_tx(user_id, tx1_id, tx2_id)
         .await
         .context("error unlinking")?;
 
@@ -100,8 +98,7 @@ pub async fn stats(
     end: &DateTime<Utc>,
 ) -> anyhow::Result<endpoints::transactions::get_stats::Output> {
     let tx_map = data
-        .transactions
-        .stats(user_id, timezone, start, end)
+        .tx_stats(user_id, timezone, start, end)
         .await
         .context("error getting stats")?;
 
