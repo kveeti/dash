@@ -58,7 +58,7 @@ pub async fn import(
                 account_id,
                 category_name,
                 category_id
-            ) FROM STDIN WITH (FORMAT CSV)
+            ) FROM STDIN WITH NULL as '' csv
             "#,
         )
         .await?;
@@ -118,9 +118,9 @@ pub async fn import(
                                     .cloned()
                                     .unwrap_or_else(|| create_id());
 
-                                (category_name, category_id)
+                                (Some(category_name), Some(category_id))
                             } else {
-                                ("".to_owned(), "".to_owned())
+                                (None, None)
                             };
 
                         let parsed = &[
@@ -135,18 +135,20 @@ pub async fn import(
                             /* og_counter_party */ parsed.og_counter_party,
                             /* additional */ parsed.additional.unwrap_or_default(),
                             /* account_id */ account_id.to_owned(),
-                            /* category_name */ category_name,
-                            /* category_id */ category_id,
+                            /* category_name */
+                            category_name.unwrap_or("".to_owned()),
+                            /* category_id */ category_id.unwrap_or("".to_owned()),
                         ];
 
                         let mut wtr = csv::WriterBuilder::new()
                             .has_headers(false)
-                            .quote_style(csv::QuoteStyle::Always)
+                            .quote_style(csv::QuoteStyle::Necessary)
                             .from_writer(vec![]);
 
                         wtr.write_record(parsed).context("error writing record")?;
 
                         let line = wtr.into_inner().context("error finishing line")?;
+
                         line_buffer.push(line);
                         if line_buffer.len() >= 100 {
                             let batch = std::mem::take(&mut line_buffer);

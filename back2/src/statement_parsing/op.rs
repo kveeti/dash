@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{NaiveDate, NaiveTime, Utc};
 
 use super::parser::{ParsedTransaction, RecordParser};
 
@@ -7,30 +7,46 @@ pub struct OpFormatParser;
 
 impl RecordParser for OpFormatParser {
     fn parse_record(&self, record: &csv_async::StringRecord) -> Result<ParsedTransaction> {
-        let date = record.get(0).unwrap_or("").to_string();
-        let date = date
-            .parse::<NaiveDate>()
-            .context("error parsing transaction date")?;
-        let date = date.and_time(NaiveTime::default()).and_utc();
+        let date = match record.get(0).filter(|s| !s.is_empty()) {
+            Some(date_str) => {
+                let naive_date = date_str
+                    .parse::<NaiveDate>()
+                    .context("error parsing transaction date")?;
+                naive_date.and_time(NaiveTime::default()).and_utc()
+            }
+            None => Utc::now(),
+        };
 
         let amount = record.get(2).unwrap_or("");
         let amount = format_amount(&amount);
 
-        let name = record.get(5).unwrap_or("");
-        let cleaned_name = name
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .trim()
-            .to_string();
+        let (counter_party, og_counter_party) = match record.get(5).filter(|s| !s.is_empty()) {
+            Some(name) => {
+                let cleaned = name
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .trim()
+                    .to_string();
+                (cleaned, name.to_string())
+            }
+            None => {
+                // TODO: this WILL break syncing for these transactions btw.
+                // look into what integrations return for these kind of transactions
+                // where OP account statement has an empty counter party
+                // eg Selitys: KÄTEISPANO had it empty
+                let default = "NONAME".to_string();
+                (default.clone(), default)
+            }
+        };
 
         let additional = build_additional_field(record);
 
         Ok(ParsedTransaction {
             date,
             amount: amount.parse().context("error parsing transaction amount")?,
-            counter_party: cleaned_name,
-            og_counter_party: name.to_string(),
+            counter_party,
+            og_counter_party,
             additional: Some(additional),
             category_name: None,
         })
