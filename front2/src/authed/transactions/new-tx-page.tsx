@@ -19,7 +19,7 @@ import { useLocaleStuff } from "../use-formatting";
 // this works tho
 const custom = "__CUSTOM__DO__NOT__USE__OR__YOU__WILL__BE__FIRED__";
 
-export default function NewTransaction() {
+export default function NewTxPage() {
 	const mutation = api.useMutation("post", "/transactions");
 	const [localErrors, setLocalErrors] = useState<Record<string, string> | null>(null);
 	const [serverErrors, setServerErrors] = useState<Record<string, string> | null>(null);
@@ -163,7 +163,15 @@ export function DateField({
 	);
 }
 
-function AccountField({ name, label, error }: { name?: string; label: string; error?: string }) {
+export function AccountField({
+	name,
+	label,
+	error,
+}: {
+	name?: string;
+	label: string;
+	error?: string;
+}) {
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;
 
@@ -248,7 +256,15 @@ function AccountField({ name, label, error }: { name?: string; label: string; er
 	);
 }
 
-function AccountIdField({ name, label, error }: { name?: string; label: string; error?: string }) {
+export function AccountIdField({
+	name,
+	label,
+	error,
+}: {
+	name?: string;
+	label: string;
+	error?: string;
+}) {
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;
 
@@ -306,11 +322,21 @@ function AccountIdField({ name, label, error }: { name?: string; label: string; 
 	);
 }
 
-function CategoryField({ name, label, error }: { name?: string; label: string; error?: string }) {
+export function CategoryField({
+	name,
+	label,
+	error,
+	defaultValue,
+}: {
+	name?: string;
+	label: string;
+	error?: string;
+	defaultValue?: string;
+}) {
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;
 
-	let { contains } = Rac.useFilter({ sensitivity: "base" });
+	const { contains } = Rac.useFilter({ sensitivity: "base" });
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
@@ -376,6 +402,7 @@ function CategoryField({ name, label, error }: { name?: string; label: string; e
 				>
 					<Rac.TextField aria-label="search categories...">
 						<Rac.Input
+							defaultValue={defaultValue}
 							placeholder="search categories..."
 							autoFocus
 							className="border-gray-4 h-10 w-full border-b px-3 outline-hidden placeholder:opacity-80"
@@ -414,8 +441,10 @@ function Import() {
 		e.preventDefault();
 
 		const formData = new FormData(e.currentTarget);
+		const account_id = formData.get("account_id");
+		formData.delete("account_id");
 
-		await fetch(things.apiBase + "/transactions/import", {
+		await fetch(things.apiBase + "/transactions/import/" + account_id, {
 			method: "POST",
 			body: formData,
 		})

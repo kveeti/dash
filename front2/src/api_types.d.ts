@@ -109,7 +109,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["query"];
+        post: operations["transactions/query"];
         delete?: never;
         options?: never;
         head?: never;
@@ -141,7 +141,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["update"];
+        post: operations["transactions/update"];
         delete: operations["delete"];
         options?: never;
         head?: never;
@@ -214,7 +214,7 @@ export interface components {
             created_at: string;
             tx: components["schemas"]["LinkedTx"];
             /** Format: date-time */
-            updated_at: string;
+            updated_at?: string | null;
         };
         LinkedTx: {
             additional?: string | null;
@@ -253,6 +253,28 @@ export interface components {
             date: string;
             id: string;
             links: components["schemas"]["Link"][];
+        };
+        TransactionUpdateInput: {
+            additional?: string | null;
+            /** Format: float */
+            amount: number;
+            category_name?: string | null;
+            counter_party: string;
+            currency: string;
+            /** Format: date-time */
+            date: string;
+        };
+        TransactionsQueryInput: {
+            left?: string | null;
+            /** Format: int32 */
+            limit?: number | null;
+            right?: string | null;
+            search_text?: string | null;
+        };
+        TransactionsQueryOutput: {
+            next_id?: string | null;
+            prev_id?: string | null;
+            transactions: components["schemas"]["QueryTx"][];
         };
     };
     responses: never;
@@ -407,7 +429,7 @@ export interface operations {
             };
         };
     };
-    query: {
+    "transactions/query": {
         parameters: {
             query?: never;
             header?: never;
@@ -416,7 +438,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Input"];
+                "application/json": components["schemas"]["TransactionsQueryInput"];
             };
         };
         responses: {
@@ -425,7 +447,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["QueryTx"][];
+                    "application/json": components["schemas"]["TransactionsQueryOutput"];
                 };
             };
         };
@@ -453,7 +475,7 @@ export interface operations {
             };
         };
     };
-    update: {
+    "transactions/update": {
         parameters: {
             query?: never;
             header?: never;
@@ -465,7 +487,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["Input"];
+                "application/json": components["schemas"]["TransactionUpdateInput"];
             };
         };
         responses: {

@@ -15,7 +15,7 @@ impl RecordParser for GenericFormatParser {
 
     fn parse_record(
         &self,
-        record: &csv::StringRecord,
+        record: &csv_async::StringRecord,
     ) -> anyhow::Result<super::parser::ParsedTransaction> {
         let date = record.get(0).unwrap_or("").to_string();
         let date = date

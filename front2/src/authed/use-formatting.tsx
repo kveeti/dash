@@ -33,8 +33,45 @@ function useLocaleStuffValue() {
 		[locale]
 	);
 
+	const shortDateFormatter = useMemo(
+		() =>
+			new Intl.DateTimeFormat(locale, {
+				month: "numeric",
+				day: "numeric",
+			}),
+		[locale]
+	);
+
+	const longDateFormatter = useMemo(
+		() =>
+			new Intl.DateTimeFormat(locale, {
+				month: "numeric",
+				day: "numeric",
+				year: "2-digit",
+			}),
+		[locale]
+	);
+
+	const sidebarDateFormatter = useMemo(
+		() =>
+			new Intl.DateTimeFormat(locale, {
+				month: "short",
+				day: "numeric",
+				year: "numeric",
+				minute: "numeric",
+				hour: "numeric",
+				second: "numeric",
+			}),
+		[locale]
+	);
+
 	return {
-		formatAmount: amountFormatter.format,
+		f: {
+			amount: amountFormatter,
+			shortDate: shortDateFormatter,
+			longDate: longDateFormatter,
+			sidebarDate: sidebarDateFormatter,
+		},
 		hourCycle,
 		timeZone: resolvedOptions.timeZone,
 	};

@@ -1,3 +1,5 @@
+use indexmap::IndexMap;
+use sqlx::Row;
 use std::collections::HashMap;
 
 use anyhow::{Context, Result};
@@ -7,9 +9,10 @@ use serde::Serialize;
 use serde_json::Value;
 use sqlx::{PgPool, Postgres, QueryBuilder, prelude::FromRow, query, query_as};
 use tokio::io::AsyncRead;
+use tracing::info;
 use utoipa::ToSchema;
 
-use crate::config::Config;
+use crate::{config::Config, endpoints::transactions::query::TransactionsQueryOutput};
 
 mod id;
 pub use id::create_id;
@@ -28,6 +31,10 @@ impl Data {
         return Ok(Self {
             pg_pool: pg.clone(),
         });
+    }
+
+    pub fn get_pg_pool(self) -> sqlx::PgPool {
+        return self.pg_pool;
     }
 
     pub async fn query_categories(
@@ -84,87 +91,168 @@ impl Data {
         Ok(rows)
     }
 
-    pub async fn query_transactions(&self, user_id: &str) -> Result<Vec<QueryTx>, sqlx::Error> {
-        let rows = query_as!(
-            QueryTxRow,
+    pub async fn query_transactions(
+        &self,
+        user_id: &str,
+        input: QueryTxInput,
+    ) -> Result<TransactionsQueryOutput, sqlx::Error> {
+        let mut query: QueryBuilder<Postgres> = QueryBuilder::new(
             r#"
             select
-                t.id as id,
-                t.date as date,
-                t.counter_party as counter_party,
-                t.amount as amount,
-                t.category_id as category_id,
-                t.currency as currency,
-                t.additional as additional,
+	            t.id as id,
+	            t.date as date,
+	            t.counter_party as counter_party,
+	            t.amount as amount,
+	            t.category_id as category_id,
+	            t.currency as currency,
+	            t.additional as additional,
 
-                c.name as "cat_name?",
-                c.is_neutral as "cat_is_ne?",
+	            c.name as c_name,
+	            c.is_neutral as c_is_neutral,
 
-                link.created_at as "link_created_at?",
-                link.updated_at as "link_updated_at?",
+	            link.created_at as link_created_at,
+	            link.updated_at as link_updated_at,
 
-                linked.id as "l_id?",
-                linked.amount as "l_amount?",
-                linked.date as "l_date?",
-                linked.counter_party as "l_counter_party?",
-                linked.additional as "l_additional?",
-                linked.currency as "l_currency?",
-                linked.category_id as "l_category_id?"
-            from transactions t
-
-            left join transaction_categories c on t.category_id = c.id
-
+	            linked.id as l_id,
+	            linked.amount as l_amount,
+	            linked.date as l_date,
+	            linked.counter_party as l_counter_party,
+	            linked.additional as l_additional,
+	            linked.currency as l_currency,
+	            linked.category_id as l_category_id
+	        from transactions t
+			left join transaction_categories c on t.category_id = c.id
             left join transactions_links link
               on link.transaction_a_id = t.id or link.transaction_b_id = t.id
             left join transactions linked
-              on (linked.id = CASE WHEN link.transaction_a_id = t.id THEN link.transaction_b_id ELSE link.transaction_a_id END)
-
-            where t.user_id = $1
-            order by t.date asc
+              on (linked.id = case when link.transaction_a_id = t.id then link.transaction_b_id else link.transaction_a_id end)
             "#,
-            user_id
-        )
-        .fetch_all(&self.pg_pool)
-        .await?;
+        );
 
-        let mut tx_map: HashMap<String, QueryTx> = HashMap::default();
+        query.push("where t.user_id = ").push_bind(user_id);
+
+        let order = match input.cursor {
+            Some(QueryTxInputCursor::Left(ref id)) => {
+                query
+                    .push(" and (")
+                    .push("( t.date = (select date from transactions where id = ")
+                    .push_bind(id.to_owned())
+                    .push(")")
+                    .push(" and t.id > ")
+                    .push_bind(id.to_owned())
+                    .push(")")
+                    .push(" or t.date > (select date from transactions where id = ")
+                    .push_bind(id)
+                    .push(")")
+                    .push(")");
+
+                "asc"
+            }
+            Some(QueryTxInputCursor::Right(ref id)) => {
+                query
+                    .push(" and (")
+                    .push("( t.date = (select date from transactions where id = ")
+                    .push_bind(id.to_owned())
+                    .push(")")
+                    .push(" and t.id < ")
+                    .push_bind(id.to_owned())
+                    .push(")")
+                    .push(" or t.date < (select date from transactions where id = ")
+                    .push_bind(id)
+                    .push(")")
+                    .push(")");
+
+                "desc"
+            }
+            None => "desc",
+        };
+
+        query
+            .push(" order by t.date ")
+            .push(order)
+            .push(", t.id ")
+            .push(order);
+
+        let limit = input.limit.unwrap_or(100) + 1;
+        query.push(" limit ").push(limit);
+
+        let mut rows = query.build().fetch_all(&self.pg_pool).await?;
+
+        let mut tx_map: IndexMap<String, QueryTx> = IndexMap::default();
+
+        let has_more = rows.len() == limit as usize;
+        if has_more {
+            rows.pop();
+        }
+
+        match input.cursor {
+            Some(QueryTxInputCursor::Left(_)) => rows.reverse(),
+            _ => {}
+        }
 
         for row in rows {
-            let tx = tx_map.get_mut(&row.id);
+            let id: &str = row.try_get("id").expect("id");
+
+            let tx = tx_map.get_mut(id);
 
             if let Some(tx) = tx {
-                if let Some(l_id) = row.l_id {
+                let link_id: Option<String> = row.try_get("l_id").expect("l_id");
+
+                if let Some(l_id) = link_id {
+                    let created_at: DateTime<Utc> =
+                        row.try_get("link_created_at").expect("link_created_at");
+                    let updated_at: Option<DateTime<Utc>> =
+                        row.try_get("link_updated_at").expect("link_updated_at");
+
+                    let date: DateTime<Utc> = row.try_get("l_date").expect("l_date");
+                    let counter_party: String =
+                        row.try_get("l_counter_party").expect("l_counter_party");
+                    let additional: Option<String> =
+                        row.try_get("l_additional").expect("l_additional");
+                    let currency: String = row.try_get("l_currency").expect("l_currency");
+                    let amount: f32 = row.try_get("l_amount").expect("l_amount");
+
                     tx.links.push(Link {
-                        created_at: row.link_created_at.expect("checked created_at"),
-                        updated_at: row.link_updated_at.expect("checked updated_at"),
+                        created_at,
+                        updated_at,
                         tx: LinkedTx {
                             id: l_id,
-                            date: row.l_date.expect("checked linked_date"),
-                            counter_party: row
-                                .l_counter_party
-                                .expect("checked linked_counter_party"),
-                            additional: row.l_additional,
-                            currency: row.l_currency.expect("checked linked_currency"),
-                            amount: row.l_amount.expect("checked linked_amount"),
+                            date,
+                            counter_party,
+                            additional,
+                            currency,
+                            amount,
                         },
                     });
                 }
             } else {
+                let date: DateTime<Utc> = row.try_get("date").expect("date");
+                let counter_party: String = row.try_get("counter_party").expect("counter_party");
+                let amount: f32 = row.try_get("amount").expect("amount");
+                let additional: Option<String> = row.try_get("additional").expect("additional");
+                let currency: String = row.try_get("currency").expect("currency");
+
+                let category_id: Option<String> = row.try_get("category_id").expect("category_id");
+
                 tx_map.insert(
-                    row.id.to_owned(),
+                    id.to_owned(),
                     QueryTx {
-                        id: row.id.clone(),
-                        date: row.date.clone(),
-                        counter_party: row.counter_party.clone(),
-                        amount: row.amount.clone(),
-                        additional: row.additional.clone(),
-                        currency: row.currency.clone(),
+                        id: id.to_owned(),
+                        date,
+                        counter_party,
+                        amount,
+                        additional,
+                        currency,
                         links: vec![],
-                        category: if let Some(cat_id) = row.category_id.clone() {
+                        category: if let Some(cat_id) = category_id {
+                            let name: String = row.try_get("c_name").expect("c_name");
+                            let is_neutral: bool =
+                                row.try_get("c_is_neutral").expect("c_is_neutral");
+
                             Some(Category {
                                 id: cat_id,
-                                name: row.cat_name.expect("checked cat_name"),
-                                is_neutral: row.cat_is_ne.expect("checked is_ne"),
+                                name,
+                                is_neutral,
                             })
                         } else {
                             None
@@ -174,20 +262,135 @@ impl Data {
             }
         }
 
-        let mut result = tx_map
-            .into_iter()
-            .map(|(_, tx)| tx)
-            .collect::<Vec<QueryTx>>();
+        let vec: Vec<QueryTx> = tx_map.into_values().collect();
 
-        result.sort_by(|a, b| b.date.cmp(&a.date));
+        let (next_id, prev_id) = if let [first, _second] = &vec[..] {
+            let first_id = first.id.to_owned();
+            let last_id = vec.last().expect("last").id.to_owned();
 
-        Ok(result)
+            let (next_id, prev_id) = match (has_more, input.cursor) {
+                (true, None) => (Some(last_id), None),
+                (false, None) => (None, None),
+                (true, Some(_)) => (Some(last_id), Some(first_id)),
+                (false, Some(QueryTxInputCursor::Left(_))) => (Some(last_id), None),
+                (false, Some(QueryTxInputCursor::Right(_))) => (None, Some(first_id)),
+            };
+            (next_id, prev_id)
+        } else {
+            (None, None)
+        };
+
+        Ok(TransactionsQueryOutput {
+            next_id,
+            prev_id,
+            transactions: vec,
+        })
     }
 
-    pub async fn import_tx(
+    pub async fn import_tx_phase_2(
         &self,
         user_id: &str,
-        source: impl AsyncRead + Unpin,
+        import_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        let mut tx = self
+            .pg_pool
+            .begin()
+            .await
+            .context("error starting transaction")?;
+
+        sqlx::query!(
+            r#"
+            update transaction_imports ti
+            set category_id = tc.id
+            from transaction_categories tc
+            where ti.import_id = $2
+              and ti.user_id = tc.user_id
+              and ti.category_name is not null
+              and lower(ti.category_name) = lower(tc.name)
+              and ti.user_id = $1;
+            "#,
+            user_id,
+            import_id
+        )
+        .execute(&mut *tx)
+        .await
+        .context("error updating category_ids")?;
+
+        // TODO: figure out the lower calls
+        sqlx::query(
+            r#"
+            with cats as (
+                select distinct on (lower(ti.category_name))
+                    ti.category_id,
+                    ti.category_name
+                from transaction_imports ti
+                where ti.import_id = $4
+                    and ti.user_id = $1
+                    and ti.category_id is not null
+                    and ti.category_name is not null
+            )
+
+            insert into transaction_categories (
+                id, user_id, created_at, updated_at,
+                name, is_neutral
+            )
+            select
+                cats.category_id,
+                $1,
+                $2,
+                $3,
+                lower(cats.category_name),
+                false
+            from cats
+            where cats.category_id is not null
+              and cats.category_name is not null
+            on conflict (user_id, lower(name))
+            do update set
+                updated_at = $2,
+                name = excluded.name,
+                is_neutral = false
+            returning transaction_categories.id;
+            "#,
+        )
+        .bind(user_id)
+        .bind(Utc::now())
+        .bind(None::<DateTime<Utc>>)
+        .bind(import_id)
+        .execute(&mut *tx)
+        .await
+        .context("error inserting categories")?;
+
+        sqlx::query!(
+            r#"
+            insert into transactions (
+                id, user_id, account_id, date, amount,
+                currency, counter_party, og_counter_party,
+                additional, category_id, created_at
+            )
+            select
+                id, user_id, account_id, date, amount,
+                currency, counter_party, og_counter_party,
+                additional, category_id, created_at
+            from transaction_imports
+            where user_id = $1 and import_id = $2
+            on conflict (id) do nothing
+            "#,
+            user_id,
+            import_id
+        )
+        .execute(&mut *tx)
+        .await
+        .context("error inserting transactions")?;
+
+        tx.commit().await.context("error committing transaction")?;
+
+        Ok(())
+    }
+
+    pub async fn import_tx<T: AsyncRead + Unpin>(
+        &self,
+        user_id: &str,
+        source: T,
     ) -> Result<(), anyhow::Error> {
         let mut conn = self
             .pg_pool
@@ -355,7 +558,7 @@ impl Data {
 
         query!(
             r#"
-            with 
+            with
             account_id as (
                 insert into accounts (
                     user_id, -- 1
@@ -431,7 +634,7 @@ impl Data {
 
         query!(
             r#"
-            with 
+            with
             account_id as (
                 insert into accounts (
                     user_id, -- 1
@@ -501,7 +704,7 @@ impl Data {
                     og_counter_party,
                     additional,
                     account_id
-                ) 
+                )
             "#,
         );
 
@@ -1086,7 +1289,7 @@ pub struct Session {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Link {
     pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
     pub tx: LinkedTx,
 }
 
@@ -1159,4 +1362,17 @@ pub struct UpdateTx<'a> {
 pub struct UserBankIntergration {
     pub name: String,
     pub data: Value,
+}
+
+#[derive(Debug)]
+pub struct QueryTxInput {
+    pub search_text: Option<String>,
+    pub cursor: Option<QueryTxInputCursor>,
+    pub limit: Option<i8>,
+}
+
+#[derive(Debug)]
+pub enum QueryTxInputCursor {
+    Left(String),
+    Right(String),
 }

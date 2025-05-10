@@ -19,3 +19,5 @@ pub use query::query;
 
 pub mod import;
 pub use import::import;
+
+pub const TX_TAG: &str = "tx";

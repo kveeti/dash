@@ -1,11 +1,18 @@
-use std::{collections::HashMap, io::Cursor};
+use std::{
+    collections::HashMap,
+    io::{self},
+};
 
 use anyhow::Context;
 use axum::{
-    extract::{Multipart, State},
+    extract::{Multipart, Path, State},
     response::IntoResponse,
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
+use csv_async::{AsyncReaderBuilder, StringRecord};
+use futures::{StreamExt, TryStreamExt};
+use http::StatusCode;
+use tokio_util::io::StreamReader;
 
 use crate::{
     auth_middleware::User,
@@ -15,6 +22,7 @@ use crate::{
     statement_parsing::{generic::GenericFormatParser, op::OpFormatParser, parser::RecordParser},
 };
 
+#[derive(Debug)]
 enum ImportKind {
     Op,
     Generic,
@@ -23,105 +31,158 @@ enum ImportKind {
 // TODO: make more efficient
 pub async fn import(
     State(state): State<AppState>,
+    Path(account_id): Path<String>,
     user: User,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut account_id = None;
-    let mut file_data = None;
-    let mut kind: Option<ImportKind> = None;
+    let pg_pool = state.data.clone().get_pg_pool();
+    let mut conn = pg_pool
+        .acquire()
+        .await
+        .context("error acquiring connection")?;
 
-    // collect all fields first before processing
+    let mut copy_in = conn
+        .copy_in_raw(
+            r#"
+            COPY transaction_imports (
+                id,
+                import_id,
+                user_id,
+                created_at,
+                date,
+                amount,
+                currency,
+                counter_party,
+                og_counter_party,
+                additional,
+                account_id,
+                category_name,
+                category_id
+            ) FROM STDIN WITH (FORMAT CSV)
+            "#,
+        )
+        .await?;
+
     while let Ok(Some(field)) = multipart.next_field().await {
         if let Some(name) = field.name() {
             match name {
-                "account_id" => {
-                    account_id = Some(field.text().await.context("error reading account id")?);
+                "op_file" | "generic_file" => {
+                    let kind = match name {
+                        "op_file" => ImportKind::Op,
+                        "generic_file" => ImportKind::Generic,
+                        _ => continue,
+                    };
+
+                    let stream = field
+                        .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                        .map_ok(|bytes| bytes)
+                        .into_stream();
+
+                    let reader = StreamReader::new(stream.map(|result| {
+                        result.map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+                    }));
+
+                    let parser: Box<dyn RecordParser> = match kind {
+                        ImportKind::Op => Box::new(OpFormatParser),
+                        ImportKind::Generic => Box::new(GenericFormatParser),
+                    };
+
+                    let mut csv_reader = AsyncReaderBuilder::new()
+                        .flexible(true)
+                        .delimiter(parser.delimiter())
+                        .has_headers(false)
+                        .create_reader(reader);
+
+                    let now = Utc::now();
+                    let categories: HashMap<String, String> = HashMap::new();
+                    let mut rows = 0;
+                    let import_id = create_id();
+                    let mut line_buffer: Vec<Vec<u8>> = Vec::new();
+                    let mut record = StringRecord::new();
+                    loop {
+                        let result = csv_reader.read_record(&mut record).await;
+
+                        let has_record = result.context("error parsing record")?;
+                        if !has_record {
+                            break;
+                        }
+
+                        let parsed = parser
+                            .parse_record(&record)
+                            .context("error parsing record")?;
+
+                        let (category_name, category_id) =
+                            if let Some(category_name) = parsed.category_name {
+                                let category_id = categories
+                                    .get(&category_name)
+                                    .cloned()
+                                    .unwrap_or_else(|| create_id());
+
+                                (category_name, category_id)
+                            } else {
+                                ("".to_owned(), "".to_owned())
+                            };
+
+                        let parsed = &[
+                            /* id */ create_id(),
+                            /* import_id */ import_id.to_owned(),
+                            /* user_id */ user.id.to_owned(),
+                            /* created_at */ now.to_rfc3339(),
+                            /* date */ parsed.date.to_rfc3339(),
+                            /* amount */ parsed.amount.to_string(),
+                            /* currency */ "EUR".to_owned(),
+                            /* counter_party */ parsed.counter_party,
+                            /* og_counter_party */ parsed.og_counter_party,
+                            /* additional */ parsed.additional.unwrap_or_default(),
+                            /* account_id */ account_id.to_owned(),
+                            /* category_name */ category_name,
+                            /* category_id */ category_id,
+                        ];
+
+                        let mut wtr = csv::WriterBuilder::new()
+                            .has_headers(false)
+                            .quote_style(csv::QuoteStyle::Always)
+                            .from_writer(vec![]);
+
+                        wtr.write_record(parsed).context("error writing record")?;
+
+                        let line = wtr.into_inner().context("error finishing line")?;
+                        line_buffer.push(line);
+                        if line_buffer.len() >= 100 {
+                            let batch = std::mem::take(&mut line_buffer);
+                            copy_in
+                                .send(batch.concat())
+                                .await
+                                .context("error sending batch")?;
+                            rows += 100;
+                        }
+                    }
+
+                    if !line_buffer.is_empty() {
+                        copy_in
+                            .send(line_buffer.concat())
+                            .await
+                            .context("error sending remaining lines")?;
+                    }
+
+                    copy_in.finish().await.context("error finishing copying")?;
+                    conn.close().await.context("error closing connection")?;
+                    drop(pg_pool);
+
+                    state
+                        .data
+                        .import_tx_phase_2(&user.id, &import_id)
+                        .await
+                        .context("error finishing import")?;
+
+                    return Ok((StatusCode::OK).into_response());
                 }
-                "op_file" => {
-                    file_data = Some(field.bytes().await.context("error reading data")?);
-                    kind = Some(ImportKind::Op);
-                }
-                "generic_file" => {
-                    file_data = Some(field.bytes().await.context("error reading data")?);
-                    kind = Some(ImportKind::Generic);
-                }
-                _ => continue,
+                _ => return Err(ApiError::BadRequest("Invalid request".to_string())),
             }
+        } else {
+            return Err(ApiError::BadRequest("Invalid request".to_string()));
         }
     }
 
-    let account_id =
-        account_id.ok_or_else(|| ApiError::BadRequest("Missing account id".to_string()))?;
-
-    let data = file_data.ok_or_else(|| ApiError::BadRequest("Missing file".to_string()))?;
-
-    let parser: Box<dyn RecordParser> = match kind {
-        Some(ImportKind::Op) => Box::new(OpFormatParser),
-        Some(ImportKind::Generic) => Box::new(GenericFormatParser),
-        None => {
-            return Err(ApiError::BadRequest("Missing file type".to_string()));
-        }
-    };
-
-    let mut reader = csv::ReaderBuilder::new()
-        .has_headers(false)
-        .delimiter(parser.delimiter())
-        .from_reader(data.as_ref());
-
-    let mut buf = Vec::new();
-    {
-        let mut wtr = csv::WriterBuilder::new()
-            .has_headers(false)
-            .quote_style(csv::QuoteStyle::Always)
-            .from_writer(&mut buf);
-
-        let categories: HashMap<String, String> = HashMap::new();
-
-        for result in reader.records() {
-            let record = result.context("error reading record")?;
-
-            let parsed_record = parser.parse_record(&record)?;
-
-            let (category_name, category_id) =
-                if let Some(category_name) = parsed_record.category_name {
-                    let category_id = categories
-                        .get(&category_name)
-                        .cloned()
-                        .unwrap_or_else(|| create_id());
-
-                    (category_name, category_id)
-                } else {
-                    ("".to_owned(), "".to_owned())
-                };
-
-            let now = Utc::now();
-
-            wtr.write_record(&[
-                /* id */ create_id(),
-                /* user_id */ user.id.to_owned(),
-                /* created_at */ now.to_string(),
-                /* date */ parsed_record.date.to_string(),
-                /* amount */ parsed_record.amount.to_string(),
-                /* currency */ "EUR".to_owned(),
-                /* counter_party */ parsed_record.counter_party,
-                /* og_counter_party */ parsed_record.og_counter_party,
-                /* additional */ parsed_record.additional.unwrap_or_default(),
-                /* account_id */ account_id.to_owned(),
-                /* category_name */ category_name,
-                /* category_id */ category_id,
-            ])
-            .context("error writing record")?;
-        }
-
-        wtr.flush().context("error flushing writer")?;
-    }
-    let cursor = Cursor::new(buf);
-
-    state
-        .data
-        .import_tx(&user.id, cursor)
-        .await
-        .context("error inserting transactions")?;
-
-    Ok(())
+    return Err(ApiError::BadRequest("Invalid request".to_string()));
 }

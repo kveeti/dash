@@ -46,7 +46,7 @@ pub async fn update(
     data: &Data,
     user_id: &str,
     tx_id: &str,
-    input: &endpoints::transactions::update::Input,
+    input: &endpoints::transactions::update::TransactionUpdateInput,
 ) -> anyhow::Result<()> {
     let tx = UpdateTx {
         amount: input.amount,

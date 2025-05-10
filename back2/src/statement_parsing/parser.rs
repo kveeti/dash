@@ -1,7 +1,8 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct ParsedTransaction {
     pub date: DateTime<Utc>,
     pub amount: f32,
@@ -12,6 +13,6 @@ pub struct ParsedTransaction {
 }
 
 pub trait RecordParser: Sync + Send {
-    fn parse_record(&self, record: &csv::StringRecord) -> Result<ParsedTransaction>;
+    fn parse_record(&self, record: &csv_async::StringRecord) -> Result<ParsedTransaction>;
     fn delimiter(&self) -> u8;
 }

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::endpoints::*;
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     routing::{delete, get, patch, post},
 };
 use config::Config;
@@ -10,7 +11,7 @@ use data::Data;
 use http::{HeaderValue, Method, header};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
-use tower_http::cors::CorsLayer;
+use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod auth_middleware;
@@ -43,7 +44,7 @@ async fn main() {
         .route("/stats", get(transactions::get_stats))
         .route("/query", post(transactions::query))
         .route("/", post(transactions::create))
-        .route("/import", post(transactions::import))
+        .route("/import/{account_id}", post(transactions::import))
         .route("/{id}", patch(transactions::update))
         .route("/{id}", delete(transactions::delete))
         .route("/{id}/linked", post(transactions::link))
@@ -86,6 +87,10 @@ async fn main() {
         .nest("/auth", auth)
         .route("/@me", get(me::get_me))
         .route("/openapi.json", get(openapi))
+        .layer(DefaultBodyLimit::disable())
+        .layer(RequestBodyLimitLayer::new(
+            250 * 1024 * 1024, /* 250mb */
+        ))
         .layer(cors(&config))
         .with_state(state);
 

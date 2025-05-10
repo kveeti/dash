@@ -22,11 +22,11 @@ AuthLayout.preload();
 const IndexPage = lazyWithPreload(() => import("./authed/index"));
 IndexPage.preload();
 
-const TransactionsPage = lazyWithPreload(() => import("./authed/transactions/transactions"));
-TransactionsPage.preload();
+const TxPage = lazyWithPreload(() => import("./authed/transactions/tx-page"));
+TxPage.preload();
 
-const NewTransactionPage = lazyWithPreload(() => import("./authed/transactions/new"));
-NewTransactionPage.preload();
+const NewTxPage = lazyWithPreload(() => import("./authed/transactions/new-tx-page"));
+NewTxPage.preload();
 
 const StatsPage = lazyWithPreload(() => import("./authed/stats/statspage"));
 StatsPage.preload();
@@ -50,10 +50,10 @@ function Authed() {
 								<IndexPage />
 							</Route>
 							<Route path="/txs">
-								<TransactionsPage />
+								<TxPage />
 							</Route>
 							<Route path="/txs/new">
-								<NewTransactionPage />
+								<NewTxPage />
 							</Route>
 							<Route path="/stats">
 								<StatsPage />

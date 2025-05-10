@@ -7,25 +7,27 @@ use http::StatusCode;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use crate::{auth_middleware::User, error::ApiError, services, state::AppState};
+use crate::{auth_middleware::User, data::UpdateTx, error::ApiError, state::AppState};
 
 #[derive(Deserialize, ToSchema)]
-pub struct Input {
+pub struct TransactionUpdateInput {
     pub counter_party: String,
     pub date: DateTime<Utc>,
     pub amount: f32,
     pub additional: Option<String>,
-    pub category_id: Option<String>,
+    pub currency: String,
+    pub category_name: Option<String>,
 }
 
 #[utoipa::path(
     post,
     path = "/transactions/{id}",
+    operation_id = "transactions/update",
     params(
         ("id" = String, description = "Transaction ID"),
     ),
     request_body(
-        content = Input,
+        content = TransactionUpdateInput,
         content_type = "application/json",
     ),
     responses(
@@ -36,9 +38,24 @@ pub async fn update(
     State(state): State<AppState>,
     user: User,
     Path(id): Path<String>,
-    extract::Json(input): extract::Json<Input>,
+    extract::Json(input): extract::Json<TransactionUpdateInput>,
 ) -> Result<impl IntoResponse, ApiError> {
-    services::transactions::update(&state.data, &user.id, &id, &input).await?;
+    let tx = UpdateTx {
+        counter_party: &input.counter_party,
+        additional: input.additional.as_deref(),
+        amount: input.amount,
+        currency: &input.currency,
+        date: input.date,
+    };
 
-    return Ok(StatusCode::NO_CONTENT);
+    if let Some(category_name) = input.category_name {
+        state
+            .data
+            .update_tx_with_category(&user.id, &id, &tx, &category_name)
+            .await?;
+    } else {
+        state.data.update_tx(&user.id, &id, &tx).await?;
+    }
+
+    return Ok(StatusCode::OK);
 }

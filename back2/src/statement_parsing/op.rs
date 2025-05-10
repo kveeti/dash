@@ -1,12 +1,17 @@
 use anyhow::{Context, Result};
+use chrono::{NaiveDate, NaiveTime};
 
 use super::parser::{ParsedTransaction, RecordParser};
 
 pub struct OpFormatParser;
 
 impl RecordParser for OpFormatParser {
-    fn parse_record(&self, record: &csv::StringRecord) -> Result<ParsedTransaction> {
+    fn parse_record(&self, record: &csv_async::StringRecord) -> Result<ParsedTransaction> {
         let date = record.get(0).unwrap_or("").to_string();
+        let date = date
+            .parse::<NaiveDate>()
+            .context("error parsing transaction date")?;
+        let date = date.and_time(NaiveTime::default()).and_utc();
 
         let amount = record.get(2).unwrap_or("");
         let amount = format_amount(&amount);
@@ -22,7 +27,7 @@ impl RecordParser for OpFormatParser {
         let additional = build_additional_field(record);
 
         Ok(ParsedTransaction {
-            date: date.parse().context("error parsing transaction date")?,
+            date,
             amount: amount.parse().context("error parsing transaction amount")?,
             counter_party: cleaned_name,
             og_counter_party: name.to_string(),
@@ -36,7 +41,7 @@ impl RecordParser for OpFormatParser {
     }
 }
 
-fn build_additional_field(record: &csv::StringRecord) -> String {
+fn build_additional_field(record: &csv_async::StringRecord) -> String {
     let mut additional = String::new();
 
     fn append_field(additional: &mut String, label: &str, value: Option<&str>) {
