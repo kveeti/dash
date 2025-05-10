@@ -9,7 +9,6 @@ use serde::Serialize;
 use serde_json::Value;
 use sqlx::{PgPool, Postgres, QueryBuilder, prelude::FromRow, query, query_as};
 use tokio::io::AsyncRead;
-use tracing::info;
 use utoipa::ToSchema;
 
 use crate::{config::Config, endpoints::transactions::query::TransactionsQueryOutput};
@@ -264,7 +263,7 @@ impl Data {
 
         let vec: Vec<QueryTx> = tx_map.into_values().collect();
 
-        let (next_id, prev_id) = if let [first, _second] = &vec[..] {
+        let (next_id, prev_id) = if let [first, _second, ..] = &vec[..] {
             let first_id = first.id.to_owned();
             let last_id = vec.last().expect("last").id.to_owned();
 
