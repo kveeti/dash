@@ -100,6 +100,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/transactions/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["transactions/bulk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/transactions/query": {
         parameters: {
             query?: never;
@@ -141,11 +157,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["transactions/update"];
+        post?: never;
         delete: operations["delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        patch: operations["transactions/update"];
         trace?: never;
     };
     "/transactions/{id}/linked": {
@@ -253,6 +269,10 @@ export interface components {
             date: string;
             id: string;
             links: components["schemas"]["Link"][];
+        };
+        TransactionBulkInput: {
+            category_name: string;
+            ids: string[];
         };
         TransactionUpdateInput: {
             additional?: string | null;
@@ -429,6 +449,29 @@ export interface operations {
             };
         };
     };
+    "transactions/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransactionBulkInput"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     "transactions/query": {
         parameters: {
             query?: never;
@@ -475,6 +518,28 @@ export interface operations {
             };
         };
     };
+    delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Transaction ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     "transactions/update": {
         parameters: {
             query?: never;
@@ -490,28 +555,6 @@ export interface operations {
                 "application/json": components["schemas"]["TransactionUpdateInput"];
             };
         };
-        responses: {
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Transaction ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             204: {
                 headers: {

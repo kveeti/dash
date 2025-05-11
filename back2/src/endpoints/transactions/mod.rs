@@ -20,4 +20,7 @@ pub use query::query;
 pub mod import;
 pub use import::import;
 
+pub mod bulk;
+pub use bulk::bulk;
+
 pub const TX_TAG: &str = "tx";

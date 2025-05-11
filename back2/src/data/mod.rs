@@ -773,13 +773,14 @@ impl Data {
             r#"
             with category_id as (
                 insert into transaction_categories (
+                    id,
                     user_id,
                     created_at,
                     updated_at,
                     name,
                     is_neutral
                 )
-                values ($1, $2, null, $3, false)
+                values ($4, $1, $2, NULL, $3, false)
                 on conflict (user_id, lower(name))
                 do update set name = excluded.name
                 returning id
@@ -971,6 +972,48 @@ impl Data {
             user_id,
             tx1_id,
             tx2_id,
+        )
+        .execute(&self.pg_pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn tx_bulk_actions(
+        &self,
+        user_id: &str,
+        tx_ids: Vec<String>,
+        category_name: &str,
+    ) -> Result<(), sqlx::Error> {
+        let category_id = create_id();
+
+        query!(
+            r#"
+            with category_id as (
+                insert into transaction_categories (
+                    id,
+                    user_id,
+                    created_at,
+                    updated_at,
+                    name,
+                    is_neutral
+                )
+                values ($2, $1, $4, NULL, $3, false)
+                on conflict (user_id, lower(name))
+                do update set name = excluded.name
+                returning id
+            )
+            update transactions
+            set
+                updated_at = $4,
+                category_id = coalesce((select id from category_id), $2)
+            where user_id = $1 and id = ANY($5)
+            "#,
+            user_id,
+            category_id,
+            category_name,
+            Utc::now(),
+            &tx_ids[..]
         )
         .execute(&self.pg_pool)
         .await?;

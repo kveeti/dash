@@ -142,7 +142,7 @@ function Thing2({
 }: {
 	data: typeof testdata;
 }) {
-	const { formatAmount } = useLocaleStuff();
+	const { f } = useLocaleStuff();
 
 	const [selectedDateIndex, setSelectedDateIndex] = useState<number | null>(null);
 	const selectedDate = typeof selectedDateIndex === "number" ? dates[selectedDateIndex] : null;
@@ -186,8 +186,8 @@ function Thing2({
 								</h3>
 
 								<div className="relative space-y-1 p-1">
-									<Row width={clamp(i)} value={formatAmount(i)} label={"+"} />
-									<Row width={clamp(e)} value={formatAmount(e)} label={"-"} />
+									<Row width={clamp(i)} value={f.amount.format(i)} label={"+"} />
+									<Row width={clamp(e)} value={f.amount.format(e)} label={"-"} />
 								</div>
 							</div>
 						);
@@ -201,12 +201,12 @@ function Thing2({
 						<div className="space-y-1 p-1">
 							<Row
 								width={getClamp(0, Math.max(ti, te))(ti)}
-								value={formatAmount(ti)}
+								value={f.amount.format(ti)}
 								label={"+"}
 							/>
 							<Row
 								width={getClamp(0, Math.max(ti, te))(te)}
-								value={formatAmount(te)}
+								value={f.amount.format(te)}
 								label={"-"}
 							/>
 						</div>
@@ -218,7 +218,7 @@ function Thing2({
 									(ti - te < 0 ? " text-red-10" : "")
 								}
 							>
-								{formatAmount(ti - te)}
+								{f.amount.format(ti - te)}
 							</span>
 						</div>
 					</div>
@@ -251,7 +251,7 @@ function Thing2({
 											<div className="space-y-1 px-1 py-1">
 												<Row
 													width={clamp(val)}
-													value={formatAmount(val)}
+													value={f.amount.format(val)}
 													label={cat}
 												/>
 											</div>
@@ -282,7 +282,7 @@ function Thing2({
 											<div className="space-y-1 px-1 py-1">
 												<Row
 													width={clamp(val)}
-													value={formatAmount(val)}
+													value={f.amount.format(val)}
 													label={cat}
 												/>
 											</div>
@@ -310,12 +310,12 @@ function Thing2({
 										<div className="space-y-1 p-1">
 											<Row
 												width={clamp(i)}
-												value={formatAmount(i)}
+												value={f.amount.format(i)}
 												label={"+"}
 											/>
 											<Row
 												width={clamp(e)}
-												value={formatAmount(e)}
+												value={f.amount.format(e)}
 												label={"-"}
 											/>
 										</div>
@@ -327,7 +327,7 @@ function Thing2({
 													(sum < 0 ? " text-red-10" : "")
 												}
 											>
-												{formatAmount(sum)}
+												{f.amount.format(sum)}
 											</span>
 										</div>
 									</div>

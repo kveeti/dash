@@ -44,6 +44,7 @@ async fn main() {
         .route("/stats", get(transactions::get_stats))
         .route("/query", post(transactions::query))
         .route("/", post(transactions::create))
+        .route("/bulk", post(transactions::bulk))
         .route("/import/{account_id}", post(transactions::import))
         .route("/{id}", patch(transactions::update))
         .route("/{id}", delete(transactions::delete))

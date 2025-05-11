@@ -4,7 +4,7 @@ import { ComponentProps, useId } from "react";
 
 export function Checkbox(
 	props: ComponentProps<typeof _Checkbox.Root> & {
-		label: string;
+		label?: string;
 	}
 ) {
 	const id = useId();
@@ -21,9 +21,11 @@ export function Checkbox(
 				</_Checkbox.Indicator>
 			</_Checkbox.Root>
 
-			<label htmlFor={id} className="ms-2">
-				{props.label}
-			</label>
+			{props.label && (
+				<label htmlFor={id} className="ms-2">
+					{props.label}
+				</label>
+			)}
 		</div>
 	);
 }

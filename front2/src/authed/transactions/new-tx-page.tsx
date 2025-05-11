@@ -17,7 +17,7 @@ import { useLocaleStuff } from "../use-formatting";
 // maybe support creating accounts and categories
 // with a plus button & dialog instead of this monstrosity
 // this works tho
-const custom = "__CUSTOM__DO__NOT__USE__OR__YOU__WILL__BE__FIRED__";
+export const CUSTOM_VALUE_PREFIX = "__CUSTOM__DO__NOT__USE__OR__YOU__WILL__BE__FIRED__";
 
 export default function NewTxPage() {
 	const mutation = api.useMutation("post", "/transactions");
@@ -37,8 +37,8 @@ export default function NewTxPage() {
 			date: new Date(data.date).toISOString(),
 			additional: data.additional,
 			// i dont like this
-			category_name: data.category_name.replace(custom, ""),
-			account_name: data.account_name.replace(custom, ""),
+			category_name: data.category_name.replace(CUSTOM_VALUE_PREFIX, ""),
+			account_name: data.account_name.replace(CUSTOM_VALUE_PREFIX, ""),
 		};
 
 		mutation.mutateAsync({ body: input }).catch((error) => {
@@ -199,12 +199,14 @@ export function AccountField({
 	// i dont like this
 	const items = useDeferredValue([
 		...list.items,
-		...(!list.items.length ? [{ id: custom, name: `create "${list.filterText}"` }] : []),
+		...(!list.items.length
+			? [{ id: CUSTOM_VALUE_PREFIX, name: `create "${list.filterText}"` }]
+			: []),
 	]);
 	function onSelectionChange(key: string) {
-		if (key === custom) {
+		if (key === CUSTOM_VALUE_PREFIX) {
 			list.remove(key);
-			const newKey = custom + list.filterText;
+			const newKey = CUSTOM_VALUE_PREFIX + list.filterText;
 			list.insert(0, {
 				id: newKey,
 				name: list.filterText,
@@ -299,7 +301,7 @@ export function AccountIdField({
 				<Rac.SelectValue />
 			</Rac.Button>
 
-			<Rac.Popover className="bg-gray-1 border-gray-4 w-(--trigger-width) border outline-hidden">
+			<Rac.Popover className="bg-gray-1 border-gray-4 !max-h-10 w-(--trigger-width) border outline-hidden">
 				<Rac.Autocomplete
 					inputValue={list.filterText}
 					onInputChange={list.setFilterText}
@@ -313,7 +315,10 @@ export function AccountIdField({
 						/>
 					</Rac.TextField>
 
-					<Rac.ListBox className="w-full" items={list.items}>
+					<Rac.ListBox
+						className="w-full scroll-pb-1 overflow-auto"
+						items={[{ id: "1", name: "11" }]}
+					>
 						{(thing) => <SelectItem>{thing.name}</SelectItem>}
 					</Rac.ListBox>
 				</Rac.Autocomplete>
@@ -360,12 +365,14 @@ export function CategoryField({
 	// i dont like this
 	const items = useDeferredValue([
 		...list.items,
-		...(!list.items.length ? [{ id: custom, name: `create "${list.filterText}"` }] : []),
+		...(!list.items.length
+			? [{ id: CUSTOM_VALUE_PREFIX, name: `create "${list.filterText}"` }]
+			: []),
 	]);
 	function onSelectionChange(key: string) {
-		if (key === custom) {
+		if (key === CUSTOM_VALUE_PREFIX) {
 			list.remove(key);
-			const newKey = custom + list.filterText;
+			const newKey = CUSTOM_VALUE_PREFIX + list.filterText;
 			list.insert(0, {
 				id: newKey,
 				name: list.filterText,
@@ -381,14 +388,17 @@ export function CategoryField({
 		<Rac.Select
 			name={name}
 			placeholder="select a category"
+			defaultSelectedKey={defaultValue}
 			selectedKey={selectedKey}
 			onSelectionChange={onSelectionChange}
 		>
-			<LabelWrapper>
-				<Rac.Label className={labelStyles}>{label}</Rac.Label>
+			{label && (
+				<LabelWrapper>
+					<Rac.Label className={labelStyles}>{label}</Rac.Label>
 
-				{error && errorId && <Error id={errorId}>{error}</Error>}
-			</LabelWrapper>
+					{error && errorId && <Error id={errorId}>{error}</Error>}
+				</LabelWrapper>
+			)}
 
 			<Rac.Button className={buttonStyles({ variant: "outline" }) + " w-full justify-start"}>
 				<Rac.SelectValue />
@@ -402,7 +412,6 @@ export function CategoryField({
 				>
 					<Rac.TextField aria-label="search categories...">
 						<Rac.Input
-							defaultValue={defaultValue}
 							placeholder="search categories..."
 							autoFocus
 							className="border-gray-4 h-10 w-full border-b px-3 outline-hidden placeholder:opacity-80"
@@ -410,7 +419,7 @@ export function CategoryField({
 					</Rac.TextField>
 
 					<Rac.ListBox className="w-full" items={items}>
-						{(thing) => <SelectItem>{thing.name}</SelectItem>}
+						{(thing) => <SelectItem id={thing.name}>{thing.name}</SelectItem>}
 					</Rac.ListBox>
 				</Rac.Autocomplete>
 			</Rac.Popover>

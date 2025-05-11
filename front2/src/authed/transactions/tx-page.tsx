@@ -1,10 +1,13 @@
+import * as ak from "@ariakit/react";
 import { UseQueryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tooltip } from "radix-ui";
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, ReactNode, useRef, useState } from "react";
+import * as Rac from "react-aria-components";
+import { useAsyncList } from "react-stately";
 import { toast } from "sonner";
 import { useLocation, useSearchParams } from "wouter";
 
-import { api } from "../../api";
+import { api, fetchClient } from "../../api";
 import { paths } from "../../api_types";
 import { errorToast } from "../../lib/error-toast";
 import { Button } from "../../ui/button";
@@ -14,14 +17,14 @@ import { IconChevronLeft } from "../../ui/icons/chevron-left";
 import { IconChevronRight } from "../../ui/icons/chevron-right";
 import { IconCopy } from "../../ui/icons/copy";
 import { IconCross } from "../../ui/icons/cross";
-import { Input } from "../../ui/input";
+import { Input, inputStyles } from "../../ui/input";
 import { Link } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
 import { Spinner } from "../../ui/spinner";
 import { useLocaleStuff } from "../use-formatting";
-import { CategoryField, DateField } from "./new-tx-page";
+import { CUSTOM_VALUE_PREFIX, DateField } from "./new-tx-page";
 
-type Tx =
+export type Tx =
 	paths["/transactions/query"]["post"]["responses"]["200"]["content"]["application/json"]["transactions"][number];
 
 export default function TxPage() {
@@ -47,21 +50,31 @@ export default function TxPage() {
 
 	const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
 	const selectedTx = q.data?.transactions.find((t) => t.id === selectedTxId);
+	const [selectedKeys, setSelectedKeys] = useState<Rac.Selection>(new Set());
+	const [selectingEnabled, setSelectingEnabled] = useState(false);
 
-	function onTxClick(this: Tx) {
-		setSelectedTxId((p) => (p === this.id ? null : this.id));
+	function onTxClick(tx: Tx) {
+		setSelectedTxId((p) => (p === tx.id ? null : tx.id));
 	}
 
 	return (
-		<main className="w-full max-w-[320px]">
+		<main className="w-full max-w-md">
+			{!!selectedKeys.size && selectingEnabled && (
+				<Bulks selectedKeys={selectedKeys} onClear={() => setSelectedKeys(new Set())} />
+			)}
+
 			{/* desktop */}
-			<div className="bg-gray-1 border-b-gray-4 order-b sticky top-10 hidden pt-2 sm:block">
+			<div className="bg-gray-1 border-b-gray-4 sticky top-10 hidden border-b pt-2 sm:block">
 				<div className="flex gap-1">
 					<Search currentSearchParams={searchParams} />
 				</div>
 
 				<div className="flex items-center justify-between py-2">
 					{q.isPending && <Spinner />}
+
+					<Button variant="ghost" onClick={() => setSelectingEnabled((p) => !p)}>
+						{selectingEnabled ? "open" : "select"}
+					</Button>
 
 					<Pagination
 						className="ml-auto"
@@ -76,6 +89,10 @@ export default function TxPage() {
 			<div className="bg-gray-1 border-t-gray-5 pwa:bottom-20 fixed right-0 bottom-10 left-0 block border-t px-1 pb-2 sm:hidden">
 				<div className="flex items-center justify-between py-2">
 					{q.isPending && <Spinner />}
+
+					<Button variant="ghost" onClick={() => setSelectingEnabled((p) => !p)}>
+						{selectingEnabled ? "open" : "select"}
+					</Button>
 
 					<Pagination
 						className="ml-auto"
@@ -116,21 +133,50 @@ export default function TxPage() {
 						</div>
 					)}
 
-					<TxList onTxClick={onTxClick} list={q.data.transactions} />
+					<TxList
+						onTxClick={onTxClick}
+						list={q.data.transactions}
+						s={selectedKeys}
+						setS={setSelectedKeys}
+						selectingEnabled={selectingEnabled}
+						setSelectingEnabled={setSelectingEnabled}
+					/>
 				</>
 			)}
 		</main>
 	);
 }
 
-function TxList({ list, onTxClick }: { list: Array<Tx>; onTxClick: (this: Tx) => void }) {
+function TxList({
+	list,
+	onTxClick,
+	s,
+	setS,
+	selectingEnabled,
+	setSelectingEnabled,
+}: {
+	list: Array<Tx>;
+	onTxClick: (tx: Tx) => void;
+	s: Rac.Selection;
+	setS: (s: Rac.Selection) => void;
+	selectingEnabled: boolean;
+	setSelectingEnabled: (val: boolean) => void;
+}) {
 	const { f } = useLocaleStuff();
 
 	const thisYear = new Date().getFullYear();
 	let lastDate = "";
 
 	return (
-		<ul className="grid grid-cols-[max-content_1fr_auto] items-center">
+		<Rac.GridList
+			aria-label="transaction list"
+			className="grid grid-cols-[max-content_1fr_auto] items-center"
+			selectionMode={selectingEnabled ? "multiple" : "none"}
+			selectionBehavior="toggle"
+			disallowTypeAhead
+			selectedKeys={s}
+			onSelectionChange={setS}
+		>
 			{list.map((t) => {
 				const asDate = new Date(t.date);
 				const year = asDate.getFullYear();
@@ -144,15 +190,17 @@ function TxList({ list, onTxClick }: { list: Array<Tx>; onTxClick: (this: Tx) =>
 				const isPositive = t.amount > 0;
 
 				return (
-					<li
+					<Rac.GridListItem
 						key={t.id}
 						data-id={t.id}
-						className="group col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
-						onClick={onTxClick.bind(t)}
+						id={t.id}
+						className="focus group data-selected:bg-gray-a4 col-[span_3] grid w-full grid-cols-subgrid overflow-hidden text-sm"
+						textValue={t.counter_party}
+						onAction={selectingEnabled ? undefined : () => onTxClick(t)}
 					>
 						<span
 							className={
-								"col-[1] flex h-full items-start px-2 py-3 text-sm" +
+								"col-[1] flex h-full items-start px-2 py-1.5 text-sm" +
 								(!showDate
 									? " invisible group-hover:visible"
 									: " border-t-gray-3 border-t")
@@ -161,28 +209,34 @@ function TxList({ list, onTxClick }: { list: Array<Tx>; onTxClick: (this: Tx) =>
 							{date}
 						</span>
 
-						<span className="border-t-gray-3 col-[2] flex items-center truncate border-t p-3">
+						<span className="border-t-gray-3 col-[2] flex flex-col truncate border-t p-1.5">
 							<div className="flex flex-col gap-0.5 truncate">
 								<span className="truncate">{t.counter_party}</span>
 							</div>
+							<span
+								className={
+									"text-[10px] " +
+									(!t.category?.name ? "text-red-11" : "text-gray-11")
+								}
+							>
+								{t.category?.name ?? "uncategorized"}
+							</span>
 						</span>
 
 						<div
 							className={
-								"border-t-gray-3 col-[3] border-t px-2 py-3 text-right tabular-nums" +
+								"border-t-gray-3 col-[3] border-t px-2 py-1.5 text-right tabular-nums" +
 								(isPositive ? " text-green-10" : "")
 							}
 						>
 							{f.amount.format(t.amount)}
 						</div>
-					</li>
+					</Rac.GridListItem>
 				);
 			})}
-		</ul>
+		</Rac.GridList>
 	);
 }
-
-function Tx({ t }: { t: Tx }) {}
 
 function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams }) {
 	const [location, setLocation] = useLocation();
@@ -282,7 +336,7 @@ function SelectedTx({
 	const { f } = useLocaleStuff();
 
 	const qc = useQueryClient();
-	const mutation = api.useMutation("post", "/transactions/{id}", {
+	const mutation = api.useMutation("patch", "/transactions/{id}", {
 		onSuccess: () => {
 			qc.invalidateQueries(opts);
 		},
@@ -303,7 +357,10 @@ function SelectedTx({
 					counter_party: formData.get("counter_party") as string,
 					currency: "EUR",
 					additional: formData.get("additional") as string,
-					category_name: formData.get("category_name") as string | null,
+					category_name: formData
+						.get("category_name")
+						?.toString()
+						.replace(CUSTOM_VALUE_PREFIX, "") as string | null,
 				},
 			})
 			.catch(errorToast("error updating transaction"));
@@ -548,5 +605,103 @@ function DeleteTransaction({
 				</div>
 			</Dialog.Content>
 		</Dialog.Root>
+	);
+}
+
+function Bulks({ selectedKeys, onClear }: { selectedKeys: Rac.Selection; onClear: () => void }) {
+	const qc = useQueryClient();
+	const mutation = api.useMutation("post", "/transactions/bulk", {
+		onSuccess: () => {
+			qc.invalidateQueries(api.queryOptions("post", "/transactions/query"));
+		},
+	});
+
+	function onSubmit(e: FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+		if (mutation.isPending || !selectedKeys.size) return;
+
+		const data = Object.fromEntries(new FormData(e.currentTarget));
+
+		mutation.mutateAsync({
+			body: {
+				ids: [...selectedKeys] as Array<string>,
+				category_name: data.category_name,
+			},
+		});
+	}
+
+	return (
+		<div className="bg-gray-1 border-gray-a4 fixed bottom-2 flex w-full max-w-md items-center justify-between border p-2">
+			<Tooltip.Root>
+				<Tooltip.Trigger asChild>
+					<Button className="gap-3 text-xs" variant="ghost" onClick={onClear}>
+						<IconCross className="size-3" /> {selectedKeys.size} selected
+					</Button>
+				</Tooltip.Trigger>
+				<Tooltip.Portal>
+					<Tooltip.Content className="bg-gray-1 border-gray-5 z-10 border p-2">
+						clear selection
+					</Tooltip.Content>
+				</Tooltip.Portal>
+			</Tooltip.Root>
+
+			<form onSubmit={onSubmit} className="flex items-center gap-2">
+				<CategoryField name="category_name" />
+
+				<Button>apply</Button>
+			</form>
+		</div>
+	);
+}
+
+function CategoryField() {
+	const list = useAsyncList<{ id: string; name: string }>({
+		load: async ({ signal, filterText }) => {
+			const res = await fetchClient.GET("/categories", {
+				signal,
+				params: { query: { search_text: filterText } },
+			});
+
+			if (res.error) {
+				throw "error";
+			}
+
+			return {
+				items: res.data,
+			};
+		},
+	});
+
+	return (
+		<ak.ComboboxProvider value={list.filterText} setValue={list.setFilterText}>
+			<ak.Combobox
+				className={inputStyles}
+				autoSelect
+				placeholder="search categories..."
+				name="category_name"
+			></ak.Combobox>
+
+			<ak.ComboboxPopover
+				gutter={4}
+				className="bg-gray-1 border-gray-4 min-w-(--popover-anchor-width) border outline-hidden"
+			>
+				{list.items.map((c) => (
+					<ak.ComboboxItem
+						className="data-active-item:bg-gray-a4 px-2 py-1"
+						value={c.name}
+					>
+						{c.name}
+					</ak.ComboboxItem>
+				))}
+				{list.filterText && !list.items.length && (
+					<ak.ComboboxItem
+						value={list.filterText}
+						className="data-active-item:bg-gray-a4 px-2 py-1"
+					>
+						create "{list.filterText}"
+					</ak.ComboboxItem>
+				)}
+			</ak.ComboboxPopover>
+		</ak.ComboboxProvider>
 	);
 }
