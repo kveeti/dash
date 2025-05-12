@@ -7,7 +7,12 @@ use http::StatusCode;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use crate::{auth_middleware::User, data::UpdateTx, error::ApiError, state::AppState};
+use crate::{
+    auth_middleware::User,
+    data::{IdentifierSpec, UpdateTx},
+    error::ApiError,
+    state::AppState,
+};
 
 #[derive(Deserialize, ToSchema)]
 pub struct TransactionUpdateInput {
@@ -17,6 +22,9 @@ pub struct TransactionUpdateInput {
     pub additional: Option<String>,
     pub currency: String,
     pub category_name: Option<String>,
+    pub category_id: Option<String>,
+    pub account_name: Option<String>,
+    pub account_id: Option<String>,
 }
 
 #[utoipa::path(
@@ -48,14 +56,25 @@ pub async fn update(
         date: input.date,
     };
 
-    if let Some(category_name) = input.category_name {
-        state
-            .data
-            .update_tx_with_category(&user.id, &id, &tx, &category_name)
-            .await?;
-    } else {
-        state.data.update_tx(&user.id, &id, &tx).await?;
-    }
+    let cat = match (input.category_name, input.category_id) {
+        (Some(_), Some(_)) => Err(ApiError::BadRequest(
+            "category_id OR category_name".to_string(),
+        ))?,
+        (Some(name), None) => Some(IdentifierSpec::Name(name.to_owned())),
+        (None, Some(id)) => Some(IdentifierSpec::Id(id.to_owned())),
+        _ => None,
+    };
+
+    let acc = match (input.account_name, input.account_id) {
+        (Some(_), Some(_)) => Err(ApiError::BadRequest(
+            "account_id OR account_name".to_string(),
+        ))?,
+        (Some(name), None) => Some(IdentifierSpec::Name(name.to_owned())),
+        (None, Some(id)) => Some(IdentifierSpec::Id(id.to_owned())),
+        _ => None,
+    };
+
+    state.data.update_tx_2(&user.id, &id, &tx, acc, cat).await?;
 
     return Ok(StatusCode::OK);
 }

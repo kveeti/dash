@@ -4,7 +4,7 @@ use anyhow::Context;
 use chrono::{DateTime, Utc};
 
 use crate::{
-    data::{Data, Tx, UpdateTx},
+    data::{Data, Tx},
     endpoints::{self},
     error::ApiError,
 };
@@ -38,25 +38,6 @@ pub async fn create(
 
 pub async fn delete(data: &Data, user_id: &str, tx_id: &str) -> anyhow::Result<()> {
     data.delete_tx(user_id, tx_id).await?;
-
-    Ok(())
-}
-
-pub async fn update(
-    data: &Data,
-    user_id: &str,
-    tx_id: &str,
-    input: &endpoints::transactions::update::TransactionUpdateInput,
-) -> anyhow::Result<()> {
-    let tx = UpdateTx {
-        amount: input.amount,
-        counter_party: &input.counter_party,
-        date: input.date,
-        additional: input.additional.as_deref(),
-        currency: "EUR",
-    };
-
-    data.update_tx(user_id, tx_id, &tx).await?;
 
     Ok(())
 }

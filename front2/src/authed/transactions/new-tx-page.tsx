@@ -1,23 +1,18 @@
+import * as ak from "@ariakit/react";
 import { parseDateTime } from "@internationalized/date";
 import { CalendarIcon } from "@radix-ui/react-icons";
 import { format } from "date-fns";
-import { useDeferredValue, useId, useState } from "react";
+import { startTransition, useId, useState } from "react";
 import * as Rac from "react-aria-components";
 import { useAsyncList } from "react-stately";
 
 import { api, fetchClient } from "../../api";
-import { things } from "../../things";
 import { Button, buttonStyles } from "../../ui/button";
-import { IconCheck } from "../../ui/icons/check";
 import { IconChevronLeft } from "../../ui/icons/chevron-left";
 import { IconChevronRight } from "../../ui/icons/chevron-right";
+import { IconChevronsUpDown } from "../../ui/icons/chevrons-up-down";
 import { Error, Input, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 import { useLocaleStuff } from "../use-formatting";
-
-// maybe support creating accounts and categories
-// with a plus button & dialog instead of this monstrosity
-// this works tho
-export const CUSTOM_VALUE_PREFIX = "__CUSTOM__DO__NOT__USE__OR__YOU__WILL__BE__FIRED__";
 
 export default function NewTxPage() {
 	const mutation = api.useMutation("post", "/transactions");
@@ -31,14 +26,27 @@ export default function NewTxPage() {
 		const formData = new FormData(e.currentTarget);
 		const data = Object.fromEntries(formData);
 
+		let category_key = "category_name";
+		let category_value = data.category_name;
+		if (data.category_id) {
+			category_key = "category_id";
+			category_value = data.category_id;
+		}
+
+		let account_key = "account_name";
+		let account_value = data.account_name;
+		if (data.account_id) {
+			account_key = "account_id";
+			account_value = data.account_id;
+		}
+
 		const input = {
 			counter_party: data.counter_party,
 			amount: Number(data.amount),
 			date: new Date(data.date).toISOString(),
 			additional: data.additional,
-			// i dont like this
-			category_name: data.category_name.replace(CUSTOM_VALUE_PREFIX, ""),
-			account_name: data.account_name.replace(CUSTOM_VALUE_PREFIX, ""),
+			[category_key]: category_value,
+			[account_key]: account_value,
 		};
 
 		mutation.mutateAsync({ body: input }).catch((error) => {
@@ -52,8 +60,6 @@ export default function NewTxPage() {
 		<main className="w-full max-w-[320px]">
 			<h1 className="mb-4 text-lg font-medium">new transaction</h1>
 
-			<Import />
-
 			<form className="w-full" onSubmit={handleSubmit}>
 				<fieldset className="space-y-3">
 					<Input
@@ -63,13 +69,9 @@ export default function NewTxPage() {
 					/>
 					<Input label="amount" name="amount" error={errors?.amount} />
 					<DateField label="date" name="date" error={errors?.date} />
-					<CategoryField
-						label="category"
-						name="category_name"
-						error={errors?.category_name}
-					/>
 					<Input label="additional" name="additional" error={errors?.additional} />
-					<AccountField label="account" name="account_name" />
+					<CategoryField error={errors?.category} />
+					<AccountField error={errors?.account} />
 				</fieldset>
 
 				<div className="mt-6 flex justify-end">
@@ -163,19 +165,12 @@ export function DateField({
 	);
 }
 
-export function AccountField({
-	name,
-	label,
-	error,
-}: {
-	name?: string;
-	label: string;
-	error?: string;
-}) {
-	const id = useId();
-	const errorId = error ? id + "-error" : undefined;
-
-	let { contains } = Rac.useFilter({ sensitivity: "base" });
+export function AccountField({ error }: { error?: string }) {
+	const [s, setS] = useState<{
+		custom: boolean;
+		value: string;
+		label: string;
+	} | null>(null);
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
@@ -194,154 +189,93 @@ export function AccountField({
 		},
 	});
 
-	const [selectedKey, setSelectedKey] = useState<string | null>(null);
+	function onSelect(val: string) {
+		const existing = list.items.find((x) => x.id === val);
 
-	// i dont like this
-	const items = useDeferredValue([
-		...list.items,
-		...(!list.items.length
-			? [{ id: CUSTOM_VALUE_PREFIX, name: `create "${list.filterText}"` }]
-			: []),
-	]);
-	function onSelectionChange(key: string) {
-		if (key === CUSTOM_VALUE_PREFIX) {
-			list.remove(key);
-			const newKey = CUSTOM_VALUE_PREFIX + list.filterText;
-			list.insert(0, {
-				id: newKey,
-				name: list.filterText,
-			});
-			setSelectedKey(newKey);
+		if (!existing) {
+			setS({ custom: true, label: val, value: val });
 			return;
 		}
 
-		setSelectedKey(key);
+		setS({ custom: false, label: existing.name, value: existing.id });
 	}
 
+	const id = useId();
+	const errorId = error ? id + "-error" : undefined;
+
 	return (
-		<Rac.Select
-			name={name}
-			placeholder="select an account"
-			selectedKey={selectedKey}
-			onSelectionChange={onSelectionChange}
+		<ak.ComboboxProvider
+			value={list.filterText}
+			setValue={(val) => {
+				startTransition(() => {
+					list.setFilterText(val);
+				});
+			}}
 		>
-			<LabelWrapper>
-				<Rac.Label className={labelStyles}>{label}</Rac.Label>
+			<ak.SelectProvider setValue={onSelect} value={s?.value ?? ""}>
+				<LabelWrapper>
+					<ak.SelectLabel className={labelStyles}>account</ak.SelectLabel>
 
-				{error && errorId && <Error id={errorId}>{error}</Error>}
-			</LabelWrapper>
+					{error && errorId && <Error id={errorId}>{error}</Error>}
+				</LabelWrapper>
 
-			<Rac.Button className={buttonStyles({ variant: "outline" }) + " w-full justify-start"}>
-				<Rac.SelectValue />
-			</Rac.Button>
-
-			<Rac.Popover className="bg-gray-1 border-gray-4 w-(--trigger-width) border outline-hidden">
-				<Rac.Autocomplete
-					inputValue={list.filterText}
-					onInputChange={list.setFilterText}
-					filter={contains}
+				<ak.Select
+					className={
+						"focus border-gray-6 flex h-10 w-full items-center justify-between border"
+					}
+					name={s?.custom ? "account_name" : "account_id"}
 				>
-					<Rac.TextField aria-label="search accounts...">
-						<Rac.Input
-							placeholder="search accounts..."
-							autoFocus
-							className="border-gray-4 h-10 w-full border-b px-3 outline-hidden placeholder:opacity-80"
-						/>
-					</Rac.TextField>
+					<span className="ps-3">{s ? s.label : "select an account"}</span>
 
-					<Rac.ListBox className="w-full" items={items}>
-						{(thing) => <SelectItem>{thing.name}</SelectItem>}
-					</Rac.ListBox>
-				</Rac.Autocomplete>
-			</Rac.Popover>
-		</Rac.Select>
+					<IconChevronsUpDown className="text-gray-a11 me-2 size-5" />
+				</ak.Select>
+
+				<ak.SelectPopover
+					gutter={4}
+					sameWidth
+					className="bg-gray-1 border-gray-4 z-10 min-w-(--popover-anchor-width) border outline-hidden"
+				>
+					<ak.Combobox
+						className="border-gray-a4 w-full border-b px-3 py-2 outline-hidden"
+						autoSelect
+						placeholder="search accounts..."
+						name="account_name"
+					/>
+
+					<ak.ComboboxList>
+						<ak.ComboboxList>
+							{list.items.map((x) => (
+								<SelectComboItem value={x.name} />
+							))}
+
+							{list.items.length && list.isLoading ? (
+								<SelectComboItem>loading</SelectComboItem>
+							) : (
+								!list.items.length &&
+								list.filterText &&
+								!list.isLoading &&
+								list.filterText === list.filterText && (
+									<SelectComboItem value={list.filterText}>
+										<p className="max-w-(--popover-anchor-width) truncate">
+											create "{list.filterText}"
+										</p>
+									</SelectComboItem>
+								)
+							)}
+						</ak.ComboboxList>
+					</ak.ComboboxList>
+				</ak.SelectPopover>
+			</ak.SelectProvider>
+		</ak.ComboboxProvider>
 	);
 }
 
-export function AccountIdField({
-	name,
-	label,
-	error,
-}: {
-	name?: string;
-	label: string;
-	error?: string;
-}) {
-	const id = useId();
-	const errorId = error ? id + "-error" : undefined;
-
-	let { contains } = Rac.useFilter({ sensitivity: "base" });
-
-	const list = useAsyncList<{ id: string; name: string }>({
-		load: async ({ signal, filterText }) => {
-			const res = await fetchClient.GET("/accounts", {
-				signal,
-				params: { query: { search_text: filterText } },
-			});
-
-			if (res.error) {
-				throw "error";
-			}
-
-			return {
-				items: res.data,
-			};
-		},
-	});
-
-	return (
-		<Rac.Select name={name} placeholder="select an account">
-			<LabelWrapper>
-				<Rac.Label className={labelStyles}>{label}</Rac.Label>
-
-				{error && errorId && <Error id={errorId}>{error}</Error>}
-			</LabelWrapper>
-
-			<Rac.Button className={buttonStyles({ variant: "outline" }) + " w-full justify-start"}>
-				<Rac.SelectValue />
-			</Rac.Button>
-
-			<Rac.Popover className="bg-gray-1 border-gray-4 !max-h-10 w-(--trigger-width) border outline-hidden">
-				<Rac.Autocomplete
-					inputValue={list.filterText}
-					onInputChange={list.setFilterText}
-					filter={contains}
-				>
-					<Rac.TextField aria-label="search accounts...">
-						<Rac.Input
-							placeholder="search accounts..."
-							autoFocus
-							className="border-gray-4 h-10 w-full border-b px-3 outline-hidden placeholder:opacity-80"
-						/>
-					</Rac.TextField>
-
-					<Rac.ListBox
-						className="w-full scroll-pb-1 overflow-auto"
-						items={[{ id: "1", name: "11" }]}
-					>
-						{(thing) => <SelectItem>{thing.name}</SelectItem>}
-					</Rac.ListBox>
-				</Rac.Autocomplete>
-			</Rac.Popover>
-		</Rac.Select>
-	);
-}
-
-export function CategoryField({
-	name,
-	label,
-	error,
-	defaultValue,
-}: {
-	name?: string;
-	label: string;
-	error?: string;
-	defaultValue?: string;
-}) {
-	const id = useId();
-	const errorId = error ? id + "-error" : undefined;
-
-	const { contains } = Rac.useFilter({ sensitivity: "base" });
+export function CategoryField({ error, defaultValue }: { error?: string; defaultValue?: string }) {
+	const [s, setS] = useState<{
+		custom: boolean;
+		value: string;
+		label: string;
+	} | null>(defaultValue ? { custom: false, value: defaultValue, label: "loading..." } : null);
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
@@ -360,124 +294,83 @@ export function CategoryField({
 		},
 	});
 
-	const [selectedKey, setSelectedKey] = useState<string | null>(null);
+	function onSelect(val: string) {
+		const existing = list.items.find((x) => x.id === val);
 
-	// i dont like this
-	const items = useDeferredValue([
-		...list.items,
-		...(!list.items.length
-			? [{ id: CUSTOM_VALUE_PREFIX, name: `create "${list.filterText}"` }]
-			: []),
-	]);
-	function onSelectionChange(key: string) {
-		if (key === CUSTOM_VALUE_PREFIX) {
-			list.remove(key);
-			const newKey = CUSTOM_VALUE_PREFIX + list.filterText;
-			list.insert(0, {
-				id: newKey,
-				name: list.filterText,
-			});
-			setSelectedKey(newKey);
+		if (!existing) {
+			setS({ custom: true, label: val, value: val });
 			return;
 		}
 
-		setSelectedKey(key);
+		setS({ custom: false, label: existing.name, value: existing.id });
 	}
 
+	const id = useId();
+	const errorId = error ? id + "-error" : undefined;
+
 	return (
-		<Rac.Select
-			name={name}
-			placeholder="select a category"
-			defaultSelectedKey={defaultValue}
-			selectedKey={selectedKey}
-			onSelectionChange={onSelectionChange}
-		>
-			{label && (
+		<ak.ComboboxProvider value={list.filterText} setValue={list.setFilterText}>
+			<ak.SelectProvider setValue={onSelect} value={s?.value ?? ""}>
 				<LabelWrapper>
-					<Rac.Label className={labelStyles}>{label}</Rac.Label>
+					<ak.SelectLabel className={labelStyles}>category</ak.SelectLabel>
 
 					{error && errorId && <Error id={errorId}>{error}</Error>}
 				</LabelWrapper>
-			)}
 
-			<Rac.Button className={buttonStyles({ variant: "outline" }) + " w-full justify-start"}>
-				<Rac.SelectValue />
-			</Rac.Button>
-
-			<Rac.Popover className="bg-gray-1 border-gray-4 w-(--trigger-width) border outline-hidden">
-				<Rac.Autocomplete
-					inputValue={list.filterText}
-					onInputChange={list.setFilterText}
-					filter={contains}
+				<ak.Select
+					name={s?.custom ? "category_name" : "category_id"}
+					className={
+						"focus border-gray-6 flex h-10 w-full items-center justify-between border"
+					}
 				>
-					<Rac.TextField aria-label="search categories...">
-						<Rac.Input
-							placeholder="search categories..."
-							autoFocus
-							className="border-gray-4 h-10 w-full border-b px-3 outline-hidden placeholder:opacity-80"
-						/>
-					</Rac.TextField>
+					<span className="ps-3">{s?.value ?? "select a category"}</span>
 
-					<Rac.ListBox className="w-full" items={items}>
-						{(thing) => <SelectItem id={thing.name}>{thing.name}</SelectItem>}
-					</Rac.ListBox>
-				</Rac.Autocomplete>
-			</Rac.Popover>
-		</Rac.Select>
+					<IconChevronsUpDown className="text-gray-a11 me-2 size-5" />
+				</ak.Select>
+
+				<ak.SelectPopover
+					gutter={4}
+					className="bg-gray-1 border-gray-4 z-10 min-w-(--popover-anchor-width) border outline-hidden"
+				>
+					<ak.Combobox
+						className="border-gray-a4 w-full border-b px-3 py-2 outline-hidden"
+						autoSelect
+						placeholder="search categories..."
+						name="category_name"
+					/>
+
+					<ak.ComboboxList>
+						{list.items.map((x) => (
+							<SelectComboItem value={x.name} />
+						))}
+
+						{list.items.length && list.isLoading ? (
+							<SelectComboItem>loading</SelectComboItem>
+						) : (
+							!list.items.length &&
+							list.filterText &&
+							!list.isLoading &&
+							list.filterText === list.filterText && (
+								<SelectComboItem value={list.filterText}>
+									<p className="max-w-(--popover-anchor-width) truncate">
+										create "{list.filterText}"
+									</p>
+								</SelectComboItem>
+							)
+						)}
+					</ak.ComboboxList>
+				</ak.SelectPopover>
+			</ak.SelectProvider>
+		</ak.ComboboxProvider>
 	);
 }
-function SelectItem(props: Rac.ListBoxItemProps & { children: string }) {
+
+function SelectComboItem(props: ak.SelectItemProps) {
 	return (
-		<Rac.ListBoxItem
+		<ak.SelectItem
 			{...props}
-			textValue={props.children}
-			className="group focus:bg-gray-a5 data-focused:bg-gray-a4 flex w-full cursor-default items-center gap-2 px-4 py-2 outline-hidden select-none"
-		>
-			{({ isSelected }) => (
-				<>
-					<span className="flex flex-1 items-center gap-2 truncate">
-						{props.children}
-					</span>
-					<span className="flex w-5 items-center">{isSelected && <IconCheck />}</span>
-				</>
-			)}
-		</Rac.ListBoxItem>
-	);
-}
-
-function Import() {
-	async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-		e.preventDefault();
-
-		const formData = new FormData(e.currentTarget);
-		const account_id = formData.get("account_id");
-		formData.delete("account_id");
-
-		await fetch(things.apiBase + "/transactions/import/" + account_id, {
-			method: "POST",
-			body: formData,
-		})
-			.then((res) => res.json())
-			.then((data) => {
-				if (data.error) {
-					throw "aaaaaaaa";
-				}
-				alert("success");
-			})
-			.catch((error) => {
-				alert(error.message);
-			});
-	}
-
-	return (
-		<form onSubmit={onSubmit}>
-			<input type="file" name="op_file" />
-			<input type="file" name="generic_file" />
-			<AccountIdField name="account_id" label="account" />
-
-			<div className="mt-4 flex justify-end">
-				<Button type="submit">import</Button>
-			</div>
-		</form>
+			className="data-active-item:bg-gray-a4 p-2"
+			render={<ak.ComboboxItem />}
+		/>
 	);
 }

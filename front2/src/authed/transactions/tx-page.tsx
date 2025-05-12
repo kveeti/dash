@@ -1,7 +1,7 @@
 import * as ak from "@ariakit/react";
 import { UseQueryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tooltip } from "radix-ui";
-import { FormEvent, ReactNode, useRef, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import * as Rac from "react-aria-components";
 import { useAsyncList } from "react-stately";
 import { toast } from "sonner";
@@ -22,7 +22,7 @@ import { Link } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
 import { Spinner } from "../../ui/spinner";
 import { useLocaleStuff } from "../use-formatting";
-import { CUSTOM_VALUE_PREFIX, DateField } from "./new-tx-page";
+import { CategoryField, DateField } from "./new-tx-page";
 
 export type Tx =
 	paths["/transactions/query"]["post"]["responses"]["200"]["content"]["application/json"]["transactions"][number];
@@ -346,21 +346,25 @@ function SelectedTx({
 		event.preventDefault();
 		if (mutation.isPending) return;
 
-		const formData = new FormData(event.currentTarget);
+		const data = Object.fromEntries(new FormData(event.currentTarget));
+
+		let category_key = "category_name";
+		let category_value = data.category_name;
+		if (data.category_id) {
+			category_key = "category_id";
+			category_value = data.category_id;
+		}
 
 		mutation
 			.mutateAsync({
 				params: { path: { id: tx.id } },
 				body: {
-					date: new Date(formData.get("date") as string).toISOString(),
-					amount: Number(formData.get("amount")),
-					counter_party: formData.get("counter_party") as string,
+					date: new Date(data.date).toISOString(),
+					amount: Number(data.amount),
+					counter_party: data.counter_party,
 					currency: "EUR",
-					additional: formData.get("additional") as string,
-					category_name: formData
-						.get("category_name")
-						?.toString()
-						.replace(CUSTOM_VALUE_PREFIX, "") as string | null,
+					additional: data.additional,
+					[category_key]: category_value,
 				},
 			})
 			.catch(errorToast("error updating transaction"));
@@ -406,11 +410,7 @@ function SelectedTx({
 
 							<DateField label="date" name="date" defaultValue={tx.date} />
 
-							<CategoryField
-								name="category_name"
-								label="category"
-								defaultValue={tx.category?.name}
-							/>
+							<CategoryField defaultValue={tx.category?.name} />
 
 							<Input
 								name="additional"
@@ -622,10 +622,17 @@ function Bulks({ selectedKeys, onClear }: { selectedKeys: Rac.Selection; onClear
 
 		const data = Object.fromEntries(new FormData(e.currentTarget));
 
+		let category_key = "category_name";
+		let category_value = data.category_name;
+		if (data.category_id) {
+			category_key = "category_id";
+			category_value = data.category_id;
+		}
+
 		mutation.mutateAsync({
 			body: {
 				ids: [...selectedKeys] as Array<string>,
-				category_name: data.category_name,
+				[category_key]: category_value,
 			},
 		});
 	}
@@ -646,62 +653,10 @@ function Bulks({ selectedKeys, onClear }: { selectedKeys: Rac.Selection; onClear
 			</Tooltip.Root>
 
 			<form onSubmit={onSubmit} className="flex items-center gap-2">
-				<CategoryField name="category_name" />
+				<CategoryField />
 
 				<Button>apply</Button>
 			</form>
 		</div>
-	);
-}
-
-function CategoryField() {
-	const list = useAsyncList<{ id: string; name: string }>({
-		load: async ({ signal, filterText }) => {
-			const res = await fetchClient.GET("/categories", {
-				signal,
-				params: { query: { search_text: filterText } },
-			});
-
-			if (res.error) {
-				throw "error";
-			}
-
-			return {
-				items: res.data,
-			};
-		},
-	});
-
-	return (
-		<ak.ComboboxProvider value={list.filterText} setValue={list.setFilterText}>
-			<ak.Combobox
-				className={inputStyles}
-				autoSelect
-				placeholder="search categories..."
-				name="category_name"
-			></ak.Combobox>
-
-			<ak.ComboboxPopover
-				gutter={4}
-				className="bg-gray-1 border-gray-4 min-w-(--popover-anchor-width) border outline-hidden"
-			>
-				{list.items.map((c) => (
-					<ak.ComboboxItem
-						className="data-active-item:bg-gray-a4 px-2 py-1"
-						value={c.name}
-					>
-						{c.name}
-					</ak.ComboboxItem>
-				))}
-				{list.filterText && !list.items.length && (
-					<ak.ComboboxItem
-						value={list.filterText}
-						className="data-active-item:bg-gray-a4 px-2 py-1"
-					>
-						create "{list.filterText}"
-					</ak.ComboboxItem>
-				)}
-			</ak.ComboboxPopover>
-		</ak.ComboboxProvider>
 	);
 }

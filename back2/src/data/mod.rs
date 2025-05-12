@@ -727,88 +727,55 @@ impl Data {
         Ok(())
     }
 
-    pub async fn update_tx<'a>(
+    pub async fn update_tx_2<'a>(
         &self,
         user_id: &str,
         tx_id: &str,
         tx: &UpdateTx<'a>,
+        account: Option<IdentifierSpec>,
+        category: Option<IdentifierSpec>,
     ) -> Result<(), sqlx::Error> {
-        query!(
-            r#"
-            update transactions
-            set
-                updated_at = $3,
-                date = $4,
-                amount = $5,
-                currency = $6,
-                counter_party = $7,
-                additional = $8
-            where user_id = $1 and id = $2
-            "#,
-            user_id,
-            tx_id,
-            Utc::now(),
-            tx.date,
-            tx.amount,
-            tx.currency,
-            tx.counter_party,
-            tx.additional
-        )
-        .execute(&self.pg_pool)
-        .await?;
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("update transactions");
 
-        Ok(())
-    }
+        builder
+            .push(" where ")
+            .push(" user_id = ")
+            .push_bind(user_id)
+            .push(" and id = ")
+            .push_bind(tx_id);
 
-    pub async fn update_tx_with_category<'a>(
-        &self,
-        user_id: &str,
-        tx_id: &str,
-        tx: &UpdateTx<'a>,
-        category_name: &str,
-    ) -> Result<(), sqlx::Error> {
-        let category_id = create_id();
+        builder
+            .push(" set ")
+            .push(" updated_at = ")
+            .push_bind(Utc::now())
+            .push(" date = ")
+            .push_bind(tx.date)
+            .push(" amount = ")
+            .push_bind(tx.amount)
+            .push(" currency = ")
+            .push_bind(tx.currency)
+            .push(" counter_party = ")
+            .push_bind(tx.counter_party)
+            .push(" additional = ")
+            .push_bind(tx.additional);
 
-        query!(
-            r#"
-            with category_id as (
-                insert into transaction_categories (
-                    id,
-                    user_id,
-                    created_at,
-                    updated_at,
-                    name,
-                    is_neutral
-                )
-                values ($4, $1, $2, NULL, $3, false)
-                on conflict (user_id, lower(name))
-                do update set name = excluded.name
-                returning id
-            )
-            update transactions
-            set
-                updated_at = $2,
-                date = $5,
-                amount = $6,
-                currency = $7,
-                counter_party = $8,
-                additional = $9,
-                category_id = coalesce((select id from category_id), $4)
-            where user_id = $1 and id = $10
-            "#,
-            user_id,
-            Utc::now(),
-            category_name,
-            category_id,
-            tx.date,
-            tx.amount,
-            tx.currency,
-            tx.counter_party,
-            tx.additional,
-            tx_id
-        )
-        .execute(&self.pg_pool)
-        .await?;
+        match account {
+            Some(IdentifierSpec::Id(id)) => builder.push(" account_id = ").push_bind(id),
+            Some(IdentifierSpec::Name(name)) => {
+                unimplemented!("TODO: implement upsert account by name in tx update")
+            }
+            None => builder.push(" account_id = NULL"),
+        };
+
+        match category {
+            Some(IdentifierSpec::Id(id)) => builder.push(" category_id = ").push_bind(id),
+            Some(IdentifierSpec::Name(name)) => {
+                unimplemented!("TODO: implement upsert category by name in tx update")
+            }
+            None => builder.push(" category_id = NULL"),
+        };
+
+        builder.build().execute(&self.pg_pool).await?;
 
         Ok(())
     }
@@ -1417,4 +1384,9 @@ pub struct QueryTxInput {
 pub enum QueryTxInputCursor {
     Left(String),
     Right(String),
+}
+
+pub enum IdentifierSpec {
+    Id(String),
+    Name(String),
 }
