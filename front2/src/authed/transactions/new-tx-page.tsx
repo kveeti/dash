@@ -66,10 +66,16 @@ export default function NewTxPage() {
 						label="counter party"
 						name="counter_party"
 						error={errors?.counter_party}
+						autoComplete="off"
 					/>
-					<Input label="amount" name="amount" error={errors?.amount} />
+					<Input label="amount" name="amount" error={errors?.amount} autoComplete="off" />
 					<DateField label="date" name="date" error={errors?.date} />
-					<Input label="additional" name="additional" error={errors?.additional} />
+					<Input
+						label="additional"
+						name="additional"
+						error={errors?.additional}
+						autoComplete="off"
+					/>
 					<CategoryField error={errors?.category} />
 					<AccountField error={errors?.account} />
 				</fieldset>
