@@ -27,9 +27,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["query"];
+        get: operations["accounts/query"];
         put?: never;
-        post: operations["create"];
+        post: operations["accounts/create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -75,7 +75,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["query"];
+        get: operations["categories/query"];
         put?: never;
         post?: never;
         delete?: never;
@@ -93,7 +93,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["create"];
+        post: operations["transactions/create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -139,7 +139,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["get_stats"];
+        get: operations["transactions/stats"];
         put?: never;
         post?: never;
         delete?: never;
@@ -158,7 +158,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete: operations["delete"];
+        delete: operations["transactions/delete"];
         options?: never;
         head?: never;
         patch: operations["transactions/update"];
@@ -173,7 +173,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["link"];
+        post: operations["transactions/id/linked"];
         delete?: never;
         options?: never;
         head?: never;
@@ -209,18 +209,20 @@ export interface components {
             is_neutral: boolean;
             name: string;
         };
+        CreateAccountInput: {
+            name: string;
+        };
         CreateTransactionInput: {
-            account_name: string;
+            account_id?: string | null;
+            account_name?: string | null;
             additional?: string | null;
             /** Format: float */
             amount: number;
+            category_id?: string | null;
             category_name?: string | null;
             counter_party: string;
             /** Format: date-time */
             date: string;
-        };
-        CreateTx: {
-            name: string;
         };
         Input: {
             id: string;
@@ -259,6 +261,7 @@ export interface components {
             tti: number[];
         };
         QueryTx: {
+            account?: null | components["schemas"]["Account"];
             additional?: string | null;
             /** Format: float */
             amount: number;
@@ -275,9 +278,12 @@ export interface components {
             ids: string[];
         };
         TransactionUpdateInput: {
+            account_id?: string | null;
+            account_name?: string | null;
             additional?: string | null;
             /** Format: float */
             amount: number;
+            category_id?: string | null;
             category_name?: string | null;
             counter_party: string;
             currency: string;
@@ -324,7 +330,7 @@ export interface operations {
             };
         };
     };
-    query: {
+    "accounts/query": {
         parameters: {
             query?: {
                 search_text?: string;
@@ -345,7 +351,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    "accounts/create": {
         parameters: {
             query?: never;
             header?: never;
@@ -354,7 +360,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateTx"];
+                "application/json": components["schemas"]["CreateAccountInput"];
             };
         };
         responses: {
@@ -405,7 +411,7 @@ export interface operations {
             };
         };
     };
-    query: {
+    "categories/query": {
         parameters: {
             query?: {
                 search_text?: string;
@@ -426,7 +432,7 @@ export interface operations {
             };
         };
     };
-    create: {
+    "transactions/create": {
         parameters: {
             query?: never;
             header?: never;
@@ -495,7 +501,7 @@ export interface operations {
             };
         };
     };
-    get_stats: {
+    "transactions/stats": {
         parameters: {
             query: {
                 timezone: string;
@@ -518,7 +524,7 @@ export interface operations {
             };
         };
     };
-    delete: {
+    "transactions/delete": {
         parameters: {
             query?: never;
             header?: never;
@@ -566,7 +572,7 @@ export interface operations {
             };
         };
     };
-    link: {
+    "transactions/id/linked": {
         parameters: {
             query?: never;
             header?: never;

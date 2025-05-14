@@ -43,7 +43,7 @@ create table accounts (
     name text not null
 );
 
-create unique index on accounts (user_id, lower(name));
+create unique index on accounts (user_id, name);
 -- accounts
 
 -- transactions

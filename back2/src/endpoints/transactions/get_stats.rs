@@ -39,6 +39,7 @@ pub enum OutputDataValue {
 #[utoipa::path(
     get,
     path = "/transactions/stats",
+    operation_id = "transactions/stats",
     params(
         Input
     ),

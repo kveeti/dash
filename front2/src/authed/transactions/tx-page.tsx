@@ -22,7 +22,7 @@ import { Link } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
 import { Spinner } from "../../ui/spinner";
 import { useLocaleStuff } from "../use-formatting";
-import { CategoryField, DateField } from "./new-tx-page";
+import { AccountField, CategoryField, DateField } from "./new-tx-page";
 
 export type Tx =
 	paths["/transactions/query"]["post"]["responses"]["200"]["content"]["application/json"]["transactions"][number];
@@ -355,6 +355,13 @@ function SelectedTx({
 			category_value = data.category_id;
 		}
 
+		let account_key = "account_name";
+		let account_value = data.account_name;
+		if (data.account_id) {
+			account_key = "account_id";
+			account_value = data.account_id;
+		}
+
 		mutation
 			.mutateAsync({
 				params: { path: { id: tx.id } },
@@ -363,8 +370,9 @@ function SelectedTx({
 					amount: Number(data.amount),
 					counter_party: data.counter_party,
 					currency: "EUR",
-					additional: data.additional,
+					additional: data.additional || null,
 					[category_key]: category_value,
+					[account_key]: account_value,
 				},
 			})
 			.catch(errorToast("error updating transaction"));
@@ -410,13 +418,15 @@ function SelectedTx({
 
 							<DateField label="date" name="date" defaultValue={tx.date} />
 
-							<CategoryField defaultValue={tx.category?.name} />
-
 							<Input
 								name="additional"
 								label="additional"
 								defaultValue={tx.additional ?? undefined}
 							/>
+
+							<CategoryField defaultValue={tx.category} />
+
+							<AccountField defaultValue={tx.account} />
 
 							<div className="flex justify-between gap-2">
 								<DeleteTransaction
@@ -653,7 +663,7 @@ function Bulks({ selectedKeys, onClear }: { selectedKeys: Rac.Selection; onClear
 			</Tooltip.Root>
 
 			<form onSubmit={onSubmit} className="flex items-center gap-2">
-				<CategoryField />
+				<CategoryField invisibleLabel />
 
 				<Button>apply</Button>
 			</form>

@@ -109,6 +109,9 @@ impl Data {
 	            c.name as c_name,
 	            c.is_neutral as c_is_neutral,
 
+                    accounts.id as account_id,
+                    accounts.name as account_name,
+
 	            link.created_at as link_created_at,
 	            link.updated_at as link_updated_at,
 
@@ -120,11 +123,12 @@ impl Data {
 	            linked.currency as l_currency,
 	            linked.category_id as l_category_id
 	        from transactions t
-			left join transaction_categories c on t.category_id = c.id
-            left join transactions_links link
-              on link.transaction_a_id = t.id or link.transaction_b_id = t.id
-            left join transactions linked
-              on (linked.id = case when link.transaction_a_id = t.id then link.transaction_b_id else link.transaction_a_id end)
+                left join accounts on t.account_id = accounts.id
+		left join transaction_categories c on t.category_id = c.id
+                left join transactions_links link
+                    on link.transaction_a_id = t.id or link.transaction_b_id = t.id
+                left join transactions linked
+                    on (linked.id = case when link.transaction_a_id = t.id then link.transaction_b_id else link.transaction_a_id end)
             "#,
         );
 
@@ -232,6 +236,7 @@ impl Data {
                 let currency: String = row.try_get("currency").expect("currency");
 
                 let category_id: Option<String> = row.try_get("category_id").expect("category_id");
+                let account_id: Option<String> = row.try_get("account_id").expect("account_id");
 
                 tx_map.insert(
                     id.to_owned(),
@@ -243,6 +248,13 @@ impl Data {
                         additional,
                         currency,
                         links: vec![],
+                        account: if let Some(acc_id) = account_id {
+                            let name: String = row.try_get("account_name").expect("account_name");
+
+                            Some(Account { id: acc_id, name })
+                        } else {
+                            None
+                        },
                         category: if let Some(cat_id) = category_id {
                             let name: String = row.try_get("c_name").expect("c_name");
                             let is_neutral: bool =
@@ -727,55 +739,229 @@ impl Data {
         Ok(())
     }
 
+    pub async fn insert_tx(
+        &self,
+        user_id: &str,
+        tx: &InsertTx,
+        account: Option<IdentifierSpec>,
+        category: Option<IdentifierSpec>,
+    ) -> Result<(), sqlx::Error> {
+        let now = Utc::now();
+        let tx_id = create_id();
+
+        // Prepare account variables
+        let (account_id, account_name) = match &account {
+            Some(IdentifierSpec::Id(id)) => (Some(id.clone()), None),
+            Some(IdentifierSpec::Name(name)) => (Some(create_id()), Some(name.clone())),
+            None => (None, None),
+        };
+
+        // Prepare category variables
+        let (category_id, category_name) = match &category {
+            Some(IdentifierSpec::Id(id)) => (Some(id.clone()), None),
+            Some(IdentifierSpec::Name(name)) => (Some(create_id()), Some(name.clone())),
+            None => (None, None),
+        };
+
+        query!(
+            r#"
+        with
+        account_validation as (
+            select id from accounts 
+            where id = $1 and user_id = $2
+            union all
+            select null::text where $1 is null
+        ),
+        account_upsert as (
+            insert into accounts (
+                id,           -- $1
+                user_id,      -- $2
+                created_at,   -- $3
+                updated_at,   -- $3
+                name          -- $4
+            )
+            select $1::text, $2, $3, $3, $4::text
+            where $4 is not null
+            on conflict (user_id, name)
+            do update set 
+                name = excluded.name,
+                updated_at = excluded.updated_at
+            returning id
+        ),
+        category_validation as (
+            select id from transaction_categories
+            where id = $5 and user_id = $2
+            union all
+            select null::text where $5 is null
+        ),
+        category_upsert as (
+            insert into transaction_categories (
+                id,            -- $5
+                user_id,       -- $2
+                created_at,    -- $3
+                updated_at,    -- $3
+                is_neutral,    -- false
+                name           -- $6
+            )
+            select $5::text, $2, $3, $3, false, $6::text
+            where $6 is not null
+            on conflict (user_id, lower(name))
+            do update set 
+                name = excluded.name,
+                updated_at = excluded.updated_at
+            returning id
+        )
+        insert into transactions (
+            id,               -- $7
+            user_id,          -- $2
+            created_at,       -- $3
+            updated_at,       -- $3
+            date,             -- $8
+            amount,           -- $9
+            currency,         -- $10
+            counter_party,    -- $11
+            og_counter_party, -- $11 (same as counter_party)
+            additional,       -- $12
+            account_id,       -- validated or inserted account_id
+            category_id       -- validated or inserted category_id
+        )
+        values (
+            $7, $2, $3, $3, $8, $9, $10, $11, $11, $12, 
+            coalesce(
+                (select id from account_upsert), 
+                (select id from account_validation where id is not null)
+            ),
+            coalesce(
+                (select id from category_upsert),
+                (select id from category_validation where id is not null)
+            )
+        )
+        "#,
+            account_id as Option<String>,    // $1
+            user_id,                         // $2
+            now,                             // $3
+            account_name as Option<String>,  // $4
+            category_id as Option<String>,   // $5
+            category_name as Option<String>, // $6
+            tx_id,                           // $7
+            tx.date,                         // $8
+            tx.amount,                       // $9
+            tx.currency,                     // $10
+            tx.counter_party,                // $11
+            tx.additional,                   // $12
+        )
+        .execute(&self.pg_pool)
+        .await?;
+
+        Ok(())
+    }
+
     pub async fn update_tx_2<'a>(
         &self,
         user_id: &str,
         tx_id: &str,
-        tx: &UpdateTx<'a>,
+        input: &UpdateTx<'a>,
         account: Option<IdentifierSpec>,
         category: Option<IdentifierSpec>,
     ) -> Result<(), sqlx::Error> {
-        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("update transactions");
+        let now = Utc::now();
 
-        builder
-            .push(" where ")
-            .push(" user_id = ")
-            .push_bind(user_id)
-            .push(" and id = ")
-            .push_bind(tx_id);
-
-        builder
-            .push(" set ")
-            .push(" updated_at = ")
-            .push_bind(Utc::now())
-            .push(" date = ")
-            .push_bind(tx.date)
-            .push(" amount = ")
-            .push_bind(tx.amount)
-            .push(" currency = ")
-            .push_bind(tx.currency)
-            .push(" counter_party = ")
-            .push_bind(tx.counter_party)
-            .push(" additional = ")
-            .push_bind(tx.additional);
-
-        match account {
-            Some(IdentifierSpec::Id(id)) => builder.push(" account_id = ").push_bind(id),
-            Some(IdentifierSpec::Name(name)) => {
-                unimplemented!("TODO: implement upsert account by name in tx update")
-            }
-            None => builder.push(" account_id = NULL"),
+        // Prepare account variables
+        let (account_id, account_name) = match &account {
+            Some(IdentifierSpec::Id(id)) => (Some(id.clone()), None),
+            Some(IdentifierSpec::Name(name)) => (Some(create_id()), Some(name.clone())),
+            None => (None, None),
         };
 
-        match category {
-            Some(IdentifierSpec::Id(id)) => builder.push(" category_id = ").push_bind(id),
-            Some(IdentifierSpec::Name(name)) => {
-                unimplemented!("TODO: implement upsert category by name in tx update")
-            }
-            None => builder.push(" category_id = NULL"),
+        // Prepare category variables
+        let (category_id, category_name) = match &category {
+            Some(IdentifierSpec::Id(id)) => (Some(id.clone()), None),
+            Some(IdentifierSpec::Name(name)) => (Some(create_id()), Some(name.clone())),
+            None => (None, None),
         };
 
-        builder.build().execute(&self.pg_pool).await?;
+        query!(
+            r#"
+        with 
+        account_validation as (
+            select id from accounts 
+            where id = $1 and user_id = $2
+            union all
+            select null::text where $1 is null
+        ),
+        account_upsert as (
+            insert into accounts (
+                id,
+                user_id,
+                created_at,
+                updated_at,
+                external_id,
+                name
+            )
+            select $1::text, $2, $3, $3, null, $4::text
+            where $4 is not null
+            on conflict (user_id, name)
+            do update set 
+                name = excluded.name,
+                updated_at = excluded.updated_at
+            returning id
+        ),
+        category_validation as (
+            select id from transaction_categories
+            where id = $5 and user_id = $2
+            union all
+            select null::text where $5 is null
+        ),
+        category_upsert as (
+            insert into transaction_categories (
+                id,
+                user_id,
+                created_at,
+                updated_at,
+                is_neutral,
+                name
+            )
+            select $5::text, $2, $3, $3, false, $6::text
+            where $6 is not null
+            on conflict (user_id, lower(name))
+            do update set 
+                name = excluded.name,
+                updated_at = excluded.updated_at
+            returning id
+        )
+        update transactions
+        set
+            updated_at = $3,
+            date = $7,
+            amount = $8,
+            currency = $9,
+            counter_party = $10,
+            additional = $11,
+            category_id = coalesce(
+                (select id from category_upsert),
+                (select id from category_validation where id is not null)
+            ),
+            account_id = coalesce(
+                (select id from account_upsert),
+                (select id from account_validation where id is not null)
+            )
+        where id = $12 and user_id = $2
+        "#,
+            account_id as Option<String>,    // $1
+            user_id,                         // $2
+            now,                             // $3
+            account_name as Option<String>,  // $4
+            category_id as Option<String>,   // $5
+            category_name as Option<String>, // $6
+            input.date,                      // $7
+            input.amount,                    // $8
+            input.currency,                  // $9
+            input.counter_party,             // $10
+            input.additional,                // $11
+            tx_id                            // $12
+        )
+        .execute(&self.pg_pool)
+        .await?;
 
         Ok(())
     }
@@ -1276,6 +1462,7 @@ pub struct QueryTx {
     pub additional: Option<String>,
     pub currency: String,
     pub category: Option<Category>,
+    pub account: Option<Account>,
     pub links: Vec<Link>,
 }
 
@@ -1327,7 +1514,6 @@ pub struct InsertTx {
     pub og_counter_party: String,
     pub additional: Option<String>,
     pub currency: String,
-    pub category_name: Option<String>,
     pub amount: f32,
 }
 

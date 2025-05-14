@@ -9,6 +9,7 @@ use crate::{auth_middleware::User, error::ApiError, state::AppState};
 #[utoipa::path(
     delete,
     path = "/transactions/{id}",
+    operation_id = "transactions/delete",
     params(
         ("id" = String, description = "Transaction ID"),
     ),

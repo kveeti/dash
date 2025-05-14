@@ -23,8 +23,7 @@ export default function NewTxPage() {
 		e.preventDefault();
 		if (mutation.isPending) return;
 
-		const formData = new FormData(e.currentTarget);
-		const data = Object.fromEntries(formData);
+		const data = Object.fromEntries(new FormData(e.currentTarget));
 
 		let category_key = "category_name";
 		let category_value = data.category_name;
@@ -171,12 +170,23 @@ export function DateField({
 	);
 }
 
-export function AccountField({ error }: { error?: string }) {
+export function AccountField({
+	error,
+	defaultValue,
+}: {
+	error?: string;
+	defaultValue?: null | {
+		id: string;
+		name: string;
+	};
+}) {
 	const [s, setS] = useState<{
 		custom: boolean;
 		value: string;
 		label: string;
-	} | null>(null);
+	} | null>(
+		defaultValue ? { custom: false, value: defaultValue.id, label: defaultValue.name } : null
+	);
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
@@ -226,12 +236,12 @@ export function AccountField({ error }: { error?: string }) {
 				</LabelWrapper>
 
 				<ak.Select
+					name={s?.custom ? "account_name" : "account_id"}
 					className={
 						"focus border-gray-6 flex h-10 w-full items-center justify-between border"
 					}
-					name={s?.custom ? "account_name" : "account_id"}
 				>
-					<span className="ps-3">{s ? s.label : "select an account"}</span>
+					<span className="ps-3">{s?.label ?? "select an account"}</span>
 
 					<IconChevronsUpDown className="text-gray-a11 me-2 size-5" />
 				</ak.Select>
@@ -249,26 +259,24 @@ export function AccountField({ error }: { error?: string }) {
 					/>
 
 					<ak.ComboboxList>
-						<ak.ComboboxList>
-							{list.items.map((x) => (
-								<SelectComboItem value={x.name} />
-							))}
+						{list.items.map((x) => (
+							<SelectComboItem key={x.name} value={x.name} />
+						))}
 
-							{list.items.length && list.isLoading ? (
-								<SelectComboItem>loading</SelectComboItem>
-							) : (
-								!list.items.length &&
-								list.filterText &&
-								!list.isLoading &&
-								list.filterText === list.filterText && (
-									<SelectComboItem value={list.filterText}>
-										<p className="max-w-(--popover-anchor-width) truncate">
-											create "{list.filterText}"
-										</p>
-									</SelectComboItem>
-								)
-							)}
-						</ak.ComboboxList>
+						{list.items.length && list.isLoading ? (
+							<SelectComboItem>loading</SelectComboItem>
+						) : (
+							!list.items.length &&
+							list.filterText &&
+							!list.isLoading &&
+							list.filterText === list.filterText && (
+								<SelectComboItem value={list.filterText}>
+									<p className="max-w-(--popover-anchor-width) truncate">
+										create "{list.filterText}"
+									</p>
+								</SelectComboItem>
+							)
+						)}
 					</ak.ComboboxList>
 				</ak.SelectPopover>
 			</ak.SelectProvider>
@@ -276,12 +284,25 @@ export function AccountField({ error }: { error?: string }) {
 	);
 }
 
-export function CategoryField({ error, defaultValue }: { error?: string; defaultValue?: string }) {
+export function CategoryField({
+	error,
+	defaultValue,
+	invisibleLabel,
+}: {
+	error?: string;
+	defaultValue?: null | {
+		id: string;
+		name: string;
+	};
+	invisibleLabel?: boolean;
+}) {
 	const [s, setS] = useState<{
 		custom: boolean;
 		value: string;
 		label: string;
-	} | null>(defaultValue ? { custom: false, value: defaultValue, label: "loading..." } : null);
+	} | null>(
+		defaultValue ? { custom: false, value: defaultValue.id, label: defaultValue.name } : null
+	);
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
@@ -315,13 +336,22 @@ export function CategoryField({ error, defaultValue }: { error?: string; default
 	const errorId = error ? id + "-error" : undefined;
 
 	return (
-		<ak.ComboboxProvider value={list.filterText} setValue={list.setFilterText}>
+		<ak.ComboboxProvider
+			value={list.filterText}
+			setValue={(val) => {
+				startTransition(() => {
+					list.setFilterText(val);
+				});
+			}}
+		>
 			<ak.SelectProvider setValue={onSelect} value={s?.value ?? ""}>
-				<LabelWrapper>
-					<ak.SelectLabel className={labelStyles}>category</ak.SelectLabel>
+				{!invisibleLabel && (
+					<LabelWrapper>
+						<ak.SelectLabel className={labelStyles}>category</ak.SelectLabel>
 
-					{error && errorId && <Error id={errorId}>{error}</Error>}
-				</LabelWrapper>
+						{error && errorId && <Error id={errorId}>{error}</Error>}
+					</LabelWrapper>
+				)}
 
 				<ak.Select
 					name={s?.custom ? "category_name" : "category_id"}
@@ -329,13 +359,14 @@ export function CategoryField({ error, defaultValue }: { error?: string; default
 						"focus border-gray-6 flex h-10 w-full items-center justify-between border"
 					}
 				>
-					<span className="ps-3">{s?.value ?? "select a category"}</span>
+					<span className="ps-3">{s?.label ?? "select a category"}</span>
 
 					<IconChevronsUpDown className="text-gray-a11 me-2 size-5" />
 				</ak.Select>
 
 				<ak.SelectPopover
 					gutter={4}
+					sameWidth
 					className="bg-gray-1 border-gray-4 z-10 min-w-(--popover-anchor-width) border outline-hidden"
 				>
 					<ak.Combobox
@@ -347,7 +378,7 @@ export function CategoryField({ error, defaultValue }: { error?: string; default
 
 					<ak.ComboboxList>
 						{list.items.map((x) => (
-							<SelectComboItem value={x.name} />
+							<SelectComboItem key={x.name} value={x.name} />
 						))}
 
 						{list.items.length && list.isLoading ? (

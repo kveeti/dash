@@ -15,6 +15,7 @@ pub struct Input {
 #[utoipa::path(
     post,
     path = "/transactions/{id}/linked",
+    operation_id = "transactions/id/linked",
     params(
         ("id" = String, description = "Transaction ID"),
     ),
