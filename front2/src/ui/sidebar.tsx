@@ -1,4 +1,4 @@
-import * as _Dialog from "@radix-ui/react-dialog";
+import { Dialog as _Dialog } from "radix-ui";
 import type { ComponentProps } from "react";
 
 import { Heading } from "./typography";
