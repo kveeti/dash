@@ -12,6 +12,7 @@ import { IconChevronLeft } from "../../ui/icons/chevron-left";
 import { IconChevronRight } from "../../ui/icons/chevron-right";
 import { IconChevronsUpDown } from "../../ui/icons/chevrons-up-down";
 import { Error, Input, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
+import { Link } from "../../ui/link";
 import { useLocaleStuff } from "../use-formatting";
 
 export default function NewTxPage() {
@@ -57,7 +58,10 @@ export default function NewTxPage() {
 
 	return (
 		<main className="w-full max-w-[320px]">
-			<h1 className="mb-4 text-lg font-medium">new transaction</h1>
+			<div className="flex justify-between gap-3">
+				<h1 className="mb-4 text-lg font-medium">new transaction</h1>
+				<Link href="/txs/import">import</Link>
+			</div>
 
 			<form className="w-full" onSubmit={handleSubmit}>
 				<fieldset className="space-y-3">

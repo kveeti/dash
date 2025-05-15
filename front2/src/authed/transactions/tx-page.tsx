@@ -255,17 +255,21 @@ function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams 
 	}
 
 	return (
-		<form onSubmit={onSubmit} className="w-full">
-			<label htmlFor="query" className="sr-only">
-				search
-			</label>
-			<Input
-				placeholder="search transactions..."
-				defaultValue={currentSearchParams.get("query") || ""}
-				name="query"
-				id="query"
-			/>
-		</form>
+		<div className="flex w-full gap-3">
+			<form onSubmit={onSubmit} className="w-full">
+				<label htmlFor="query" className="sr-only">
+					search
+				</label>
+				<Input
+					placeholder="search transactions..."
+					defaultValue={currentSearchParams.get("query") || ""}
+					name="query"
+					id="query"
+				/>
+			</form>
+
+			<Link href="/txs/new">new</Link>
+		</div>
 	);
 }
 

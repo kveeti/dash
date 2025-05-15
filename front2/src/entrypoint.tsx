@@ -25,6 +25,9 @@ IndexPage.preload();
 const TxPage = lazyWithPreload(() => import("./authed/transactions/tx-page"));
 TxPage.preload();
 
+const TxImportPage = lazyWithPreload(() => import("./authed/transactions/tx-import-page"));
+TxImportPage.preload();
+
 const TxBulkPage = lazyWithPreload(() => import("./authed/transactions/tx-bulk-page"));
 TxBulkPage.preload();
 
@@ -54,6 +57,9 @@ function Authed() {
 							</Route>
 							<Route path="/txs">
 								<TxPage />
+							</Route>
+							<Route path="/txs/import">
+								<TxImportPage />
 							</Route>
 							<Route path="/txs/bulk">
 								<TxBulkPage />
