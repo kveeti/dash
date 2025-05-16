@@ -264,7 +264,9 @@ export function AccountField({
 
 					<ak.ComboboxList>
 						{list.items.map((x) => (
-							<SelectComboItem key={x.name} value={x.name} />
+							<SelectComboItem key={x.name} value={x.id}>
+								{x.name}
+							</SelectComboItem>
 						))}
 
 						{list.items.length && list.isLoading ? (
@@ -406,12 +408,18 @@ export function CategoryField({
 	);
 }
 
-function SelectComboItem(props: ak.SelectItemProps) {
+export function SelectComboItem(props: ak.SelectItemProps) {
 	return (
 		<ak.SelectItem
 			{...props}
-			className="data-active-item:bg-gray-a4 p-2"
-			render={<ak.ComboboxItem />}
+			render={({ children, ...props }) => (
+				<ak.ComboboxItem
+					{...props}
+					className="data-active-item:bg-gray-a4 flex items-center gap-3 p-2"
+				>
+					<ak.SelectItemCheck /> {children}
+				</ak.ComboboxItem>
+			)}
 		/>
 	);
 }
