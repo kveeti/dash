@@ -15,7 +15,7 @@ dev:
 	@make -j2 backdev frontdev
 
 frontbuild:
-	@cd front && pnpm build
+	@cd front2 && bun run build
 
 backbuild:
 	@cd back && cargo build --release
@@ -24,7 +24,7 @@ build:
 	@make -j2 backbuild frontbuild
 
 frontpre:
-	@cd front && pnpm preview
+	@cd front2 && bun run preview
 
 backpre:
 	@cd back && cargo run --release
@@ -36,8 +36,8 @@ db:
 	@docker exec -it dash_db psql -U pg -d db
 
 dbreset:
-	@docker compose down -v -t 1 && \
-	docker compose up -d && \
+	@docker-compose down -v -t 1 && \
+	docker-compose up -d && \
 	sleep 2 && \
 	cd back2 && sqlx migrate run
 
