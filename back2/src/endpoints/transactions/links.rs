@@ -17,7 +17,7 @@ pub struct Input {
     path = "/transactions/{id}/linked",
     operation_id = "transactions/id/linked",
     params(
-        ("id" = String, description = "Transaction ID"),
+        ("id" = String, description = "transaction id"),
     ),
     request_body(
         content = Input,

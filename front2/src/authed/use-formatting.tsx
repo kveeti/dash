@@ -1,3 +1,4 @@
+import { count } from "console";
 import { ReactNode, useMemo } from "react";
 
 import { createContext } from "../lib/create-context";
@@ -65,12 +66,21 @@ function useLocaleStuffValue() {
 		[locale]
 	);
 
+	const countFormatter = useMemo(
+		() =>
+			new Intl.NumberFormat(undefined, {
+				notation: "compact",
+				maximumFractionDigits: 1,
+			}),
+		[locale]
+	);
 	return {
 		f: {
 			amount: amountFormatter,
 			shortDate: shortDateFormatter,
 			longDate: longDateFormatter,
 			sidebarDate: sidebarDateFormatter,
+			count: countFormatter,
 		},
 		hourCycle,
 		timeZone: resolvedOptions.timeZone,

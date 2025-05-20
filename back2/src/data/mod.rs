@@ -36,29 +36,53 @@ impl Data {
         return self.pg_pool;
     }
 
+    pub async fn query_categories_with_counts(
+        &self,
+        user_id: &str,
+        search_text: &Option<String>,
+    ) -> Result<Vec<CategoryWithCounts>, sqlx::Error> {
+        let mut qb = QueryBuilder::new(
+            "select tc.id, tc.name, tc.is_neutral, coalesce(count(t.id), 0)::bigint as tx_count
+             from transaction_categories tc
+             left join transactions t on tc.id = t.category_id
+             where tc.user_id = ",
+        );
+
+        qb.push_bind(user_id);
+
+        if let Some(search_text) = search_text {
+            qb.push(" and name ilike ");
+            qb.push_bind(format!("%{}%", search_text));
+        }
+
+        qb.push(" group by tc.id");
+
+        let query = qb.build_query_as::<CategoryWithCounts>();
+        let rows = query.fetch_all(&self.pg_pool).await?;
+
+        Ok(rows)
+    }
+
     pub async fn query_categories(
         &self,
         user_id: &str,
         search_text: &Option<String>,
     ) -> Result<Vec<Category>, sqlx::Error> {
-        let rows = if let Some(search_text) = search_text {
-            query_as!(
-                Category,
-                "select id, name, is_neutral from transaction_categories where user_id = $1 and name ilike $2",
-                user_id,
-                format!("%{}%", search_text)
-            )
-            .fetch_all(&self.pg_pool)
-            .await?
-        } else {
-            query_as!(
-                Category,
-                "select id, name, is_neutral from transaction_categories where user_id = $1",
-                user_id
-            )
-            .fetch_all(&self.pg_pool)
-            .await?
-        };
+        let mut qb = QueryBuilder::new(
+            "select tc.id, tc.name, tc.is_neutral
+             from transaction_categories tc
+             where tc.user_id = ",
+        );
+
+        qb.push_bind(user_id);
+
+        if let Some(search_text) = search_text {
+            qb.push(" and name ilike ");
+            qb.push_bind(format!("%{}%", search_text));
+        }
+
+        let query = qb.build_query_as::<Category>();
+        let rows = query.fetch_all(&self.pg_pool).await?;
 
         Ok(rows)
     }
@@ -90,6 +114,77 @@ impl Data {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn update_category(
+        &self,
+        user_id: &str,
+        category_id: &str,
+        name: &str,
+        is_neutral: bool,
+    ) -> Result<(), sqlx::Error> {
+        query!(
+            r#"
+            update transaction_categories
+            set 
+                name = $3,
+                is_neutral = $4,
+                updated_at = $5
+            where user_id = $1 and id = $2
+            "#,
+            user_id,
+            category_id,
+            name,
+            is_neutral,
+            Utc::now()
+        )
+        .execute(&self.pg_pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_category_if_unused(
+        &self,
+        user_id: &str,
+        category_id: &str,
+    ) -> Result<bool, sqlx::Error> {
+        let mut tx = self.pg_pool.begin().await?;
+
+        let has_transactions = query!(
+            r#"
+                select exists(
+                    select 1 
+                    from transactions
+                    where category_id = $1 and user_id = $2
+                    limit 1
+                ) as "has_transactions!"
+            "#,
+            category_id,
+            user_id
+        )
+        .fetch_one(&mut *tx)
+        .await?
+        .has_transactions;
+
+        if !has_transactions {
+            query!(
+                r#"
+                    delete from transaction_categories
+                    where user_id = $1 and id = $2
+                "#,
+                user_id,
+                category_id
+            )
+            .execute(&mut *tx)
+            .await?;
+
+            tx.commit().await?;
+            Ok(true)
+        } else {
+            tx.rollback().await?;
+            Ok(false)
+        }
     }
 
     pub async fn query_accounts(
@@ -1226,11 +1321,19 @@ impl Data {
     }
 }
 
-#[derive(Debug, Clone, Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema, FromRow)]
 pub struct Category {
     pub id: String,
     pub name: String,
     pub is_neutral: bool,
+}
+
+#[derive(Debug, Clone, Serialize, ToSchema, FromRow)]
+pub struct CategoryWithCounts {
+    pub id: String,
+    pub name: String,
+    pub is_neutral: bool,
+    pub tx_count: i64,
 }
 
 #[derive(Debug, Serialize, ToSchema)]

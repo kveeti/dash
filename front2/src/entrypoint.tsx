@@ -31,6 +31,9 @@ NewTxPage.preload();
 const StatsPage = lazyWithPreload(() => import("./authed/stats/stats-page"));
 StatsPage.preload();
 
+const CatsPage = lazyWithPreload(() => import("./authed/cats-page"));
+CatsPage.preload();
+
 function Authed() {
 	return (
 		<LocaleStuff>
@@ -49,6 +52,9 @@ function Authed() {
 							</Route>
 							<Route path="/stats">
 								<StatsPage />
+							</Route>
+							<Route path="/cats">
+								<CatsPage />
 							</Route>
 							<Route path="*">
 								<Redirect href="/txs" />

@@ -1,6 +1,6 @@
 import { fromDate, parseDate } from "@internationalized/date";
 import { CalendarIcon } from "@radix-ui/react-icons";
-import { endOfDay, endOfMonth, format, startOfMonth, subYears } from "date-fns";
+import { endOfDay, format, startOfMonth, subYears } from "date-fns";
 import { useState } from "react";
 import * as Rac from "react-aria-components";
 import { useSearchParams } from "wouter";

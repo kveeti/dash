@@ -17,6 +17,8 @@ use utoipa::OpenApi;
     endpoints::transactions::bulk::bulk,
     endpoints::categories::query::query,
     endpoints::categories::create::create,
+    endpoints::categories::update::update,
+    endpoints::categories::delete::delete,
     endpoints::accounts::query::query,
     endpoints::accounts::create::create,
 ))]

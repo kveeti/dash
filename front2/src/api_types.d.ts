@@ -84,6 +84,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/categories/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["categories/delete"];
+        options?: never;
+        head?: never;
+        patch: operations["categories/update"];
+        trace?: never;
+    };
     "/transactions": {
         parameters: {
             query?: never;
@@ -206,6 +222,10 @@ export interface components {
         };
         Category: {
             id: string;
+            is_neutral: boolean;
+            name: string;
+        };
+        CategoryUpdateInput: {
             is_neutral: boolean;
             name: string;
         };
@@ -414,6 +434,7 @@ export interface operations {
         parameters: {
             query?: {
                 search_text?: string;
+                include_counts?: boolean;
             };
             header?: never;
             path?: never;
@@ -445,6 +466,54 @@ export interface operations {
         };
         responses: {
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    "categories/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description category id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    "categories/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description category id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryUpdateInput"];
+            };
+        };
+        responses: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -599,7 +668,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Transaction ID */
+                /** @description transaction id */
                 id: string;
             };
             cookie?: never;
