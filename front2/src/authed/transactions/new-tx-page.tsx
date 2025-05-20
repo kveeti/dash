@@ -1,60 +1,55 @@
 import * as ak from "@ariakit/react";
 import { parseDateTime } from "@internationalized/date";
 import { CalendarIcon } from "@radix-ui/react-icons";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { startTransition, useId, useState } from "react";
+import { Tooltip } from "radix-ui";
+import { FormEvent, startTransition, useId, useState } from "react";
 import * as Rac from "react-aria-components";
 import { useAsyncList } from "react-stately";
 
 import { api, fetchClient } from "../../api";
+import { errorToast } from "../../lib/error-toast";
 import { Button, buttonStyles } from "../../ui/button";
+import { Checkbox } from "../../ui/checkbox";
+import * as Dialog from "../../ui/dialog";
 import { IconChevronLeft } from "../../ui/icons/chevron-left";
 import { IconChevronRight } from "../../ui/icons/chevron-right";
 import { IconChevronsUpDown } from "../../ui/icons/chevrons-up-down";
+import { IconPlus } from "../../ui/icons/plus";
 import { Error, Input, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 import { Link } from "../../ui/link";
+import { Spinner } from "../../ui/spinner";
+import { TooltipContent } from "../../ui/tooltip";
+import { useDialog } from "../../ui/use-dialog";
 import { useLocaleStuff } from "../use-formatting";
 
 export default function NewTxPage() {
 	const mutation = api.useMutation("post", "/transactions");
-	const [localErrors, setLocalErrors] = useState<Record<string, string> | null>(null);
-	const [serverErrors, setServerErrors] = useState<Record<string, string> | null>(null);
 
-	function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+	function handleSubmit(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
-		if (mutation.isPending) return;
 
-		const data = Object.fromEntries(new FormData(e.currentTarget));
+		const data = new FormData(e.currentTarget);
 
-		let category_key = "category_name";
-		let category_value = data.category_name;
-		if (data.category_id) {
-			category_key = "category_id";
-			category_value = data.category_id;
-		}
-
-		let account_key = "account_name";
-		let account_value = data.account_name;
-		if (data.account_id) {
-			account_key = "account_id";
-			account_value = data.account_id;
-		}
-
-		const input = {
-			counter_party: data.counter_party,
-			amount: Number(data.amount),
-			date: new Date(data.date).toISOString(),
-			additional: data.additional,
-			[category_key]: category_value,
-			[account_key]: account_value,
-		};
-
-		mutation.mutateAsync({ body: input }).catch((error) => {
-			setServerErrors(error.response.data.errors);
-		});
+		mutation
+			.mutateAsync({
+				body: {
+					date: new Date(data.get("date") as string).toISOString(),
+					amount: Number(data.get("amount") as unknown as string),
+					counter_party: data.get("counterParty") as unknown as string,
+					additional: data.get("additional") as unknown as string,
+					account: data.get("account") as string | null,
+					category: data.get("category") as string | null,
+				},
+			})
+			.then(() => {
+				e.target.counterParty.value = "";
+				e.target.amount.value = "";
+				e.target.additional.value = "";
+				e.target.counterParty.focus();
+			});
 	}
-
-	const errors = serverErrors ?? localErrors;
 
 	return (
 		<main className="w-full max-w-[320px]">
@@ -63,25 +58,26 @@ export default function NewTxPage() {
 				<Link href="/txs/import">import</Link>
 			</div>
 
-			<form className="w-full" onSubmit={handleSubmit}>
-				<fieldset className="space-y-3">
-					<Input
-						label="counter party"
-						name="counter_party"
-						error={errors?.counter_party}
-						autoComplete="off"
-					/>
-					<Input label="amount" name="amount" error={errors?.amount} autoComplete="off" />
-					<DateField label="date" name="date" error={errors?.date} />
-					<Input
-						label="additional"
-						name="additional"
-						error={errors?.additional}
-						autoComplete="off"
-					/>
-					<CategoryField error={errors?.category} />
-					<AccountField error={errors?.account} />
-				</fieldset>
+			<form className="w-full space-y-6" onSubmit={handleSubmit}>
+				<Input name="counterParty" label="counter party" autoComplete="off" />
+
+				<Input name="amount" label="amount" autoComplete="off" />
+
+				<DateField name="date" label="date" granularity="minute" />
+
+				<Input name="additional" label="additional" autoComplete="off" />
+
+				<div className="flex items-end gap-3">
+					<CategoryField name="category" label="category" />
+
+					<CreateCategory />
+				</div>
+
+				<div className="flex items-end gap-3">
+					<AccountField name="account" label="account" />
+
+					<CreateAccount />
+				</div>
 
 				<div className="mt-6 flex justify-end">
 					<Button isLoading={mutation.isPending}>add</Button>
@@ -92,15 +88,17 @@ export default function NewTxPage() {
 }
 
 export function DateField({
-	error,
-	defaultValue = new Date(),
 	name,
 	label,
+	error,
+	defaultValue = new Date(),
+	granularity,
 }: {
-	error?: string;
-	defaultValue?: Date | string;
-	name?: string;
+	name: string;
 	label: string;
+	error?: string;
+	defaultValue?: Date;
+	granularity: "second" | "minute";
 }) {
 	const { hourCycle } = useLocaleStuff();
 	const _defaultValue = parseDateTime(format(defaultValue, "yyyy-MM-dd'T'HH:mm:ss"));
@@ -113,7 +111,7 @@ export function DateField({
 
 	return (
 		<Rac.DatePicker
-			granularity="second"
+			granularity={granularity}
 			defaultValue={_defaultValue}
 			name={name}
 			hourCycle={hourCycle}
@@ -175,22 +173,25 @@ export function DateField({
 }
 
 export function AccountField({
+	label,
+	name,
 	error,
 	defaultValue,
+	allowCreate = true,
 }: {
+	name: string;
+	label: string;
 	error?: string;
-	defaultValue?: null | {
+	defaultValue?: {
 		id: string;
 		name: string;
-	};
+	} | null;
+	allowCreate?: boolean;
 }) {
 	const [s, setS] = useState<{
-		custom: boolean;
 		value: string;
 		label: string;
-	} | null>(
-		defaultValue ? { custom: false, value: defaultValue.id, label: defaultValue.name } : null
-	);
+	} | null>(defaultValue ? { value: defaultValue.id, label: defaultValue.name } : null);
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
@@ -211,104 +212,209 @@ export function AccountField({
 
 	function onSelect(val: string) {
 		const existing = list.items.find((x) => x.id === val);
-
 		if (!existing) {
-			setS({ custom: true, label: val, value: val });
 			return;
 		}
 
-		setS({ custom: false, label: existing.name, value: existing.id });
+		setS({ label: existing.name, value: existing.id });
 	}
 
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;
 
 	return (
-		<ak.ComboboxProvider
-			value={list.filterText}
-			setValue={(val) => {
-				startTransition(() => {
-					list.setFilterText(val);
-				});
-			}}
-		>
-			<ak.SelectProvider setValue={onSelect} value={s?.value ?? ""}>
-				<LabelWrapper>
-					<ak.SelectLabel className={labelStyles}>account</ak.SelectLabel>
+		<div className="w-full">
+			<ak.ComboboxProvider
+				value={list.filterText}
+				setValue={(val) => {
+					startTransition(() => {
+						list.setFilterText(val);
+					});
+				}}
+			>
+				<ak.SelectProvider setValue={onSelect} value={s?.value ?? ""}>
+					<LabelWrapper>
+						<ak.SelectLabel className={labelStyles}>{label}</ak.SelectLabel>
 
-					{error && errorId && <Error id={errorId}>{error}</Error>}
-				</LabelWrapper>
+						{error && errorId && <Error id={errorId}>{error}</Error>}
+					</LabelWrapper>
 
-				<ak.Select
-					name={s?.custom ? "account_name" : "account_id"}
-					className={
-						"focus border-gray-6 flex h-10 w-full items-center justify-between border"
-					}
-				>
-					<span className="ps-3">{s?.label ?? "select an account"}</span>
+					<ak.Select
+						name={name}
+						className={
+							"focus2 border-gray-6 flex h-10 w-full items-center justify-between border"
+						}
+					>
+						<span className="ps-3">{s?.label ?? "select an account"}</span>
 
-					<IconChevronsUpDown className="text-gray-a11 me-2 size-5" />
-				</ak.Select>
+						<IconChevronsUpDown className="text-gray-a11 me-2 size-5" />
+					</ak.Select>
 
-				<ak.SelectPopover
-					gutter={4}
-					sameWidth
-					className="bg-gray-1 border-gray-4 z-10 min-w-(--popover-anchor-width) border outline-hidden"
-				>
-					<ak.Combobox
-						className="border-gray-a4 w-full border-b px-3 py-2 outline-hidden"
-						autoSelect
-						placeholder="search accounts..."
-						name="account_name"
-					/>
+					<ak.SelectPopover
+						gutter={4}
+						sameWidth
+						className="bg-gray-1 border-gray-4 z-10 w-full max-w-[300px] min-w-(--popover-anchor-width) border outline-hidden"
+					>
+						<div className="relative">
+							<ak.Combobox
+								className="border-gray-a4 w-full px-3 py-2 outline-hidden"
+								autoSelect
+								placeholder="search accounts..."
+							/>
 
-					<ak.ComboboxList>
-						{list.items.map((x) => (
-							<SelectComboItem key={x.name} value={x.id}>
-								{x.name}
-							</SelectComboItem>
-						))}
+							{list.isLoading && (
+								<div className="absolute top-2 right-2">
+									<Spinner />
+								</div>
+							)}
+						</div>
 
-						{list.items.length && list.isLoading ? (
-							<SelectComboItem>loading</SelectComboItem>
-						) : (
-							!list.items.length &&
-							list.filterText &&
-							!list.isLoading &&
-							list.filterText === list.filterText && (
-								<SelectComboItem value={list.filterText}>
-									<p className="max-w-(--popover-anchor-width) truncate">
-										create "{list.filterText}"
-									</p>
+						<ak.ComboboxList>
+							{list.items.map((x) => (
+								<SelectComboItem key={x.name} value={x.id}>
+									{x.name}
 								</SelectComboItem>
-							)
-						)}
-					</ak.ComboboxList>
-				</ak.SelectPopover>
-			</ak.SelectProvider>
-		</ak.ComboboxProvider>
+							))}
+						</ak.ComboboxList>
+					</ak.SelectPopover>
+				</ak.SelectProvider>
+			</ak.ComboboxProvider>
+		</div>
+	);
+}
+
+export function CreateAccount() {
+	const mutation = api.useMutation("post", "/accounts");
+
+	function handleSubmit(e: FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+		e.stopPropagation();
+
+		const name = new FormData(e.currentTarget).get("name");
+
+		mutation
+			.mutateAsync({
+				body: { name },
+			})
+			.catch(errorToast("error creating account"));
+	}
+
+	return (
+		<Dialog.Root>
+			<Tooltip.Root>
+				<Tooltip.Trigger asChild>
+					<Dialog.Trigger asChild>
+						<Button size="icon">
+							<IconPlus />
+						</Button>
+					</Dialog.Trigger>
+				</Tooltip.Trigger>
+
+				<TooltipContent>new account</TooltipContent>
+			</Tooltip.Root>
+
+			<Dialog.Content>
+				<Dialog.Title>new account</Dialog.Title>
+
+				<form className="mt-4 space-y-6" onSubmit={handleSubmit}>
+					<Input label="name" name="name" autoComplete="off" />
+
+					<div className="flex justify-end gap-3">
+						<Dialog.Close asChild>
+							<Button variant="ghost">cancel</Button>
+						</Dialog.Close>
+
+						<Button type="submit" isLoading={mutation.isPending}>
+							add
+						</Button>
+					</div>
+				</form>
+			</Dialog.Content>
+		</Dialog.Root>
+	);
+}
+
+export function CreateCategory() {
+	const qc = useQueryClient();
+	const mutation = api.useMutation("post", "/categories", {
+		onSuccess: () => {
+			qc.invalidateQueries(api.queryOptions("get", "/categories"));
+		},
+	});
+	const d = useDialog();
+
+	function handleSubmit(e: FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+		e.stopPropagation();
+		const data = new FormData(e.currentTarget);
+
+		const name = data.get("name");
+		const isNeutral = data.get("isNeutral");
+
+		mutation
+			.mutateAsync({
+				body: { name, is_neutral: isNeutral === "on" },
+			})
+			.then(() => {
+				d.close();
+			})
+			.catch(errorToast("error creating category"));
+	}
+
+	return (
+		<Dialog.Root {...d.props}>
+			<Tooltip.Root>
+				<Tooltip.Trigger asChild>
+					<Dialog.Trigger asChild>
+						<Button size="icon">
+							<IconPlus />
+						</Button>
+					</Dialog.Trigger>
+				</Tooltip.Trigger>
+
+				<TooltipContent>new category</TooltipContent>
+			</Tooltip.Root>
+			<Dialog.Content>
+				<Dialog.Title>new category</Dialog.Title>
+
+				<form className="mt-4 space-y-6" onSubmit={handleSubmit}>
+					<Input label="name" name="name" autoComplete="off" />
+
+					<Checkbox label="is neutral" name="isNeutral" />
+
+					<div className="flex justify-end gap-3">
+						<Dialog.Close asChild>
+							<Button variant="ghost">cancel</Button>
+						</Dialog.Close>
+
+						<Button type="submit" isLoading={mutation.isPending}>
+							add
+						</Button>
+					</div>
+				</form>
+			</Dialog.Content>
+		</Dialog.Root>
 	);
 }
 
 export function CategoryField({
+	name,
+	label,
 	error,
 	defaultValue,
-	invisibleLabel,
 }: {
+	name: string;
+	label?: string;
 	error?: string;
 	defaultValue?: null | {
 		id: string;
 		name: string;
 	};
-	invisibleLabel?: boolean;
 }) {
 	const [s, setS] = useState<{
-		custom: boolean;
 		value: string;
 		label: string;
-	} | null>(
-		defaultValue ? { custom: false, value: defaultValue.id, label: defaultValue.name } : null
-	);
+	} | null>(defaultValue ? { value: defaultValue.id, label: defaultValue.name } : null);
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
@@ -329,82 +435,75 @@ export function CategoryField({
 
 	function onSelect(val: string) {
 		const existing = list.items.find((x) => x.id === val);
-
 		if (!existing) {
-			setS({ custom: true, label: val, value: val });
 			return;
 		}
-
-		setS({ custom: false, label: existing.name, value: existing.id });
+		setS({ label: existing.name, value: existing.id });
 	}
 
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;
 
 	return (
-		<ak.ComboboxProvider
-			value={list.filterText}
-			setValue={(val) => {
-				startTransition(() => {
-					list.setFilterText(val);
-				});
-			}}
-		>
-			<ak.SelectProvider setValue={onSelect} value={s?.value ?? ""}>
-				{!invisibleLabel && (
-					<LabelWrapper>
-						<ak.SelectLabel className={labelStyles}>category</ak.SelectLabel>
+		<div className="w-full">
+			<ak.ComboboxProvider
+				value={list.filterText}
+				setValue={(val) => {
+					startTransition(() => {
+						list.setFilterText(val);
+					});
+				}}
+			>
+				<ak.SelectProvider setValue={onSelect} value={s?.value ?? ""}>
+					{!!label && (
+						<LabelWrapper>
+							<ak.SelectLabel className={labelStyles}>{label}</ak.SelectLabel>
 
-						{error && errorId && <Error id={errorId}>{error}</Error>}
-					</LabelWrapper>
-				)}
+							{error && errorId && <Error id={errorId}>{error}</Error>}
+						</LabelWrapper>
+					)}
 
-				<ak.Select
-					name={s?.custom ? "category_name" : "category_id"}
-					className={
-						"focus border-gray-6 flex h-10 w-full items-center justify-between border"
-					}
-				>
-					<span className="ps-3">{s?.label ?? "select a category"}</span>
+					<ak.Select
+						name={name}
+						className={
+							"focus border-gray-6 flex h-10 w-full items-center justify-between border"
+						}
+					>
+						<span className="ps-3">{s?.label ?? "select a category"}</span>
 
-					<IconChevronsUpDown className="text-gray-a11 me-2 size-5" />
-				</ak.Select>
+						<IconChevronsUpDown className="text-gray-a11 me-2 size-5" />
+					</ak.Select>
 
-				<ak.SelectPopover
-					gutter={4}
-					sameWidth
-					className="bg-gray-1 border-gray-4 z-10 min-w-(--popover-anchor-width) border outline-hidden"
-				>
-					<ak.Combobox
-						className="border-gray-a4 w-full border-b px-3 py-2 outline-hidden"
-						autoSelect
-						placeholder="search categories..."
-						name="category_name"
-					/>
+					<ak.SelectPopover
+						gutter={4}
+						sameWidth
+						className="bg-gray-1 border-gray-4 z-10 w-[300px] min-w-(--popover-anchor-width) border outline-hidden"
+					>
+						<div className="relative">
+							<ak.Combobox
+								className="border-gray-a4 w-full px-3 py-2 outline-hidden"
+								autoSelect
+								placeholder="search categories..."
+							/>
 
-					<ak.ComboboxList>
-						{list.items.map((x) => (
-							<SelectComboItem key={x.name} value={x.name} />
-						))}
+							{list.isLoading && (
+								<div className="absolute top-2 right-2">
+									<Spinner />
+								</div>
+							)}
+						</div>
 
-						{list.items.length && list.isLoading ? (
-							<SelectComboItem>loading</SelectComboItem>
-						) : (
-							!list.items.length &&
-							list.filterText &&
-							!list.isLoading &&
-							list.filterText === list.filterText && (
-								<SelectComboItem value={list.filterText}>
-									<p className="max-w-(--popover-anchor-width) truncate">
-										create "{list.filterText}"
-									</p>
+						<ak.ComboboxList>
+							{list.items.map((x) => (
+								<SelectComboItem key={x.name} value={x.id}>
+									{x.name}
 								</SelectComboItem>
-							)
-						)}
-					</ak.ComboboxList>
-				</ak.SelectPopover>
-			</ak.SelectProvider>
-		</ak.ComboboxProvider>
+							))}
+						</ak.ComboboxList>
+					</ak.SelectPopover>
+				</ak.SelectProvider>
+			</ak.ComboboxProvider>
+		</div>
 	);
 }
 

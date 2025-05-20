@@ -54,7 +54,7 @@ async fn main() {
         .route("/{id}/linked", post(transactions::link))
         .route("/{id}/linked/{id}", delete(transactions::unlink));
 
-    let categories = Router::new().route("/", get(categories::query));
+    let categories = Router::new().route("/", get(categories::query).post(categories::create));
 
     let accounts = Router::new().route("/", get(accounts::query).post(accounts::create));
 

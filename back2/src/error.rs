@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use axum::{
     Json,
     response::{IntoResponse, Response},
 };
 use hyper::StatusCode;
+use serde::Serialize;
 use serde_json::json;
 
 #[derive(Debug, thiserror::Error)]
@@ -21,24 +24,40 @@ pub enum ApiError {
 
     #[error("bad request: {0}")]
     BadRequest(String),
+
+    #[error("bad request (details): {0}")]
+    BadRequestDetails(String, ErrorDetails),
 }
+
+#[derive(Debug, Serialize)]
+pub struct ErrorDetails(pub HashMap<String, String>);
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         tracing::error!("{:#?}", self);
 
-        let (status_code, error_message) = match self {
+        let (status_code, error_message, details) = match self {
             ApiError::UnexpectedError(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Some("unexpected error".to_string()),
+                None,
             ),
-            ApiError::NoAuth(_) => (StatusCode::UNAUTHORIZED, None),
-            ApiError::NoAccess(_) => (StatusCode::FORBIDDEN, None),
-            ApiError::NotFound(_) => (StatusCode::NOT_FOUND, None),
-            ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, Some(err.to_string())),
+            ApiError::NoAuth(_) => (StatusCode::UNAUTHORIZED, None, None),
+            ApiError::NoAccess(_) => (StatusCode::FORBIDDEN, None, None),
+            ApiError::NotFound(_) => (StatusCode::NOT_FOUND, None, None),
+            ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, Some(err.to_string()), None),
+            ApiError::BadRequestDetails(err, details) => (
+                StatusCode::BAD_REQUEST,
+                Some(err.to_string()),
+                Some(details),
+            ),
         };
 
-        return (status_code, Json(json!({ "error": error_message }))).into_response();
+        return (
+            status_code,
+            Json(json!({ "error": error_message, "details": details })),
+        )
+            .into_response();
     }
 }
 

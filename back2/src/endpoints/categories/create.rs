@@ -13,16 +13,17 @@ use crate::{
 };
 
 #[derive(Deserialize, ToSchema)]
-pub struct CreateAccountInput {
+pub struct CreateCategoryInput {
     pub name: String,
+    pub is_neutral: bool,
 }
 
 #[utoipa::path(
     post,
-    path = "/accounts",
-    operation_id = "accounts/create",
+    path = "/categories",
+    operation_id = "categories/create",
     request_body(
-        content = CreateAccountInput,
+        content = CreateCategoryInput,
         content_type = "application/json",
     ),
     responses(
@@ -32,7 +33,7 @@ pub struct CreateAccountInput {
 pub async fn create(
     State(state): State<AppState>,
     user: User,
-    Json(payload): Json<CreateAccountInput>,
+    Json(payload): Json<CreateCategoryInput>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut errors: HashMap<String, String> = HashMap::new();
 
@@ -50,13 +51,13 @@ pub async fn create(
         ));
     }
 
-    let account_id = create_id();
+    let category_id = create_id();
 
     state
         .data
-        .insert_account(&user.id, &account_id, &name)
+        .insert_category(&user.id, &category_id, &name, payload.is_neutral)
         .await
-        .context("error inserting account")?;
+        .context("error inserting category")?;
 
     Ok(())
 }

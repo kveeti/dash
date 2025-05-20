@@ -1,40 +1,60 @@
-import { parseDate } from "@internationalized/date";
+import { fromDate, parseDate } from "@internationalized/date";
 import { CalendarIcon } from "@radix-ui/react-icons";
-import { format, subYears } from "date-fns";
+import { endOfDay, endOfMonth, format, startOfMonth, subYears } from "date-fns";
 import { useState } from "react";
 import * as Rac from "react-aria-components";
+import { useSearchParams } from "wouter";
 
 import { api } from "../../api";
 import { buttonStyles } from "../../ui/button";
 import { IconChevronLeft } from "../../ui/icons/chevron-left";
 import { IconChevronRight } from "../../ui/icons/chevron-right";
 import { LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
+import { Spinner } from "../../ui/spinner";
 import { useLocaleStuff } from "../use-formatting";
-import { testdata } from "./testdata";
 
 export default function StatsPage() {
-	const [precision, setPrecision] = useState<"month" | "year">("month");
+	const [searchParams] = useSearchParams();
 	const { timeZone } = useLocaleStuff();
 
-	const [value, setValue] = useState<Rac.DateRange | null>({
-		start: parseDate("2023-01-01"),
-		end: parseDate("2023-12-31"),
-	});
+	const startq = searchParams.get("start");
+	const start = startq
+		? parseDate(startq)
+		: fromDate(startOfMonth(subYears(new Date(), 1)), timeZone);
+	const endq = searchParams.get("end");
+	const end = endq ? parseDate(endq) : fromDate(endOfDay(new Date()), timeZone);
 
-	let year = subYears(new Date(), 1);
+	const [value, setValue] = useState<Rac.DateRange>({ start, end });
+
+	return (
+		<div className="flex w-full flex-col gap-3">
+			<DateField value={value} setValue={setValue} />
+			<Thing2 time={value} />
+		</div>
+	);
+}
+
+function Thing2({ time }: { time: Rac.DateRange }) {
+	const { timeZone, f } = useLocaleStuff();
 
 	const q = api.useQuery("get", "/transactions/stats", {
 		params: {
 			query: {
 				timezone: timeZone,
-				start: value.start.toDate(timeZone).toISOString(),
-				end: value.end.toDate(timeZone).toISOString(),
+				start: time.start.toDate(timeZone).toISOString(),
+				end: time.end.toDate(timeZone).toISOString(),
 			},
 		},
 	});
 
+	const [selectedDateIndex, setSelectedDateIndex] = useState<number | null>(null);
+
 	if (q.isLoading) {
-		return <div>Loading...</div>;
+		return (
+			<div className="flex h-60 w-full items-center justify-center">
+				<Spinner />
+			</div>
+		);
 	}
 
 	if (q.isError) {
@@ -45,106 +65,8 @@ export default function StatsPage() {
 		return <div>No data</div>;
 	}
 
-	return (
-		<div className="flex w-full flex-col gap-3">
-			<DateField value={value} setValue={setValue} />
-			<Thing2 data={q.data} />
-		</div>
-	);
-}
+	const { dates, tti, tte, e: expenses, i: income, te, ti, e_cats, i_cats } = q.data;
 
-function DateField({
-	value,
-	setValue,
-}: {
-	value: Rac.DateRange;
-	setValue: (val: Rac.DateRange | null) => void;
-}) {
-	const { hourCycle } = useLocaleStuff();
-
-	const calCellStyles =
-		buttonStyles({ variant: "ghost", size: "icon" }) + " data-selected:bg-gray-a4";
-
-	return (
-		<Rac.DateRangePicker
-			granularity="day"
-			hourCycle={hourCycle}
-			value={value}
-			onChange={setValue}
-		>
-			<LabelWrapper>
-				<Rac.Label className={labelStyles}>start</Rac.Label>
-			</LabelWrapper>
-
-			<Rac.Group className="flex gap-2">
-				<Rac.DateInput slot="start" className={inputStyles + " inline-flex items-center"}>
-					{(segment) => (
-						<Rac.DateSegment
-							segment={segment}
-							className={
-								"inline p-1 leading-4 caret-transparent outline-none" +
-								" data-[type=literal]:p-0" +
-								" data-[type=year]:-me-1" +
-								" data-focused:bg-gray-a7 data-focused:text-white"
-							}
-						/>
-					)}
-				</Rac.DateInput>
-
-				<Rac.DateInput slot="end" className={inputStyles + " inline-flex items-center"}>
-					{(segment) => (
-						<Rac.DateSegment
-							segment={segment}
-							className={
-								"inline p-1 leading-4 caret-transparent outline-none" +
-								" data-[type=literal]:p-0" +
-								" data-[type=year]:-me-1" +
-								" data-focused:bg-gray-a7 data-focused:text-white"
-							}
-						/>
-					)}
-				</Rac.DateInput>
-				<Rac.Button className={buttonStyles({ variant: "outline", size: "icon" })}>
-					<CalendarIcon className="size-4" />
-				</Rac.Button>
-			</Rac.Group>
-
-			<Rac.Popover>
-				<Rac.Dialog>
-					<Rac.RangeCalendar className="bg-gray-1 border-gray-4 border shadow-sm">
-						<header className="mb-2 flex items-center justify-between gap-2">
-							<Rac.Button
-								slot="previous"
-								className={buttonStyles({ variant: "ghost", size: "icon" })}
-							>
-								<IconChevronLeft />
-							</Rac.Button>
-							<Rac.Heading />
-							<Rac.Button
-								slot="next"
-								className={buttonStyles({ variant: "ghost", size: "icon" })}
-							>
-								<IconChevronRight />
-							</Rac.Button>
-						</header>
-						<Rac.CalendarGrid>
-							{(date) => <Rac.CalendarCell className={calCellStyles} date={date} />}
-						</Rac.CalendarGrid>
-					</Rac.RangeCalendar>
-				</Rac.Dialog>
-			</Rac.Popover>
-		</Rac.DateRangePicker>
-	);
-}
-
-function Thing2({
-	data: { dates, i_cats, e_cats, i: income, e: expenses, tte, tti, ti, te },
-}: {
-	data: typeof testdata;
-}) {
-	const { f } = useLocaleStuff();
-
-	const [selectedDateIndex, setSelectedDateIndex] = useState<number | null>(null);
 	const selectedDate = typeof selectedDateIndex === "number" ? dates[selectedDateIndex] : null;
 
 	return (
@@ -360,4 +282,111 @@ function getClamp(min: number, max: number) {
 		const normalized = Math.min(Math.max((numAbs - min) / (max - min), 0), 1);
 		return normalized * 100;
 	};
+}
+
+function DateField({
+	value,
+	setValue,
+}: {
+	value: Rac.DateRange;
+	setValue: (val: Rac.DateRange | null) => void;
+}) {
+	const { hourCycle } = useLocaleStuff();
+
+	const calCellStyles =
+		buttonStyles({ variant: "ghost", size: "icon" }) + " data-selected:bg-gray-a4";
+
+	return (
+		<Rac.DateRangePicker
+			granularity="day"
+			hourCycle={hourCycle}
+			value={value}
+			onChange={setValue}
+		>
+			<LabelWrapper>
+				<Rac.Label className={labelStyles}>timerange</Rac.Label>
+			</LabelWrapper>
+
+			<Rac.Group className="flex gap-2">
+				<Rac.Button
+					className={
+						buttonStyles({ variant: "outline", size: "icon" }) + " " + "shrink-0"
+					}
+				>
+					<CalendarIcon className="size-4" />
+				</Rac.Button>
+
+				<Rac.DateInput slot="start" className={inputStyles + " inline-flex items-center"}>
+					{(segment) => (
+						<Rac.DateSegment
+							segment={segment}
+							className={
+								"inline p-1 leading-4 caret-transparent outline-none" +
+								" data-[type=literal]:p-0" +
+								" data-[type=year]:-me-1" +
+								" data-focused:bg-gray-a7 data-focused:text-white"
+							}
+						/>
+					)}
+				</Rac.DateInput>
+
+				<Rac.DateInput slot="end" className={inputStyles + " inline-flex items-center"}>
+					{(segment) => (
+						<Rac.DateSegment
+							segment={segment}
+							className={
+								"inline p-1 leading-4 caret-transparent outline-none" +
+								" data-[type=literal]:p-0" +
+								" data-[type=year]:-me-1" +
+								" data-focused:bg-gray-a7 data-focused:text-white"
+							}
+						/>
+					)}
+				</Rac.DateInput>
+			</Rac.Group>
+
+			<Rac.Popover>
+				<Rac.Dialog>
+					<Rac.RangeCalendar
+						className="bg-gray-1 border-gray-4 border shadow-sm"
+						visibleDuration={{ months: 2 }}
+						firstDayOfWeek="mon"
+						pageBehavior="single"
+					>
+						<header className="mb-2 flex items-center justify-between gap-2">
+							<Rac.Button
+								slot="previous"
+								className={buttonStyles({ variant: "ghost", size: "icon" })}
+							>
+								<IconChevronLeft />
+							</Rac.Button>
+
+							<Rac.Heading />
+
+							<Rac.Button
+								slot="next"
+								className={buttonStyles({ variant: "ghost", size: "icon" })}
+							>
+								<IconChevronRight />
+							</Rac.Button>
+						</header>
+
+						<div className="flex items-start justify-start gap-1">
+							<Rac.CalendarGrid>
+								{(date) => (
+									<Rac.CalendarCell className={calCellStyles} date={date} />
+								)}
+							</Rac.CalendarGrid>
+
+							<Rac.CalendarGrid offset={{ months: 1 }}>
+								{(date) => (
+									<Rac.CalendarCell className={calCellStyles} date={date} />
+								)}
+							</Rac.CalendarGrid>
+						</div>
+					</Rac.RangeCalendar>
+				</Rac.Dialog>
+			</Rac.Popover>
+		</Rac.DateRangePicker>
+	);
 }

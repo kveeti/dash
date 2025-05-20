@@ -1,26 +1,26 @@
-import * as ak from "@ariakit/react";
+import { PlusIcon } from "@radix-ui/react-icons";
 import { UseQueryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tooltip } from "radix-ui";
 import { FormEvent, useRef, useState } from "react";
 import * as Rac from "react-aria-components";
-import { useAsyncList } from "react-stately";
 import { toast } from "sonner";
 import { useLocation, useSearchParams } from "wouter";
 
-import { api, fetchClient } from "../../api";
+import { api } from "../../api";
 import { paths } from "../../api_types";
 import { errorToast } from "../../lib/error-toast";
-import { Button } from "../../ui/button";
+import { Button, buttonStyles } from "../../ui/button";
 import * as Dialog from "../../ui/dialog";
 import { IconCheck } from "../../ui/icons/check";
 import { IconChevronLeft } from "../../ui/icons/chevron-left";
 import { IconChevronRight } from "../../ui/icons/chevron-right";
 import { IconCopy } from "../../ui/icons/copy";
 import { IconCross } from "../../ui/icons/cross";
-import { Input, inputStyles } from "../../ui/input";
+import { Input } from "../../ui/input";
 import { Link } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
 import { Spinner } from "../../ui/spinner";
+import { TooltipContent } from "../../ui/tooltip";
 import { useLocaleStuff } from "../use-formatting";
 import { AccountField, CategoryField, DateField } from "./new-tx-page";
 
@@ -40,7 +40,7 @@ export default function TxPage() {
 
 	const opts = api.queryOptions("post", "/transactions/query", {
 		body: {
-			search_text: searchParams.get("search_text"),
+			search_text: searchParams.get("query"),
 			limit,
 			left,
 			right,
@@ -268,7 +268,14 @@ function Search({ currentSearchParams }: { currentSearchParams: URLSearchParams 
 				/>
 			</form>
 
-			<Link href="/txs/new">new</Link>
+			<Tooltip.Root>
+				<Tooltip.Trigger asChild>
+					<Link href="/txs/new" className={buttonStyles({ size: "icon" })}>
+						<PlusIcon />
+					</Link>
+				</Tooltip.Trigger>
+				<TooltipContent>new transaction</TooltipContent>
+			</Tooltip.Root>
 		</div>
 	);
 }
@@ -352,20 +359,6 @@ function SelectedTx({
 
 		const data = Object.fromEntries(new FormData(event.currentTarget));
 
-		let category_key = "category_name";
-		let category_value = data.category_name;
-		if (data.category_id) {
-			category_key = "category_id";
-			category_value = data.category_id;
-		}
-
-		let account_key = "account_name";
-		let account_value = data.account_name;
-		if (data.account_id) {
-			account_key = "account_id";
-			account_value = data.account_id;
-		}
-
 		mutation
 			.mutateAsync({
 				params: { path: { id: tx.id } },
@@ -373,14 +366,15 @@ function SelectedTx({
 					date: new Date(data.date).toISOString(),
 					amount: Number(data.amount),
 					counter_party: data.counter_party,
-					currency: "EUR",
 					additional: data.additional || null,
-					[category_key]: category_value,
-					[account_key]: account_value,
+					category: data.category,
+					account: data.account,
 				},
 			})
 			.catch(errorToast("error updating transaction"));
 	}
+
+	const txDate = new Date(tx.date);
 
 	return (
 		<Sidebar.Root modal={false} defaultOpen onOpenChange={unselect}>
@@ -401,7 +395,7 @@ function SelectedTx({
 
 				<p className="text-base">{f.amount.format(tx.amount)}</p>
 
-				<p>{f.sidebarDate.format(new Date(tx.date))}</p>
+				<p>{f.sidebarDate.format(txDate)}</p>
 
 				<p className="text-gray-11 break-words">{tx.additional}</p>
 
@@ -420,7 +414,12 @@ function SelectedTx({
 
 							<Input label="amount" name="amount" defaultValue={tx.amount} />
 
-							<DateField label="date" name="date" defaultValue={tx.date} />
+							<DateField
+								label="date"
+								name="date"
+								granularity="second"
+								defaultValue={txDate}
+							/>
 
 							<Input
 								name="additional"
@@ -428,9 +427,17 @@ function SelectedTx({
 								defaultValue={tx.additional ?? undefined}
 							/>
 
-							<CategoryField defaultValue={tx.category} />
+							<CategoryField
+								name="category"
+								label="category"
+								defaultValue={tx.category}
+							/>
 
-							<AccountField defaultValue={tx.account} />
+							<AccountField
+								name="account"
+								label="account"
+								defaultValue={tx.account}
+							/>
 
 							<div className="flex justify-between gap-2">
 								<DeleteTransaction
@@ -636,17 +643,10 @@ function Bulks({ selectedKeys, onClear }: { selectedKeys: Rac.Selection; onClear
 
 		const data = Object.fromEntries(new FormData(e.currentTarget));
 
-		let category_key = "category_name";
-		let category_value = data.category_name;
-		if (data.category_id) {
-			category_key = "category_id";
-			category_value = data.category_id;
-		}
-
 		mutation.mutateAsync({
 			body: {
 				ids: [...selectedKeys] as Array<string>,
-				[category_key]: category_value,
+				category_id: data.categoryId,
 			},
 		});
 	}
@@ -667,7 +667,7 @@ function Bulks({ selectedKeys, onClear }: { selectedKeys: Rac.Selection; onClear
 			</Tooltip.Root>
 
 			<form onSubmit={onSubmit} className="flex items-center gap-2">
-				<CategoryField invisibleLabel />
+				<CategoryField name="categoryId" />
 
 				<Button>apply</Button>
 			</form>

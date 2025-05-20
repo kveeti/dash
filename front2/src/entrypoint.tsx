@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from "react";
+import { Suspense } from "react";
 import { Redirect, Route, Switch } from "wouter";
 
 import { useMe } from "./api";
@@ -19,50 +19,30 @@ export function Entrypoint() {
 const AuthLayout = lazyWithPreload(() => import("./authed/layout"));
 AuthLayout.preload();
 
-const IndexPage = lazyWithPreload(() => import("./authed/index"));
-IndexPage.preload();
-
 const TxPage = lazyWithPreload(() => import("./authed/transactions/tx-page"));
 TxPage.preload();
 
 const TxImportPage = lazyWithPreload(() => import("./authed/transactions/tx-import-page"));
 TxImportPage.preload();
 
-const TxBulkPage = lazyWithPreload(() => import("./authed/transactions/tx-bulk-page"));
-TxBulkPage.preload();
-
 const NewTxPage = lazyWithPreload(() => import("./authed/transactions/new-tx-page"));
 NewTxPage.preload();
 
-const StatsPage = lazyWithPreload(() => import("./authed/stats/statspage"));
+const StatsPage = lazyWithPreload(() => import("./authed/stats/stats-page"));
 StatsPage.preload();
-
-function Log({ toLog }: { toLog: string }) {
-	useEffect(() => {
-		console.log(toLog);
-	}, []);
-
-	return <></>;
-}
 
 function Authed() {
 	return (
 		<LocaleStuff>
-			<Suspense fallback={<Log toLog="upmost" />}>
+			<Suspense>
 				<AuthLayout>
-					<Suspense fallback={<Log toLog="inner" />}>
+					<Suspense>
 						<Switch>
-							<Route path="/">
-								<IndexPage />
-							</Route>
 							<Route path="/txs">
 								<TxPage />
 							</Route>
 							<Route path="/txs/import">
 								<TxImportPage />
-							</Route>
-							<Route path="/txs/bulk">
-								<TxBulkPage />
 							</Route>
 							<Route path="/txs/new">
 								<NewTxPage />
@@ -71,7 +51,7 @@ function Authed() {
 								<StatsPage />
 							</Route>
 							<Route path="*">
-								<Redirect href="/" />
+								<Redirect href="/txs" />
 							</Route>
 						</Switch>
 					</Suspense>

@@ -11,7 +11,7 @@ use crate::{auth_middleware::User, error::ApiError, state::AppState};
 #[derive(Deserialize, ToSchema)]
 pub struct TransactionBulkInput {
     pub ids: Vec<String>,
-    pub category_name: String,
+    pub category_id: String,
 }
 
 #[utoipa::path(
@@ -33,7 +33,7 @@ pub async fn bulk(
 ) -> Result<impl IntoResponse, ApiError> {
     state
         .data
-        .tx_bulk_actions(&user.id, input.ids, &input.category_name)
+        .tx_bulk_actions(&user.id, input.ids, &input.category_id)
         .await?;
 
     return Ok(StatusCode::OK);

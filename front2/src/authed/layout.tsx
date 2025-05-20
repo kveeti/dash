@@ -32,9 +32,6 @@ export function Nav() {
 			<ul className="mx-auto flex w-full max-w-[800px] justify-between">
 				<div className="flex">
 					<li>
-						<NavLink href="/">home</NavLink>
-					</li>
-					<li>
 						<NavLink href="/stats">stats</NavLink>
 					</li>
 					<li>

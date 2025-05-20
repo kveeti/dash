@@ -77,7 +77,7 @@ export interface paths {
         };
         get: operations["categories/query"];
         put?: never;
-        post?: never;
+        post: operations["categories/create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -212,14 +212,16 @@ export interface components {
         CreateAccountInput: {
             name: string;
         };
+        CreateCategoryInput: {
+            is_neutral: boolean;
+            name: string;
+        };
         CreateTransactionInput: {
-            account_id?: string | null;
-            account_name?: string | null;
+            account?: string | null;
             additional?: string | null;
             /** Format: float */
             amount: number;
-            category_id?: string | null;
-            category_name?: string | null;
+            category?: string | null;
             counter_party: string;
             /** Format: date-time */
             date: string;
@@ -274,19 +276,16 @@ export interface components {
             links: components["schemas"]["Link"][];
         };
         TransactionBulkInput: {
-            category_name: string;
+            category_id: string;
             ids: string[];
         };
         TransactionUpdateInput: {
-            account_id?: string | null;
-            account_name?: string | null;
+            account?: string | null;
             additional?: string | null;
             /** Format: float */
             amount: number;
-            category_id?: string | null;
-            category_name?: string | null;
+            category?: string | null;
             counter_party: string;
-            currency: string;
             /** Format: date-time */
             date: string;
         };
@@ -428,6 +427,29 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Category"][];
+                };
+            };
+        };
+    };
+    "categories/create": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

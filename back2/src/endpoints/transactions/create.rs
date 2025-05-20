@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use axum::{
     extract::{self, State},
     response::IntoResponse,
@@ -9,8 +11,8 @@ use utoipa::ToSchema;
 
 use crate::{
     auth_middleware::User,
-    data::{IdentifierSpec, InsertTx, create_id},
-    error::ApiError,
+    data::{InsertTx, create_id},
+    error::{ApiError, ErrorDetails},
     state::AppState,
 };
 
@@ -20,10 +22,8 @@ pub struct CreateTransactionInput {
     pub date: DateTime<Utc>,
     pub amount: f32,
     pub additional: Option<String>,
-    pub category_name: Option<String>,
-    pub category_id: Option<String>,
-    pub account_name: Option<String>,
-    pub account_id: Option<String>,
+    pub category: Option<String>,
+    pub account: Option<String>,
 }
 
 #[utoipa::path(
@@ -41,37 +41,62 @@ pub struct CreateTransactionInput {
 pub async fn create(
     State(state): State<AppState>,
     user: User,
-    extract::Json(input): extract::Json<CreateTransactionInput>,
+    extract::Json(payload): extract::Json<CreateTransactionInput>,
 ) -> Result<impl IntoResponse, ApiError> {
+    let mut errors: HashMap<String, String> = HashMap::new();
+
+    let counter_party = payload.counter_party.trim();
+    if counter_party.is_empty() {
+        errors.insert("counter_party".to_owned(), "required".to_owned());
+    } else if counter_party.len() > 250 {
+        errors.insert(
+            "counter_party".to_owned(),
+            "must be shorter than 250".to_owned(),
+        );
+    }
+
+    let account = match payload.account {
+        Some(ref acc) => {
+            let account = acc.trim();
+            if account.is_empty() {
+                errors.insert("account".to_owned(), "required".to_owned());
+                None
+            } else if account.len() > 250 {
+                errors.insert("account".to_owned(), "must be shorter than 250".to_owned());
+                None
+            } else {
+                Some(account.to_owned())
+            }
+        }
+        None => {
+            errors.insert("account".to_owned(), "required".to_owned());
+            None
+        }
+    };
+
+    if !errors.is_empty() {
+        return Err(ApiError::BadRequestDetails(
+            "invalid request".to_owned(),
+            ErrorDetails(errors),
+        ));
+    }
+
+    let account = account.unwrap();
+
     let tx = InsertTx {
         id: create_id(),
-        counter_party: input.counter_party.to_owned(),
-        og_counter_party: input.counter_party,
-        additional: input.additional,
-        amount: input.amount,
+        counter_party: counter_party.to_owned(),
+        og_counter_party: payload.counter_party,
+        additional: payload.additional,
+        amount: payload.amount,
         currency: "EUR".to_owned(),
-        date: input.date,
+        date: payload.date,
     };
 
-    let cat = match (input.category_name, input.category_id) {
-        (Some(_), Some(_)) => Err(ApiError::BadRequest(
-            "category_id OR category_name".to_string(),
-        ))?,
-        (Some(name), None) => Some(IdentifierSpec::Name(name.to_owned())),
-        (None, Some(id)) => Some(IdentifierSpec::Id(id.to_owned())),
-        _ => None,
-    };
-
-    let acc = match (input.account_name, input.account_id) {
-        (Some(_), Some(_)) => Err(ApiError::BadRequest(
-            "account_id OR account_name".to_string(),
-        ))?,
-        (Some(name), None) => Some(IdentifierSpec::Name(name.to_owned())),
-        (None, Some(id)) => Some(IdentifierSpec::Id(id.to_owned())),
-        _ => None,
-    };
-
-    state.data.insert_tx(&user.id, &tx, acc, cat).await?;
+    state
+        .data
+        .insert_tx(&user.id, &tx, account, payload.category)
+        .await?;
 
     return Ok(StatusCode::CREATED);
 }
