@@ -100,6 +100,22 @@ export interface paths {
         patch: operations["categories/update"];
         trace?: never;
     };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["settings/get"];
+        put?: never;
+        post: operations["settings/save"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/transactions": {
         parameters: {
             query?: never;
@@ -294,6 +310,12 @@ export interface components {
             date: string;
             id: string;
             links: components["schemas"]["Link"][];
+        };
+        SaveSettingsInput: {
+            locale: string;
+        };
+        Settings: {
+            locale: string;
         };
         TransactionBulkInput: {
             category_id: string;
@@ -491,9 +513,13 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": unknown;
+                content?: never;
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
                 };
+                content?: never;
             };
         };
     };
@@ -510,6 +536,48 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CategoryUpdateInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    "settings/get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Settings"];
+                };
+            };
+        };
+    };
+    "settings/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSettingsInput"];
             };
         };
         responses: {

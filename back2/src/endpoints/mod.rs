@@ -12,3 +12,5 @@ pub mod me;
 pub mod transactions;
 
 pub mod integrations;
+
+pub mod settings;

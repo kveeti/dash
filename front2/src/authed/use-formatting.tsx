@@ -1,4 +1,3 @@
-import { count } from "console";
 import { ReactNode, useMemo } from "react";
 
 import { createContext } from "../lib/create-context";
@@ -12,7 +11,7 @@ export function LocaleStuff({ children }: { children: ReactNode }) {
 }
 
 function useLocaleStuffValue() {
-	const locale = "fi-FI";
+	const locale = undefined;
 	const timeZone = undefined;
 	const hourCycle: 12 | 24 = 24;
 

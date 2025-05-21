@@ -145,3 +145,11 @@ create table transaction_imports (
 );
 create index idx_transaction_imports_import_id on transaction_imports (import_id);
 -- transaction_imports
+
+create table user_settings (
+    user_id varchar(30) primary key not null,
+    created_at timestamptz not null,
+    updated_at timestamptz,
+
+    locale text not null
+);

@@ -63,6 +63,8 @@ async fn main() {
 
     let accounts = Router::new().route("/", get(accounts::query).post(accounts::create));
 
+    let user_settings = Router::new().route("/", get(settings::get).post(settings::save));
+
     let auth_base = Router::new()
         .route("/init", get(auth::init))
         .route("/callback", get(auth::callback));
@@ -93,6 +95,7 @@ async fn main() {
         .nest("/integrations", integrations)
         .nest("/categories", categories)
         .nest("/accounts", accounts)
+        .nest("/settings", user_settings)
         .nest("/auth", auth)
         .route("/@me", get(me::get_me))
         .route("/openapi.json", get(openapi))
