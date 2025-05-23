@@ -137,6 +137,8 @@ fn compute(mut tx_map: HashMap<String, Tx>) -> endpoints::transactions::get_stat
     let mut i: Vec<Vec<f32>> = Vec::new();
     let mut e_cats: Vec<Vec<String>> = Vec::new();
     let mut e: Vec<Vec<f32>> = Vec::new();
+    let mut n_cats: Vec<Vec<String>> = Vec::new();
+    let mut n: Vec<Vec<f32>> = Vec::new();
 
     let mut total_income: f32 = 0.0;
     let mut total_expenses: f32 = 0.0;
@@ -155,6 +157,7 @@ fn compute(mut tx_map: HashMap<String, Tx>) -> endpoints::transactions::get_stat
 
     let mut tti: Vec<f32> = vec![0.0; periods.len()];
     let mut tte: Vec<f32> = vec![0.0; periods.len()];
+    let mut ttn: Vec<f32> = vec![0.0; periods.len()];
 
     for (period_index, period) in periods.iter().enumerate() {
         dates.push(period.clone());
@@ -165,18 +168,27 @@ fn compute(mut tx_map: HashMap<String, Tx>) -> endpoints::transactions::get_stat
         let mut period_e_cats: Vec<String> = Vec::new();
         let mut period_e_vals: Vec<f32> = Vec::new();
 
+        let mut period_n_cats: Vec<String> = Vec::new();
+        let mut period_n_vals: Vec<f32> = Vec::new();
+
         let mut i_cat_amounts: HashMap<String, f32> = HashMap::new();
         let mut e_cat_amounts: HashMap<String, f32> = HashMap::new();
+        let mut n_cat_amounts: HashMap<String, f32> = HashMap::new();
+
         for tx in &period_txs[period] {
-            let cat_name = tx
+            let (cat_name, cat_is_neutral) = tx
                 .category
                 .as_ref()
-                .map(|c| c.name.to_owned())
-                .unwrap_or("__uncategorized__".into());
+                .map(|c| (c.name.to_owned(), c.is_neutral.to_owned()))
+                .unwrap_or(("__uncategorized__".into(), false));
 
             let amount = tx.amount;
 
-            if amount > 0.0 {
+            if cat_is_neutral {
+                ttn[period_index] += amount.abs();
+                *n_cat_amounts.entry(cat_name).or_default() += amount.abs();
+                //total_income += amount.abs();
+            } else if amount > 0.0 {
                 tti[period_index] += amount.abs();
                 *i_cat_amounts.entry(cat_name).or_default() += amount.abs();
                 total_income += amount.abs();
@@ -195,11 +207,17 @@ fn compute(mut tx_map: HashMap<String, Tx>) -> endpoints::transactions::get_stat
             period_e_cats.push(cat_name);
             period_e_vals.push(amount);
         }
+        for (cat_name, amount) in n_cat_amounts {
+            period_n_cats.push(cat_name);
+            period_n_vals.push(amount);
+        }
 
         i_cats.push(period_i_cats);
         i.push(period_i_vals);
         e_cats.push(period_e_cats);
         e.push(period_e_vals);
+        n_cats.push(period_n_cats);
+        n.push(period_n_vals);
     }
 
     return endpoints::transactions::get_stats::Output {
@@ -208,8 +226,11 @@ fn compute(mut tx_map: HashMap<String, Tx>) -> endpoints::transactions::get_stat
         e_cats,
         i,
         i_cats,
+        n,
+        n_cats,
         tti,
         tte,
+        ttn,
         ti: total_income,
         te: total_expenses,
     };

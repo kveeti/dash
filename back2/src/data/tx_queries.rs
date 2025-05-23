@@ -277,17 +277,10 @@ impl Data {
             from transactions t
             left join transaction_categories c on t.category_id = c.id
 
-            left join transactions_links link on link.transaction_a_id = t.id or link.transaction_b_id = t.id
-            left join transactions linked on (
-                link.transaction_b_id = linked.id and link.transaction_a_id = t.id
-            ) or (
-                link.transaction_a_id = linked.id and link.transaction_b_id = t.id
-            )
-
-            -- left join transactions_links link
-            --   on link.transaction_a_id = t.id or link.transaction_b_id = t.id
-            -- left join transactions linked
-            --   on (linked.id = CASE WHEN link.transaction_a_id = t.id THEN link.transaction_b_id ELSE link.transaction_a_id END)
+            left join transactions_links link
+              on link.transaction_a_id = t.id or link.transaction_b_id = t.id
+            left join transactions linked
+              on (linked.id = CASE WHEN link.transaction_a_id = t.id THEN link.transaction_b_id ELSE link.transaction_a_id END)
 
             where t.user_id = $1
             and t.date at time zone $2 between $3 and $4;

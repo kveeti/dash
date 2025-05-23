@@ -65,7 +65,20 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 		return <div>No data</div>;
 	}
 
-	const { dates, tti, tte, e: expenses, i: income, te, ti, e_cats, i_cats } = q.data;
+	const {
+		dates,
+		tti,
+		tte,
+		ttn,
+		e: expenses,
+		i: income,
+		n: neutral,
+		te,
+		ti,
+		e_cats,
+		i_cats,
+		n_cats,
+	} = q.data;
 
 	const selectedDate = typeof selectedDateIndex === "number" ? dates[selectedDateIndex] : null;
 
@@ -213,6 +226,35 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 								)}
 							</div>
 						</div>
+
+						{!!neutral[selectedDateIndex].length && (
+							<div className="">
+								<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">
+									neutral
+								</h2>
+
+								<div className="divide-gray-4 divide-y">
+									{neutral[selectedDateIndex].map((val, index) => {
+										let cat = n_cats[selectedDateIndex][index];
+										if (cat === "__uncategorized__") {
+											cat = "uncategorized";
+										}
+										const i = tti[selectedDateIndex];
+										const clamp = getClamp(0, Math.max(i, val));
+
+										return (
+											<div className="space-y-1 px-1 py-1">
+												<Row
+													width={clamp(val)}
+													value={f.amount.format(val)}
+													label={cat}
+												/>
+											</div>
+										);
+									})}
+								</div>
+							</div>
+						)}
 
 						{(() => {
 							const i = tti[selectedDateIndex];

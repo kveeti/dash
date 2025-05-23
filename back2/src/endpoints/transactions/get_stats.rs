@@ -24,8 +24,11 @@ pub struct Output {
     pub i: Vec<Vec<f32>>,
     pub e_cats: Vec<Vec<String>>,
     pub e: Vec<Vec<f32>>,
+    pub n_cats: Vec<Vec<String>>,
+    pub n: Vec<Vec<f32>>,
     pub tti: Vec<f32>,
     pub tte: Vec<f32>,
+    pub ttn: Vec<f32>,
     pub ti: f32,
     pub te: f32,
 }
