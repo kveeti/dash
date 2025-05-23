@@ -297,24 +297,15 @@ impl Data {
 
         query!(
             r#"
-            insert into transactions (
-                id,
-                user_id,
-                created_at,
-                updated_at,
-                date,
-                amount,
-                currency,
-                counter_party,
-                og_counter_party,
-                additional,
-                account_id,
-                category_id
-            )
-            values (
-                $1, $2, $3, $3, $4, $5, $6, $7, $7, $8, $9, $10
-            )
-            "#,
+           insert into transactions (
+               id, user_id, created_at, updated_at, date, amount, currency, 
+               counter_party, og_counter_party, additional, account_id, category_id
+           )
+           select 
+               $1, $2::text, $3, $3, $4, $5, $6, $7, $7, $8,
+               (select id from accounts where id = $9 and user_id = $2::text),
+               (select id from transaction_categories where id = $10::text and user_id = $2::text)
+           "#,
             tx_id,            // $1
             user_id,          // $2
             now,              // $3

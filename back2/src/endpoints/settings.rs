@@ -6,7 +6,8 @@ use crate::{auth_middleware::User, data::Settings, error::ApiError, state::AppSt
 
 #[derive(Deserialize, ToSchema)]
 pub struct SaveSettingsInput {
-    pub locale: String,
+    pub locale: Option<String>,
+    pub timezone: Option<String>,
 }
 
 #[utoipa::path(
@@ -32,29 +33,10 @@ pub async fn save(
             &user.id,
             Settings {
                 locale: payload.locale,
+                timezone: payload.timezone,
             },
         )
         .await?;
 
     Ok(())
-}
-
-#[utoipa::path(
-    get,
-    path = "/settings",
-    operation_id = "settings/get",
-    responses(
-        (status = 200, body = Settings)
-    )
-)]
-pub async fn get(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, ApiError> {
-    let settings = state
-        .data
-        .get_settings(&user.id)
-        .await?
-        .unwrap_or_else(|| Settings {
-            locale: "en-US".to_string(),
-        });
-
-    Ok(Json(settings))
 }

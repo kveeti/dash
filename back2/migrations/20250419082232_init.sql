@@ -2,9 +2,7 @@ create table users (
     id varchar(30) primary key not null,
     external_id varchar(36) not null unique,
     created_at timestamptz not null,
-    updated_at timestamptz,
-
-    locale text not null
+    updated_at timestamptz
 );
 
 create table sessions (
@@ -146,10 +144,12 @@ create table transaction_imports (
 create index idx_transaction_imports_import_id on transaction_imports (import_id);
 -- transaction_imports
 
+-- TODO: needs to change some day
 create table user_settings (
     user_id varchar(30) primary key not null,
     created_at timestamptz not null,
     updated_at timestamptz,
 
-    locale text not null
+    locale text,
+    timezone text
 );

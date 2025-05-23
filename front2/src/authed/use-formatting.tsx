@@ -1,5 +1,6 @@
 import { ReactNode, useMemo } from "react";
 
+import { useMe } from "../api";
 import { createContext } from "../lib/create-context";
 
 const [useContext, context] = createContext<ReturnType<typeof useLocaleStuffValue>>();
@@ -11,8 +12,10 @@ export function LocaleStuff({ children }: { children: ReactNode }) {
 }
 
 function useLocaleStuffValue() {
-	const locale = undefined;
-	const timeZone = undefined;
+	const me = useMe();
+
+	const locale = me?.settings?.locale ?? undefined;
+	const timeZone = me?.settings?.timezone ?? undefined;
 	const hourCycle: 12 | 24 = 24;
 
 	const resolvedOptions = useMemo(
@@ -82,6 +85,7 @@ function useLocaleStuffValue() {
 			count: countFormatter,
 		},
 		hourCycle,
-		timeZone: resolvedOptions.timeZone,
+		timeZone: timeZone ?? resolvedOptions.timeZone,
+		locale: locale ?? resolvedOptions.locale,
 	};
 }

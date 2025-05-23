@@ -23,12 +23,6 @@ use crate::{
     statement_parsing::{generic::GenericFormatParser, op::OpFormatParser, parser::RecordParser},
 };
 
-#[derive(Debug)]
-enum ImportKind {
-    Op,
-    Generic,
-}
-
 pub async fn import(
     State(state): State<AppState>,
     Path((account_id, file_type)): Path<(String, String)>,

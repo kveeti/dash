@@ -120,7 +120,6 @@ pub async fn callback(
             let user = User {
                 id: create_id(),
                 external_id,
-                locale: "en-FI".to_owned(),
                 created_at,
                 updated_at,
             };
@@ -152,7 +151,6 @@ pub async fn ___dev_login___(config: &Config, data: &Data) -> Result<String, Api
     let user = User {
         id: create_id(),
         external_id: create_id(),
-        locale: "en-FI".to_owned(),
         created_at,
         updated_at,
     };

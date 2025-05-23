@@ -107,7 +107,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["settings/get"];
+        get?: never;
         put?: never;
         post: operations["settings/save"];
         delete?: never;
@@ -282,8 +282,9 @@ export interface components {
             date: string;
             id: string;
         };
-        Me: {
+        MeOutput: {
             id: string;
+            settings?: null | components["schemas"]["Settings"];
         };
         Output: {
             dates: string[];
@@ -312,10 +313,12 @@ export interface components {
             links: components["schemas"]["Link"][];
         };
         SaveSettingsInput: {
-            locale: string;
+            locale?: string | null;
+            timezone?: string | null;
         };
         Settings: {
-            locale: string;
+            locale?: string | null;
+            timezone?: string | null;
         };
         TransactionBulkInput: {
             category_id: string;
@@ -366,7 +369,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Me"];
+                    "application/json": components["schemas"]["MeOutput"];
                 };
             };
         };
@@ -545,25 +548,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    "settings/get": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Settings"];
                 };
             };
         };

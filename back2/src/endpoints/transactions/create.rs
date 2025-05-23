@@ -74,6 +74,19 @@ pub async fn create(
         }
     };
 
+    let category = match payload.category {
+        Some(ref category) => {
+            let category = category.trim();
+            if !category.is_empty() {
+                None
+            } else {
+                Some(category.to_owned())
+            }
+        }
+
+        None => None,
+    };
+
     if !errors.is_empty() {
         return Err(ApiError::BadRequestDetails(
             "invalid request".to_owned(),
@@ -95,7 +108,7 @@ pub async fn create(
 
     state
         .data
-        .insert_tx(&user.id, &tx, account, payload.category)
+        .insert_tx(&user.id, &tx, account, category)
         .await?;
 
     return Ok(StatusCode::CREATED);

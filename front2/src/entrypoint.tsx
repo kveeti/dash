@@ -1,13 +1,13 @@
 import { Suspense } from "react";
 import { Redirect, Route, Switch } from "wouter";
 
-import { useMe } from "./api";
+import { useMeQuery } from "./api";
 import { LocaleStuff } from "./authed/use-formatting";
 import { lazyWithPreload } from "./lib/lazy-with-preload";
 import { things } from "./things";
 
 export function Entrypoint() {
-	const me = useMe();
+	const me = useMeQuery();
 
 	if (me.data) {
 		return <Authed />;

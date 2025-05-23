@@ -63,7 +63,7 @@ async fn main() {
 
     let accounts = Router::new().route("/", get(accounts::query).post(accounts::create));
 
-    let user_settings = Router::new().route("/", get(settings::get).post(settings::save));
+    let user_settings = Router::new().route("/", post(settings::save));
 
     let auth_base = Router::new()
         .route("/init", get(auth::init))

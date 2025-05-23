@@ -1,23 +1,30 @@
-use axum::{Json, response::IntoResponse};
+use axum::{Json, extract::State, response::IntoResponse};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use crate::{auth_middleware::User, error::ApiError};
+use crate::{auth_middleware::User, data::Settings, error::ApiError, state::AppState};
 
 #[derive(Serialize, ToSchema)]
-pub struct Me {
+pub struct MeOutput {
     pub id: String,
+    pub settings: Option<Settings>,
 }
 
 #[utoipa::path(
     get,
     path = "/@me",
     responses(
-        (status = 200, body = Me)
+        (status = 200, body = MeOutput)
     )
 )]
-pub async fn get_me(user: User) -> Result<impl IntoResponse, ApiError> {
-    return Ok(Json(Me {
+pub async fn get_me(
+    State(state): State<AppState>,
+    user: User,
+) -> Result<impl IntoResponse, ApiError> {
+    let settings = state.data.get_settings(&user.id).await?;
+
+    return Ok(Json(MeOutput {
         id: user.id.to_owned(),
+        settings,
     }));
 }

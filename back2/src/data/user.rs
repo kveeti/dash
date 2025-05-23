@@ -24,10 +24,9 @@ impl Data {
         let mut tx = self.pg_pool.begin().await.context("error starting tx")?;
 
         query!(
-            "insert into users (id, external_id, locale, created_at, updated_at) values ($1, $2, $3, $4, $5) on conflict (external_id) do nothing;",
+            "insert into users (id, external_id, created_at, updated_at) values ($1, $2, $3, $4) on conflict (external_id) do nothing;",
             user.id,
             user.external_id,
-            user.locale,
             user.created_at,
             user.updated_at
         )
@@ -89,7 +88,6 @@ impl Data {
 pub struct User {
     pub id: String,
     pub external_id: String,
-    pub locale: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
 }
