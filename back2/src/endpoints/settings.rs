@@ -1,12 +1,16 @@
 use axum::{Json, extract::State, response::IntoResponse};
 use serde::Deserialize;
+use serde_with::{NoneAsEmptyString, serde_as};
 use utoipa::ToSchema;
 
 use crate::{auth_middleware::User, data::Settings, error::ApiError, state::AppState};
 
+#[serde_as]
 #[derive(Deserialize, ToSchema)]
 pub struct SaveSettingsInput {
+    #[serde_as(as = "NoneAsEmptyString")]
     pub locale: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub timezone: Option<String>,
 }
 

@@ -285,6 +285,7 @@ export function AccountField({
 
 export function CreateAccount() {
 	const mutation = api.useMutation("post", "/accounts");
+	const d = useDialog();
 
 	function handleSubmit(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -296,11 +297,14 @@ export function CreateAccount() {
 			.mutateAsync({
 				body: { name },
 			})
+			.then(() => {
+				d.close();
+			})
 			.catch(errorToast("error creating account"));
 	}
 
 	return (
-		<Dialog.Root>
+		<Dialog.Root {...d.props}>
 			<Tooltip.Root>
 				<Tooltip.Trigger asChild>
 					<Dialog.Trigger asChild>

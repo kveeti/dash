@@ -1,6 +1,7 @@
 use anyhow::Context;
 use axum::{Json, extract::State, response::IntoResponse};
 use serde::{Deserialize, Serialize};
+use serde_with::{NoneAsEmptyString, serde_as};
 use utoipa::ToSchema;
 
 use crate::{
@@ -10,10 +11,14 @@ use crate::{
     state::AppState,
 };
 
+#[serde_as]
 #[derive(Deserialize, ToSchema, Debug)]
 pub struct TransactionsQueryInput {
+    #[serde_as(as = "NoneAsEmptyString")]
     pub search_text: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub left: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub right: Option<String>,
     pub limit: Option<i8>,
 }

@@ -14,8 +14,12 @@ export function LocaleStuff({ children }: { children: ReactNode }) {
 function useLocaleStuffValue() {
 	const me = useMe();
 
-	const locale = me?.settings?.locale ?? undefined;
-	const timeZone = me?.settings?.timezone ?? undefined;
+	// me.settings.* might sometimes be an empty string
+	// thats why || instead of ??
+	// they are empty string if useSetMe() is called with empty strings
+	// maybe handle it there someday idk
+	const locale = me?.settings?.locale || undefined;
+	const timeZone = me?.settings?.timezone || undefined;
 	const hourCycle: 12 | 24 = 24;
 
 	const resolvedOptions = useMemo(

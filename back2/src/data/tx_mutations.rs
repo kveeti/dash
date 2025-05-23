@@ -328,107 +328,38 @@ impl Data {
         user_id: &str,
         tx_id: &str,
         input: &UpdateTx<'a>,
-        account: String,
-        category: Option<String>,
+        account_id: String,
+        category_id: Option<String>,
     ) -> Result<(), sqlx::Error> {
         let now = Utc::now();
 
-        let new_account_id = create_id();
-        let new_category_id = create_id();
-
         query!(
-            r#"
-            with
-            account_check as (
-                select 
-                    id,
-                    case when id = $1 then true else false end as is_id
-                from accounts 
-                where (id = $1 or name = $1) and user_id = $2
-            ),
-            account_upsert as (
-                insert into accounts (
-                    id,
-                    user_id,
-                    created_at,
-                    updated_at,
-                    external_id,
-                    name
-                )
-                select 
-                    $11, $2, $3, $3, null, $1::text
-                where 
-                    not exists (select 1 from account_check where is_id = true) and
-                    not exists (select 1 from accounts where name = $1 and user_id = $2)
-                on conflict (user_id, name)
-                do update set 
-                    updated_at = excluded.updated_at
-                returning id
-            ),
-            category_check as (
-                select 
-                    id,
-                    case when id = $4 then true else false end as is_id
-                from transaction_categories
-                where (id = $4 or lower(name) = lower($4)) and user_id = $2
-                union all
-                select null::text, false where $4 is null
-            ),
-            category_upsert as (
-                insert into transaction_categories (
-                    id,
-                    user_id,
-                    created_at,
-                    updated_at,
-                    is_neutral,
-                    name
-                )
-                select 
-                    $12, $2, $3, $3, false, $4::text
-                where 
-                    $4 is not null and
-                    not exists (select 1 from category_check where is_id = true) and
-                    not exists (select 1 from transaction_categories where lower(name) = lower($4) and user_id = $2)
-                on conflict (user_id, lower(name))
-                do update set 
-                    updated_at = excluded.updated_at
-                returning id
-            )
-            update transactions
-            set
-                updated_at = $3,
-                date = $5,
-                amount = $6,
-                currency = $7,
-                counter_party = $8,
-                additional = $9,
-                category_id = coalesce(
-                    (select id from category_check where is_id = true),
-                    (select id from category_check where is_id = false and id is not null),
-                    (select id from category_upsert)
-                ),
-                account_id = coalesce(
-                    (select id from account_check where is_id = true),
-                    (select id from account_check where is_id = false and id is not null),
-                    (select id from account_upsert)
-                )
-            where id = $10 and user_id = $2
-            "#,
-            account,                         // $1
-            user_id,                         // $2
-            now,                             // $3
-            category as Option<String>,      // $4
-            input.date,                      // $5
-            input.amount,                    // $6
-            input.currency,                  // $7
-            input.counter_party,             // $8
-            input.additional,                // $9
-            tx_id,                           // $10
-            new_account_id,                  // $11
-            new_category_id,                 // $12
-        )
-        .execute(&self.pg_pool)
-        .await?;
+           r#"
+           update transactions
+           set
+               updated_at = $1,
+               date = $2,
+               amount = $3,
+               currency = $4,
+               counter_party = $5,
+               additional = $6,
+               account_id = (select id from accounts where id = $7 and user_id = $8::text),
+               category_id = (select id from transaction_categories where id = $9::text and user_id = $8::text)
+           where id = $10 and user_id = $8::text
+           "#,
+           now,                    // $1
+           input.date,             // $2
+           input.amount,           // $3
+           input.currency,         // $4
+           input.counter_party,    // $5
+           input.additional,       // $6
+           account_id,             // $7
+           user_id,                // $8
+           category_id,            // $9
+           tx_id,                  // $10
+       )
+       .execute(&self.pg_pool)
+       .await?;
 
         Ok(())
     }
@@ -518,7 +449,7 @@ impl Data {
         &self,
         user_id: &str,
         tx_ids: Vec<String>,
-        category_id: &str,
+        category_id: Option<&str>,
     ) -> Result<(), sqlx::Error> {
         query!(
             r#"

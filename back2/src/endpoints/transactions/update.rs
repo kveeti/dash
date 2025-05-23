@@ -7,6 +7,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use http::StatusCode;
 use serde::Deserialize;
+use serde_with::{NoneAsEmptyString, serde_as};
 use utoipa::ToSchema;
 
 use crate::{
@@ -16,12 +17,15 @@ use crate::{
     state::AppState,
 };
 
+#[serde_as]
 #[derive(Deserialize, ToSchema)]
 pub struct TransactionUpdateInput {
     pub counter_party: String,
     pub date: DateTime<Utc>,
     pub amount: f32,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub additional: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub category: Option<String>,
     pub account: Option<String>,
 }

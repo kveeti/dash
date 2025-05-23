@@ -34,7 +34,7 @@ impl Data {
     }
 
     pub async fn get_settings(&self, user_id: &str) -> Result<Option<Settings>, sqlx::Error> {
-        let settings = query_as!(
+        let row = query_as!(
             Settings,
             r#"
             select locale, timezone from user_settings
@@ -46,7 +46,7 @@ impl Data {
         .fetch_optional(&self.pg_pool)
         .await?;
 
-        Ok(settings)
+        Ok(row)
     }
 }
 

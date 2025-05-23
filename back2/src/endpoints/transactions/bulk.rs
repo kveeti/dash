@@ -4,14 +4,17 @@ use axum::{
 };
 use http::StatusCode;
 use serde::Deserialize;
+use serde_with::{NoneAsEmptyString, serde_as};
 use utoipa::ToSchema;
 
 use crate::{auth_middleware::User, error::ApiError, state::AppState};
 
+#[serde_as]
 #[derive(Deserialize, ToSchema)]
 pub struct TransactionBulkInput {
     pub ids: Vec<String>,
-    pub category_id: String,
+    #[serde_as(as = "NoneAsEmptyString")]
+    pub category_id: Option<String>,
 }
 
 #[utoipa::path(
@@ -33,7 +36,7 @@ pub async fn bulk(
 ) -> Result<impl IntoResponse, ApiError> {
     state
         .data
-        .tx_bulk_actions(&user.id, input.ids, &input.category_id)
+        .tx_bulk_actions(&user.id, input.ids, input.category_id.as_deref())
         .await?;
 
     return Ok(StatusCode::OK);

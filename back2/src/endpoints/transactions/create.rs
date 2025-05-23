@@ -7,6 +7,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use http::StatusCode;
 use serde::Deserialize;
+use serde_with::{NoneAsEmptyString, serde_as};
 use utoipa::ToSchema;
 
 use crate::{
@@ -16,12 +17,15 @@ use crate::{
     state::AppState,
 };
 
+#[serde_as]
 #[derive(Deserialize, ToSchema)]
 pub struct CreateTransactionInput {
     pub counter_party: String,
     pub date: DateTime<Utc>,
     pub amount: f32,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub additional: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub category: Option<String>,
     pub account: Option<String>,
 }
@@ -74,19 +78,6 @@ pub async fn create(
         }
     };
 
-    let category = match payload.category {
-        Some(ref category) => {
-            let category = category.trim();
-            if !category.is_empty() {
-                None
-            } else {
-                Some(category.to_owned())
-            }
-        }
-
-        None => None,
-    };
-
     if !errors.is_empty() {
         return Err(ApiError::BadRequestDetails(
             "invalid request".to_owned(),
@@ -108,7 +99,7 @@ pub async fn create(
 
     state
         .data
-        .insert_tx(&user.id, &tx, account, category)
+        .insert_tx(&user.id, &tx, account, payload.category)
         .await?;
 
     return Ok(StatusCode::CREATED);
