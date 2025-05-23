@@ -11,7 +11,7 @@ impl RecordParser for OpFormatParser {
             Some(date_str) => {
                 let naive_date = date_str
                     .parse::<NaiveDate>()
-                    .context("error parsing transaction date")?;
+                    .context(format!("error parsing transaction date {date_str}"))?;
                 naive_date.and_time(NaiveTime::default()).and_utc()
             }
             None => Utc::now(),
