@@ -147,10 +147,18 @@ export default function TransactionsPage() {
 										{date}
 									</span>
 
-									<span className="border-t-gray-3 col-[2] flex items-center truncate border-t p-3">
+									<span className="border-t-gray-3 col-[2] flex flex-col truncate border-t p-1.5">
 										<div className="flex flex-col gap-0.5 truncate">
 											<span className="truncate">{t.counter_party}</span>
 										</div>
+										<span
+											className={
+												"text-[10px] " +
+												(!t.category?.name ? "text-red-11" : "text-gray-11")
+											}
+										>
+											{t.category?.name ?? "uncategorized"}
+										</span>
 									</span>
 
 									<div
