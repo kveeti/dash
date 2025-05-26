@@ -9,6 +9,7 @@ import { useLocation, useSearchParams } from "wouter";
 import { api } from "../../api";
 import { paths } from "../../api_types";
 import { errorToast } from "../../lib/error-toast";
+import { things } from "../../things";
 import { Button, buttonStyles } from "../../ui/button";
 import * as Dialog from "../../ui/dialog";
 import { IconCheck } from "../../ui/icons/check";
@@ -59,6 +60,19 @@ export default function TxPage() {
 
 	return (
 		<main className="w-full max-w-md">
+			<a href={things.apiBase + "/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH"}>
+				connect OP
+			</a>
+			<Button
+				onClick={() => {
+					fetch(things.apiBase + "/integrations/sync", {
+						method: "post",
+						credentials: "include",
+					});
+				}}
+			>
+				sync
+			</Button>
 			{!!selectedKeys.size && selectingEnabled && (
 				<Bulks selectedKeys={selectedKeys} onClear={() => setSelectedKeys(new Set())} />
 			)}

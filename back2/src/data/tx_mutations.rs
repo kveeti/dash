@@ -245,7 +245,6 @@ impl Data {
         transactions: Vec<InsertTx>,
     ) -> Result<(), sqlx::Error> {
         let now = Utc::now();
-        let updated_at: Option<DateTime<Utc>> = None;
 
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
             r#"
@@ -253,7 +252,6 @@ impl Data {
                     user_id,
                     id,
                     created_at,
-                    updated_at,
                     date,
                     amount,
                     currency,
@@ -269,7 +267,6 @@ impl Data {
             b.push_bind(user_id);
             b.push_bind(tx.id);
             b.push_bind(now);
-            b.push_bind(updated_at);
             b.push_bind(tx.date);
             b.push_bind(tx.amount);
             b.push_bind(tx.currency);

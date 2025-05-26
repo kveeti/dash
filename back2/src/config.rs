@@ -19,6 +19,7 @@ pub struct Config {
     // gocardless nordigen
     pub gcn_secret_id: String,
     pub gcn_secret_key: String,
+    pub gcn_base_url: String,
 }
 
 impl Config {

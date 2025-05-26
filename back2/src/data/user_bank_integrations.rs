@@ -1,9 +1,9 @@
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
-use sqlx::{query, query_as};
+use sqlx::{Postgres, QueryBuilder, query, query_as};
 
-use super::Data;
+use super::{Account, Data, create_id};
 
 impl Data {
     pub async fn get_user_bank_integrations(
@@ -74,7 +74,7 @@ impl Data {
         user_id: &str,
         name: &str,
         data: Value,
-        account_ids: Vec<String>,
+        accounts: Vec<InsertManyAccount>,
     ) -> Result<(), anyhow::Error> {
         let mut tx = self
             .pg_pool
@@ -102,22 +102,29 @@ impl Data {
             data
         )
         .execute(&mut *tx)
-        .await?;
+        .await
+        .context("error upserting user_bank_integrations")?;
 
-        for account_id in account_ids {
-            query!(
+        if accounts.len() != 0 {
+            let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
                 r#"
-                insert into accounts (id, user_id, created_at)
-                values ($1, $2, $3)
-                on conflict (user_id, id)
-                do nothing;
+                insert into accounts (
+                    id,
+                    user_id,
+                    created_at,
+                    external_id,
+                    name
+                )
                 "#,
-                account_id,
-                user_id,
-                now
-            )
-            .execute(&mut *tx)
-            .await?;
+            );
+
+            builder.push_values(accounts, |mut b, account| {
+                b.push_bind(account.id);
+                b.push_bind(user_id);
+                b.push_bind(now);
+                b.push_bind(account.external_id.to_owned());
+                b.push_bind(account.external_id);
+            });
         }
 
         tx.commit().await.context("error committing transaction")?;
@@ -148,4 +155,9 @@ impl Data {
 pub struct UserBankIntergration {
     pub name: String,
     pub data: Value,
+}
+
+pub struct InsertManyAccount {
+    pub id: String,
+    pub external_id: String,
 }

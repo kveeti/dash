@@ -6,10 +6,6 @@ import { Input } from "../ui/input";
 export default function IndexPage() {
 	return (
 		<div className="mt-12 flex flex-col gap-4">
-			<a href={things.apiBase + "/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH"}>
-				connect OP
-			</a>
-
 			<NewAccount />
 
 			<Button

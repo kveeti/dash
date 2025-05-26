@@ -1,20 +1,61 @@
 use std::collections::HashMap;
 
-use anyhow::Context;
+use anyhow::{Context, anyhow};
 use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Redirect},
 };
 use futures::future::try_join_all;
 use serde_json::json;
-use tracing::info;
 
-use crate::{auth_middleware::User, error::ApiError, state::AppState};
+use crate::{auth_middleware::User, data::create_id, error::ApiError, state::AppState};
 
 #[derive(Serialize)]
 pub struct ConnectBankInitRes {
     pub link: String,
 }
+
+// GCN USAGE
+// - institution_id = bank identifier eg. OP_OKOYFIHH
+// - saved data:
+//   - id: requisition id
+//   - link: requisition link, redirects to gocardless' bank connection flow
+//   - account_map, this can only contain data after the user
+//     has gone through the bank connection flow and gotten redirected back
+//     to `connect_callback`
+//
+// - user wants to connect a bank -> calls connect_init with institution_id
+//   EITHER:
+//   - if theres saved data implying user has gone through the connection flow
+//     for this institution before: redirect user to that previous requisition id
+//   - otherwise: create new requisition
+//      - provide a callback url which redirects to `connect-callback`
+//      - with the institution_id in path
+//      - save req.id and req.link
+//      - redirect user to req.link
+//  TODO: maybe ask user what their intentions are if saved data for
+//        chosen instituition is found
+//  they can either be:
+//  - modify current requisition, *No new EUA or requisition needed*
+//    eg. connect/give perms to other accounts if instituition's ui
+//    supports that
+//  - modify the EUA params, *Needs new EUA and requisition*
+//    eg.
+//    - `max_historical_days`
+//    - `access_valid_for_days`
+//    - note: `access_scope` is always `transactions`. That's the min and max
+//      syncing transactions requires
+
+// - user is redirected to gocardless, goes through the bank connection flow
+//   and is redirected back to `connect-callback`
+// - `connect-callback` reads institution_id from url
+// - retrieves req.id from saved data from `connect_init`
+// - retrieves the requisiton from gcn with req.id. Requisition
+//   should now contain accounts the user wanted to connect
+// - save the accounts by gcn id -> iban to saved data->account_map
+//
+//  TODO: deletion sequence. Provide a way for users to delete the connection.
+//        Also do this on account deletion
 
 pub async fn connect_init(
     State(state): State<AppState>,
@@ -33,58 +74,40 @@ pub async fn connect_init(
         .await
         .context("error initializing integration")?;
 
-    match data {
+    let link = match data {
         Some(data) => {
             let saved = serde_json::from_value::<SavedDataGoCardlessNordigen>(data.data)
                 .context("error parsing saved data")?;
 
-            let res = integ
-                .client
-                .delete(format!("{BASE_URL}/requisitions/{}/", saved.id))
-                .bearer_auth(&integ.access_token)
-                .send()
+            saved.link
+        }
+        None => {
+            let req = integ
+                .create_requisition(&state.config, &user.id, &institution_id)
                 .await
-                .context("error sending DELETE requisitions/{id}/ request")?;
+                .context("error creating requisition")?;
 
-            if !res.status().is_success() {
-                let res = res
-                    .text()
-                    .await
-                    .context("error getting DELETE requisitions/{id}/ response text")?;
-                info!("error deleting requisition, continuing anyway... res: {res}");
-            }
+            let to_save = SavedDataGoCardlessNordigen {
+                id: req.id,
+                link: req.link.to_owned(),
+                account_map: vec![],
+            };
 
             state
                 .data
-                .delete_user_bank_integration(&user.id, &data_name)
+                .set_user_bank_integration(
+                    &user.id,
+                    &data_name,
+                    serde_json::to_value(&to_save).expect("to saved req"),
+                )
                 .await
-                .context("error deleting saved data")?;
+                .context("error setting data")?;
+
+            req.link
         }
-        None => {}
-    }
-
-    let req = integ
-        .create_requisition(&state.config, &user.id, &institution_id)
-        .await
-        .context("error creating requisition")?;
-
-    let to_save = SavedDataGoCardlessNordigen {
-        id: req.id,
-        link: req.link.to_owned(),
-        account_map: vec![],
     };
 
-    state
-        .data
-        .set_user_bank_integration(
-            &user.id,
-            &data_name,
-            serde_json::to_value(&to_save).expect("to saved req"),
-        )
-        .await
-        .context("error setting data")?;
-
-    Ok(Redirect::to(&req.link))
+    Ok(Redirect::to(&link))
 }
 
 pub async fn connect_callback(
@@ -92,7 +115,7 @@ pub async fn connect_callback(
     Path(institution_id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
     user: User,
-) -> Result<(), ApiError> {
+) -> Result<impl IntoResponse, ApiError> {
     if let Some(error) = params.get("error") {
         return Err(ApiError::BadRequest(format!(
             "error in gocardless-nordigen callback {error}",
@@ -130,8 +153,12 @@ pub async fn connect_callback(
 
         let account_map = accounts
             .iter()
-            .map(|account| (account.id.to_owned(), account.iban.to_owned()))
-            .collect::<Vec<_>>();
+            .map(|account| SavedAccount {
+                id: create_id(),
+                iban: account.iban.to_owned(),
+                gcn_id: account.id.to_owned(),
+            })
+            .collect();
 
         let to_save = SavedDataGoCardlessNordigen {
             id: saved.id,
@@ -147,7 +174,10 @@ pub async fn connect_callback(
                 serde_json::to_value(&to_save).expect("to saved req"),
                 accounts
                     .iter()
-                    .map(|account| account.iban.clone())
+                    .map(|account| crate::data::InsertManyAccount {
+                        id: create_id(),
+                        external_id: account.iban.to_owned(),
+                    })
                     .collect(),
             )
             .await
@@ -156,7 +186,7 @@ pub async fn connect_callback(
         return Err(ApiError::BadRequest("no saved data".to_string()));
     }
 
-    Ok(())
+    Ok(Redirect::to(&state.config.front_base_url))
 }
 
 use reqwest::{Client, ClientBuilder};
@@ -168,9 +198,8 @@ pub struct GoCardlessNordigen {
     access_token: String,
     refresh_token: String,
     client: Client,
+    base_url: String,
 }
-
-const BASE_URL: &str = "https://bankaccountdata.gocardless.com/api/v2";
 
 impl GoCardlessNordigen {
     pub async fn new(config: &Config) -> Result<Self, anyhow::Error> {
@@ -178,15 +207,27 @@ impl GoCardlessNordigen {
             .build()
             .context("error creating client")?;
 
+        let base_url = config.gcn_base_url.clone();
+
+        let url = format!("{base}/token/new/", base = base_url);
+        println!("{url}");
         let token_res = client
-            .post(format!("{BASE_URL}/token/new/"))
+            .post(url)
             .json(&json!({
                 "secret_id": config.gcn_secret_id,
                 "secret_key": config.gcn_secret_key
             }))
             .send()
             .await
-            .context("error making token req")?
+            .context("error making token req")?;
+
+        let status = token_res.status();
+        if !status.is_success() {
+            let text = token_res.text().await?;
+            return Err(anyhow!(format!("token req error {text} {status}")));
+        }
+
+        let token_res = token_res
             .json::<TokenRes>()
             .await
             .context("error parsing token req")?;
@@ -195,13 +236,17 @@ impl GoCardlessNordigen {
             access_token: token_res.access,
             refresh_token: token_res.refresh,
             client,
+            base_url,
         })
     }
 
     pub async fn get_requisition(&self, req_id: &str) -> Result<Requisition, anyhow::Error> {
         let requisition = self
             .client
-            .get(format!("{BASE_URL}/requisitions/{req_id}"))
+            .get(format!(
+                "{base}/requisitions/{req_id}/",
+                base = self.base_url
+            ))
             .bearer_auth(&self.access_token)
             .send()
             .await
@@ -221,7 +266,7 @@ impl GoCardlessNordigen {
     ) -> Result<Requisition, anyhow::Error> {
         let eua = self
             .client
-            .post(format!("{BASE_URL}/agreements/enduser/"))
+            .post(format!("{base}/agreements/enduser/", base = self.base_url))
             .bearer_auth(&self.access_token)
             .json(&json!({
                 "institution_id": institution_id,
@@ -238,7 +283,10 @@ impl GoCardlessNordigen {
 
         let requisition = self
             .client
-            .post(format!("{BASE_URL}/requisitions/",))
+            .post(format!(
+                "{base}/requisitions/",
+                base = self.base_url
+            ))
             .bearer_auth(&self.access_token)
             .json(&json!({
                 "institution_id": institution_id,
@@ -257,10 +305,28 @@ impl GoCardlessNordigen {
         Ok(requisition)
     }
 
+    pub async fn delete_integration(&self, integ_id: &str) -> Result<(), anyhow::Error> {
+        self.client
+            .delete(format!(
+                "{base}/requisitions/{id}/",
+                base = self.base_url,
+                id = integ_id
+            ))
+            .bearer_auth(&self.access_token)
+            .send()
+            .await
+            .context("error sending DELETE requisitions/{id}/ request")?;
+
+        Ok(())
+    }
+
     pub async fn get_accounts(&self, req_id: &str) -> Result<Vec<String>, anyhow::Error> {
         let requisition = self
             .client
-            .get(format!("{BASE_URL}/requisitions/{req_id}/"))
+            .get(format!(
+                "{base}/requisitions/{req_id}/",
+                base = self.base_url
+            ))
             .bearer_auth(&self.access_token)
             .send()
             .await
@@ -275,7 +341,10 @@ impl GoCardlessNordigen {
     pub async fn get_account(&self, account_id: &str) -> Result<Account, anyhow::Error> {
         let acc = self
             .client
-            .get(format!("{BASE_URL}/accounts/{account_id}/"))
+            .get(format!(
+                "{base}/accounts/{account_id}/",
+                base = self.base_url
+            ))
             .bearer_auth(&self.access_token)
             .send()
             .await
@@ -293,7 +362,10 @@ impl GoCardlessNordigen {
     ) -> Result<Vec<Transaction>, anyhow::Error> {
         let res = self
             .client
-            .get(format!("{BASE_URL}/accounts/{account_id}/transactions/"))
+            .get(format!(
+                "{base}/accounts/{account_id}/transactions/",
+                base = self.base_url
+            ))
             .bearer_auth(&self.access_token)
             .send()
             .await
@@ -339,10 +411,17 @@ pub struct Requisition {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+pub struct SavedAccount {
+    pub id: String,
+    pub iban: String,
+    pub gcn_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SavedDataGoCardlessNordigen {
     pub id: String,
     pub link: String,
-    pub account_map: Vec<(String, String)>,
+    pub account_map: Vec<SavedAccount>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -121,9 +121,6 @@ create table user_bank_integrations (
     primary key (user_id, name)
 );
 
-create index idx_user_bank_integrations_user_id on user_bank_integrations (user_id);
--- user_bank_integrations
-
 -- transaction_imports
 create table transaction_imports (
     id varchar(30) primary key not null,

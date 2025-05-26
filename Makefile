@@ -5,14 +5,17 @@ endif
 
 .PHONY: all
 
-frontdev: 
+mocks:
+	@cd mock_integrations && bun --watch --no-clear-screen src/index.ts
+
+frontdev:
 	@cd front2 && bun run dev
 
 backdev:
 	@cd back2 && cargo watch -x run
 
 dev: 
-	@make -j2 backdev frontdev
+	@make -j3 backdev frontdev mocks
 
 frontbuild:
 	@cd front2 && bun run build

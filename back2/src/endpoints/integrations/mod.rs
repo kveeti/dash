@@ -1,23 +1,19 @@
 use anyhow::{Context, anyhow};
-use axum::{Json, extract::State};
+use axum::extract::State;
+use chrono::NaiveTime;
 use gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen};
-use serde::Deserialize;
 use tracing::info;
 
-use crate::{auth_middleware::User, error::ApiError, state::AppState};
+use crate::{
+    auth_middleware::User,
+    data::{InsertTx, create_id},
+    error::ApiError,
+    state::AppState,
+};
 
 pub mod gocardless_nordigen;
 
-#[derive(Deserialize, Debug)]
-pub struct Input {
-    pub account_id: String,
-}
-
-pub async fn sync_transactions(
-    State(state): State<AppState>,
-    user: User,
-    Json(input): Json<Input>,
-) -> Result<(), ApiError> {
+pub async fn sync_transactions(State(state): State<AppState>, user: User) -> Result<(), ApiError> {
     let datas = state
         .data
         .get_user_bank_integrations(&user.id)
@@ -50,17 +46,16 @@ pub async fn sync_transactions(
                     .context("error initializing integration")?;
 
                 for account in data.account_map {
-                    let account_id = account.0;
-                    let account_iban = account.1;
+                    let gcn_id = account.gcn_id;
 
                     let remote_transactions = integ
-                        .get_transactions(&account_id)
+                        .get_transactions(&gcn_id)
                         .await
                         .context("error getting remote transactions")?;
 
                     let local_transactions = state
                         .data
-                        .get_transactions_by_account_for_sync(&user.id, &account_iban)
+                        .get_transactions_by_account_for_sync(&user.id, &account.id)
                         .await
                         .context("error getting local transactions")?;
 
@@ -98,20 +93,17 @@ pub async fn sync_transactions(
                         }
 
                         if !found {
-                            // new_transactions.push(InsertTx {
-                            //     id: create_id(),
-                            //     currency: "EUR".to_owned(),
-                            //     additional: remote_transaction
-                            //         .remittance_information_unstructured
-                            //         .to_owned(),
-                            //     counter_party: counter_party.to_owned(),
-                            //     date: Utc.from_utc_datetime(
-                            //         &date
-                            //             .and_hms_opt(0, 0, 0)
-                            //             .context("error creating datetime")?,
-                            //     ),
-                            //     amount,
-                            // });
+                            new_transactions.push(InsertTx {
+                                id: create_id(),
+                                currency: "EUR".to_owned(),
+                                additional: remote_transaction
+                                    .remittance_information_unstructured
+                                    .to_owned(),
+                                counter_party: counter_party.to_owned(),
+                                date: date.and_time(NaiveTime::default()).and_utc(),
+                                og_counter_party: counter_party.to_owned(),
+                                amount,
+                            });
                         }
                     }
 
@@ -124,7 +116,7 @@ pub async fn sync_transactions(
 
                     state
                         .data
-                        .insert_many_transactions(&user.id, &input.account_id, new_transactions)
+                        .insert_many_transactions(&user.id, &account.id, new_transactions)
                         .await
                         .context("error inserting transactions")?;
                 }

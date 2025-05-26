@@ -10,6 +10,10 @@
         reverse_proxy host.docker.internal:8000
     }
 
+    handle_path /mock-integrations/* {
+        reverse_proxy host.docker.internal:8002
+    }
+
     handle / {
         @no_auth {
             not header Cookie *auth=*
