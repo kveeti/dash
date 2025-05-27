@@ -14,6 +14,7 @@ use csv_async::{AsyncReaderBuilder, StringRecord};
 use futures::TryStreamExt;
 use serde_json::json;
 use tokio_util::io::StreamReader;
+use tracing::error;
 
 use crate::{
     auth_middleware::User,
@@ -134,8 +135,8 @@ pub async fn import(
         let line = wtr.into_inner().context("error finishing line")?;
 
         line_buffer.push(line);
-        if line_buffer.len() >= 100 {
-            rows += 100;
+        if line_buffer.len() >= 1000 {
+            rows += 1000;
             let batch = std::mem::take(&mut line_buffer);
             copy_in
                 .send(batch.concat())
@@ -157,11 +158,13 @@ pub async fn import(
     conn.close().await.context("error closing connection")?;
     drop(pg_pool);
 
-    state
-        .data
-        .import_tx_phase_2(&user.id, &import_id)
-        .await
-        .context("error finishing import")?;
+    tokio::spawn(async move {
+        let res = state.data.import_tx_phase_2_v3(&user.id, &import_id).await;
+
+        if let Err(err) = res {
+            error!("error importing {}", err);
+        }
+    });
 
     return Ok(Json(json!({"rows": rows})).into_response());
 }

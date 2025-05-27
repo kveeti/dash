@@ -23,9 +23,7 @@ create table transaction_categories (
     name varchar(100) not null
 );
 
-create index idx_transaction_categories_user_id_lower_name on transaction_categories(user_id, lower(name));
-
-create unique index on transaction_categories (user_id, lower(name));
+create unique index on transaction_categories (user_id, name);
 -- transaction_categories
 
 -- accounts
@@ -62,12 +60,9 @@ create table transactions (
 );
 
 create index idx_transactions_user_id on transactions(user_id);
-
 create index idx_transactions_category_id on transactions(category_id);
-
-create index idx_transactions_user_id_id on transactions(user_id, id);
-
-create index idx_transactions_user_date_id on transactions(user_id, date desc, id desc);
+create index idx_transactions_user_date_id_desc on transactions(user_id, date desc, id desc);
+create index idx_transactions_user_date_id_asc on transactions(user_id, date asc, id asc);
 
 alter table transactions add column ts tsvector;
 create index idx_transactions_ts on transactions using gin(ts);

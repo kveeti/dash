@@ -7,11 +7,12 @@ use axum::{
     routing::{delete, get, patch, post},
 };
 use config::Config;
-use data::Data;
+use data::{Data, recover_pending_imports};
 use http::{HeaderValue, Method, header};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
+use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod auth_middleware;
@@ -39,6 +40,12 @@ async fn main() {
         config: config.clone(),
         data,
     };
+
+    let state_for_recovery = state.clone();
+    tokio::spawn(async move {
+        info!("starting import bg job");
+        recover_pending_imports(state_for_recovery).await;
+    });
 
     let transactions = Router::new()
         .route("/stats", get(transactions::get_stats))

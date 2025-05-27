@@ -1,11 +1,201 @@
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use sqlx::{Postgres, QueryBuilder, query};
-use tokio::io::AsyncRead;
+use tracing::info;
 
 use super::{Data, create_id};
 
 impl Data {
+    pub async fn get_pending_imports(&self) -> Result<Vec<(String, String)>, sqlx::Error> {
+        let rows = sqlx::query_as::<_, (String, String)>(
+            "select distinct user_id, import_id from transaction_imports",
+        )
+        .fetch_all(&self.pg_pool)
+        .await?;
+
+        return Ok(rows);
+    }
+
+    pub async fn import_tx_phase_2_v3(
+        &self,
+        user_id: &str,
+        import_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        let batch_size = 50_000i64;
+
+        loop {
+            let mut tx = self.pg_pool.begin().await?;
+
+            let processed = sqlx::query!(
+                r#"
+            with batch as (
+                select id, category_name, category_id
+                from transaction_imports
+                where user_id = $1 and import_id = $2
+                order by id
+                limit $3
+            ),
+            resolved as (
+                select b.id, b.category_name, coalesce(b.category_id, tc.id) as resolved_category_id
+                from batch b
+                left join transaction_categories tc
+                    on tc.user_id = $1 and tc.name = b.category_name
+            ),
+            inserted_categories as (
+                insert into transaction_categories (id, user_id, created_at, name, is_neutral)
+                select distinct
+                    b.category_id, $1, $4::timestamptz, b.category_name, false
+                from batch b
+                where b.category_id is not null
+                on conflict (user_id, name) do nothing
+            ),
+            moved as (
+                delete from transaction_imports
+                using resolved r
+                where transaction_imports.id = r.id
+                returning transaction_imports.id,
+                          transaction_imports.user_id,
+                          transaction_imports.account_id,
+                          transaction_imports.date,
+                          transaction_imports.amount,
+                          transaction_imports.currency,
+                          transaction_imports.counter_party,
+                          transaction_imports.og_counter_party,
+                          transaction_imports.additional,
+                          r.resolved_category_id as category_id,
+                          transaction_imports.created_at
+            )
+            insert into transactions (
+                id, user_id, account_id, date, amount,
+                currency, counter_party, og_counter_party,
+                additional, category_id, created_at
+            )
+            select id, user_id, account_id, date, amount,
+                   currency, counter_party, og_counter_party,
+                   additional, category_id, created_at
+            from moved
+            on conflict (id) do nothing
+            returning id
+            "#,
+                user_id,
+                import_id,
+                batch_size,
+                Utc::now()
+            )
+            .fetch_all(&mut *tx)
+            .await?
+            .len();
+
+            tx.commit().await?;
+
+            if processed == 0 {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn import_tx_phase_2_v2(
+        &self,
+        user_id: &str,
+        import_id: &str,
+    ) -> Result<(), anyhow::Error> {
+        let batch_size = 50000i64;
+
+        loop {
+            let mut tx = self.pg_pool.begin().await?;
+
+            sqlx::query!(
+                r#"
+                with batch as (
+                    select id from transaction_imports 
+                    where user_id = $1 and import_id = $2 
+                    order by id
+                    limit $3
+                )
+                update transaction_imports ti
+                set category_id = tc.id
+                from transaction_categories tc, batch b
+                where ti.id = b.id
+                  and ti.user_id = tc.user_id
+                  and ti.category_name = tc.name
+                "#,
+                user_id,
+                import_id,
+                batch_size
+            )
+            .execute(&mut *tx)
+            .await?;
+
+            sqlx::query!(
+                r#"
+                with batch as (
+                    select id, category_id, category_name from transaction_imports 
+                    where user_id = $1 and import_id = $2 
+                      and category_id is not null
+                      and category_name is not null
+                    order by id
+                    limit $3
+                )
+                insert into transaction_categories (id, user_id, created_at, name, is_neutral)
+                select distinct category_id, $1, $4::timestamptz, category_name, false
+                from batch
+                on conflict (user_id, name) do nothing
+                "#,
+                user_id,
+                import_id,
+                batch_size,
+                Utc::now()
+            )
+            .execute(&mut *tx)
+            .await?;
+
+            let processed = sqlx::query!(
+                r#"
+                with batch as (
+                    select id from transaction_imports
+                    where user_id = $1 and import_id = $2
+                    order by id
+                    limit $3
+                ),
+                moved as (
+                    delete from transaction_imports 
+                    where id in (select id from batch)
+                    returning id, user_id, account_id, date, amount,
+                             currency, counter_party, og_counter_party,
+                             additional, category_id, created_at
+                )
+                insert into transactions (
+                    id, user_id, account_id, date, amount,
+                    currency, counter_party, og_counter_party,
+                    additional, category_id, created_at
+                )
+                select id, user_id, account_id, date, amount,
+                       currency, counter_party, og_counter_party,
+                       additional, category_id, created_at
+                from moved
+                on conflict (id) do nothing
+                "#,
+                user_id,
+                import_id,
+                batch_size
+            )
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+
+            tx.commit().await?;
+            info!("here");
+
+            if processed == 0 {
+                break;
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn import_tx_phase_2(
         &self,
         user_id: &str,
@@ -25,7 +215,7 @@ impl Data {
             where ti.import_id = $2
               and ti.user_id = tc.user_id
               and ti.category_name is not null
-              and lower(ti.category_name) = lower(tc.name)
+              and ti.category_name = tc.name
               and ti.user_id = $1;
             "#,
             user_id,
@@ -35,11 +225,10 @@ impl Data {
         .await
         .context("error updating category_ids")?;
 
-        // TODO: figure out the lower calls
         sqlx::query(
             r#"
             with cats as (
-                select distinct on (lower(ti.category_name))
+                select distinct on ti.category_name
                     ti.category_id,
                     ti.category_name
                 from transaction_imports ti
@@ -58,16 +247,13 @@ impl Data {
                 $1,
                 $2,
                 $3,
-                lower(cats.category_name),
+                cats.category_name,
                 false
             from cats
             where cats.category_id is not null
               and cats.category_name is not null
-            on conflict (user_id, lower(name))
-            do update set
-                updated_at = $2,
-                name = excluded.name,
-                is_neutral = false
+            on conflict (user_id, name)
+            do nothing
             returning transaction_categories.id;
             "#,
         )
@@ -96,138 +282,6 @@ impl Data {
             "#,
             user_id,
             import_id
-        )
-        .execute(&mut *tx)
-        .await
-        .context("error inserting transactions")?;
-
-        tx.commit().await.context("error committing transaction")?;
-
-        Ok(())
-    }
-
-    pub async fn import_tx<T: AsyncRead + Unpin>(
-        &self,
-        user_id: &str,
-        source: T,
-    ) -> Result<(), anyhow::Error> {
-        let mut conn = self
-            .pg_pool
-            .acquire()
-            .await
-            .context("error acquiring connection")?;
-
-        let mut copy_in = conn
-            .copy_in_raw(
-                r#"
-                COPY transaction_imports (
-                    id,
-                    user_id,
-                    created_at,
-
-                    date,
-                    amount,
-                    currency,
-                    counter_party,
-                    og_counter_party,
-                    additional,
-                    account_id,
-                    category_name,
-                    category_id
-                ) FROM STDIN WITH (FORMAT CSV)
-                "#,
-            )
-            .await?;
-
-        copy_in
-            .read_from(source)
-            .await
-            .context("error reading from source")?;
-
-        copy_in.finish().await.context("error finishing copy")?;
-
-        conn.close().await.context("error closing connection")?;
-
-        let mut tx = self
-            .pg_pool
-            .begin()
-            .await
-            .context("error starting transaction")?;
-
-        // TODO: figure out the lower calls
-        sqlx::query(
-            r#"
-            with cats as (
-                select distinct on (lower(ti.category_name))
-                    ti.category_id,
-                    ti.category_name
-                from transaction_imports ti
-                where ti.user_id = $1
-                  and ti.category_id is not null
-                  and ti.category_name is not null
-            )
-
-            insert into transaction_categories (
-                id, user_id, created_at, updated_at,
-                name, is_neutral
-            )
-            select
-                cats.category_id,
-                $1,
-                $2,
-                $3,
-                lower(cats.category_name),
-                false
-            from cats
-            where cats.category_id is not null
-              and cats.category_name is not null
-            on conflict (user_id, lower(name))
-            do update set
-                updated_at = $2,
-                name = excluded.name,
-                is_neutral = false
-            returning transaction_categories.id;
-            "#,
-        )
-        .bind(user_id)
-        .bind(Utc::now())
-        .bind(None::<DateTime<Utc>>)
-        .execute(&mut *tx)
-        .await
-        .context("error inserting categories")?;
-
-        sqlx::query!(
-            r#"
-            update transaction_imports ti
-            set category_id = tc.id
-            from transaction_categories tc
-            where ti.user_id = tc.user_id
-              and ti.category_name is not null
-              and lower(ti.category_name) = lower(tc.name)
-              and ti.user_id = $1;
-            "#,
-            user_id
-        )
-        .execute(&mut *tx)
-        .await
-        .context("error updating category_ids")?;
-
-        sqlx::query!(
-            r#"
-            insert into transactions (
-                id, user_id, account_id, date, amount,
-                currency, counter_party, og_counter_party,
-                additional, category_id, created_at
-            )
-            select
-                id, user_id, account_id, date, amount,
-                currency, counter_party, og_counter_party,
-                additional, category_id, created_at
-            from transaction_imports
-            where user_id = $1
-            on conflict (id) do nothing
-            "#,
-            user_id
         )
         .execute(&mut *tx)
         .await
