@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use serde_json::Value;
 use sqlx::{Postgres, QueryBuilder, query, query_as};
 
-use super::{Account, Data, create_id};
+use super::Data;
 
 impl Data {
     pub async fn get_user_bank_integrations(
@@ -106,6 +106,7 @@ impl Data {
         .context("error upserting user_bank_integrations")?;
 
         if accounts.len() != 0 {
+            println!("{accounts:?}");
             let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
                 r#"
                 insert into accounts (
@@ -125,6 +126,9 @@ impl Data {
                 b.push_bind(account.external_id.to_owned());
                 b.push_bind(account.external_id);
             });
+
+            let query = builder.build();
+            query.execute(&mut *tx).await?;
         }
 
         tx.commit().await.context("error committing transaction")?;
@@ -157,6 +161,7 @@ pub struct UserBankIntergration {
     pub data: Value,
 }
 
+#[derive(Debug)]
 pub struct InsertManyAccount {
     pub id: String,
     pub external_id: String,

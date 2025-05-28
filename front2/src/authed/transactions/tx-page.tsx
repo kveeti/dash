@@ -60,19 +60,6 @@ export default function TxPage() {
 
 	return (
 		<main className="w-full max-w-md">
-			<a href={things.apiBase + "/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH"}>
-				connect OP
-			</a>
-			<Button
-				onClick={() => {
-					fetch(things.apiBase + "/integrations/sync", {
-						method: "post",
-						credentials: "include",
-					});
-				}}
-			>
-				sync
-			</Button>
 			{!!selectedKeys.size && selectingEnabled && (
 				<Bulks selectedKeys={selectedKeys} onClear={() => setSelectedKeys(new Set())} />
 			)}

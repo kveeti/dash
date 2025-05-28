@@ -83,7 +83,8 @@ async fn main() {
     let auth = auth_base;
 
     let integrations = Router::new()
-        .route("/sync", post(integrations::sync_transactions))
+        .route("/sync", post(integrations::sync::sync))
+        .route("/", get(integrations::get::get))
         .nest(
             "/gocardless-nordigen",
             Router::new()

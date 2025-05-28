@@ -79,7 +79,7 @@ pub async fn connect_init(
             let saved = serde_json::from_value::<SavedDataGoCardlessNordigen>(data.data)
                 .context("error parsing saved data")?;
 
-            saved.link
+            saved.requisition_link
         }
         None => {
             let req = integ
@@ -88,8 +88,9 @@ pub async fn connect_init(
                 .context("error creating requisition")?;
 
             let to_save = SavedDataGoCardlessNordigen {
-                id: req.id,
-                link: req.link.to_owned(),
+                institution_id,
+                requisition_id: req.id,
+                requisition_link: req.link.to_owned(),
                 account_map: vec![],
             };
 
@@ -139,7 +140,7 @@ pub async fn connect_callback(
             .context("error initializing integration")?;
 
         let req = integ
-            .get_requisition(&saved.id)
+            .get_requisition(&saved.requisition_id)
             .await
             .context("error getting requisition")?;
 
@@ -151,7 +152,7 @@ pub async fn connect_callback(
         });
         let accounts = try_join_all(accounts_futures).await?;
 
-        let account_map = accounts
+        let account_map: Vec<SavedAccount> = accounts
             .iter()
             .map(|account| SavedAccount {
                 id: create_id(),
@@ -160,10 +161,17 @@ pub async fn connect_callback(
             })
             .collect();
 
+        let insert_accounts = account_map
+            .iter()
+            .map(|account| crate::data::InsertManyAccount {
+                id: account.id.to_owned(),
+                external_id: account.iban.to_owned(),
+            })
+            .collect();
+
         let to_save = SavedDataGoCardlessNordigen {
-            id: saved.id,
-            link: saved.link,
             account_map,
+            ..saved
         };
 
         state
@@ -172,13 +180,7 @@ pub async fn connect_callback(
                 &user.id,
                 &data_name,
                 serde_json::to_value(&to_save).expect("to saved req"),
-                accounts
-                    .iter()
-                    .map(|account| crate::data::InsertManyAccount {
-                        id: create_id(),
-                        external_id: account.iban.to_owned(),
-                    })
-                    .collect(),
+                insert_accounts,
             )
             .await
             .context("error setting data")?;
@@ -419,8 +421,9 @@ pub struct SavedAccount {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SavedDataGoCardlessNordigen {
-    pub id: String,
-    pub link: String,
+    pub institution_id: String,
+    pub requisition_id: String,
+    pub requisition_link: String,
     pub account_map: Vec<SavedAccount>,
 }
 

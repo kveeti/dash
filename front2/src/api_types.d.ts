@@ -100,6 +100,38 @@ export interface paths {
         patch: operations["categories/update"];
         trace?: never;
     };
+    "/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["integrations/get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/integrations/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["integrations/sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -262,8 +294,16 @@ export interface components {
             /** Format: date-time */
             date: string;
         };
+        GetIntegrationsOutput: {
+            available: components["schemas"]["Integration"][];
+            connected: string[];
+        };
         Input: {
             id: string;
+        };
+        Integration: {
+            link: string;
+            name: string;
         };
         Link: {
             /** Format: date-time */
@@ -292,12 +332,15 @@ export interface components {
             e_cats: string[][];
             i: number[][];
             i_cats: string[][];
+            n: number[][];
+            n_cats: string[][];
             /** Format: float */
             te: number;
             /** Format: float */
             ti: number;
             tte: number[];
             tti: number[];
+            ttn: number[];
         };
         QueryTx: {
             account?: null | components["schemas"]["Account"];
@@ -321,7 +364,7 @@ export interface components {
             timezone?: string | null;
         };
         TransactionBulkInput: {
-            category_id: string;
+            category_id?: string | null;
             ids: string[];
         };
         TransactionUpdateInput: {
@@ -541,6 +584,44 @@ export interface operations {
                 "application/json": components["schemas"]["CategoryUpdateInput"];
             };
         };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    "integrations/get": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetIntegrationsOutput"];
+                };
+            };
+        };
+    };
+    "integrations/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {

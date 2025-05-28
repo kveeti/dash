@@ -12,10 +12,19 @@ function useSaveSettings() {
 	return api.useMutation("post", "/settings");
 }
 
+function useSync() {
+	return api.useMutation("post", "/integrations/sync");
+}
+
+function useGetIntegrations() {
+	return api.useQuery("get", "/integrations");
+}
+
 export default function SettingsPage() {
 	const mutation = useSaveSettings();
 	const me = useMe();
 	const setMe = useSetMe();
+	const integrations = useGetIntegrations();
 
 	function onSave(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -55,7 +64,43 @@ export default function SettingsPage() {
 					</Button>
 				</div>
 			</form>
+
+			<div className="mt-6 flex items-center justify-between gap-3">
+				<Heading level={2}>integrations</Heading>
+
+				{!!integrations.data?.connected.length && <SyncButton />}
+			</div>
+
+			{!!integrations.data?.connected.length && (
+				<ul className="mt-2">{integrations.data?.connected.map((c) => <li>{c}</li>)}</ul>
+			)}
+
+			{!!integrations.data?.available.length && (
+				<ul className="mt-2">
+					{integrations.data?.available.map((c) => (
+						<li>
+							<a href={c.link}>{c.name}</a>
+						</li>
+					))}
+				</ul>
+			)}
 		</div>
+	);
+}
+
+function SyncButton() {
+	const mutation = useSync();
+
+	return (
+		<Button
+			variant="ghost"
+			isLoading={mutation.isPending}
+			onClick={() => {
+				mutation.mutateAsync({}).catch(errorToast("error triggering sync"));
+			}}
+		>
+			sync
+		</Button>
 	);
 }
 
