@@ -1,30 +1,8 @@
 use axum::{Json, extract::State, response::IntoResponse};
-use once_cell::sync::Lazy;
 use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::{auth_middleware::User, error::ApiError, state::AppState};
-
-pub struct AvailableIntegration {
-    pub label: String,
-    pub name: String,
-    pub link_path: String,
-}
-static AVAILABLE_INTEGRATIONS: Lazy<[AvailableIntegration; 2]> = Lazy::new(|| {
-    [
-        AvailableIntegration {
-            label: "OP".to_string(),
-            name: "gocardless-nordigen::OP_OKOYFIHH".to_string(),
-            link_path: "/api/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH".to_string(),
-        },
-        AvailableIntegration {
-            label: "sandbox".to_string(),
-            name: "gocardless-nordigen::SANDBOXFINANCE_SFIN0000".to_string(),
-            link_path: "/api/integrations/gocardless-nordigen/connect-init/SANDBOXFINANCE_SFIN0000"
-                .to_string(),
-        },
-    ]
-});
 
 #[utoipa::path(
     get,
@@ -37,7 +15,9 @@ static AVAILABLE_INTEGRATIONS: Lazy<[AvailableIntegration; 2]> = Lazy::new(|| {
 pub async fn get(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, ApiError> {
     let connected = state.data.get_user_bank_integrations(&user.id).await?;
 
-    let available: Vec<Integration> = AVAILABLE_INTEGRATIONS
+    let available: Vec<Integration> = state
+        .config
+        .allowed_integrations
         .iter()
         .filter(|i| !connected.iter().any(|c| c.name == *i.name))
         .map(|i| Integration {
@@ -53,7 +33,9 @@ pub async fn get(State(state): State<AppState>, user: User) -> Result<impl IntoR
     let connected = connected
         .iter()
         .map(|i| {
-            &AVAILABLE_INTEGRATIONS
+            &state
+                .config
+                .allowed_integrations
                 .iter()
                 .find(|ai| i.name == ai.name)
                 .unwrap()
@@ -78,4 +60,10 @@ pub struct GetIntegrationsOutput {
 pub struct Integration {
     pub name: String,
     pub link: String,
+}
+
+pub struct AllowedIntegration {
+    pub label: String,
+    pub name: String,
+    pub link_path: String,
 }

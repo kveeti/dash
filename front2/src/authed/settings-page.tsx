@@ -5,6 +5,8 @@ import { api, useMe, useSetMe } from "../api";
 import { errorToast } from "../lib/error-toast";
 import { Button } from "../ui/button";
 import { LabelWrapper, inputStyles, labelStyles } from "../ui/input";
+import { SlowLink, textLinkStyles } from "../ui/link";
+import { Spinner } from "../ui/spinner";
 import { Heading } from "../ui/typography";
 import { useLocaleStuff } from "./use-formatting";
 
@@ -65,25 +67,43 @@ export default function SettingsPage() {
 				</div>
 			</form>
 
-			<div className="mt-6 flex items-center justify-between gap-3">
-				<Heading level={2}>integrations</Heading>
+			<div className="space-y-4">
+				<div className="mt-6 flex items-center justify-between gap-3">
+					<Heading level={2}>integrations</Heading>
 
-				{!!integrations.data?.connected.length && <SyncButton />}
+					{!!integrations.data?.connected.length && <SyncButton />}
+				</div>
+
+				{integrations.isLoading ? (
+					<div className="flex h-10 items-center justify-center">
+						<Spinner />
+					</div>
+				) : (
+					<>
+						{!!integrations.data?.connected.length && (
+							<div>
+								<h3 className="mb-1 font-medium">connected</h3>
+								<ul>{integrations.data?.connected.map((c) => <li>{c}</li>)}</ul>
+							</div>
+						)}
+
+						{!!integrations.data?.available.length && (
+							<div>
+								<h3 className="mb-1 font-medium">available</h3>
+								<ul>
+									{integrations.data?.available.map((c) => (
+										<li>
+											<a className={textLinkStyles} href={c.link}>
+												{c.name}
+											</a>
+										</li>
+									))}
+								</ul>
+							</div>
+						)}
+					</>
+				)}
 			</div>
-
-			{!!integrations.data?.connected.length && (
-				<ul className="mt-2">{integrations.data?.connected.map((c) => <li>{c}</li>)}</ul>
-			)}
-
-			{!!integrations.data?.available.length && (
-				<ul className="mt-2">
-					{integrations.data?.available.map((c) => (
-						<li>
-							<a href={c.link}>{c.name}</a>
-						</li>
-					))}
-				</ul>
-			)}
 		</div>
 	);
 }

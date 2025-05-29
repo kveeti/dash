@@ -9,7 +9,6 @@ import { useLocation, useSearchParams } from "wouter";
 import { api } from "../../api";
 import { paths } from "../../api_types";
 import { errorToast } from "../../lib/error-toast";
-import { things } from "../../things";
 import { Button, buttonStyles } from "../../ui/button";
 import * as Dialog from "../../ui/dialog";
 import { IconCheck } from "../../ui/icons/check";

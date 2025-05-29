@@ -7,6 +7,7 @@ use axum::{
 };
 use futures::future::try_join_all;
 use serde_json::json;
+use tracing::error;
 
 use crate::{auth_middleware::User, data::create_id, error::ApiError, state::AppState};
 
@@ -64,6 +65,17 @@ pub async fn connect_init(
 ) -> Result<impl IntoResponse, ApiError> {
     let data_name = format!("gocardless-nordigen::{institution_id}");
 
+    let ai = state
+        .config
+        .allowed_integrations
+        .iter()
+        .find(|ai| ai.name == data_name);
+    if ai.is_none() {
+        return Err(ApiError::BadRequest(format!(
+            "invalid integration {data_name}"
+        )));
+    }
+
     let data = state
         .data
         .get_one_user_bank_integration(&user.id, &data_name)
@@ -83,7 +95,7 @@ pub async fn connect_init(
         }
         None => {
             let req = integ
-                .create_requisition(&state.config, &user.id, &institution_id)
+                .create_requisition(&state.config, &institution_id)
                 .await
                 .context("error creating requisition")?;
 
@@ -203,6 +215,8 @@ pub struct GoCardlessNordigen {
     base_url: String,
 }
 
+// TODO: implement some temporary storage for tokens
+// possibly auto refreshing as well
 impl GoCardlessNordigen {
     pub async fn new(config: &Config) -> Result<Self, anyhow::Error> {
         let client = ClientBuilder::new()
@@ -212,7 +226,6 @@ impl GoCardlessNordigen {
         let base_url = config.gcn_base_url.clone();
 
         let url = format!("{base}/token/new/", base = base_url);
-        println!("{url}");
         let token_res = client
             .post(url)
             .json(&json!({
@@ -263,7 +276,6 @@ impl GoCardlessNordigen {
     pub async fn create_requisition(
         &self,
         config: &Config,
-        user_id: &str,
         institution_id: &str,
     ) -> Result<Requisition, anyhow::Error> {
         let eua = self
@@ -278,7 +290,15 @@ impl GoCardlessNordigen {
             }))
             .send()
             .await
-            .context("error making eua req")?
+            .context("error making eua req")?;
+
+        let status = eua.status();
+        if !status.is_success() {
+            let text = eua.text().await?;
+            error!("eua req error {text} {status}");
+            return Err(anyhow!("eua req error"));
+        }
+        let eua = eua
             .json::<EndUserAgreement>()
             .await
             .context("error parsing eua res")?;
@@ -293,13 +313,20 @@ impl GoCardlessNordigen {
             .json(&json!({
                 "institution_id": institution_id,
                 "redirect": format!("{api_base}/api/integrations/gocardless-nordigen/connect-callback/{institution_id}", api_base = config.back_base_url),
-                "reference": user_id,
                 "agreement": eua.id,
                 "user_language": "EN"
             }))
             .send()
             .await
-            .context("error making requisition req")?
+            .context("error making requisition req")?;
+
+        let status = requisition.status();
+        if !status.is_success() {
+            let text = requisition.text().await?;
+            error!("req req error {text} {status}");
+            return Err(anyhow!("req req error"));
+        }
+        let requisition = requisition
             .json::<Requisition>()
             .await
             .context("error parsing requisition res")?;

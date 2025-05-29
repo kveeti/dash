@@ -106,7 +106,6 @@ impl Data {
         .context("error upserting user_bank_integrations")?;
 
         if accounts.len() != 0 {
-            println!("{accounts:?}");
             let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
                 r#"
                 insert into accounts (
