@@ -23,7 +23,8 @@ use utoipa::OpenApi;
     endpoints::accounts::create::create,
     endpoints::settings::save,
     endpoints::integrations::get::get,
-    endpoints::integrations::sync::sync
+    endpoints::integrations::sync::sync,
+    endpoints::integrations::delete::delete
 ))]
 struct ApiDoc;
 

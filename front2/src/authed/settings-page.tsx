@@ -1,12 +1,16 @@
 import * as ak from "@ariakit/react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Tooltip } from "radix-ui";
 import { FormEvent, startTransition, useMemo, useState } from "react";
 
 import { api, useMe, useSetMe } from "../api";
 import { errorToast } from "../lib/error-toast";
 import { Button } from "../ui/button";
+import { IconCross } from "../ui/icons/cross";
 import { LabelWrapper, inputStyles, labelStyles } from "../ui/input";
-import { SlowLink, textLinkStyles } from "../ui/link";
+import { textLinkStyles } from "../ui/link";
 import { Spinner } from "../ui/spinner";
+import { TooltipContent } from "../ui/tooltip";
 import { Heading } from "../ui/typography";
 import { useLocaleStuff } from "./use-formatting";
 
@@ -16,6 +20,15 @@ function useSaveSettings() {
 
 function useSync() {
 	return api.useMutation("post", "/integrations/sync");
+}
+
+function useDeleteConnectedIntegration() {
+	const qc = useQueryClient();
+	return api.useMutation("delete", "/integrations/{integration_name}", {
+		onSuccess: () => {
+			qc.invalidateQueries(api.queryOptions("get", "/integrations"));
+		},
+	});
 }
 
 function useGetIntegrations() {
@@ -83,7 +96,11 @@ export default function SettingsPage() {
 						{!!integrations.data?.connected.length && (
 							<div>
 								<h3 className="mb-1 font-medium">connected</h3>
-								<ul>{integrations.data?.connected.map((c) => <li>{c}</li>)}</ul>
+								<ul>
+									{integrations.data?.connected.map((c) => (
+										<ConnectedIntegration integration={c} />
+									))}
+								</ul>
 							</div>
 						)}
 
@@ -94,7 +111,7 @@ export default function SettingsPage() {
 									{integrations.data?.available.map((c) => (
 										<li>
 											<a className={textLinkStyles} href={c.link}>
-												{c.name}
+												{c.label}
 											</a>
 										</li>
 									))}
@@ -105,6 +122,37 @@ export default function SettingsPage() {
 				)}
 			</div>
 		</div>
+	);
+}
+
+function ConnectedIntegration({ integration }: { integration: { name: string; label: string } }) {
+	const mutation = useDeleteConnectedIntegration();
+
+	function handleClick() {
+		if (mutation.isPending) return;
+
+		mutation
+			.mutateAsync({ params: { path: { integration_name: integration.name } } })
+			.catch(errorToast("error deleting integration"));
+	}
+
+	return (
+		<li className="flex items-center gap-2">
+			<Tooltip.Root>
+				<Tooltip.Trigger asChild>
+					<Button
+						isLoading={mutation.isPending}
+						variant="ghost"
+						size="icon"
+						onClick={handleClick}
+					>
+						<IconCross />
+					</Button>
+				</Tooltip.Trigger>
+				<TooltipContent>delete</TooltipContent>
+			</Tooltip.Root>
+			{integration.label}
+		</li>
 	);
 }
 

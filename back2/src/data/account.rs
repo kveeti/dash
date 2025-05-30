@@ -60,10 +60,32 @@ impl Data {
 
         Ok(())
     }
+
+    pub async fn get_accounts(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<AccountWithExternal>, sqlx::Error> {
+        let rows = query_as!(
+            AccountWithExternal,
+            "select id, name, external_id from accounts where user_id = $1",
+            user_id
+        )
+        .fetch_all(&self.pg_pool)
+        .await?;
+
+        Ok(rows)
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct Account {
     pub id: String,
     pub name: String,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AccountWithExternal {
+    pub id: String,
+    pub name: String,
+    pub external_id: Option<String>,
 }

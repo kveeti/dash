@@ -15,13 +15,14 @@ use crate::{auth_middleware::User, error::ApiError, state::AppState};
 pub async fn get(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, ApiError> {
     let connected = state.data.get_user_bank_integrations(&user.id).await?;
 
-    let available: Vec<Integration> = state
+    let available = state
         .config
         .allowed_integrations
         .iter()
         .filter(|i| !connected.iter().any(|c| c.name == *i.name))
         .map(|i| Integration {
-            name: i.label.to_string(),
+            label: i.label.to_string(),
+            name: i.name.to_string(),
             link: format!(
                 "{base}{path}",
                 base = state.config.back_base_url,
@@ -33,15 +34,18 @@ pub async fn get(State(state): State<AppState>, user: User) -> Result<impl IntoR
     let connected = connected
         .iter()
         .map(|i| {
-            &state
+            let ai = &state
                 .config
                 .allowed_integrations
                 .iter()
                 .find(|ai| i.name == ai.name)
-                .unwrap()
-                .label
+                .unwrap();
+
+            ConnectedIntegration {
+                label: ai.label.to_string(),
+                name: ai.name.to_string(),
+            }
         })
-        .cloned()
         .collect();
 
     Ok(Json(GetIntegrationsOutput {
@@ -52,18 +56,26 @@ pub async fn get(State(state): State<AppState>, user: User) -> Result<impl IntoR
 
 #[derive(Serialize, ToSchema)]
 pub struct GetIntegrationsOutput {
-    connected: Vec<String>,
+    connected: Vec<ConnectedIntegration>,
     available: Vec<Integration>,
 }
 
 #[derive(Serialize, ToSchema)]
-pub struct Integration {
-    pub name: String,
-    pub link: String,
-}
-
 pub struct AllowedIntegration {
     pub label: String,
     pub name: String,
     pub link_path: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct Integration {
+    pub label: String,
+    pub name: String,
+    pub link: String,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ConnectedIntegration {
+    pub label: String,
+    pub name: String,
 }

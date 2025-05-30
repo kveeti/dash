@@ -164,12 +164,22 @@ pub async fn connect_callback(
         });
         let accounts = try_join_all(accounts_futures).await?;
 
+        let existing_accounts = state.data.get_accounts(&user.id).await?;
+
         let account_map: Vec<SavedAccount> = accounts
             .iter()
-            .map(|account| SavedAccount {
-                id: create_id(),
-                iban: account.iban.to_owned(),
-                gcn_id: account.id.to_owned(),
+            .map(|account| {
+                let iban = account.iban.to_owned();
+
+                let existing_id = existing_accounts
+                    .iter()
+                    .find(|ea| ea.external_id.as_deref() == Some(&iban));
+
+                SavedAccount {
+                    id: existing_id.map_or(create_id(), |ea| ea.id.to_owned()),
+                    iban,
+                    gcn_id: account.id.to_owned(),
+                }
             })
             .collect();
 
@@ -334,8 +344,9 @@ impl GoCardlessNordigen {
         Ok(requisition)
     }
 
-    pub async fn delete_integration(&self, integ_id: &str) -> Result<(), anyhow::Error> {
-        self.client
+    pub async fn delete_requisition(&self, integ_id: &str) -> Result<(), anyhow::Error> {
+        let res = self
+            .client
             .delete(format!(
                 "{base}/requisitions/{id}/",
                 base = self.base_url,
@@ -345,6 +356,14 @@ impl GoCardlessNordigen {
             .send()
             .await
             .context("error sending DELETE requisitions/{id}/ request")?;
+
+        let status = res.status();
+
+        if !status.is_success() {
+            let text = res.text().await?;
+            error!("delete req error {text} {status}");
+            return Err(anyhow!("delete req error"));
+        }
 
         Ok(())
     }

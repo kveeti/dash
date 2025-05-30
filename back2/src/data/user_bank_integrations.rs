@@ -126,6 +126,8 @@ impl Data {
                 b.push_bind(account.external_id);
             });
 
+            builder.push("on conflict (id) do nothing");
+
             let query = builder.build();
             query.execute(&mut *tx).await?;
         }

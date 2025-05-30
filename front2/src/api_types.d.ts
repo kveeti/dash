@@ -132,6 +132,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/integrations/{integration_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["integrations/delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/settings": {
         parameters: {
             query?: never;
@@ -277,6 +293,10 @@ export interface components {
             is_neutral: boolean;
             name: string;
         };
+        ConnectedIntegration: {
+            label: string;
+            name: string;
+        };
         CreateAccountInput: {
             name: string;
         };
@@ -296,12 +316,13 @@ export interface components {
         };
         GetIntegrationsOutput: {
             available: components["schemas"]["Integration"][];
-            connected: string[];
+            connected: components["schemas"]["ConnectedIntegration"][];
         };
         Input: {
             id: string;
         };
         Integration: {
+            label: string;
             link: string;
             name: string;
         };
@@ -632,6 +653,19 @@ export interface operations {
                 };
             };
         };
+    };
+    "integrations/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description integration name */
+                integration_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: never;
     };
     "settings/save": {
         parameters: {

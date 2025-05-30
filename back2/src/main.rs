@@ -85,6 +85,7 @@ async fn main() {
     let integrations = Router::new()
         .route("/sync", post(integrations::sync::sync))
         .route("/", get(integrations::get::get))
+        .route("/{integration_name}", delete(integrations::delete::delete))
         .nest(
             "/gocardless-nordigen",
             Router::new()
