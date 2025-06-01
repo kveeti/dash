@@ -16,6 +16,25 @@ impl Data {
         return Ok(id.map(|row| row.id));
     }
 
+    pub async fn upsert_user(&self, user: &User) -> Result<String, anyhow::Error> {
+        let res = query!(
+            r#"
+            insert into users (id, external_id, created_at, updated_at)
+            values ($1, $2, $3, $4)
+            on conflict (external_id) do nothing
+            returning id;
+            "#,
+            user.id,
+            user.external_id,
+            user.created_at,
+            user.updated_at
+        )
+        .fetch_optional(&self.pg_pool)
+        .await?;
+
+        Ok(res.map_or(user.id.to_owned(), |row| row.id))
+    }
+
     pub async fn upsert_user_with_session(
         &self,
         user: &User,

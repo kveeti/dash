@@ -9,7 +9,7 @@ use axum_extra::{TypedHeader, headers, typed_header::TypedHeaderRejectionReason}
 use http::request::Parts;
 use hyper::header;
 
-use crate::{error::ApiError, services::auth::verify_token, state::AppState};
+use crate::{endpoints::auth::verify_token, error::ApiError, state::AppState};
 
 #[derive(Debug)]
 pub struct User {

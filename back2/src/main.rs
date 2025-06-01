@@ -20,7 +20,6 @@ pub mod config;
 pub mod data;
 pub mod endpoints;
 pub mod error;
-mod services;
 pub mod state;
 pub mod statement_parsing;
 
