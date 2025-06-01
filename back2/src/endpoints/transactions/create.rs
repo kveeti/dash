@@ -11,7 +11,7 @@ use serde_with::{NoneAsEmptyString, serde_as};
 use utoipa::ToSchema;
 
 use crate::{
-    auth_middleware::User,
+    auth_middleware::LoggedInUser,
     data::{InsertTx, create_id},
     error::{ApiError, ErrorDetails},
     state::AppState,
@@ -44,7 +44,7 @@ pub struct CreateTransactionInput {
 )]
 pub async fn create(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     extract::Json(payload): extract::Json<CreateTransactionInput>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut errors: HashMap<String, String> = HashMap::new();

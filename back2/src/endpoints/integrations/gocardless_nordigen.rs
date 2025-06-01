@@ -9,7 +9,7 @@ use futures::future::try_join_all;
 use serde_json::json;
 use tracing::error;
 
-use crate::{auth_middleware::User, data::create_id, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, data::create_id, error::ApiError, state::AppState};
 
 #[derive(Serialize)]
 pub struct ConnectBankInitRes {
@@ -61,7 +61,7 @@ pub struct ConnectBankInitRes {
 pub async fn connect_init(
     State(state): State<AppState>,
     Path(institution_id): Path<String>,
-    user: User,
+    user: LoggedInUser,
 ) -> Result<impl IntoResponse, ApiError> {
     let data_name = format!("gocardless-nordigen::{institution_id}");
 
@@ -127,7 +127,7 @@ pub async fn connect_callback(
     State(state): State<AppState>,
     Path(institution_id): Path<String>,
     Query(params): Query<HashMap<String, String>>,
-    user: User,
+    user: LoggedInUser,
 ) -> Result<impl IntoResponse, ApiError> {
     if let Some(error) = params.get("error") {
         return Err(ApiError::BadRequest(format!(
@@ -220,7 +220,6 @@ use crate::config::Config;
 
 pub struct GoCardlessNordigen {
     access_token: String,
-    refresh_token: String,
     client: Client,
     base_url: String,
 }
@@ -259,7 +258,6 @@ impl GoCardlessNordigen {
 
         Ok(Self {
             access_token: token_res.access,
-            refresh_token: token_res.refresh,
             client,
             base_url,
         })
@@ -429,7 +427,6 @@ impl GoCardlessNordigen {
 #[derive(Debug, Deserialize)]
 struct TokenRes {
     pub access: String,
-    pub refresh: String,
 }
 
 #[derive(Deserialize)]

@@ -4,7 +4,7 @@ use axum::{
 };
 use http::StatusCode;
 
-use crate::{auth_middleware::User, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
 #[utoipa::path(
     delete,
@@ -19,7 +19,7 @@ use crate::{auth_middleware::User, error::ApiError, state::AppState};
 )]
 pub async fn delete(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     state.data.delete_tx(&user.id, &id).await?;

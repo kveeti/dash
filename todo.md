@@ -1,8 +1,6 @@
 - [ ] transaction filters
 - [ ] clear button for transaction search (and filters?)
-- [ ] some transaction bulk actions
 - [ ] stats page filters
-- [ ] accounts
 - [ ] transaction tags?
 - [ ] improve transaction import page
 - [ ] moor stats
@@ -22,3 +20,5 @@
 - [x] moor stats
 - [x] deploy script
 - [x] password change
+- [x] some transaction bulk actions
+- [x] accounts

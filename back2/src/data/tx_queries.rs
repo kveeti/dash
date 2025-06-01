@@ -272,8 +272,7 @@ impl Data {
                 c.name as "cat_name?",
                 c.is_neutral as "cat_is_ne?",
 
-                linked.id as "linked_id?",
-                linked.amount as "linked_amount?"
+                linked.id as "linked_id?"
             from transactions t
             left join transaction_categories c on t.category_id = c.id
 
@@ -328,31 +327,6 @@ impl Data {
 
         return Ok(tx_map);
     }
-}
-
-#[derive(Debug, FromRow)]
-struct QueryTxRow {
-    id: String,
-    date: DateTime<Utc>,
-    amount: f32,
-    counter_party: String,
-    additional: Option<String>,
-    currency: String,
-    category_id: Option<String>,
-
-    cat_name: Option<String>,
-    cat_is_ne: Option<bool>,
-
-    link_created_at: Option<DateTime<Utc>>,
-    link_updated_at: Option<DateTime<Utc>>,
-
-    l_id: Option<String>,
-    l_date: Option<DateTime<Utc>>,
-    l_amount: Option<f32>,
-    l_counter_party: Option<String>,
-    l_additional: Option<String>,
-    l_currency: Option<String>,
-    l_category_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -418,7 +392,6 @@ struct TxRow {
     cat_is_ne: Option<bool>,
 
     linked_id: Option<String>,
-    linked_amount: Option<f32>,
 }
 
 #[derive(Debug, Clone)]

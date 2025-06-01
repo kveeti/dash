@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::{auth_middleware::User, data::Account, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, data::Account, error::ApiError, state::AppState};
 
 #[derive(Deserialize, ToSchema, IntoParams)]
 #[into_params(parameter_in = Query)]
@@ -28,7 +28,7 @@ pub struct Input {
 )]
 pub async fn query(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Query(input): Query<Input>,
 ) -> Result<impl IntoResponse, ApiError> {
     let accounts = state

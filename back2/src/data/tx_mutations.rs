@@ -3,6 +3,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{Postgres, QueryBuilder, query};
 use tracing::info;
 
+use crate::state::AppState;
+
 use super::{Data, create_id};
 
 impl Data {
@@ -520,6 +522,35 @@ impl Data {
 
         Ok(())
     }
+}
+
+pub async fn do_pending_imports(state: &AppState) -> Result<(), anyhow::Error> {
+    let pending_imports = state
+        .data
+        .get_pending_imports()
+        .await
+        .context("error getting pending imports")?;
+
+    tracing::info!("found {} pending imports", pending_imports.len());
+
+    for (user_id, import_id) in pending_imports {
+        let state_clone = state.clone();
+        let user_id_clone = user_id.clone();
+        let import_id_clone = import_id.clone();
+
+        tokio::spawn(async move {
+            tracing::info!("starting importing {import_id_clone}");
+            if let Err(e) = state_clone
+                .data
+                .import_tx_phase_2_v2(&user_id_clone, &import_id_clone)
+                .await
+            {
+                tracing::error!("error importing {}: {}", import_id_clone, e);
+            }
+        });
+    }
+
+    Ok(())
 }
 
 #[derive(Debug)]

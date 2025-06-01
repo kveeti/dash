@@ -9,14 +9,18 @@ use axum_extra::{TypedHeader, headers, typed_header::TypedHeaderRejectionReason}
 use http::request::Parts;
 use hyper::header;
 
-use crate::{endpoints::auth::verify_token, error::ApiError, state::AppState};
+use crate::{
+    endpoints::auth::{COOKIE_AUTH, verify_token},
+    error::ApiError,
+    state::AppState,
+};
 
 #[derive(Debug)]
-pub struct User {
+pub struct LoggedInUser {
     pub id: String,
 }
 
-impl<S> FromRequestParts<S> for User
+impl<S> FromRequestParts<S> for LoggedInUser
 where
     AppState: FromRef<S>,
     S: Send + Sync,
@@ -40,7 +44,7 @@ where
             })?;
 
         let auth_cookie = cookies
-            .get("auth")
+            .get(COOKIE_AUTH)
             .ok_or(ApiError::NoAuth("no cookie".to_owned()))?;
 
         let auth_token = verify_token(&state.config.secret, auth_cookie)
@@ -53,13 +57,13 @@ where
             .context("error getting session")?
             .ok_or(ApiError::NoAuth("no session".to_string()))?;
 
-        return Ok(User {
+        return Ok(LoggedInUser {
             id: session.user_id.to_owned(),
         });
     }
 }
 
-impl<S> OptionalFromRequestParts<S> for User
+impl<S> OptionalFromRequestParts<S> for LoggedInUser
 where
     AppState: FromRef<S>,
     S: Send + Sync,
@@ -70,7 +74,7 @@ where
         parts: &mut Parts,
         state: &S,
     ) -> Result<Option<Self>, Self::Rejection> {
-        match <User as FromRequestParts<S>>::from_request_parts(parts, state).await {
+        match <LoggedInUser as FromRequestParts<S>>::from_request_parts(parts, state).await {
             Ok(res) => Ok(Some(res)),
             Err(_) => Ok(None),
         }

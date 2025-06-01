@@ -1,5 +1,5 @@
-pub mod get_stats;
-pub use get_stats::get_stats;
+pub mod stats;
+pub use stats::stats;
 
 pub mod create;
 pub use create::create;

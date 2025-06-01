@@ -11,7 +11,7 @@ use serde_with::{NoneAsEmptyString, serde_as};
 use utoipa::ToSchema;
 
 use crate::{
-    auth_middleware::User,
+    auth_middleware::LoggedInUser,
     data::UpdateTx,
     error::{ApiError, ErrorDetails},
     state::AppState,
@@ -47,7 +47,7 @@ pub struct TransactionUpdateInput {
 )]
 pub async fn update(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Path(id): Path<String>,
     extract::Json(payload): extract::Json<TransactionUpdateInput>,
 ) -> Result<impl IntoResponse, ApiError> {

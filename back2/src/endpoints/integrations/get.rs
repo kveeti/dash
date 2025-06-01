@@ -2,7 +2,9 @@ use axum::{Json, extract::State, response::IntoResponse};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use crate::{auth_middleware::User, error::ApiError, state::AppState};
+use crate::{
+    auth_middleware::LoggedInUser, config::EnvironmentVariables, error::ApiError, state::AppState,
+};
 
 #[utoipa::path(
     get,
@@ -12,7 +14,10 @@ use crate::{auth_middleware::User, error::ApiError, state::AppState};
         (status = 200, body = GetIntegrationsOutput),
     )
 )]
-pub async fn get(State(state): State<AppState>, user: User) -> Result<impl IntoResponse, ApiError> {
+pub async fn get(
+    State(state): State<AppState>,
+    user: LoggedInUser,
+) -> Result<impl IntoResponse, ApiError> {
     let connected = state.data.get_user_bank_integrations(&user.id).await?;
 
     let available = state
@@ -52,6 +57,25 @@ pub async fn get(State(state): State<AppState>, user: User) -> Result<impl IntoR
         connected,
         available,
     }))
+}
+
+pub fn allowed_integrations(envs: &EnvironmentVariables) -> Vec<AllowedIntegration> {
+    let mut allowed_integrations = vec![AllowedIntegration {
+        label: "OP".to_string(),
+        name: "gocardless-nordigen::OP_OKOYFIHH".to_string(),
+        link_path: "/api/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH".to_string(),
+    }];
+
+    if envs.gcn_allow_sandbox {
+        allowed_integrations.push(AllowedIntegration {
+            label: "sandbox".to_string(),
+            name: "gocardless-nordigen::SANDBOXFINANCE_SFIN0000".to_string(),
+            link_path: "/api/integrations/gocardless-nordigen/connect-init/SANDBOXFINANCE_SFIN0000"
+                .to_string(),
+        });
+    }
+
+    return allowed_integrations;
 }
 
 #[derive(Serialize, ToSchema)]

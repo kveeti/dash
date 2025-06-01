@@ -2,6 +2,7 @@ use std::{fmt, str::FromStr};
 
 use anyhow::{Context, anyhow};
 use axum::{
+    debug_handler,
     extract::{Query, State},
     response::{IntoResponse, Redirect},
 };
@@ -35,13 +36,15 @@ use sha2::Sha256;
 use utoipa::IntoParams;
 
 use crate::{
+    auth_middleware::LoggedInUser,
     config::Config,
-    data::{Data, Session, User, create_id},
+    data::{Session, User, create_id},
     error::ApiError,
     state::AppState,
 };
 
-const AUTH_STATE: &'static str = "auth_state";
+const COOKIE_AUTH_STATE: &'static str = "auth_state";
+pub const COOKIE_AUTH: &'static str = "auth";
 
 #[utoipa::path(
     get,
@@ -50,7 +53,14 @@ const AUTH_STATE: &'static str = "auth_state";
         (status = 307)
     )
 )]
-pub async fn init(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+pub async fn init(
+    State(state): State<AppState>,
+    user: Option<LoggedInUser>,
+) -> Result<impl IntoResponse, ApiError> {
+    if user.is_some() {
+        return Ok((Redirect::temporary(&state.config.front_base_url)).into_response());
+    }
+
     let (_, oidc_client) = create_oidc(&state.config).await?;
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -69,10 +79,13 @@ pub async fn init(State(state): State<AppState>) -> Result<impl IntoResponse, Ap
     let mut headers = HeaderMap::new();
     headers.append(
         header::SET_COOKIE,
-        state_cookie(&auth_state.to_string(), state.config.use_secure_cookies),
+        create_state_cookie(
+            Some(&auth_state.to_string()),
+            state.config.use_secure_cookies,
+        ),
     );
 
-    return Ok((headers, Redirect::temporary(&auth_url.to_string())));
+    return Ok((headers, Redirect::temporary(&auth_url.to_string())).into_response());
 }
 
 #[derive(IntoParams, Deserialize)]
@@ -95,13 +108,17 @@ pub async fn callback(
     State(state): State<AppState>,
     Query(query): Query<AuthCallbackQuery>,
     TypedHeader(cookies): TypedHeader<headers::Cookie>,
-    State(data): State<Data>,
+    user: Option<LoggedInUser>,
 ) -> Result<impl IntoResponse, ApiError> {
+    if user.is_some() {
+        return Ok((Redirect::temporary(&state.config.front_base_url)).into_response());
+    }
+
     let (http_client, oidc_client) = create_oidc(&state.config).await?;
 
     let auth_state = AuthState::from_str(
         cookies
-            .get(AUTH_STATE)
+            .get(COOKIE_AUTH_STATE)
             .ok_or(ApiError::BadRequest("no state".to_owned()))?,
     )
     .context("error")?;
@@ -139,7 +156,8 @@ pub async fn callback(
     }
 
     let external_id = claims.subject().to_string();
-    let existing_user_id = data
+    let existing_user_id = state
+        .data
         .get_user_id_by_external_id(&external_id)
         .await
         .context("error getting user by external id")?;
@@ -149,7 +167,9 @@ pub async fn callback(
     let updated_at = None;
     let user_id = match existing_user_id {
         Some(user_id) => {
-            data.insert_session(&user_id, &session_id)
+            state
+                .data
+                .insert_session(&user_id, &session_id)
                 .await
                 .context("error inserting session")?;
 
@@ -170,7 +190,9 @@ pub async fn callback(
                 updated_at,
             };
 
-            data.upsert_user_with_session(&user, &session)
+            state
+                .data
+                .upsert_user_with_session(&user, &session)
                 .await
                 .context("error upserting user and session")?;
 
@@ -186,8 +208,12 @@ pub async fn callback(
             &create_token(&state.config.secret, &user_id, &session_id),
         ),
     );
+    headers.append(
+        header::SET_COOKIE,
+        create_state_cookie(None, state.config.use_secure_cookies),
+    );
 
-    return Ok((headers, Redirect::temporary(&state.config.front_base_url)));
+    return Ok((headers, Redirect::temporary(&state.config.front_base_url)).into_response());
 }
 
 #[cfg(debug_assertions)]
@@ -235,7 +261,7 @@ pub async fn ___dev_login___(State(state): State<AppState>) -> Result<impl IntoR
 }
 
 fn create_auth_cookie(is_secure: bool, auth_token: &str) -> HeaderValue {
-    CookieBuilder::new("auth", auth_token)
+    CookieBuilder::new(COOKIE_AUTH, auth_token)
         .secure(is_secure)
         .same_site(cookie::SameSite::Lax)
         .http_only(true)
@@ -249,13 +275,13 @@ fn create_auth_cookie(is_secure: bool, auth_token: &str) -> HeaderValue {
         .expect("parsing auth cookie")
 }
 
-pub fn state_cookie(val: &str, is_secure: bool) -> HeaderValue {
-    CookieBuilder::new(AUTH_STATE, val)
+pub fn create_state_cookie(val: Option<&str>, is_secure: bool) -> HeaderValue {
+    CookieBuilder::new(COOKIE_AUTH_STATE, val.unwrap_or(""))
         .secure(is_secure)
         .http_only(true)
         .path("/")
         .same_site(SameSite::Lax)
-        .expires(cookie::Expiration::from(if val.is_empty() {
+        .expires(cookie::Expiration::from(if val.is_none() {
             OffsetDateTime::from_unix_timestamp(0).expect("epoch")
         } else {
             OffsetDateTime::now_utc().saturating_add(Duration::minutes(5))

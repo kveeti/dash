@@ -7,12 +7,11 @@ use axum::{
     routing::{delete, get, patch, post},
 };
 use config::Config;
-use data::{Data, recover_pending_imports};
+use data::{Data, do_pending_imports};
 use http::{HeaderValue, Method, header};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
-use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub mod auth_middleware;
@@ -40,14 +39,13 @@ async fn main() {
         data,
     };
 
-    let state_for_recovery = state.clone();
+    let state_for_pending = state.clone();
     tokio::spawn(async move {
-        info!("starting import bg job");
-        recover_pending_imports(state_for_recovery).await;
+        let _ = do_pending_imports(&state_for_pending).await;
     });
 
-    let transactions = Router::new()
-        .route("/stats", get(transactions::get_stats))
+    let v1_transactions = Router::new()
+        .route("/stats", get(transactions::stats))
         .route("/query", post(transactions::query))
         .route("/", post(transactions::create))
         .route("/bulk", post(transactions::bulk))
@@ -60,16 +58,16 @@ async fn main() {
         .route("/{id}/linked", post(transactions::link))
         .route("/{id}/linked/{id}", delete(transactions::unlink));
 
-    let categories = Router::new()
+    let v1_categories = Router::new()
         .route("/", get(categories::query).post(categories::create))
         .route(
             "/{id}",
             delete(categories::delete).patch(categories::update),
         );
 
-    let accounts = Router::new().route("/", get(accounts::query).post(accounts::create));
+    let v1_accounts = Router::new().route("/", get(accounts::query).post(accounts::create));
 
-    let user_settings = Router::new().route("/", post(settings::save));
+    let v1_user_settings = Router::new().route("/", post(settings::save));
 
     let auth_base = Router::new()
         .route("/init", get(auth::init))
@@ -77,11 +75,11 @@ async fn main() {
 
     // dev login in debug mode
     #[cfg(debug_assertions)]
-    let auth = auth_base.route("/___dev_login___", post(auth::___dev_login___));
+    let v1_auth = auth_base.route("/___dev_login___", post(auth::___dev_login___));
     #[cfg(not(debug_assertions))]
     let auth = auth_base;
 
-    let integrations = Router::new()
+    let v1_integrations = Router::new()
         .route("/sync", post(integrations::sync::sync))
         .route("/", get(integrations::get::get))
         .route("/{integration_name}", delete(integrations::delete::delete))
@@ -97,16 +95,18 @@ async fn main() {
                     get(integrations::gocardless_nordigen::connect_callback),
                 ),
         );
+    let v1 = Router::new()
+        .nest("/transactions", v1_transactions)
+        .nest("/integrations", v1_integrations)
+        .nest("/categories", v1_categories)
+        .nest("/accounts", v1_accounts)
+        .nest("/settings", v1_user_settings)
+        .nest("/auth", v1_auth)
+        .route("/@me", get(me::get_me))
+        .route("/openapi.json", get(openapi));
 
     let routes = Router::new()
-        .nest("/transactions", transactions)
-        .nest("/integrations", integrations)
-        .nest("/categories", categories)
-        .nest("/accounts", accounts)
-        .nest("/settings", user_settings)
-        .nest("/auth", auth)
-        .route("/@me", get(me::get_me))
-        .route("/openapi.json", get(openapi))
+        .nest("/v1", v1)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(
             250 * 1024 * 1024, /* 250mb */

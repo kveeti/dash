@@ -5,7 +5,7 @@ use serde_with::{NoneAsEmptyString, serde_as};
 use utoipa::ToSchema;
 
 use crate::{
-    auth_middleware::User,
+    auth_middleware::LoggedInUser,
     data::{QueryTx, QueryTxInput, QueryTxInputCursor},
     error::ApiError,
     state::AppState,
@@ -44,7 +44,7 @@ pub struct TransactionsQueryOutput {
 )]
 pub async fn query(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Json(input): Json<TransactionsQueryInput>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut input2 = QueryTxInput {

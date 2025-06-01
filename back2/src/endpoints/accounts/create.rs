@@ -6,7 +6,7 @@ use serde::Deserialize;
 use utoipa::ToSchema;
 
 use crate::{
-    auth_middleware::User,
+    auth_middleware::LoggedInUser,
     data::create_id,
     error::{ApiError, ErrorDetails},
     state::AppState,
@@ -31,12 +31,12 @@ pub struct CreateAccountInput {
 )]
 pub async fn create(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Json(payload): Json<CreateAccountInput>,
 ) -> Result<impl IntoResponse, ApiError> {
     let mut errors: HashMap<String, String> = HashMap::new();
 
-    let mut name = payload.name.trim();
+    let name = payload.name.trim();
     if name.is_empty() {
         errors.insert("name".to_owned(), "required".to_owned());
     } else if name.len() > 50 {

@@ -4,7 +4,7 @@ use axum::{
     response::IntoResponse,
 };
 
-use crate::{auth_middleware::User, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
 use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen};
 
@@ -18,7 +18,7 @@ use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen
 )]
 pub async fn delete(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Path(integration_name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let integration = state

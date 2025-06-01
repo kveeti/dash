@@ -881,7 +881,7 @@ export interface operations {
             };
         };
         responses: {
-            201: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -1,5 +1,5 @@
 use crate::error::ApiError;
-use crate::{auth_middleware::User, state::AppState};
+use crate::{auth_middleware::LoggedInUser, state::AppState};
 use axum::extract::Path;
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -19,7 +19,7 @@ use http::StatusCode;
 )]
 pub async fn delete(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Path(id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
     let was_deleted = state.data.delete_category_if_unused(&user.id, &id).await?;

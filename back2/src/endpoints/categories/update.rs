@@ -8,7 +8,7 @@ use axum::{
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use crate::{auth_middleware::User, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
 #[derive(Deserialize, ToSchema)]
 pub struct CategoryUpdateInput {
@@ -33,7 +33,7 @@ pub struct CategoryUpdateInput {
 )]
 pub async fn update(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Path(id): Path<String>,
     Json(payload): Json<CategoryUpdateInput>,
 ) -> Result<impl IntoResponse, ApiError> {

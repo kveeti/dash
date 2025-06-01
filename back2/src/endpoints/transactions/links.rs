@@ -6,7 +6,7 @@ use http::StatusCode;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use crate::{auth_middleware::User, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
 #[derive(Deserialize, ToSchema)]
 pub struct Input {
@@ -31,7 +31,7 @@ pub struct Input {
 )]
 pub async fn link(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Path(id): Path<String>,
     extract::Json(input): extract::Json<Input>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -62,7 +62,7 @@ pub async fn link(
 )]
 pub async fn unlink(
     State(state): State<AppState>,
-    user: User,
+    user: LoggedInUser,
     Path(id): Path<String>,
     Path(linked_id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {

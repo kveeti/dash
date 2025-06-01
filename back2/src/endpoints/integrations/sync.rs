@@ -4,7 +4,7 @@ use chrono::NaiveTime;
 use tracing::info;
 
 use crate::{
-    auth_middleware::User,
+    auth_middleware::LoggedInUser,
     data::{InsertTx, create_id},
     error::ApiError,
     state::AppState,
@@ -20,7 +20,7 @@ use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen
         (status = 200, body = ()),
     )
 )]
-pub async fn sync(State(state): State<AppState>, user: User) -> Result<(), ApiError> {
+pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(), ApiError> {
     let datas = state
         .data
         .get_user_bank_integrations(&user.id)

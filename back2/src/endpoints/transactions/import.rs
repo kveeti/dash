@@ -17,7 +17,7 @@ use tokio_util::io::StreamReader;
 use tracing::error;
 
 use crate::{
-    auth_middleware::User,
+    auth_middleware::LoggedInUser,
     data::create_id,
     error::ApiError,
     state::AppState,
@@ -27,7 +27,7 @@ use crate::{
 pub async fn import(
     State(state): State<AppState>,
     Path((account_id, file_type)): Path<(String, String)>,
-    user: User,
+    user: LoggedInUser,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, ApiError> {
     let pg_pool = state.data.clone().get_pg_pool();

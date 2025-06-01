@@ -7,7 +7,7 @@ use utoipa::OpenApi;
     endpoints::auth::init,
     endpoints::auth::callback,
     endpoints::me::get_me,
-    endpoints::transactions::get_stats::get_stats,
+    endpoints::transactions::stats::stats,
     endpoints::transactions::query::query,
     endpoints::transactions::create::create,
     endpoints::transactions::update::update,
