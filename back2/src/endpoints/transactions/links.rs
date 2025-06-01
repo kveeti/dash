@@ -2,10 +2,11 @@ use axum::{
     extract::{self, Path, State},
     response::IntoResponse,
 };
+use http::StatusCode;
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use crate::{auth_middleware::User, error::ApiError, services, state::AppState};
+use crate::{auth_middleware::User, error::ApiError, state::AppState};
 
 #[derive(Deserialize, ToSchema)]
 pub struct Input {
@@ -34,9 +35,13 @@ pub async fn link(
     Path(id): Path<String>,
     extract::Json(input): extract::Json<Input>,
 ) -> Result<impl IntoResponse, ApiError> {
-    services::transactions::link(&state.data, &user.id, &id, &input.id).await?;
+    if id == input.id {
+        return Err(ApiError::BadRequest("Cannot link to self".into()));
+    }
 
-    Ok(())
+    state.data.link_tx(&user.id, &id, &input.id).await?;
+
+    Ok(StatusCode::CREATED)
 }
 
 #[utoipa::path(
@@ -51,7 +56,7 @@ pub async fn link(
         content_type = "application/json",
     ),
     responses(
-        (status = 201, body = ()),
+        (status = 204, body = ()),
         (status = 400, description = "Bad request"),
     )
 )]
@@ -61,7 +66,11 @@ pub async fn unlink(
     Path(id): Path<String>,
     Path(linked_id): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    services::transactions::unlink(&state.data, &user.id, &id, &linked_id).await?;
+    if id == linked_id {
+        return Err(ApiError::BadRequest("Cannot unlink self".into()));
+    }
 
-    Ok(())
+    state.data.unlink_tx(&user.id, &id, &linked_id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
 }
