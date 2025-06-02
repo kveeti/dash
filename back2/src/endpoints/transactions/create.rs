@@ -32,8 +32,8 @@ pub struct CreateTransactionInput {
 
 #[utoipa::path(
     post,
-    path = "/transactions",
-    operation_id = "transactions/create",
+    path = "/v1/transactions",
+    operation_id = "v1/transactions/create",
     request_body(
         content = CreateTransactionInput,
         content_type = "application/json",

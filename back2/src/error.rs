@@ -43,7 +43,7 @@ impl IntoResponse for ApiError {
                 None,
             ),
             ApiError::NoAuth(_) => (StatusCode::UNAUTHORIZED, None, None),
-            ApiError::NoAccess(_) => (StatusCode::FORBIDDEN, None, None),
+            ApiError::NoAccess(details) => (StatusCode::FORBIDDEN, Some(details), None),
             ApiError::NotFound(_) => (StatusCode::NOT_FOUND, None, None),
             ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, Some(err.to_string()), None),
             ApiError::BadRequestDetails(err, details) => (

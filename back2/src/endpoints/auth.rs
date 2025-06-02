@@ -2,7 +2,6 @@ use std::{fmt, str::FromStr};
 
 use anyhow::{Context, anyhow};
 use axum::{
-    debug_handler,
     extract::{Query, State},
     response::{IntoResponse, Redirect},
 };
@@ -48,7 +47,7 @@ pub const COOKIE_AUTH: &'static str = "auth";
 
 #[utoipa::path(
     get,
-    path = "/auth/init",
+    path = "/v1/auth/init",
     responses(
         (status = 307)
     )
@@ -312,7 +311,7 @@ async fn create_oidc(config: &Config) -> Result<(reqwest::Client, OidcClient), A
     )
     .set_redirect_uri(
         RedirectUrl::new(format!(
-            "{base}/api/auth/callback",
+            "{base}/api/v1/auth/callback",
             base = config.back_base_url
         ))
         .context("error parsing auth redirect url")?,

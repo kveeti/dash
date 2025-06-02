@@ -10,8 +10,8 @@ use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen
 
 #[utoipa::path(
     delete,
-    path = "/integrations/{integration_name}",
-    operation_id = "integrations/delete",
+    path = "/v1/integrations/{integration_name}",
+    operation_id = "v1/integrations/delete",
     params(
         ("integration_name" = String, description = "integration name"),
     ),

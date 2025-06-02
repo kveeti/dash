@@ -32,8 +32,8 @@ pub struct TransactionUpdateInput {
 
 #[utoipa::path(
     patch,
-    path = "/transactions/{id}",
-    operation_id = "transactions/update",
+    path = "/v1/transactions/{id}",
+    operation_id = "v1/transactions/update",
     params(
         ("id" = String, description = "Transaction ID"),
     ),

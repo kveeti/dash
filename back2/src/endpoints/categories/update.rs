@@ -18,8 +18,8 @@ pub struct CategoryUpdateInput {
 
 #[utoipa::path(
     patch,
-    path = "/categories/{id}",
-    operation_id = "categories/update",
+    path = "/v1/categories/{id}",
+    operation_id = "v1/categories/update",
     params(
         ("id" = String, description = "category id"),
     ),

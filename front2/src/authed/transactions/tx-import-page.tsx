@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { ChangeEvent, FormEvent, startTransition, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { csrf } from "../../api";
 import { errorToast } from "../../lib/error-toast";
 import { things } from "../../things";
 import { Button } from "../../ui/button";
@@ -199,9 +200,10 @@ async function doImport({
 	account_id: string;
 	file_type: string;
 }) {
-	return api<{ rows: number }>("/transactions/import" + "/" + account_id + "/" + file_type, {
+	return api<{ rows: number }>("/v1/transactions/import" + "/" + account_id + "/" + file_type, {
 		method: "POST",
 		body: formData,
+		headers: { "x-csrf": csrf! },
 	});
 }
 
@@ -215,6 +217,7 @@ type Props = {
 	method: string;
 	body?: unknown;
 	query?: Record<string, string>;
+	headers?: HeadersInit;
 	signal?: AbortSignal;
 };
 
@@ -223,6 +226,7 @@ export async function api<TReturnValue>(path: string, props: Props) {
 		credentials: "include",
 		signal: props.signal,
 		method: props.method ?? "GET",
+		headers: props.headers,
 	} as RequestInit;
 
 	if (props.body) {

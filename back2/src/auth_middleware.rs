@@ -1,12 +1,15 @@
 use std::convert::Infallible;
+use subtle::ConstantTimeEq;
 
 use anyhow::{Context, anyhow};
 use axum::{
     RequestPartsExt,
-    extract::{FromRef, FromRequestParts, OptionalFromRequestParts},
+    extract::{FromRef, FromRequestParts, OptionalFromRequestParts, Request},
+    middleware::Next,
+    response::Response,
 };
 use axum_extra::{TypedHeader, headers, typed_header::TypedHeaderRejectionReason};
-use http::request::Parts;
+use http::{HeaderMap, Method, request::Parts};
 use hyper::header;
 
 use crate::{
@@ -79,4 +82,27 @@ where
             Err(_) => Ok(None),
         }
     }
+}
+
+pub async fn csrf_middleware(
+    TypedHeader(cookies): TypedHeader<headers::Cookie>,
+    headers: HeaderMap,
+    request: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    if request.method() != Method::GET {
+        let csrf_header = headers
+            .get("x-csrf")
+            .ok_or(ApiError::NoAccess("csrf".to_string()))?;
+        let csrf_cookie = cookies
+            .get("csrf")
+            .ok_or(ApiError::NoAccess("csrf".to_string()))?;
+
+        let matches: bool = csrf_header.as_bytes().ct_eq(csrf_cookie.as_bytes()).into();
+        if !matches {
+            return Err(ApiError::NoAccess("csrf".to_string()));
+        }
+    }
+
+    Ok(next.run(request).await)
 }

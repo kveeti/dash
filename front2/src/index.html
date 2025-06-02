@@ -19,13 +19,13 @@
 			const apiBase = "<%= import.meta.env.PUBLIC_API_BASE_URL %>";
 
 			window[key] = { data: null, promise: null };
-			const p = fetch(apiBase + "/@me", { credentials: "include" })
+			const p = fetch(apiBase + "/v1/@me", { credentials: "include" })
 				.catch(() => {})
 				.then(async (res) => {
 					if (!res?.ok) {
 						localStorage.removeItem("me");
 						if (res?.status === 401) {
-							window.location.href = apiBase + "/auth/init";
+							window.location.href = apiBase + "/v1/auth/init";
 						}
 						return null;
 					}

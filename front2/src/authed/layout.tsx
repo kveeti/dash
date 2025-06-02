@@ -48,30 +48,6 @@ export function Nav() {
 	);
 }
 
-function Transactions() {
-	return (
-		<Dropdown.Root>
-			<Dropdown.Trigger className="focus hover:bg-gray-a3 size-10 px-2 -outline-offset-2">
-				tx
-			</Dropdown.Trigger>
-			<Dropdown.Content>
-				<Dropdown.Item asChild>
-					<SlowLink href="/transactions">transactions</SlowLink>
-				</Dropdown.Item>
-				<Dropdown.Item asChild>
-					<SlowLink href="/transactions/new">new tx</SlowLink>
-				</Dropdown.Item>
-				<Dropdown.Item asChild>
-					<SlowLink href="/transactions/import">import</SlowLink>
-				</Dropdown.Item>
-				<Dropdown.Item asChild>
-					<SlowLink href="/categories">categories</SlowLink>
-				</Dropdown.Item>
-			</Dropdown.Content>
-		</Dropdown.Root>
-	);
-}
-
 function NavLink({ href, children }: { href: string; children: ReactNode }) {
 	const [isActive] = useRoute(href);
 

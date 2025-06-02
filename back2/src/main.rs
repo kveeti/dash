@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use crate::endpoints::*;
+use auth_middleware::csrf_middleware;
 use axum::{
     Router,
     extract::DefaultBodyLimit,
+    middleware,
     routing::{delete, get, patch, post},
 };
 use config::Config;
@@ -112,6 +114,7 @@ async fn main() {
             250 * 1024 * 1024, /* 250mb */
         ))
         .layer(cors(&config))
+        .layer(middleware::from_fn(csrf_middleware))
         .with_state(state);
 
     let api = Router::new().nest("/api", routes);

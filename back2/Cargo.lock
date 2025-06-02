@@ -194,6 +194,7 @@ dependencies = [
  "serde_with",
  "sha2",
  "sqlx",
+ "subtle",
  "thiserror 2.0.12",
  "tokio",
  "tokio-util",

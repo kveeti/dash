@@ -16,8 +16,8 @@ pub struct SaveSettingsInput {
 
 #[utoipa::path(
     post,
-    path = "/settings",
-    operation_id = "settings/save",
+    path = "/v1/settings",
+    operation_id = "v1/settings/save",
     request_body(
         content = SaveSettingsInput,
         content_type = "application/json",

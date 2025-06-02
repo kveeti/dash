@@ -17,8 +17,8 @@ pub struct Input {
 
 #[utoipa::path(
     get,
-    path = "/categories",
-    operation_id = "categories/query",
+    path = "/v1/categories",
+    operation_id = "v1/categories/query",
     params(
         Input
     ),

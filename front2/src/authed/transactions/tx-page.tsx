@@ -25,7 +25,7 @@ import { useLocaleStuff } from "../use-formatting";
 import { AccountField, CategoryField, DateField } from "./new-tx-page";
 
 export type Tx =
-	paths["/transactions/query"]["post"]["responses"]["200"]["content"]["application/json"]["transactions"][number];
+	paths["/v1/transactions/query"]["post"]["responses"]["200"]["content"]["application/json"]["transactions"][number];
 
 export default function TxPage() {
 	const [searchParams] = useSearchParams();
@@ -38,7 +38,7 @@ export default function TxPage() {
 	const left = searchParams.get("left");
 	const right = searchParams.get("right");
 
-	const opts = api.queryOptions("post", "/transactions/query", {
+	const opts = api.queryOptions("post", "/v1/transactions/query", {
 		body: {
 			search_text: searchParams.get("query"),
 			limit,
@@ -347,7 +347,7 @@ function SelectedTx({
 	const { f } = useLocaleStuff();
 
 	const qc = useQueryClient();
-	const mutation = api.useMutation("patch", "/transactions/{id}", {
+	const mutation = api.useMutation("patch", "/v1/transactions/{id}", {
 		onSuccess: () => {
 			qc.invalidateQueries(opts);
 		},
@@ -495,10 +495,10 @@ function CopyButton({ label, value }: { label: string; value: string }) {
 
 function Links({ opts, tx, links }: { opts: UseQueryOptions; tx: Tx; links: Tx["links"] }) {
 	const qc = useQueryClient();
-	const linkMutation = api.useMutation("post", "/transactions/{id}/linked", {
+	const linkMutation = api.useMutation("post", "/v1/transactions/{id}/linked", {
 		onSuccess: () => qc.invalidateQueries(opts),
 	});
-	const unlinkMutation = api.useMutation("post", "/transactions/{id}/linked", {
+	const unlinkMutation = api.useMutation("post", "/v1/transactions/{id}/linked", {
 		onSuccess: () => qc.invalidateQueries(opts),
 	});
 
@@ -588,7 +588,7 @@ function DeleteTransaction({
 	counterParty: string;
 }) {
 	const qc = useQueryClient();
-	const mutation = api.useMutation("delete", "/transactions/{id}", {
+	const mutation = api.useMutation("delete", "/v1/transactions/{id}", {
 		onSuccess: () => qc.invalidateQueries(opts),
 	});
 
@@ -631,9 +631,9 @@ function DeleteTransaction({
 
 function Bulks({ selectedKeys, onClear }: { selectedKeys: Rac.Selection; onClear: () => void }) {
 	const qc = useQueryClient();
-	const mutation = api.useMutation("post", "/transactions/bulk", {
+	const mutation = api.useMutation("post", "/v1/transactions/bulk", {
 		onSuccess: () => {
-			qc.invalidateQueries(api.queryOptions("post", "/transactions/query"));
+			qc.invalidateQueries(api.queryOptions("post", "/v1/transactions/query"));
 		},
 	});
 

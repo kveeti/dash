@@ -32,8 +32,8 @@ pub struct TransactionsQueryOutput {
 
 #[utoipa::path(
     post,
-    path = "/transactions/query",
-    operation_id = "transactions/query",
+    path = "/v1/transactions/query",
+    operation_id = "v1/transactions/query",
     request_body(
         content = TransactionsQueryInput,
         content_type = "application/json",

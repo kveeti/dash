@@ -7,8 +7,8 @@ use http::StatusCode;
 
 #[utoipa::path(
     delete,
-    path = "/categories/{id}",
-    operation_id = "categories/delete",
+    path = "/v1/categories/{id}",
+    operation_id = "v1/categories/delete",
     params(
         ("id" = String, description = "category id"),
     ),

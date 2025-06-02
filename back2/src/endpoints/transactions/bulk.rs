@@ -19,8 +19,8 @@ pub struct TransactionBulkInput {
 
 #[utoipa::path(
     post,
-    path = "/transactions/bulk",
-    operation_id = "transactions/bulk",
+    path = "/v1/transactions/bulk",
+    operation_id = "v1/transactions/bulk",
     request_body(
         content = TransactionBulkInput,
         content_type = "application/json",

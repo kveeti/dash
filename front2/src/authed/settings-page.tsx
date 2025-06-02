@@ -5,6 +5,7 @@ import { FormEvent, startTransition, useMemo, useState } from "react";
 
 import { api, useMe, useSetMe } from "../api";
 import { errorToast } from "../lib/error-toast";
+import { things } from "../things";
 import { Button } from "../ui/button";
 import { IconCross } from "../ui/icons/cross";
 import { LabelWrapper, inputStyles, labelStyles } from "../ui/input";
@@ -15,24 +16,24 @@ import { Heading } from "../ui/typography";
 import { useLocaleStuff } from "./use-formatting";
 
 function useSaveSettings() {
-	return api.useMutation("post", "/settings");
+	return api.useMutation("post", "/v1/settings");
 }
 
 function useSync() {
-	return api.useMutation("post", "/integrations/sync");
+	return api.useMutation("post", "/v1/integrations/sync");
 }
 
 function useDeleteConnectedIntegration() {
 	const qc = useQueryClient();
-	return api.useMutation("delete", "/integrations/{integration_name}", {
+	return api.useMutation("delete", "/v1/integrations/{integration_name}", {
 		onSuccess: () => {
-			qc.invalidateQueries(api.queryOptions("get", "/integrations"));
+			qc.invalidateQueries(api.queryOptions("get", "/v1/integrations"));
 		},
 	});
 }
 
 function useGetIntegrations() {
-	return api.useQuery("get", "/integrations");
+	return api.useQuery("get", "/v1/integrations");
 }
 
 export default function SettingsPage() {
@@ -110,7 +111,10 @@ export default function SettingsPage() {
 								<ul>
 									{integrations.data?.available.map((c) => (
 										<li>
-											<a className={textLinkStyles} href={c.link}>
+											<a
+												className={textLinkStyles}
+												href={things.apiBase + c.link}
+											>
 												{c.label}
 											</a>
 										</li>

@@ -25,7 +25,7 @@ import { useDialog } from "../../ui/use-dialog";
 import { useLocaleStuff } from "../use-formatting";
 
 export default function NewTxPage() {
-	const mutation = api.useMutation("post", "/transactions");
+	const mutation = api.useMutation("post", "/v1/transactions");
 
 	function handleSubmit(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();

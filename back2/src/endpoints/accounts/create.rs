@@ -19,8 +19,8 @@ pub struct CreateAccountInput {
 
 #[utoipa::path(
     post,
-    path = "/accounts",
-    operation_id = "accounts/create",
+    path = "/v1/accounts",
+    operation_id = "v1/accounts/create",
     request_body(
         content = CreateAccountInput,
         content_type = "application/json",

@@ -20,8 +20,8 @@ pub struct CreateCategoryInput {
 
 #[utoipa::path(
     post,
-    path = "/categories",
-    operation_id = "categories/create",
+    path = "/v1/categories",
+    operation_id = "v1/categories/create",
     request_body(
         content = CreateCategoryInput,
         content_type = "application/json",

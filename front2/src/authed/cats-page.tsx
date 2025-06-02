@@ -25,7 +25,7 @@ export default function CatsPage() {
 	const list = useAsyncList<{ id: string; name: string }>({
 		initialFilterText: query ?? "",
 		load: async ({ signal, filterText }) => {
-			const res = await fetchClient.GET("/categories", {
+			const res = await fetchClient.GET("/v1/categories", {
 				signal,
 				params: { query: { search_text: filterText, include_counts: true } },
 			});

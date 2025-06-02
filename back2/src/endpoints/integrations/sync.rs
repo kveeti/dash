@@ -14,8 +14,8 @@ use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen
 
 #[utoipa::path(
     post,
-    path = "/integrations/sync",
-    operation_id = "integrations/sync",
+    path = "/v1/integrations/sync",
+    operation_id = "v1/integrations/sync",
     responses(
         (status = 200, body = ()),
     )

@@ -8,8 +8,8 @@ use crate::{
 
 #[utoipa::path(
     get,
-    path = "/integrations",
-    operation_id = "integrations/get",
+    path = "/v1/integrations",
+    operation_id = "v1/integrations/get",
     responses(
         (status = 200, body = GetIntegrationsOutput),
     )
@@ -28,11 +28,7 @@ pub async fn get(
         .map(|i| Integration {
             label: i.label.to_string(),
             name: i.name.to_string(),
-            link: format!(
-                "{base}{path}",
-                base = state.config.back_base_url,
-                path = i.link_path
-            ),
+            link: i.link_path.to_string(),
         })
         .collect();
 
@@ -63,14 +59,14 @@ pub fn allowed_integrations(envs: &EnvironmentVariables) -> Vec<AllowedIntegrati
     let mut allowed_integrations = vec![AllowedIntegration {
         label: "OP".to_string(),
         name: "gocardless-nordigen::OP_OKOYFIHH".to_string(),
-        link_path: "/api/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH".to_string(),
+        link_path: "/v1/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH".to_string(),
     }];
 
     if envs.gcn_allow_sandbox {
         allowed_integrations.push(AllowedIntegration {
             label: "sandbox".to_string(),
             name: "gocardless-nordigen::SANDBOXFINANCE_SFIN0000".to_string(),
-            link_path: "/api/integrations/gocardless-nordigen/connect-init/SANDBOXFINANCE_SFIN0000"
+            link_path: "/v1/integrations/gocardless-nordigen/connect-init/SANDBOXFINANCE_SFIN0000"
                 .to_string(),
         });
     }

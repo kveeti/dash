@@ -17,17 +17,33 @@ export const fetchClient = createFetchClient<paths>({
 	baseUrl: things.apiBase,
 	credentials: "include",
 });
+
+export let csrf: string | undefined = undefined;
+
+fetchClient.use({
+	onRequest: ({ request }) => {
+		if ("GET" !== request.method && csrf) {
+			request.headers.set("x-csrf", csrf);
+		}
+		return request;
+	},
+});
 export const api = createClient(fetchClient);
 
 export function useMeQuery() {
 	return useQuery({
 		queryKey: ["me"],
 		queryFn: async () => {
+			let data = null;
 			if (win.__ME_LOADER__.promise) {
-				return await win.__ME_LOADER__.promise;
+				data = await win.__ME_LOADER__.promise;
 			}
 
-			return win.__ME_LOADER__.data;
+			data = win.__ME_LOADER__.data;
+
+			csrf = data?.csrf;
+
+			return data;
 		},
 		initialData: () => lsGetJson("me") as Me | null,
 	});
