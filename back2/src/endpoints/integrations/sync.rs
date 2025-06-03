@@ -53,8 +53,24 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
                     .context("error initializing integration")?;
 
                 for account in data.account_map {
-                    let gcn_id = account.gcn_id;
+                    // TODO: better solution for situation where user
+                    //       has not used syncing before so they have an account
+                    //       most likely with a different iban/name than the account
+                    //       they're going to sync. And because how the bank connection
+                    //       is set up atm, the exp is not good there. It will effectively
+                    //       sync transactions on the new empty account
 
+                    // TODO: maybe communicate sync status/result to the user
+
+                    // TODO: maybe make syncing a bg job, then status is needed
+
+                    // TODO: store last sync date and retrieve new transactions
+                    //       with that as start. GCN supports that. ALSO filter
+                    //       transactions with that just in case
+
+                    // TODO: some pagination for local transactions at least.
+                    //       GCN does not support pagination
+                    let gcn_id = account.gcn_id;
                     let remote_transactions = integ
                         .get_transactions(&gcn_id)
                         .await
@@ -91,8 +107,8 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
 
                         for local_transaction in &local_transactions {
                             if *counter_party == local_transaction.og_counter_party
-                                && local_transaction.date.date_naive() == date
                                 && local_transaction.amount == amount
+                                && local_transaction.date.date_naive() == date
                             {
                                 found = true;
                                 break;
