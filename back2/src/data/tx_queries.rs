@@ -125,80 +125,69 @@ impl Data {
         for row in rows {
             let id: &str = row.try_get("id").expect("id");
 
-            let tx = tx_map.get_mut(id);
+            let link_id: Option<String> = row.try_get("l_id").expect("l_id");
 
-            if let Some(tx) = tx {
-                let link_id: Option<String> = row.try_get("l_id").expect("l_id");
-
-                if let Some(l_id) = link_id {
-                    let created_at: DateTime<Utc> =
-                        row.try_get("link_created_at").expect("link_created_at");
-                    let updated_at: Option<DateTime<Utc>> =
-                        row.try_get("link_updated_at").expect("link_updated_at");
-
-                    let date: DateTime<Utc> = row.try_get("l_date").expect("l_date");
-                    let counter_party: String =
-                        row.try_get("l_counter_party").expect("l_counter_party");
-                    let additional: Option<String> =
-                        row.try_get("l_additional").expect("l_additional");
-                    let currency: String = row.try_get("l_currency").expect("l_currency");
-                    let amount: f32 = row.try_get("l_amount").expect("l_amount");
-
-                    tx.links.push(Link {
-                        created_at,
-                        updated_at,
-                        tx: LinkedTx {
-                            id: l_id,
-                            date,
-                            counter_party,
-                            additional,
-                            currency,
-                            amount,
-                        },
-                    });
-                }
-            } else {
+            let tx = tx_map.entry(id.to_owned()).or_insert_with(|| {
                 let date: DateTime<Utc> = row.try_get("date").expect("date");
                 let counter_party: String = row.try_get("counter_party").expect("counter_party");
                 let amount: f32 = row.try_get("amount").expect("amount");
                 let additional: Option<String> = row.try_get("additional").expect("additional");
                 let currency: String = row.try_get("currency").expect("currency");
-
                 let category_id: Option<String> = row.try_get("category_id").expect("category_id");
                 let account_id: Option<String> = row.try_get("account_id").expect("account_id");
 
-                tx_map.insert(
-                    id.to_owned(),
-                    QueryTx {
-                        id: id.to_owned(),
+                QueryTx {
+                    id: id.to_owned(),
+                    date,
+                    counter_party,
+                    amount,
+                    additional,
+                    currency,
+                    links: vec![],
+                    account: if let Some(acc_id) = account_id {
+                        let name: String = row.try_get("account_name").expect("account_name");
+                        Some(Account { id: acc_id, name })
+                    } else {
+                        None
+                    },
+                    category: if let Some(cat_id) = category_id {
+                        let name: String = row.try_get("c_name").expect("c_name");
+                        let is_neutral: bool = row.try_get("c_is_neutral").expect("c_is_neutral");
+                        Some(Category {
+                            id: cat_id,
+                            name,
+                            is_neutral,
+                        })
+                    } else {
+                        None
+                    },
+                }
+            });
+
+            if let Some(l_id) = link_id {
+                let created_at: DateTime<Utc> =
+                    row.try_get("link_created_at").expect("link_created_at");
+                let updated_at: Option<DateTime<Utc>> =
+                    row.try_get("link_updated_at").expect("link_updated_at");
+                let date: DateTime<Utc> = row.try_get("l_date").expect("l_date");
+                let counter_party: String =
+                    row.try_get("l_counter_party").expect("l_counter_party");
+                let additional: Option<String> = row.try_get("l_additional").expect("l_additional");
+                let currency: String = row.try_get("l_currency").expect("l_currency");
+                let amount: f32 = row.try_get("l_amount").expect("l_amount");
+
+                tx.links.push(Link {
+                    created_at,
+                    updated_at,
+                    tx: LinkedTx {
+                        id: l_id,
                         date,
                         counter_party,
-                        amount,
                         additional,
                         currency,
-                        links: vec![],
-                        account: if let Some(acc_id) = account_id {
-                            let name: String = row.try_get("account_name").expect("account_name");
-
-                            Some(Account { id: acc_id, name })
-                        } else {
-                            None
-                        },
-                        category: if let Some(cat_id) = category_id {
-                            let name: String = row.try_get("c_name").expect("c_name");
-                            let is_neutral: bool =
-                                row.try_get("c_is_neutral").expect("c_is_neutral");
-
-                            Some(Category {
-                                id: cat_id,
-                                name,
-                                is_neutral,
-                            })
-                        } else {
-                            None
-                        },
+                        amount,
                     },
-                );
+                });
             }
         }
 
