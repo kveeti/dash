@@ -37,7 +37,7 @@ export default function StatsPage() {
 function Thing2({ time }: { time: Rac.DateRange }) {
 	const { timeZone, f } = useLocaleStuff();
 
-	const q = api.useQuery("get", "/transactions/stats", {
+	const q = api.useQuery("get", "/v1/transactions/stats", {
 		params: {
 			query: {
 				timezone: timeZone,

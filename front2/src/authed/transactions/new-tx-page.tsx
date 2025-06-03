@@ -177,7 +177,6 @@ export function AccountField({
 	name,
 	error,
 	defaultValue,
-	allowCreate = true,
 }: {
 	name: string;
 	label: string;
@@ -195,7 +194,7 @@ export function AccountField({
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
-			const res = await fetchClient.GET("/accounts", {
+			const res = await fetchClient.GET("/v1/accounts", {
 				signal,
 				params: { query: { search_text: filterText } },
 			});
@@ -284,7 +283,7 @@ export function AccountField({
 }
 
 export function CreateAccount() {
-	const mutation = api.useMutation("post", "/accounts");
+	const mutation = api.useMutation("post", "/v1/accounts");
 	const d = useDialog();
 
 	function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -340,9 +339,9 @@ export function CreateAccount() {
 
 export function CreateCategory() {
 	const qc = useQueryClient();
-	const mutation = api.useMutation("post", "/categories", {
+	const mutation = api.useMutation("post", "/v1/categories", {
 		onSuccess: () => {
-			qc.invalidateQueries(api.queryOptions("get", "/categories"));
+			qc.invalidateQueries(api.queryOptions("get", "/v1/categories"));
 		},
 	});
 	const d = useDialog();
@@ -422,7 +421,7 @@ export function CategoryField({
 
 	const list = useAsyncList<{ id: string; name: string }>({
 		load: async ({ signal, filterText }) => {
-			const res = await fetchClient.GET("/categories", {
+			const res = await fetchClient.GET("/v1/categories", {
 				signal,
 				params: { query: { search_text: filterText } },
 			});
