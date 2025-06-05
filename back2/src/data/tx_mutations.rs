@@ -1,5 +1,6 @@
 use anyhow::Context;
 use chrono::{DateTime, Utc};
+use serde_json::Value;
 use sqlx::{Postgres, QueryBuilder, query};
 use tracing::info;
 
@@ -294,12 +295,20 @@ impl Data {
         Ok(())
     }
 
-    pub async fn insert_many_transactions(
+    pub async fn insert_many_transactions_and_user_bank_integration(
         &self,
         user_id: &str,
         account_id: &str,
         transactions: Vec<InsertTx>,
-    ) -> Result<(), sqlx::Error> {
+        integration_name: &str,
+        integration_data: Value,
+    ) -> Result<(), anyhow::Error> {
+        let mut tx = self
+            .pg_pool
+            .begin()
+            .await
+            .context("error starting transaction")?;
+
         let now = Utc::now();
 
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
@@ -333,7 +342,28 @@ impl Data {
         });
 
         let query = builder.build();
-        query.execute(&self.pg_pool).await?;
+        query.execute(&mut *tx).await?;
+
+        query!(
+            r#"
+            insert into user_bank_integrations (user_id, created_at, updated_at, name, data)
+            values ($1, $2, $3, $4, $5)
+            on conflict (user_id, name)
+            do update
+            set
+                updated_at = $3,
+                data = $5
+            "#,
+            user_id,
+            now,
+            now,
+            integration_name,
+            integration_data
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await.context("error committing transaction")?;
 
         Ok(())
     }

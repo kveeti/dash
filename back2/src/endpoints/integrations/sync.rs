@@ -1,6 +1,6 @@
 use anyhow::{Context, anyhow};
 use axum::extract::State;
-use chrono::NaiveTime;
+use chrono::{NaiveTime, Utc};
 use tracing::info;
 
 use crate::{
@@ -32,6 +32,8 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
         return Ok(());
     }
 
+    let now = Utc::now().date_naive();
+
     for data in datas {
         let (integ, _) = data
             .name
@@ -40,10 +42,10 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
 
         match integ {
             "gocardless-nordigen" => {
-                let data = serde_json::from_value::<SavedDataGoCardlessNordigen>(data.data)
+                let inner = serde_json::from_value::<SavedDataGoCardlessNordigen>(data.data)
                     .context("error parsing saved data")?;
 
-                if data.account_map.is_empty() {
+                if inner.account_map.is_empty() {
                     info!("no accounts to sync");
                     continue;
                 }
@@ -52,7 +54,9 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
                     .await
                     .context("error initializing integration")?;
 
-                for account in data.account_map {
+                let mut current_account_map = inner.account_map.clone();
+
+                for (idx, account) in inner.account_map.iter().enumerate() {
                     // TODO: better solution for situation where user
                     //       has not used syncing before so they have an account
                     //       most likely with a different iban/name than the account
@@ -64,15 +68,10 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
 
                     // TODO: maybe make syncing a bg job, then status is needed
 
-                    // TODO: store last sync date and retrieve new transactions
-                    //       with that as start. GCN supports that. ALSO filter
-                    //       transactions with that just in case
-
                     // TODO: some pagination for local transactions at least.
                     //       GCN does not support pagination
-                    let gcn_id = account.gcn_id;
                     let remote_transactions = integ
-                        .get_transactions(&gcn_id)
+                        .get_transactions(&account.gcn_id, account.last_synced_at)
                         .await
                         .context("error getting remote transactions")?;
 
@@ -130,8 +129,24 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
                         }
                     }
 
+                    current_account_map[idx].last_synced_at = Some(now);
+
+                    let new_bank_integ_data = SavedDataGoCardlessNordigen {
+                        account_map: current_account_map.clone(),
+                        institution_id: inner.institution_id.to_owned(),
+                        requisition_id: inner.requisition_id.to_owned(),
+                        requisition_link: inner.requisition_link.to_owned(),
+                    };
+                    let new_bank_integ_data = serde_json::to_value(new_bank_integ_data)
+                        .context("error serializing new data")?;
+
                     if new_transactions.is_empty() {
                         info!("no new transactions");
+                        state
+                            .data
+                            .set_user_bank_integration(&user.id, &data.name, new_bank_integ_data)
+                            .await
+                            .context("error updating db")?;
                         continue;
                     }
 
@@ -139,9 +154,15 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
 
                     state
                         .data
-                        .insert_many_transactions(&user.id, &account.id, new_transactions)
+                        .insert_many_transactions_and_user_bank_integration(
+                            &user.id,
+                            &account.id,
+                            new_transactions,
+                            &data.name,
+                            new_bank_integ_data,
+                        )
                         .await
-                        .context("error inserting transactions")?;
+                        .context("error updating db")?;
                 }
             }
             _ => continue,

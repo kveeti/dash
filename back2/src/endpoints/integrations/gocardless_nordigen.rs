@@ -5,6 +5,7 @@ use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Redirect},
 };
+use chrono::{DateTime, NaiveDate, Utc};
 use futures::future::try_join_all;
 use serde_json::json;
 use tracing::error;
@@ -179,6 +180,7 @@ pub async fn connect_callback(
                     id: existing_id.map_or(create_id(), |ea| ea.id.to_owned()),
                     iban,
                     gcn_id: account.id.to_owned(),
+                    last_synced_at: None,
                 }
             })
             .collect();
@@ -405,6 +407,7 @@ impl GoCardlessNordigen {
     pub async fn get_transactions(
         &self,
         account_id: &str,
+        from: Option<NaiveDate>,
     ) -> Result<Vec<Transaction>, anyhow::Error> {
         let res = self
             .client
@@ -412,10 +415,19 @@ impl GoCardlessNordigen {
                 "{base}/accounts/{account_id}/transactions/",
                 base = self.base_url
             ))
+            .query(&[("date_from", from.map(|d| d))])
             .bearer_auth(&self.access_token)
             .send()
             .await
-            .context("error making transactions req")?
+            .context("error making transactions req")?;
+
+        let status = res.status();
+        if !status.is_success() {
+            let text = res.text().await?;
+            error!("transactions req error {text} {status}");
+            return Err(anyhow!("transactions req error"));
+        }
+        let res = res
             .json::<TransactionRes>()
             .await
             .context("error parsing transactions res")?;
@@ -455,14 +467,15 @@ pub struct Requisition {
     pub reference: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SavedAccount {
     pub id: String,
     pub iban: String,
     pub gcn_id: String,
+    pub last_synced_at: Option<NaiveDate>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SavedDataGoCardlessNordigen {
     pub institution_id: String,
     pub requisition_id: String,
