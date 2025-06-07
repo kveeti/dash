@@ -117,7 +117,9 @@ async fn main() {
         .layer(middleware::from_fn(csrf_middleware))
         .with_state(state);
 
-    let api = Router::new().nest("/api", routes);
+    let api = Router::new()
+        .nest("/api", routes)
+        .route("/health", get(health_check));
 
     let listener = TcpListener::bind("0.0.0.0:8000").await.unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());
@@ -172,4 +174,8 @@ async fn shutdown_signal() {
         _ = ctrl_c => {},
         _ = terminate => {},
     }
+}
+
+async fn health_check() -> &'static str {
+    "OK"
 }
