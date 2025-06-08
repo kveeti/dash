@@ -155,6 +155,12 @@ pub async fn callback(
     }
 
     let external_id = claims.subject().to_string();
+    if state.config.auth_user_id_whitelist_enabled
+        && !state.config.auth_user_id_whitelist.contains(&external_id)
+    {
+        return Err(ApiError::NoAccess("user not whitelisted".to_string()));
+    }
+
     let existing_user_id = state
         .data
         .get_user_id_by_external_id(&external_id)
