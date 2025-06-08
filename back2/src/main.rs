@@ -71,15 +71,16 @@ async fn main() {
 
     let v1_user_settings = Router::new().route("/", post(settings::save));
 
-    let auth_base = Router::new()
+    let v1_auth_base = Router::new()
         .route("/init", get(auth::init))
-        .route("/callback", get(auth::callback));
+        .route("/callback", get(auth::callback))
+        .route("/logout", get(auth::logout));
 
     // dev login in debug mode
     #[cfg(debug_assertions)]
-    let v1_auth = auth_base.route("/___dev_login___", post(auth::___dev_login___));
+    let v1_auth = v1_auth_base.route("/___dev_login___", post(auth::___dev_login___));
     #[cfg(not(debug_assertions))]
-    let auth = auth_base;
+    let v1_auth = auth_base;
 
     let v1_integrations = Router::new()
         .route("/sync", post(integrations::sync::sync))

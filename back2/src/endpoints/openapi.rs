@@ -6,6 +6,7 @@ use utoipa::OpenApi;
 #[openapi(paths(
     endpoints::auth::init,
     endpoints::auth::callback,
+    endpoints::auth::logout,
     endpoints::me::get_me,
     endpoints::transactions::stats::stats,
     endpoints::transactions::query::query,

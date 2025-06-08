@@ -83,6 +83,18 @@ impl Data {
 
         Ok(())
     }
+
+    pub async fn delete_session(&self, user_id: &str, session_id: &str) -> Result<(), sqlx::Error> {
+        query!(
+            "delete from sessions where id = $1 and user_id = $2",
+            session_id,
+            user_id
+        )
+        .execute(&self.pg_pool)
+        .await?;
+
+        Ok(())
+    }
 }
 
 pub struct User {

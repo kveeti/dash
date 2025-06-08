@@ -203,8 +203,8 @@ pub async fn callback(
     headers.append(
         header::SET_COOKIE,
         create_auth_cookie(
+            Some(&create_token(&state.config.secret, &user_id, &session_id)),
             state.config.use_secure_cookies,
-            &create_token(&state.config.secret, &user_id, &session_id),
         ),
     );
     headers.append(
@@ -213,6 +213,40 @@ pub async fn callback(
     );
 
     return Ok((headers, Redirect::temporary(&state.config.front_base_url)).into_response());
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/auth/logout",
+    responses(
+        (status = 307)
+    )
+)]
+pub async fn logout(
+    State(state): State<AppState>,
+    user: Option<LoggedInUser>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut headers = HeaderMap::new();
+    headers.append(
+        header::SET_COOKIE,
+        create_state_cookie(None, state.config.use_secure_cookies),
+    );
+    headers.append(
+        header::SET_COOKIE,
+        create_auth_cookie(None, state.config.use_secure_cookies),
+    );
+
+    if let Some(user) = user {
+        state
+            .data
+            .delete_session(&user.id, &user.session_id)
+            .await
+            .unwrap_or_else(|_| {
+                tracing::error!("error deleting session on logout for user {}", user.id);
+            });
+    }
+
+    return Ok((headers, Redirect::temporary(&state.config.front_base_url)));
 }
 
 #[cfg(debug_assertions)]
@@ -251,23 +285,25 @@ pub async fn ___dev_login___(State(state): State<AppState>) -> Result<impl IntoR
     headers.append(
         header::SET_COOKIE,
         create_auth_cookie(
+            Some(&create_token(&state.config.secret, &user.id, &session.id)),
             state.config.use_secure_cookies,
-            &create_token(&state.config.secret, &user.id, &session.id),
         ),
     );
 
     return Ok((headers, Redirect::temporary(&state.config.front_base_url)));
 }
 
-fn create_auth_cookie(is_secure: bool, auth_token: &str) -> HeaderValue {
-    CookieBuilder::new(COOKIE_AUTH, auth_token)
+fn create_auth_cookie(val: Option<&str>, is_secure: bool) -> HeaderValue {
+    CookieBuilder::new(COOKIE_AUTH, val.unwrap_or(""))
         .secure(is_secure)
         .same_site(cookie::SameSite::Lax)
         .http_only(true)
         .path("/")
-        .expires(cookie::Expiration::from(
-            OffsetDateTime::now_utc().saturating_add(Duration::days(7)),
-        ))
+        .expires(cookie::Expiration::from(if val.is_none() {
+            OffsetDateTime::from_unix_timestamp(0).expect("epoch")
+        } else {
+            OffsetDateTime::now_utc().saturating_add(Duration::days(7))
+        }))
         .build()
         .to_string()
         .parse()

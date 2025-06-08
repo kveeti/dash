@@ -5,7 +5,7 @@ import createClient from "openapi-react-query";
 import type { paths } from "./api_types.d.ts";
 import { things } from "./things.ts";
 
-type Me = paths["/@me"]["get"]["responses"]["200"]["content"]["application/json"];
+type Me = paths["/v1/@me"]["get"]["responses"]["200"]["content"]["application/json"];
 const win = window as unknown as {
 	__ME_LOADER__: {
 		promise: Promise<Me> | null;

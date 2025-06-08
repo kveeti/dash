@@ -21,6 +21,7 @@ use crate::{
 #[derive(Debug)]
 pub struct LoggedInUser {
     pub id: String,
+    pub session_id: String,
 }
 
 impl<S> FromRequestParts<S> for LoggedInUser
@@ -62,6 +63,7 @@ where
 
         return Ok(LoggedInUser {
             id: session.user_id.to_owned(),
+            session_id: session.id.to_owned(),
         });
     }
 }
