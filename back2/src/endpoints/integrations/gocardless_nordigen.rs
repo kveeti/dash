@@ -5,7 +5,7 @@ use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Redirect},
 };
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::NaiveDate;
 use futures::future::try_join_all;
 use serde_json::json;
 use tracing::error;
@@ -70,12 +70,8 @@ pub async fn connect_init(
         .config
         .allowed_integrations
         .iter()
-        .find(|ai| ai.name == data_name);
-    if ai.is_none() {
-        return Err(ApiError::BadRequest(format!(
-            "invalid integration {data_name}"
-        )));
-    }
+        .find(|ai| ai.name == data_name)
+        .ok_or_else(|| ApiError::BadRequest(format!("invalid integration {data_name}")))?;
 
     let data = state
         .data
@@ -96,7 +92,7 @@ pub async fn connect_init(
         }
         None => {
             let req = integ
-                .create_requisition(&state.config, &institution_id)
+                .create_requisition(&state.config, &institution_id, &ai.days_back)
                 .await
                 .context("error creating requisition")?;
 
@@ -287,6 +283,7 @@ impl GoCardlessNordigen {
         &self,
         config: &Config,
         institution_id: &str,
+        days_back: &u32,
     ) -> Result<Requisition, anyhow::Error> {
         let eua = self
             .client
@@ -294,8 +291,8 @@ impl GoCardlessNordigen {
             .bearer_auth(&self.access_token)
             .json(&json!({
                 "institution_id": institution_id,
-                "max_historical_days": 3,
-                "access_valid_for_days": 1,
+                "max_historical_days": days_back,
+                "access_valid_for_days": 90,
                 "access_scope": vec!["transactions"],
             }))
             .send()

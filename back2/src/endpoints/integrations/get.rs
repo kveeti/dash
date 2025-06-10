@@ -60,6 +60,7 @@ pub fn allowed_integrations(envs: &EnvironmentVariables) -> Vec<AllowedIntegrati
         label: "OP".to_string(),
         name: "gocardless-nordigen::OP_OKOYFIHH".to_string(),
         link_path: "/v1/integrations/gocardless-nordigen/connect-init/OP_OKOYFIHH".to_string(),
+        days_back: 729,
     }];
 
     if envs.gcn_allow_sandbox {
@@ -68,6 +69,7 @@ pub fn allowed_integrations(envs: &EnvironmentVariables) -> Vec<AllowedIntegrati
             name: "gocardless-nordigen::SANDBOXFINANCE_SFIN0000".to_string(),
             link_path: "/v1/integrations/gocardless-nordigen/connect-init/SANDBOXFINANCE_SFIN0000"
                 .to_string(),
+            days_back: 90,
         });
     }
 
@@ -85,6 +87,7 @@ pub struct AllowedIntegration {
     pub label: String,
     pub name: String,
     pub link_path: String,
+    pub days_back: u32,
 }
 
 #[derive(Serialize, ToSchema)]
