@@ -80,7 +80,7 @@ async fn main() {
     #[cfg(debug_assertions)]
     let v1_auth = v1_auth_base.route("/___dev_login___", post(auth::___dev_login___));
     #[cfg(not(debug_assertions))]
-    let v1_auth = auth_base;
+    let v1_auth = v1_auth_base;
 
     let v1_integrations = Router::new()
         .route("/sync", post(integrations::sync::sync))

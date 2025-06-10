@@ -158,6 +158,7 @@ pub async fn callback(
     if state.config.auth_user_id_whitelist_enabled
         && !state.config.auth_user_id_whitelist.contains(&external_id)
     {
+        tracing::warn!("user {} not whitelisted", external_id);
         return Err(ApiError::NoAccess("user not whitelisted".to_string()));
     }
 

@@ -83,7 +83,7 @@ function Hamburger() {
 					<SlowLink href="/settings">settings</SlowLink>
 				</Dropdown.Item>
 				<Dropdown.Item asChild>
-					<SlowLink href={things.apiBase + "/v1/auth/logout"}>logout</SlowLink>
+					<a href={things.apiBase + "/v1/auth/logout"}>logout</a>
 				</Dropdown.Item>
 			</Dropdown.Content>
 		</Dropdown.Root>
