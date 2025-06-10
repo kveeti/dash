@@ -53,7 +53,6 @@ create table transactions (
     amount real not null,
     currency varchar(3) not null,
     counter_party text not null,
-    og_counter_party text not null,
     additional text,
     category_id varchar(30),
     account_id text not null
@@ -127,7 +126,6 @@ create table transaction_imports (
     amount real not null,
     currency varchar(3) not null,
     counter_party text not null,
-    og_counter_party text not null,
     additional text,
     account_id varchar(30) not null,
     category_name varchar(100),

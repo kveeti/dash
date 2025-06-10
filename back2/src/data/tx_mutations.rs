@@ -63,18 +63,17 @@ impl Data {
                           transaction_imports.amount,
                           transaction_imports.currency,
                           transaction_imports.counter_party,
-                          transaction_imports.og_counter_party,
                           transaction_imports.additional,
                           r.resolved_category_id as category_id,
                           transaction_imports.created_at
             )
             insert into transactions (
                 id, user_id, account_id, date, amount,
-                currency, counter_party, og_counter_party,
+                currency, counter_party,
                 additional, category_id, created_at
             )
             select id, user_id, account_id, date, amount,
-                   currency, counter_party, og_counter_party,
+                   currency, counter_party,
                    additional, category_id, created_at
             from moved
             on conflict (id) do nothing
@@ -166,16 +165,16 @@ impl Data {
                     delete from transaction_imports 
                     where id in (select id from batch)
                     returning id, user_id, account_id, date, amount,
-                             currency, counter_party, og_counter_party,
+                             currency, counter_party,
                              additional, category_id, created_at
                 )
                 insert into transactions (
                     id, user_id, account_id, date, amount,
-                    currency, counter_party, og_counter_party,
+                    currency, counter_party,
                     additional, category_id, created_at
                 )
                 select id, user_id, account_id, date, amount,
-                       currency, counter_party, og_counter_party,
+                       currency, counter_party,
                        additional, category_id, created_at
                 from moved
                 on conflict (id) do nothing
@@ -272,12 +271,12 @@ impl Data {
             r#"
             insert into transactions (
                 id, user_id, account_id, date, amount,
-                currency, counter_party, og_counter_party,
+                currency, counter_party,
                 additional, category_id, created_at
             )
             select
                 id, user_id, account_id, date, amount,
-                currency, counter_party, og_counter_party,
+                currency, counter_party,
                 additional, category_id, created_at
             from transaction_imports
             where user_id = $1 and import_id = $2
@@ -321,7 +320,6 @@ impl Data {
                     amount,
                     currency,
                     counter_party,
-                    og_counter_party,
                     additional,
                     account_id
                 )
@@ -336,7 +334,6 @@ impl Data {
             b.push_bind(tx.amount);
             b.push_bind(tx.currency);
             b.push_bind(tx.counter_party);
-            b.push_bind(tx.og_counter_party);
             b.push_bind(tx.additional);
             b.push_bind(account_id);
         });
@@ -382,10 +379,10 @@ impl Data {
             r#"
            insert into transactions (
                id, user_id, created_at, updated_at, date, amount, currency, 
-               counter_party, og_counter_party, additional, account_id, category_id
+               counter_party, additional, account_id, category_id
            )
            select 
-               $1, $2::text, $3, $3, $4, $5, $6, $7, $7, $8,
+               $1, $2::text, $3, $3, $4, $5, $6, $7, $8,
                (select id from accounts where id = $9 and user_id = $2::text),
                (select id from transaction_categories where id = $10::text and user_id = $2::text)
            "#,
@@ -597,7 +594,6 @@ pub struct InsertTx {
     pub id: String,
     pub date: DateTime<Utc>,
     pub counter_party: String,
-    pub og_counter_party: String,
     pub additional: Option<String>,
     pub currency: String,
     pub amount: f32,

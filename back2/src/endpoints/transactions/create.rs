@@ -90,7 +90,6 @@ pub async fn create(
     let tx = InsertTx {
         id: create_id(),
         counter_party: counter_party.to_owned(),
-        og_counter_party: payload.counter_party,
         additional: payload.additional,
         amount: payload.amount,
         currency: "EUR".to_owned(),

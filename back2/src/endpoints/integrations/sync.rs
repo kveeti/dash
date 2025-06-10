@@ -105,7 +105,7 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
                         );
 
                         for local_transaction in &local_transactions {
-                            if *counter_party == local_transaction.og_counter_party
+                            if *counter_party == local_transaction.counter_party
                                 && local_transaction.amount == amount
                                 && local_transaction.date.date_naive() == date
                             {
@@ -123,7 +123,6 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
                                     .to_owned(),
                                 counter_party: counter_party.to_owned(),
                                 date: date.and_time(NaiveTime::default()).and_utc(),
-                                og_counter_party: counter_party.to_owned(),
                                 amount,
                             });
                         }

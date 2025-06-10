@@ -48,7 +48,6 @@ pub async fn import(
                 amount,
                 currency,
                 counter_party,
-                og_counter_party,
                 additional,
                 account_id,
                 category_name,
@@ -117,7 +116,6 @@ pub async fn import(
             /* amount */ parsed.amount.to_string(),
             /* currency */ "EUR".to_owned(),
             /* counter_party */ parsed.counter_party,
-            /* og_counter_party */ parsed.og_counter_party,
             /* additional */ parsed.additional.unwrap_or_default(),
             /* account_id */ account_id.to_owned(),
             /* category_name */
@@ -127,7 +125,7 @@ pub async fn import(
 
         let mut wtr = csv::WriterBuilder::new()
             .has_headers(false)
-            .quote_style(csv::QuoteStyle::Necessary)
+            .quote_style(csv::QuoteStyle::Always)
             .from_writer(vec![]);
 
         wtr.write_record(parsed).context("error writing record")?;

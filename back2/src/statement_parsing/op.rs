@@ -20,23 +20,14 @@ impl RecordParser for OpFormatParser {
         let amount = record.get(2).unwrap_or("");
         let amount = format_amount(&amount);
 
-        let (counter_party, og_counter_party) = match record.get(5).filter(|s| !s.is_empty()) {
-            Some(name) => {
-                let cleaned = name
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .trim()
-                    .to_string();
-                (cleaned, name.to_string())
-            }
+        let counter_party = match record.get(5).filter(|s| !s.is_empty()) {
+            Some(name) => name.to_string(),
             None => {
                 // TODO: this WILL break syncing for these transactions btw.
                 // look into what integrations return for these kind of transactions
                 // where OP account statement has an empty counter party
                 // eg Selitys: KÄTEISPANO had it empty
-                let default = "NONAME".to_string();
-                (default.clone(), default)
+                "NONAME".to_string()
             }
         };
 
@@ -46,7 +37,6 @@ impl RecordParser for OpFormatParser {
             date,
             amount: amount.parse().context("error parsing transaction amount")?,
             counter_party,
-            og_counter_party,
             additional: Some(additional),
             category_name: None,
         })

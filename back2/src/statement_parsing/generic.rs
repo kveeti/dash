@@ -29,12 +29,6 @@ impl RecordParser for GenericFormatParser {
             .context("error parsing transaction amount")?;
 
         let counter_party = record.get(2).unwrap_or("").to_string();
-        let cleaned_counter_party = counter_party
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .trim()
-            .to_string();
 
         let additional = record
             .get(3)
@@ -49,8 +43,7 @@ impl RecordParser for GenericFormatParser {
         Ok(ParsedTransaction {
             date,
             amount,
-            counter_party: cleaned_counter_party,
-            og_counter_party: counter_party,
+            counter_party,
             additional,
             category_name: category,
         })

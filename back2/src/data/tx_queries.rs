@@ -226,8 +226,8 @@ impl Data {
             r#"
             select
                 t.date,
-                t.og_counter_party,
-                t.amount as amount
+                t.counter_party,
+                t.amount
             from transactions t
             where t.user_id = $1 and t.account_id = $2
             "#,
@@ -363,8 +363,8 @@ pub enum QueryTxInputCursor {
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct SyncTx {
-    pub og_counter_party: String,
     pub date: DateTime<Utc>,
+    pub counter_party: String,
     pub amount: f32,
 }
 
