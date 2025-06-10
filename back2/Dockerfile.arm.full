@@ -13,9 +13,7 @@ copy migrations ./migrations
 copy .sqlx ./.sqlx
 env SQLX_OFFLINE=true
 run touch src/main.rs
-run --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=./target \
-    cargo build --locked --release && \
+run cargo build --locked --release && \
     cp ./target/release/backend backend
 run chmod +x backend
 
