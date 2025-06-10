@@ -1,6 +1,6 @@
 create table users (
     id varchar(30) primary key not null,
-    external_id varchar(36) not null unique,
+    external_id text not null unique,
     created_at timestamptz not null,
     updated_at timestamptz
 );
