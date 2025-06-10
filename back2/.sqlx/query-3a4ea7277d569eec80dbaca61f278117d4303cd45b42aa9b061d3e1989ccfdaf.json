@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            delete from user_bank_integrations\n            where user_id = $1 and name = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3a4ea7277d569eec80dbaca61f278117d4303cd45b42aa9b061d3e1989ccfdaf"
+}

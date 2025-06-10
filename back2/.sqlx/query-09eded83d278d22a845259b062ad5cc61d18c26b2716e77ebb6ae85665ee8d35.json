@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into transactions (\n                id, user_id, account_id, date, amount,\n                currency, counter_party,\n                additional, category_id, created_at\n            )\n            select\n                id, user_id, account_id, date, amount,\n                currency, counter_party,\n                additional, category_id, created_at\n            from transaction_imports\n            where user_id = $1 and import_id = $2\n            on conflict (id) do nothing\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "09eded83d278d22a845259b062ad5cc61d18c26b2716e77ebb6ae85665ee8d35"
+}

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select name, data from user_bank_integrations where user_id = $1 and name = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "data",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4ccae40a813d8df5a4e4baa60eaf99517d7344c4a53ad1cdcb6b44b6ea550936"
+}

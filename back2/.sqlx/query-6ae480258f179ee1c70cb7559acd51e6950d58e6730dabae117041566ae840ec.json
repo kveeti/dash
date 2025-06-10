@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    delete from transaction_categories\n                    where user_id = $1 and id = $2\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6ae480258f179ee1c70cb7559acd51e6950d58e6730dabae117041566ae840ec"
+}

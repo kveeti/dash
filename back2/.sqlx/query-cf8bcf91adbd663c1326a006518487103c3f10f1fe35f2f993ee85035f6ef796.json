@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            update transaction_categories\n            set \n                name = $3,\n                is_neutral = $4,\n                updated_at = $5\n            where user_id = $1 and id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Varchar",
+        "Bool",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cf8bcf91adbd663c1326a006518487103c3f10f1fe35f2f993ee85035f6ef796"
+}

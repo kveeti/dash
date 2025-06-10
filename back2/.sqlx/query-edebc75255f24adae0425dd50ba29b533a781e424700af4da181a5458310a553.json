@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            update transaction_imports ti\n            set category_id = tc.id\n            from transaction_categories tc\n            where ti.import_id = $2\n              and ti.user_id = tc.user_id\n              and ti.category_name is not null\n              and ti.category_name = tc.name\n              and ti.user_id = $1;\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "edebc75255f24adae0425dd50ba29b533a781e424700af4da181a5458310a553"
+}

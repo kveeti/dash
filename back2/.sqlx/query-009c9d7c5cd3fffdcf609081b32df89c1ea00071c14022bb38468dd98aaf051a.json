@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            select\n                t.date,\n                t.counter_party,\n                t.amount\n            from transactions t\n            where t.user_id = $1 and t.account_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "counter_party",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "amount",
+        "type_info": "Float4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "009c9d7c5cd3fffdcf609081b32df89c1ea00071c14022bb38468dd98aaf051a"
+}

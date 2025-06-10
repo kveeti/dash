@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            with batch as (\n                select id, category_name, category_id\n                from transaction_imports\n                where user_id = $1 and import_id = $2\n                order by id\n                limit $3\n            ),\n            resolved as (\n                select b.id, b.category_name, coalesce(b.category_id, tc.id) as resolved_category_id\n                from batch b\n                left join transaction_categories tc\n                    on tc.user_id = $1 and tc.name = b.category_name\n            ),\n            inserted_categories as (\n                insert into transaction_categories (id, user_id, created_at, name, is_neutral)\n                select distinct\n                    b.category_id, $1, $4::timestamptz, b.category_name, false\n                from batch b\n                where b.category_id is not null\n                on conflict (user_id, name) do nothing\n            ),\n            moved as (\n                delete from transaction_imports\n                using resolved r\n                where transaction_imports.id = r.id\n                returning transaction_imports.id,\n                          transaction_imports.user_id,\n                          transaction_imports.account_id,\n                          transaction_imports.date,\n                          transaction_imports.amount,\n                          transaction_imports.currency,\n                          transaction_imports.counter_party,\n                          transaction_imports.additional,\n                          r.resolved_category_id as category_id,\n                          transaction_imports.created_at\n            )\n            insert into transactions (\n                id, user_id, account_id, date, amount,\n                currency, counter_party,\n                additional, category_id, created_at\n            )\n            select id, user_id, account_id, date, amount,\n                   currency, counter_party,\n                   additional, category_id, created_at\n            from moved\n            on conflict (id) do nothing\n            returning id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6e23cbb6ccdd351eca7b28bb12fd6ade1b0a924e6d46e8e4fb5d3ab6016b4838"
+}

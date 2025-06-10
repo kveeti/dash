@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into users (id, external_id, created_at, updated_at) values ($1, $2, $3, $4) on conflict (external_id) do nothing;",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b43cfebbced1a8a66101449b9502ec022f3df721130dd0552baaf355156d6dee"
+}

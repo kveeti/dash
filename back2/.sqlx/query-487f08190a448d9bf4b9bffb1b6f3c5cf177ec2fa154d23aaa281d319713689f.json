@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into transaction_categories\n            (id, user_id, created_at, updated_at, name, is_neutral)\n            values ($1, $2, $3, $4, $5, $6)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Timestamptz",
+        "Timestamptz",
+        "Varchar",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "487f08190a448d9bf4b9bffb1b6f3c5cf177ec2fa154d23aaa281d319713689f"
+}

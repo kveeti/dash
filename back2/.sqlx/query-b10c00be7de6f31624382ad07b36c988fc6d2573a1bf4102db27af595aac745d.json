@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                with batch as (\n                    select id, category_id, category_name from transaction_imports \n                    where user_id = $1 and import_id = $2 \n                      and category_id is not null\n                      and category_name is not null\n                    order by id\n                    limit $3\n                )\n                insert into transaction_categories (id, user_id, created_at, name, is_neutral)\n                select distinct category_id, $1, $4::timestamptz, category_name, false\n                from batch\n                on conflict (user_id, name) do nothing\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b10c00be7de6f31624382ad07b36c988fc6d2573a1bf4102db27af595aac745d"
+}

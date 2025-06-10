@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                with batch as (\n                    select id from transaction_imports\n                    where user_id = $1 and import_id = $2\n                    order by id\n                    limit $3\n                ),\n                moved as (\n                    delete from transaction_imports \n                    where id in (select id from batch)\n                    returning id, user_id, account_id, date, amount,\n                             currency, counter_party,\n                             additional, category_id, created_at\n                )\n                insert into transactions (\n                    id, user_id, account_id, date, amount,\n                    currency, counter_party,\n                    additional, category_id, created_at\n                )\n                select id, user_id, account_id, date, amount,\n                       currency, counter_party,\n                       additional, category_id, created_at\n                from moved\n                on conflict (id) do nothing\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e73f2be6839d3589deaf5029f6a97478407e546f14666b8211e92ead3f866b45"
+}

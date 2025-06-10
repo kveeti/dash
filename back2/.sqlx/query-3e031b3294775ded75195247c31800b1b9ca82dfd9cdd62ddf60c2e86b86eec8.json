@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            with existing as (\n                select user_id from transactions_links\n                where user_id = $1\n                and (\n                    (transaction_a_id = $2 and transaction_b_id = $3)\n                    or (transaction_a_id = $3 and transaction_b_id = $2)\n                )\n            )\n            insert into transactions_links (\n                user_id,\n                created_at,\n                updated_at,\n                transaction_a_id,\n                transaction_b_id\n            )\n            select $1, $4, $5, $2, $3\n            where not exists (select 1 from existing);\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e031b3294775ded75195247c31800b1b9ca82dfd9cdd62ddf60c2e86b86eec8"
+}

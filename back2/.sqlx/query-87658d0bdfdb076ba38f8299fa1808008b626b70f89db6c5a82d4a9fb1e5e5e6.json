@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            update transactions\n            set\n                updated_at = $3,\n                category_id = $2\n            where user_id = $1 and id = ANY($4)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Varchar",
+        "Timestamptz",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "87658d0bdfdb076ba38f8299fa1808008b626b70f89db6c5a82d4a9fb1e5e5e6"
+}

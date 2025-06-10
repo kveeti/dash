@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            select\n                t.id as id,\n                t.date as date,\n                t.counter_party as counter_party,\n                t.amount as amount,\n                t.category_id as category_id,\n                t.additional as additional,\n                t.currency as currency,\n                c.name as \"cat_name?\",\n                c.is_neutral as \"cat_is_ne?\",\n\n                linked.id as \"linked_id?\"\n            from transactions t\n            left join transaction_categories c on t.category_id = c.id\n\n            left join transactions_links link\n              on link.transaction_a_id = t.id or link.transaction_b_id = t.id\n            left join transactions linked\n              on (linked.id = CASE WHEN link.transaction_a_id = t.id THEN link.transaction_b_id ELSE link.transaction_a_id END)\n\n            where t.user_id = $1\n            and t.date at time zone $2 between $3 and $4;\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "date",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "counter_party",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 4,
+        "name": "category_id",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "additional",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "currency",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "cat_name?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "cat_is_ne?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "linked_id?",
+        "type_info": "Varchar"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Timestamp",
+        "Timestamp"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "73dbbdbc37caddd989a9fa769980db984099093dc63ead0c9f57015a0ae54636"
+}

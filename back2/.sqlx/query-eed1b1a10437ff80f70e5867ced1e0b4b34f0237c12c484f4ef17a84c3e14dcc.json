@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                select exists(\n                    select 1 \n                    from transactions\n                    where category_id = $1 and user_id = $2\n                    limit 1\n                ) as \"has_transactions!\"\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "has_transactions!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "eed1b1a10437ff80f70e5867ced1e0b4b34f0237c12c484f4ef17a84c3e14dcc"
+}

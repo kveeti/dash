@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                with batch as (\n                    select id from transaction_imports \n                    where user_id = $1 and import_id = $2 \n                    order by id\n                    limit $3\n                )\n                update transaction_imports ti\n                set category_id = tc.id\n                from transaction_categories tc, batch b\n                where ti.id = b.id\n                  and ti.user_id = tc.user_id\n                  and ti.category_name = tc.name\n                ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e4bf0c06b43fefd2c83cfaa25e487c65e991913246cab6599bd40745ee6d78aa"
+}
