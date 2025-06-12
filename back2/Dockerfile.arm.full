@@ -1,0 +1,24 @@
+from rust:alpine as builder
+run apk add --no-cache musl-dev
+run rustup target add aarch64-unknown-linux-musl
+workdir /app
+
+copy Cargo.toml Cargo.lock ./
+run mkdir src && echo 'fn main() { println!("hi! this should never print") }' > src/main.rs && \
+    cargo build --locked --release && \
+    rm -rf src
+
+copy src ./src
+copy migrations ./migrations
+copy .sqlx ./.sqlx
+env SQLX_OFFLINE=true
+run touch src/main.rs
+run cargo build --locked --release && \
+    cp ./target/release/backend backend
+run chmod +x backend
+
+from scratch
+copy --from=builder /app/backend /usr/local/bin/backend
+expose 8000
+entrypoint ["backend"]
+
