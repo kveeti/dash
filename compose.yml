@@ -1,23 +1,35 @@
 services:
-  db:
-    container_name: dash_db
-    image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: db
-      POSTGRES_USER: pg
-      POSTGRES_PASSWORD: pg
-    ports:
-      - "5432:5432"
-    volumes:
-      - data:/var/lib/postgresql/data
+  backend:
+    image: veetik/money_backend:${COMMIT_SHA:-latest}
+    networks:
+      - proxy
+      - pg
+    secrets:
+      - source: money_envs
+        target: /.env
+    healthcheck:
+      test: test ! -f /tmp/drain && curl -f http://localhost:8000/api/health
+      interval: 2s
+      timeout: 2s
+      retries: 3
+    labels:
+      traefik.enable: true
+      traefik.docker.network: proxy
+      traefik.http.routers.money_backend.rule: Host(`money_api.veetik.com`)
+      traefik.http.services.money_backend.loadbalancer.server.port: 8000
+      docker-rollout.pre-stop-hook: "touch /tmp/drain && sleep 5"
+    logging:
+      options:
+        max-size: 2m
+        max-file: 3
 
+secrets:
+  money_envs:
+    external: true
+
+networks:
   proxy:
-    container_name: dash_proxy
-    image: caddy
-    ports:
-      - "3000:3000"
-    volumes:
-      - "./Caddyfile:/etc/caddy/Caddyfile"
+    external: true
+  pg:
+    external: true
 
-volumes:
-  data:

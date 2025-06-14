@@ -5,17 +5,17 @@ on:
     branches:
       - main
     paths:
-      - 'back/**'
+      - 'back2/**'
   pull_request:
     branches:
       - main
     paths:
-      - 'back/**'
+      - 'back2/**'
 
 env:
   DIR: back2
   DOCKERHUB_USERNAME: veetik
-  DOCKERHUB_IMAGE: veetik/dash_backend
+  DOCKERHUB_IMAGE: veetik/money_backend
 
 jobs:
   checks:
@@ -33,7 +33,6 @@ jobs:
       - name: check formatting
         run: cargo fmt --check
 
-
   build_and_push_docker_image:
     name: build and push docker image
     runs-on: ubuntu-24.04-arm
@@ -50,6 +49,7 @@ jobs:
         with:
           target: aarch64-unknown-linux-musl
           cache-workspaces: "${{ env.DIR }}"
+
       - name: setup sccache
         uses: mozilla-actions/sccache-action@65101d47ea8028ed0c98a1cdea8dd9182e9b5133 # 0.0.8
 

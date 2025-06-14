@@ -1,0 +1,23 @@
+services:
+  db:
+    container_name: dash_db
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_USER: pg
+      POSTGRES_PASSWORD: pg
+    ports:
+      - "5432:5432"
+    volumes:
+      - data:/var/lib/postgresql/data
+
+  proxy:
+    container_name: dash_proxy
+    image: caddy
+    ports:
+      - "3000:3000"
+    volumes:
+      - "./Caddyfile:/etc/caddy/Caddyfile"
+
+volumes:
+  data:
