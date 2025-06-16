@@ -10,7 +10,7 @@ use axum::{
 };
 use config::Config;
 use data::{Data, do_pending_imports};
-use http::{HeaderValue, Method, header};
+use http::{HeaderName, HeaderValue, Method, header};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
 use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer};
@@ -115,8 +115,8 @@ async fn main() {
         .layer(RequestBodyLimitLayer::new(
             250 * 1024 * 1024, /* 250mb */
         ))
-        .layer(cors(&config))
         .layer(middleware::from_fn(csrf_middleware))
+        .layer(cors(&config))
         .with_state(state);
 
     let api = Router::new().nest("/api", routes);
@@ -145,6 +145,7 @@ fn cors(config: &Config) -> CorsLayer {
             header::ACCEPT,
             header::ACCEPT_ENCODING,
             header::ACCEPT_LANGUAGE,
+            "x-csrf".parse::<HeaderName>().expect("x-csrf header"),
         ])
         .allow_origin(
             config

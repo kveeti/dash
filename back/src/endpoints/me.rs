@@ -30,12 +30,12 @@ pub async fn get_me(
     let csrf = CsrfToken::new_random().secret().to_string();
 
     let mut headers = HeaderMap::new();
-    headers.append(
+    headers.insert(
         header::SET_COOKIE,
         CookieBuilder::new("csrf", csrf.to_owned())
             .http_only(true)
             .expires(cookie::Expiration::Session)
-            .path("/api")
+            .path("/")
             .same_site(cookie::SameSite::Strict)
             .secure(state.config.use_secure_cookies)
             .build()

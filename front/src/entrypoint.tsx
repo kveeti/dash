@@ -74,5 +74,5 @@ function Authed() {
 }
 
 function UnAuthed() {
-	return <Redirect href={things.apiBase + "/auth/init"} />;
+	return null;
 }

@@ -92,7 +92,10 @@ pub async fn csrf_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, ApiError> {
-    if request.method() != Method::GET {
+    if request.method() != Method::GET
+        && request.method() != Method::HEAD
+        && request.method() != Method::OPTIONS
+    {
         let csrf_header = headers
             .get("x-csrf")
             .ok_or(ApiError::NoAccess("csrf".to_string()))?;

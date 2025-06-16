@@ -23,7 +23,8 @@ export let csrf: string | undefined = undefined;
 fetchClient.use({
 	onRequest: ({ request }) => {
 		if ("GET" !== request.method && csrf) {
-			request.headers.set("x-csrf", csrf);
+			const _csrf = csrf || lsGetJson("me")?.csrf;
+			request.headers.set("x-csrf", _csrf);
 		}
 		return request;
 	},
