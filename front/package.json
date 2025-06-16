@@ -8,7 +8,9 @@
 		"build": "rsbuild build",
 		"preview": "rsbuild preview",
 		"format": "prettier --write .",
-		"check": "eslint .",
+		"check:lint": "eslint .",
+		"check:format": "prettier --check .",
+		"check:types": "tsc --noEmit",
 		"api": "openapi-typescript http://localhost:3000/api/v1/openapi.json -o ./src/api_types.d.ts"
 	},
 	"dependencies": {
