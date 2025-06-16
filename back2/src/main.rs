@@ -110,6 +110,7 @@ async fn main() {
 
     let routes = Router::new()
         .nest("/v1", v1)
+        .route("/health", get(health_check))
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(
             250 * 1024 * 1024, /* 250mb */
@@ -118,9 +119,7 @@ async fn main() {
         .layer(middleware::from_fn(csrf_middleware))
         .with_state(state);
 
-    let api = Router::new()
-        .nest("/api", routes)
-        .route("/health", get(health_check));
+    let api = Router::new().nest("/api", routes);
 
     let listener = TcpListener::bind("0.0.0.0:8000").await.unwrap();
     tracing::debug!("listening on {}", listener.local_addr().unwrap());

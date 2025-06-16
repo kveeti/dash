@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
-use sqlx::PgPool;
+use sqlx::{PgPool, migrate};
+use tracing::info;
 
 use crate::config::Config;
 
@@ -28,9 +29,20 @@ pub struct Data {
 
 impl Data {
     pub async fn new(config: &Config) -> Result<Self> {
+        info!("connecting to db...");
+
         let pg = PgPool::connect(&config.database_url)
             .await
             .context("error connecting to postgres")?;
+
+        info!("connected to db, running migrations...");
+
+        migrate!()
+            .run(&pg)
+            .await
+            .context("error running migrations")?;
+
+        info!("migrations completed");
 
         return Ok(Self {
             pg_pool: pg.clone(),
