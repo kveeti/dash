@@ -20,17 +20,13 @@
 .fadeIn {
 	transform: translateY(0);
 	opacity: 1;
-	transition:
-		opacity var(--anim-speed) ease,
-		transform var(--anim-speed) ease;
+	transition: opacity var(--anim-speed) ease, transform var(--anim-speed) ease;
 }
 
 .fadeOut {
 	transform: translateY(5);
 	opacity: 0;
-	transition:
-		opacity var(--anim-speed) ease,
-		transform var(--anim-speed) ease;
+	transition: opacity var(--anim-speed) ease, transform var(--anim-speed) ease;
 }
 
 .spinner {

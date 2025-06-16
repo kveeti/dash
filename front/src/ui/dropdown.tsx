@@ -1,4 +1,4 @@
-import * as _Dropdown from "@radix-ui/react-dropdown-menu";
+import { DropdownMenu as _Dropdown } from "radix-ui";
 import type { ComponentProps } from "react";
 
 export const Root = _Dropdown.Root;

@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 import { ConditionalSpinner } from "./spinner";
 
 const baseButtonStyles =
-	"relative inline-flex items-center justify-center whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-50";
+	"relative inline-flex shrink-0 items-center justify-center whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-50";
 
 const variants = {
 	default: "text-gray-12 border-gray-a5 bg-gray-4 focus border",
@@ -44,18 +44,10 @@ export function Button({
 	children,
 	...props
 }: Props) {
-	let _className = baseButtonStyles;
+	let _className = buttonStyles({ variant, size });
 
 	if (className) {
 		_className += " " + className;
-	}
-
-	if (variant) {
-		_className += " " + variants[variant];
-	}
-
-	if (size) {
-		_className += " " + sizes[size];
 	}
 
 	return (

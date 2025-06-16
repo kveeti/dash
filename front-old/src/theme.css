@@ -4,10 +4,6 @@
 	@apply focus-visible:outline-gray-a10 outline-offset-2 outline-none focus-visible:outline-2 focus-visible:outline-solid;
 }
 
-@utility focus2 {
-	@apply focus:outline-gray-a10 outline-offset-2 outline-none focus:outline-2 focus:outline-solid;
-}
-
 @theme {
 	--color-*: initial;
 	--spacing: 0.25rem;

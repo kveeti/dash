@@ -5,15 +5,15 @@ on:
     branches:
       - main
     paths:
-      - 'back2/**'
+      - 'back/**'
   pull_request:
     branches:
       - main
     paths:
-      - 'back2/**'
+      - 'back/**'
 
 env:
-  DIR: back2
+  DIR: back
   DOCKERHUB_USERNAME: veetik
   DOCKERHUB_IMAGE: veetik/money_backend
 
@@ -87,7 +87,6 @@ jobs:
           images: ${{ env.DOCKERHUB_IMAGE }}
           tags: |
             type=sha
-            type=ref,event=branch
             type=ref,event=pr
 
       - name: build and push docker image
