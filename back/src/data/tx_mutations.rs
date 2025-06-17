@@ -50,6 +50,7 @@ impl Data {
                     b.category_id, $1, $4::timestamptz, b.category_name, false
                 from batch b
                 where b.category_id is not null
+                    and trim(b.category_id) != ''
                 on conflict (user_id, name) do nothing
             ),
             moved as (
@@ -74,7 +75,7 @@ impl Data {
             )
             select id, user_id, account_id, date, amount,
                    currency, counter_party,
-                   additional, category_id, created_at
+                   additional, nullif(category_id, ''), created_at
             from moved
             on conflict (id) do nothing
             returning id

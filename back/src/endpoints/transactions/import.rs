@@ -52,7 +52,7 @@ pub async fn import(
                 account_id,
                 category_name,
                 category_id
-            ) FROM STDIN WITH NULL as '' csv
+            ) FROM STDIN csv
             "#,
         )
         .await?;
