@@ -203,7 +203,7 @@ async function doImport({
 	return api<{ rows: number }>("/v1/transactions/import" + "/" + account_id + "/" + file_type, {
 		method: "POST",
 		body: formData,
-		headers: { "x-csrf": csrf! },
+		headers: { "x-csrf": await csrf! },
 	});
 }
 

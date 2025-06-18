@@ -18,13 +18,14 @@ export const fetchClient = createFetchClient<paths>({
 	credentials: "include",
 });
 
-export let csrf: string | undefined = undefined;
+export let csrf: string | undefined = win.__ME_LOADER__.promise
+	? win.__ME_LOADER__.promise.then((me) => me.csrf)
+	: win.__ME_LOADER__.data?.csrf;
 
 fetchClient.use({
-	onRequest: ({ request }) => {
+	onRequest: async ({ request }) => {
 		if ("GET" !== request.method && csrf) {
-			const _csrf = csrf || lsGetJson("me")?.csrf;
-			request.headers.set("x-csrf", _csrf);
+			request.headers.set("x-csrf", await csrf);
 		}
 		return request;
 	},
@@ -41,8 +42,6 @@ export function useMeQuery() {
 			}
 
 			data = win.__ME_LOADER__.data;
-
-			csrf = data?.csrf;
 
 			return data;
 		},
