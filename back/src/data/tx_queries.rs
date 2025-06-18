@@ -243,7 +243,6 @@ impl Data {
     pub async fn tx_stats(
         &self,
         user_id: &str,
-        timezone: &str,
         start: &DateTime<Utc>,
         end: &DateTime<Utc>,
     ) -> Result<HashMap<String, Tx>, sqlx::Error> {
@@ -271,12 +270,11 @@ impl Data {
               on (linked.id = CASE WHEN link.transaction_a_id = t.id THEN link.transaction_b_id ELSE link.transaction_a_id END)
 
             where t.user_id = $1
-            and t.date at time zone $2 between $3 and $4;
+            and t.date between $2 and $3
             "#,
             user_id,
-            timezone,
-            start.naive_utc(),
-            end.naive_utc()
+            start,
+            end
         )
         .fetch(&self.pg_pool);
 

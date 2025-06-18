@@ -40,7 +40,6 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 	const q = api.useQuery("get", "/v1/transactions/stats", {
 		params: {
 			query: {
-				timezone: timeZone,
 				start: time.start.toDate(timeZone).toISOString(),
 				end: time.end.toDate(timeZone).toISOString(),
 			},

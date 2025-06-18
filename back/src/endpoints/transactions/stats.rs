@@ -14,7 +14,6 @@ use crate::{auth_middleware::LoggedInUser, data::Tx, error::ApiError, state::App
 #[derive(Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct Input {
-    pub timezone: String,
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
 }
@@ -60,7 +59,7 @@ pub async fn stats(
     let result = compute(
         state
             .data
-            .tx_stats(&user.id, &input.timezone, &input.start, &input.end)
+            .tx_stats(&user.id, &input.start, &input.end)
             .await?,
     );
 
