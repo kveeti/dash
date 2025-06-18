@@ -283,34 +283,27 @@ impl Data {
         let mut tx_map: HashMap<String, Tx> = HashMap::default();
 
         while let Some(row) = rows.try_next().await? {
-            let tx = tx_map.get_mut(&row.id);
+            let tx = tx_map.entry(row.id.to_owned()).or_insert_with(|| Tx {
+                id: row.id,
+                date: row.date,
+                counter_party: row.counter_party,
+                amount: row.amount,
+                additional: row.additional,
+                currency: row.currency,
+                links: vec![],
+                category: if let Some(cat_id) = row.category_id {
+                    Some(Category {
+                        id: cat_id,
+                        name: row.cat_name.expect("checked cat_name"),
+                        is_neutral: row.cat_is_ne.expect("checked is_ne"),
+                    })
+                } else {
+                    None
+                },
+            });
 
-            if let Some(tx) = tx {
-                if let Some(linked_id) = row.linked_id {
-                    tx.links.push(linked_id);
-                }
-            } else {
-                tx_map.insert(
-                    row.id.to_owned(),
-                    Tx {
-                        id: row.id,
-                        date: row.date,
-                        counter_party: row.counter_party,
-                        amount: row.amount,
-                        additional: row.additional,
-                        currency: row.currency,
-                        links: vec![],
-                        category: if let Some(cat_id) = row.category_id {
-                            Some(Category {
-                                id: cat_id,
-                                name: row.cat_name.expect("checked cat_name"),
-                                is_neutral: row.cat_is_ne.expect("checked is_ne"),
-                            })
-                        } else {
-                            None
-                        },
-                    },
-                );
+            if let Some(linked_id) = row.linked_id {
+                tx.links.push(linked_id);
             }
         }
 
