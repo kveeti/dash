@@ -1,0 +1,41 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+// otlp receiver for traces
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// export traces to tempo
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "http://tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+// loki logs processing
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = []
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

@@ -5,6 +5,7 @@ use futures::TryStreamExt;
 use indexmap::IndexMap;
 use serde::Serialize;
 use sqlx::{Postgres, QueryBuilder, Row, prelude::FromRow, query_as};
+use tracing::instrument;
 use utoipa::ToSchema;
 
 use crate::endpoints::transactions::query::TransactionsQueryOutput;
@@ -240,6 +241,7 @@ impl Data {
         Ok(rows)
     }
 
+    #[instrument(skip(self))]
     pub async fn tx_stats(
         &self,
         user_id: &str,

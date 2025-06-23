@@ -7,11 +7,12 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{auth_middleware::LoggedInUser, data::Tx, error::ApiError, state::AppState};
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct Input {
     pub start: DateTime<Utc>,
@@ -51,6 +52,7 @@ pub enum OutputDataValue {
         (status = 200, body = Output)
     )
 )]
+#[instrument(skip(state))]
 pub async fn stats(
     State(state): State<AppState>,
     user: LoggedInUser,

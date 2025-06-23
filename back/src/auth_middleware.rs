@@ -11,6 +11,7 @@ use axum::{
 use axum_extra::{TypedHeader, headers, typed_header::TypedHeaderRejectionReason};
 use http::{HeaderMap, Method, request::Parts};
 use hyper::header;
+use tracing::instrument;
 
 use crate::{
     endpoints::auth::{COOKIE_AUTH, verify_token},
@@ -86,6 +87,7 @@ where
     }
 }
 
+#[instrument(skip_all)]
 pub async fn csrf_middleware(
     TypedHeader(cookies): TypedHeader<headers::Cookie>,
     headers: HeaderMap,
