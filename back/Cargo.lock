@@ -176,55 +176,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "backend"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "axum",
- "axum-extra",
- "base64 0.22.1",
- "chrono",
- "chrono-tz",
- "cookie",
- "csv",
- "csv-async",
- "dotenv",
- "envy",
- "futures",
- "hex",
- "hmac",
- "http",
- "hyper",
- "indexmap 2.9.0",
- "once_cell",
- "openidconnect",
- "opentelemetry",
- "opentelemetry-appender-tracing",
- "opentelemetry-otlp",
- "opentelemetry-semantic-conventions",
- "opentelemetry_sdk",
- "rand 0.9.1",
- "reqwest",
- "serde",
- "serde_json",
- "serde_with",
- "sha2",
- "sqlx",
- "subtle",
- "thiserror 2.0.12",
- "tokio",
- "tokio-util",
- "tower",
- "tower-http",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "ulid",
- "utoipa",
- "utoipa-axum",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1534,6 +1485,55 @@ dependencies = [
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "money_backend"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "axum",
+ "axum-extra",
+ "base64 0.22.1",
+ "chrono",
+ "chrono-tz",
+ "cookie",
+ "csv",
+ "csv-async",
+ "dotenv",
+ "envy",
+ "futures",
+ "hex",
+ "hmac",
+ "http",
+ "hyper",
+ "indexmap 2.9.0",
+ "once_cell",
+ "openidconnect",
+ "opentelemetry",
+ "opentelemetry-appender-tracing",
+ "opentelemetry-otlp",
+ "opentelemetry-semantic-conventions",
+ "opentelemetry_sdk",
+ "rand 0.9.1",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_with",
+ "sha2",
+ "sqlx",
+ "subtle",
+ "thiserror 2.0.12",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tower-http",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+ "ulid",
+ "utoipa",
+ "utoipa-axum",
 ]
 
 [[package]]

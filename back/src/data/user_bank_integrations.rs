@@ -6,6 +6,7 @@ use sqlx::{Postgres, QueryBuilder, query, query_as};
 use super::Data;
 
 impl Data {
+    #[tracing::instrument(skip(self))]
     pub async fn get_user_bank_integrations(
         &self,
         user_id: &str,
@@ -21,6 +22,7 @@ impl Data {
         Ok(rows)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_one_user_bank_integration(
         &self,
         user_id: &str,
@@ -38,6 +40,7 @@ impl Data {
         Ok(row)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn set_user_bank_integration(
         &self,
         user_id: &str,
@@ -69,6 +72,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn set_user_bank_integration_with_accounts(
         &self,
         user_id: &str,
@@ -137,6 +141,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn delete_user_bank_integration(
         &self,
         user_id: &str,

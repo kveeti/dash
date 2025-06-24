@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateCategoryInput {
     pub name: String,
     pub is_neutral: bool,
@@ -30,6 +30,7 @@ pub struct CreateCategoryInput {
         (status = 201, body = ())
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn create(
     State(state): State<AppState>,
     user: LoggedInUser,

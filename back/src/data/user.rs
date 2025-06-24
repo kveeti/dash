@@ -5,6 +5,7 @@ use sqlx::{query, query_as};
 use super::Data;
 
 impl Data {
+    #[tracing::instrument(skip(self))]
     pub async fn get_user_id_by_external_id(
         &self,
         external_id: &str,
@@ -16,6 +17,7 @@ impl Data {
         return Ok(id.map(|row| row.id));
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn upsert_user_with_session(
         &self,
         user: &User,
@@ -50,6 +52,7 @@ impl Data {
         return Ok(());
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_session(
         &self,
         user_id: &str,
@@ -67,6 +70,7 @@ impl Data {
         return Ok(session);
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn insert_session(&self, user_id: &str, session_id: &str) -> Result<(), sqlx::Error> {
         let created_at = Utc::now();
         let updated_at: Option<DateTime<Utc>> = None;
@@ -84,6 +88,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn delete_session(&self, user_id: &str, session_id: &str) -> Result<(), sqlx::Error> {
         query!(
             "delete from sessions where id = $1 and user_id = $2",
@@ -97,6 +102,7 @@ impl Data {
     }
 }
 
+#[derive(Debug)]
 pub struct User {
     pub id: String,
     pub external_id: String,

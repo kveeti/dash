@@ -6,6 +6,7 @@ use utoipa::ToSchema;
 use super::Data;
 
 impl Data {
+    #[tracing::instrument(skip(self))]
     pub async fn query_categories_with_counts(
         &self,
         user_id: &str,
@@ -33,6 +34,7 @@ impl Data {
         Ok(rows)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn query_categories(
         &self,
         user_id: &str,
@@ -57,6 +59,7 @@ impl Data {
         Ok(rows)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn insert_category(
         &self,
         user_id: &str,
@@ -86,6 +89,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn update_category(
         &self,
         user_id: &str,
@@ -114,6 +118,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn delete_category_if_unused(
         &self,
         user_id: &str,

@@ -34,8 +34,6 @@ pub struct ErrorDetails(pub HashMap<String, String>);
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        tracing::error!("{:#?}", self);
-
         let (status_code, error_message, details) = match self {
             ApiError::UnexpectedError(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,

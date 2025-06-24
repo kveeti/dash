@@ -21,6 +21,7 @@ pub struct MeOutput {
         (status = 200, body = MeOutput)
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn get_me(
     State(state): State<AppState>,
     user: LoggedInUser,

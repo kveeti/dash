@@ -22,7 +22,7 @@ use opentelemetry::{
     global::{self},
     trace::{Span, Tracer, TracerProvider as _},
 };
-use opentelemetry_otlp::{Protocol, SpanExporter, WithExportConfig};
+use opentelemetry_otlp::{SpanExporter, WithExportConfig};
 use opentelemetry_sdk::{
     Resource,
     propagation::TraceContextPropagator,
@@ -75,7 +75,7 @@ async fn main() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                format!("{service_name}=debug,tower_http=info,sqlx=info,axum::rejection=trace",)
+                format!("{service_name}=debug,tower_http=info,sqlx=info,axum::rejection=trace")
                     .into()
             }),
         )
@@ -164,7 +164,6 @@ async fn main() {
     let routes = Router::new()
         .nest("/v1", v1)
         .route("/health", get(health_check))
-        .route("/fail", get(failing_endpoint))
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(
             250 * 1024 * 1024, /* 250mb */
@@ -194,7 +193,7 @@ async fn main() {
                 })
                 .on_response(|response: &Response, _latency: Duration, span: &tracing::Span| {
                     let status_code = response.status().as_u16();
-                    let is_failure = if status_code < 300 { "ok" } else { "error" };
+                    let is_failure = if status_code < 400 { "ok" } else { "error" };
                     span.record(OTEL_STATUS_CODE, is_failure);
                     span.record(HTTP_RESPONSE_STATUS_CODE, status_code);
                 })
@@ -286,11 +285,5 @@ async fn shutdown_signal() {
 }
 
 async fn health_check() -> &'static str {
-    "OK"
-}
-
-async fn failing_endpoint() -> &'static str {
-    panic!("oh no");
-
     "OK"
 }

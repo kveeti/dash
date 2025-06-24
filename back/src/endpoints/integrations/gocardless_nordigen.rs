@@ -59,6 +59,7 @@ pub struct ConnectBankInitRes {
 //  TODO: deletion sequence. Provide a way for users to delete the connection.
 //        Also do this on account deletion
 
+#[tracing::instrument(skip(state))]
 pub async fn connect_init(
     State(state): State<AppState>,
     Path(institution_id): Path<String>,
@@ -120,6 +121,7 @@ pub async fn connect_init(
     Ok(Redirect::to(&link))
 }
 
+#[tracing::instrument(skip(state))]
 pub async fn connect_callback(
     State(state): State<AppState>,
     Path(institution_id): Path<String>,
@@ -225,6 +227,7 @@ pub struct GoCardlessNordigen {
 // TODO: implement some temporary storage for tokens
 // possibly auto refreshing as well
 impl GoCardlessNordigen {
+    #[tracing::instrument(skip_all)]
     pub async fn new(config: &Config) -> Result<Self, anyhow::Error> {
         let client = ClientBuilder::new()
             .build()
@@ -261,6 +264,7 @@ impl GoCardlessNordigen {
         })
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_requisition(&self, req_id: &str) -> Result<Requisition, anyhow::Error> {
         let requisition = self
             .client
@@ -279,6 +283,7 @@ impl GoCardlessNordigen {
         Ok(requisition)
     }
 
+    #[tracing::instrument(skip(self, config))]
     pub async fn create_requisition(
         &self,
         config: &Config,
@@ -341,6 +346,7 @@ impl GoCardlessNordigen {
         Ok(requisition)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn delete_requisition(&self, integ_id: &str) -> Result<(), anyhow::Error> {
         let res = self
             .client
@@ -365,6 +371,7 @@ impl GoCardlessNordigen {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_accounts(&self, req_id: &str) -> Result<Vec<String>, anyhow::Error> {
         let requisition = self
             .client
@@ -383,6 +390,7 @@ impl GoCardlessNordigen {
         Ok(requisition.accounts)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_account(&self, account_id: &str) -> Result<Account, anyhow::Error> {
         let acc = self
             .client
@@ -401,6 +409,7 @@ impl GoCardlessNordigen {
         Ok(acc)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_transactions(
         &self,
         account_id: &str,

@@ -17,6 +17,7 @@ use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
         (status = 204, body = ())
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn delete(
     State(state): State<AppState>,
     user: LoggedInUser,

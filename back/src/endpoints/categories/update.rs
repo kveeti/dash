@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 
 use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CategoryUpdateInput {
     pub name: String,
     pub is_neutral: bool,
@@ -31,6 +31,7 @@ pub struct CategoryUpdateInput {
         (status = 200, body = ()),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn update(
     State(state): State<AppState>,
     user: LoggedInUser,

@@ -7,7 +7,6 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use tracing::instrument;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{auth_middleware::LoggedInUser, data::Tx, error::ApiError, state::AppState};
@@ -52,7 +51,7 @@ pub enum OutputDataValue {
         (status = 200, body = Output)
     )
 )]
-#[instrument(skip(state))]
+#[tracing::instrument(skip(state))]
 pub async fn stats(
     State(state): State<AppState>,
     user: LoggedInUser,

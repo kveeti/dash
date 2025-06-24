@@ -52,6 +52,7 @@ pub const COOKIE_AUTH: &'static str = "auth";
         (status = 307)
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn init(
     State(state): State<AppState>,
     user: Option<LoggedInUser>,
@@ -103,6 +104,7 @@ pub struct AuthCallbackQuery {
         (status = 200)
     )
 )]
+#[tracing::instrument(skip(state, cookies, query))]
 pub async fn callback(
     State(state): State<AppState>,
     Query(query): Query<AuthCallbackQuery>,
@@ -229,6 +231,7 @@ pub async fn callback(
         (status = 307)
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn logout(
     State(state): State<AppState>,
     user: Option<LoggedInUser>,
@@ -264,6 +267,7 @@ pub async fn logout(
         (status = 200)
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn ___dev_login___(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let created_at = Utc::now();
     let updated_at = None;

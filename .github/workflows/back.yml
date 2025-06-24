@@ -62,8 +62,8 @@ jobs:
       - name: build binary
         run: |
           cargo build --release --target aarch64-unknown-linux-musl && \
-          cp ./target/aarch64-unknown-linux-musl/release/backend ./backend && \
-          chmod +x backend
+          cp ./target/aarch64-unknown-linux-musl/release/money_backend ./money_backend && \
+          chmod +x money_backend
         env:
           SCCACHE_GHA_ENABLED: "true"
           RUSTC_WRAPPER: "sccache"

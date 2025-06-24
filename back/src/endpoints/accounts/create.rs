@@ -12,7 +12,7 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateAccountInput {
     pub name: String,
 }
@@ -29,6 +29,7 @@ pub struct CreateAccountInput {
         (status = 201, body = ())
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn create(
     State(state): State<AppState>,
     user: LoggedInUser,

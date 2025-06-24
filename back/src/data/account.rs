@@ -6,6 +6,7 @@ use utoipa::ToSchema;
 use super::Data;
 
 impl Data {
+    #[tracing::instrument(skip(self))]
     pub async fn query_accounts(
         &self,
         user_id: &str,
@@ -33,6 +34,7 @@ impl Data {
         Ok(rows)
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn insert_account(
         &self,
         user_id: &str,
@@ -61,6 +63,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_accounts(
         &self,
         user_id: &str,

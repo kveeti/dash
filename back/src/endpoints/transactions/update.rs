@@ -18,7 +18,7 @@ use crate::{
 };
 
 #[serde_as]
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct TransactionUpdateInput {
     pub counter_party: String,
     pub date: DateTime<Utc>,
@@ -45,6 +45,7 @@ pub struct TransactionUpdateInput {
         (status = 204, body = ())
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn update(
     State(state): State<AppState>,
     user: LoggedInUser,

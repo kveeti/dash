@@ -14,6 +14,7 @@ use crate::{
         (status = 200, body = GetIntegrationsOutput),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn get(
     State(state): State<AppState>,
     user: LoggedInUser,

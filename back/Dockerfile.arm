@@ -1,3 +1,3 @@
 from scratch
-copy ./backend /usr/local/bin/backend
-entrypoint ["backend"]
+copy ./money_backend /usr/local/bin/money_backend
+entrypoint ["money_backend"]

@@ -5,7 +5,6 @@ use futures::TryStreamExt;
 use indexmap::IndexMap;
 use serde::Serialize;
 use sqlx::{Postgres, QueryBuilder, Row, prelude::FromRow, query_as};
-use tracing::instrument;
 use utoipa::ToSchema;
 
 use crate::endpoints::transactions::query::TransactionsQueryOutput;
@@ -13,6 +12,7 @@ use crate::endpoints::transactions::query::TransactionsQueryOutput;
 use super::{Account, Category, Data};
 
 impl Data {
+    #[tracing::instrument(skip(self))]
     pub async fn query_transactions(
         &self,
         user_id: &str,
@@ -217,6 +217,7 @@ impl Data {
         })
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_transactions_by_account_for_sync(
         &self,
         user_id: &str,
@@ -241,7 +242,7 @@ impl Data {
         Ok(rows)
     }
 
-    #[instrument(skip(self))]
+    #[tracing::instrument(skip(self))]
     pub async fn tx_stats(
         &self,
         user_id: &str,

@@ -17,6 +17,7 @@ use http::StatusCode;
         (status = 400),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn delete(
     State(state): State<AppState>,
     user: LoggedInUser,

@@ -8,7 +8,7 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{auth_middleware::LoggedInUser, data::Category, error::ApiError, state::AppState};
 
-#[derive(Deserialize, ToSchema, IntoParams)]
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct Input {
     pub search_text: Option<String>,
@@ -26,6 +26,7 @@ pub struct Input {
         (status = 200, body = Vec<Category>),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn query(
     State(state): State<AppState>,
     user: LoggedInUser,

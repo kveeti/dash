@@ -6,7 +6,7 @@ use utoipa::ToSchema;
 use crate::{auth_middleware::LoggedInUser, data::Settings, error::ApiError, state::AppState};
 
 #[serde_as]
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct SaveSettingsInput {
     #[serde_as(as = "NoneAsEmptyString")]
     pub locale: Option<String>,
@@ -26,6 +26,7 @@ pub struct SaveSettingsInput {
         (status = 200, body = ())
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn save(
     State(state): State<AppState>,
     user: LoggedInUser,

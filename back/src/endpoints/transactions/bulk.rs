@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
 #[serde_as]
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct TransactionBulkInput {
     pub ids: Vec<String>,
     #[serde_as(as = "NoneAsEmptyString")]
@@ -29,6 +29,7 @@ pub struct TransactionBulkInput {
         (status = 204, body = ())
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn bulk(
     State(state): State<AppState>,
     user: LoggedInUser,

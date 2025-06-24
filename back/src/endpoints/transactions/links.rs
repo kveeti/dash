@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 
 use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct Input {
     pub id: String,
 }
@@ -29,6 +29,7 @@ pub struct Input {
         (status = 400, description = "Bad request"),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn link(
     State(state): State<AppState>,
     user: LoggedInUser,
@@ -60,6 +61,7 @@ pub async fn link(
         (status = 400, description = "Bad request"),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn unlink(
     State(state): State<AppState>,
     user: LoggedInUser,

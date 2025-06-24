@@ -9,6 +9,7 @@ use crate::state::AppState;
 use super::{Data, create_id};
 
 impl Data {
+    #[tracing::instrument(skip(self))]
     pub async fn get_pending_imports(&self) -> Result<Vec<(String, String)>, sqlx::Error> {
         let rows = sqlx::query_as::<_, (String, String)>(
             "select distinct user_id, import_id from transaction_imports",
@@ -19,6 +20,7 @@ impl Data {
         return Ok(rows);
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn import_tx_phase_2_v3(
         &self,
         user_id: &str,
@@ -99,6 +101,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn import_tx_phase_2_v2(
         &self,
         user_id: &str,
@@ -199,6 +202,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn import_tx_phase_2(
         &self,
         user_id: &str,
@@ -295,6 +299,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn insert_many_transactions_and_user_bank_integration(
         &self,
         user_id: &str,
@@ -366,6 +371,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn insert_tx(
         &self,
         user_id: &str,
@@ -404,6 +410,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn update_tx_2<'a>(
         &self,
         user_id: &str,
@@ -445,6 +452,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn delete_tx(&self, user_id: &str, tx_id: &str) -> Result<(), sqlx::Error> {
         query!(
             r#"
@@ -460,6 +468,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn link_tx(
         &self,
         user_id: &str,
@@ -501,6 +510,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn unlink_tx(
         &self,
         user_id: &str,
@@ -526,6 +536,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn tx_bulk_actions(
         &self,
         user_id: &str,
@@ -552,6 +563,7 @@ impl Data {
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn do_pending_imports(state: &AppState) -> Result<(), anyhow::Error> {
     let pending_imports = state
         .data

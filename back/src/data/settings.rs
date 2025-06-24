@@ -6,6 +6,7 @@ use utoipa::ToSchema;
 use super::Data;
 
 impl Data {
+    #[tracing::instrument(skip(self))]
     pub async fn save_settings(
         &self,
         user_id: &str,
@@ -33,6 +34,7 @@ impl Data {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn get_settings(&self, user_id: &str) -> Result<Option<Settings>, sqlx::Error> {
         let row = query_as!(
             Settings,

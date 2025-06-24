@@ -42,6 +42,7 @@ pub struct TransactionsQueryOutput {
         (status = 200, body = TransactionsQueryOutput),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn query(
     State(state): State<AppState>,
     user: LoggedInUser,

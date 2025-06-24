@@ -16,6 +16,7 @@ use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen
         ("integration_name" = String, description = "integration name"),
     ),
 )]
+#[tracing::instrument(skip(state))]
 pub async fn delete(
     State(state): State<AppState>,
     user: LoggedInUser,

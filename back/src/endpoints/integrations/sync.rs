@@ -20,6 +20,7 @@ use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen
         (status = 200, body = ()),
     )
 )]
+#[tracing::instrument(skip(state))]
 pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(), ApiError> {
     let datas = state
         .data
