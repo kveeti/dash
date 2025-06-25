@@ -14,6 +14,7 @@ otelcol.receiver.otlp "default" {
 
   output {
     traces = [otelcol.exporter.otlp.tempo.input]
+    logs   = [otelcol.exporter.loki.default.input]
   }
 }
 
@@ -25,6 +26,10 @@ otelcol.exporter.otlp "tempo" {
       insecure = true
     }
   }
+}
+
+otelcol.exporter.loki "default" {
+  forward_to = [loki.write.default.receiver]
 }
 
 // loki logs processing

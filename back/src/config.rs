@@ -17,6 +17,7 @@ pub struct EnvironmentVariables {
     pub auth_user_id_whitelist: Vec<String>,
     pub auth_user_id_whitelist_enabled: bool,
     pub use_secure_cookies: bool,
+    pub port: Option<u16>,
 
     // gocardless nordigen
     pub gcn_secret_id: String,
@@ -36,6 +37,7 @@ pub struct Config {
     pub auth_user_id_whitelist: Vec<String>,
     pub auth_user_id_whitelist_enabled: bool,
     pub use_secure_cookies: bool,
+    pub port: u16,
 
     // gocardless nordigen
     pub gcn_secret_id: String,
@@ -65,6 +67,7 @@ impl Config {
             auth_user_id_whitelist: envs.auth_user_id_whitelist,
             auth_user_id_whitelist_enabled: envs.auth_user_id_whitelist_enabled,
             use_secure_cookies: envs.use_secure_cookies,
+            port: envs.port.unwrap_or(8000),
 
             gcn_secret_id: envs.gcn_secret_id,
             gcn_secret_key: envs.gcn_secret_key,

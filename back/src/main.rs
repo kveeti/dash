@@ -204,8 +204,10 @@ async fn main() {
 
     let api = Router::new().nest("/api", routes);
 
-    let listener = TcpListener::bind("0.0.0.0:8000").await.unwrap();
-    tracing::debug!("listening on {}", listener.local_addr().unwrap());
+    let listener = TcpListener::bind(format!("0.0.0.0:{port}", port = config.port))
+        .await
+        .unwrap();
+    tracing::info!("listening on {}", listener.local_addr().unwrap());
     axum::serve(listener, api)
         .with_graceful_shutdown(shutdown_signal())
         .await

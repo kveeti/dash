@@ -36,11 +36,11 @@ pre:
 	@make -j2 backpre frontpre
 
 db:
-	@docker exec -it dash_db psql -U pg -d db
+	@docker exec -it dash_db psql -U pg -d db -p 35432
 
 dbreset:
-	@docker-compose -f compose-dev.yml down -v -t 1 && \
-	docker-compose -f compose-dev.yml up -d && \
+	@docker-compose down -v -t 1 && \
+	docker-compose up -d && \
 	sleep 2 && \
 	cd back && sqlx migrate run
 
