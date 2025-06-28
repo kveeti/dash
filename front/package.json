@@ -11,7 +11,7 @@
 		"check:lint": "eslint .",
 		"check:format": "prettier --check .",
 		"check:types": "tsc --noEmit",
-		"api": "openapi-typescript http://localhost:3000/api/v1/openapi.json -o ./src/api_types.d.ts"
+		"api": "openapi-typescript http://localhost:38000/api/v1/openapi.json -o ./src/api_types.d.ts"
 	},
 	"dependencies": {
 		"@ariakit/react": "^0.4.17",

@@ -498,7 +498,7 @@ function Links({ opts, tx, links }: { opts: UseQueryOptions; tx: Tx; links: Tx["
 	const linkMutation = api.useMutation("post", "/v1/transactions/{id}/linked", {
 		onSuccess: () => qc.invalidateQueries(opts),
 	});
-	const unlinkMutation = api.useMutation("post", "/v1/transactions/{id}/linked", {
+	const unlinkMutation = api.useMutation("delete", "/v1/transactions/{id}/linked/{linked_id}", {
 		onSuccess: () => qc.invalidateQueries(opts),
 	});
 
@@ -526,8 +526,7 @@ function Links({ opts, tx, links }: { opts: UseQueryOptions; tx: Tx; links: Tx["
 
 		unlinkMutation
 			.mutateAsync({
-				params: { path: { id: otherTxId } },
-				body: { id: tx.id },
+				params: { path: { id: otherTxId, linked_id: tx.id } },
 			})
 			.catch(errorToast("error deleting link"));
 	}

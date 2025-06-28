@@ -47,14 +47,10 @@ pub async fn link(
 
 #[utoipa::path(
     delete,
-    path = "/transactions/{id}/linked/{linked_id}",
+    path = "/v1/transactions/{id}/linked/{linked_id}",
     params(
         ("id" = String, description = "Transaction ID"),
         ("linked_id" = String, description = "Linked transaction ID"),
-    ),
-    request_body(
-        content = Input,
-        content_type = "application/json",
     ),
     responses(
         (status = 204, body = ()),
@@ -65,8 +61,7 @@ pub async fn link(
 pub async fn unlink(
     State(state): State<AppState>,
     user: LoggedInUser,
-    Path(id): Path<String>,
-    Path(linked_id): Path<String>,
+    Path((id, linked_id)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, ApiError> {
     if id == linked_id {
         return Err(ApiError::BadRequest("Cannot unlink self".into()));
