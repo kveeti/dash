@@ -12,6 +12,7 @@ services:
       - db_data:/var/lib/postgresql/data
 
   loki:
+    profiles: [trace]
     image: grafana/loki@sha256:da23a37b2b8e543c49a90bc553bffeef6154e535ec00abcc4f279f105a536f0c # arm64 3.4.4
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
@@ -19,6 +20,7 @@ services:
       - loki_data:/loki
 
   alloy:
+    profiles: [trace]
     image: grafana/alloy@sha256:b402cd5f6ce52a4b92d03138c323723a70cc429d4ded6f9c3accdce260a6f796 # arm64 1.9.1
     volumes:
       - ./_local_dev/config.alloy:/etc/alloy/config.alloy
@@ -35,6 +37,7 @@ services:
       - loki
 
   grafana:
+    profiles: [trace]
     image: grafana/grafana@sha256:df406be53f5a0f5592faca47629867dd83388611d72f424edcf6a5ab3f8f35b9 # arm64 12.0.2
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -47,6 +50,7 @@ services:
       - "30001:3000" # grafana
 
   tempo:
+    profiles: [trace]
     image: grafana/tempo@sha256:cac917bca281bf3fbe360041e1053d20351558dda3032172b622c1453de9b622 # arm64/v8 2.8.1
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:

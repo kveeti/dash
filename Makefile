@@ -27,7 +27,7 @@ build:
 	@make -j2 backbuild frontbuild
 
 frontpre:
-	@cd front && bun run preview
+	@cd front && bun run build && bun run preview
 
 backpre:
 	@cd back && cargo run --release
@@ -39,10 +39,19 @@ db:
 	@docker exec -it dash_db psql -U pg -d db -p 35432
 
 dbreset:
-	@docker-compose down -v -t 1 && \
-	docker-compose up -d && \
+	@docker-compose down db -v -t 1 && \
+	docker-compose up db -d && \
 	sleep 2 && \
 	cd back && sqlx migrate run
+
+up:
+	@docker compose up -d
+
+trace:
+	@docker compose --profile trace up -d
+
+down:
+	@docker compose --profile trace down -v -t 1
 
 an:
 	@cd front && BUNDLE_ANALYZE=true bun run build && open dist/report-web.html
