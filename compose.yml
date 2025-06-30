@@ -64,9 +64,11 @@ services:
   keycloak:
     build:
       context: ./_local_dev
-      dockerfile: Containerfile.keycloak
+      dockerfile: Containerfile.keycloak-dev
     ports:
       - "30000:8080"
+    volumes:
+      - ./_local_dev/realm_localdev.json:/opt/keycloak/data/import/realm_localdev.json
     environment:
       KC_DB: postgres
       KC_DB_URL_HOST: keycloak_pg
