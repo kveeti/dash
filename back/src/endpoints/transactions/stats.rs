@@ -5,7 +5,7 @@ use axum::{
     extract::{Query, State},
     response::IntoResponse,
 };
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -62,12 +62,18 @@ pub async fn stats(
             .data
             .tx_stats(&user.id, &input.start, &input.end)
             .await?,
+        &input.start.date_naive(),
+        &input.end.date_naive(),
     );
 
     return Ok(Json(result));
 }
 
-fn compute(mut tx_map: HashMap<String, Tx>) -> Output {
+fn compute(
+    mut tx_map: HashMap<String, Tx>,
+    start_date: &NaiveDate,
+    end_date: &NaiveDate,
+) -> Output {
     let mut adjustments: HashMap<String, f32> = HashMap::default();
 
     for tx in tx_map.values() {
@@ -111,96 +117,116 @@ fn compute(mut tx_map: HashMap<String, Tx>) -> Output {
         }
     }
 
-    let mut dates: Vec<String> = Vec::new();
-    let mut i_cats: Vec<Vec<String>> = Vec::new();
-    let mut i: Vec<Vec<f32>> = Vec::new();
-    let mut e_cats: Vec<Vec<String>> = Vec::new();
-    let mut e: Vec<Vec<f32>> = Vec::new();
-    let mut n_cats: Vec<Vec<String>> = Vec::new();
-    let mut n: Vec<Vec<f32>> = Vec::new();
+    let mut periods: Vec<String> = Vec::new();
+    let mut year = start_date.year();
+    let mut month = start_date.month();
 
-    let mut total_income: f32 = 0.0;
-    let mut total_expenses: f32 = 0.0;
+    let end_year = end_date.year();
+    let end_month = end_date.month();
+
+    loop {
+        periods.push(format!("{year}-{month}"));
+
+        if year == end_year && month == end_month {
+            break;
+        }
+
+        month += 1;
+        if month > 12 {
+            month = 1;
+            year += 1;
+        }
+    }
 
     let mut period_txs: HashMap<String, Vec<&Tx>> = HashMap::new();
     for tx in tx_map.values() {
         if tx.amount == 0.0 {
             continue;
         }
-        let period = tx.date.format("%Y-%m").to_string();
+        let month = tx.date.month();
+        let year = tx.date.year();
+        let period = format!("{year}-{month}");
         period_txs.entry(period).or_default().push(tx);
     }
 
-    let mut periods: Vec<String> = period_txs.keys().cloned().collect();
-    periods.sort();
+    let period_count = periods.len();
+    let mut i_cats: Vec<Vec<String>> = vec![vec![]; period_count];
+    let mut i: Vec<Vec<f32>> = vec![vec![]; period_count];
+    let mut e_cats: Vec<Vec<String>> = vec![vec![]; period_count];
+    let mut e: Vec<Vec<f32>> = vec![vec![]; period_count];
+    let mut n_cats: Vec<Vec<String>> = vec![vec![]; period_count];
+    let mut n: Vec<Vec<f32>> = vec![vec![]; period_count];
+    let mut tti: Vec<f32> = vec![0.0; period_count];
+    let mut tte: Vec<f32> = vec![0.0; period_count];
+    let mut ttn: Vec<f32> = vec![0.0; period_count];
 
-    let mut tti: Vec<f32> = vec![0.0; periods.len()];
-    let mut tte: Vec<f32> = vec![0.0; periods.len()];
-    let mut ttn: Vec<f32> = vec![0.0; periods.len()];
+    let mut total_income: f32 = 0.0;
+    let mut total_expenses: f32 = 0.0;
 
-    for (period_index, period) in periods.iter().enumerate() {
-        dates.push(period.clone());
+    for (index, period) in periods.iter().enumerate() {
+        match period_txs.get(period) {
+            None => continue,
+            Some(txs) => {
+                let mut i_cat_amounts: HashMap<String, f32> = HashMap::new();
+                let mut e_cat_amounts: HashMap<String, f32> = HashMap::new();
+                let mut n_cat_amounts: HashMap<String, f32> = HashMap::new();
 
-        let mut period_i_cats: Vec<String> = Vec::new();
-        let mut period_i_vals: Vec<f32> = Vec::new();
+                let mut period_tti = 0.0;
+                let mut period_tte = 0.0;
+                let mut period_ttn = 0.0;
 
-        let mut period_e_cats: Vec<String> = Vec::new();
-        let mut period_e_vals: Vec<f32> = Vec::new();
+                for tx in txs {
+                    let (cat_name, cat_is_neutral) = tx
+                        .category
+                        .as_ref()
+                        .map(|c| (c.name.to_owned(), c.is_neutral))
+                        .unwrap_or(("__uncategorized__".into(), false));
 
-        let mut period_n_cats: Vec<String> = Vec::new();
-        let mut period_n_vals: Vec<f32> = Vec::new();
+                    let amount = tx.amount;
+                    let abs_amount = amount.abs();
 
-        let mut i_cat_amounts: HashMap<String, f32> = HashMap::new();
-        let mut e_cat_amounts: HashMap<String, f32> = HashMap::new();
-        let mut n_cat_amounts: HashMap<String, f32> = HashMap::new();
+                    if cat_is_neutral {
+                        period_ttn += abs_amount;
+                        *n_cat_amounts.entry(cat_name).or_default() += abs_amount;
+                    } else if amount > 0.0 {
+                        period_tti += abs_amount;
+                        *i_cat_amounts.entry(cat_name).or_default() += abs_amount;
+                        total_income += abs_amount;
+                    } else if amount < 0.0 {
+                        period_tte += abs_amount;
+                        *e_cat_amounts.entry(cat_name).or_default() += abs_amount;
+                        total_expenses += abs_amount;
+                    }
+                }
 
-        for tx in &period_txs[period] {
-            let (cat_name, cat_is_neutral) = tx
-                .category
-                .as_ref()
-                .map(|c| (c.name.to_owned(), c.is_neutral.to_owned()))
-                .unwrap_or(("__uncategorized__".into(), false));
+                let mut i_pairs: Vec<_> = i_cat_amounts.into_iter().collect();
+                i_pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                let (period_i_cats, period_i_vals): (Vec<_>, Vec<_>) = i_pairs.into_iter().unzip();
 
-            let amount = tx.amount;
+                let mut e_pairs: Vec<_> = e_cat_amounts.into_iter().collect();
+                e_pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                let (period_e_cats, period_e_vals): (Vec<_>, Vec<_>) = e_pairs.into_iter().unzip();
 
-            if cat_is_neutral {
-                ttn[period_index] += amount.abs();
-                *n_cat_amounts.entry(cat_name).or_default() += amount.abs();
-                //total_income += amount.abs();
-            } else if amount > 0.0 {
-                tti[period_index] += amount.abs();
-                *i_cat_amounts.entry(cat_name).or_default() += amount.abs();
-                total_income += amount.abs();
-            } else if amount < 0.0 {
-                tte[period_index] += amount.abs();
-                *e_cat_amounts.entry(cat_name).or_default() += amount.abs();
-                total_expenses += amount.abs();
+                let mut n_pairs: Vec<_> = n_cat_amounts.into_iter().collect();
+                n_pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+                let (period_n_cats, period_n_vals): (Vec<_>, Vec<_>) = n_pairs.into_iter().unzip();
+
+                i_cats[index] = period_i_cats;
+                i[index] = period_i_vals;
+                e_cats[index] = period_e_cats;
+                e[index] = period_e_vals;
+                n_cats[index] = period_n_cats;
+                n[index] = period_n_vals;
+
+                tti[index] = period_tti;
+                tte[index] = period_tte;
+                ttn[index] = period_ttn;
             }
         }
-
-        for (cat_name, amount) in i_cat_amounts {
-            period_i_cats.push(cat_name);
-            period_i_vals.push(amount);
-        }
-        for (cat_name, amount) in e_cat_amounts {
-            period_e_cats.push(cat_name);
-            period_e_vals.push(amount);
-        }
-        for (cat_name, amount) in n_cat_amounts {
-            period_n_cats.push(cat_name);
-            period_n_vals.push(amount);
-        }
-
-        i_cats.push(period_i_cats);
-        i.push(period_i_vals);
-        e_cats.push(period_e_cats);
-        e.push(period_e_vals);
-        n_cats.push(period_n_cats);
-        n.push(period_n_vals);
     }
 
     return Output {
-        dates,
+        dates: periods,
         e,
         e_cats,
         i,

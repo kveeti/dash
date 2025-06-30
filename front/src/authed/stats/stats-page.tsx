@@ -110,7 +110,7 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 								<div
 									className={
 										"absolute top-1 right-7 size-6 rounded-full " +
-										(isPositive ? "bg-green-10" : "bg-red-9")
+										(sum !== 0 && (isPositive ? "bg-green-10" : "bg-red-9"))
 									}
 								></div>
 								<div className="absolute inset-0 backdrop-blur-2xl"></div>
@@ -170,7 +170,7 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 							</h2>
 
 							<div className="divide-gray-4 divide-y">
-								{!income[selectedDateIndex].length ? (
+								{!income[selectedDateIndex]?.length ? (
 									<p className="px-2 py-1.5 text-xs">no income</p>
 								) : (
 									income[selectedDateIndex].map((val, index) => {
@@ -201,7 +201,7 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 							</h2>
 
 							<div className="divide-gray-4 divide-y">
-								{!expenses[selectedDateIndex].length ? (
+								{!expenses[selectedDateIndex]?.length ? (
 									<p className="px-2 py-1.5 text-xs">no expenses</p>
 								) : (
 									expenses[selectedDateIndex].map((val, index) => {
@@ -226,7 +226,7 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 							</div>
 						</div>
 
-						{!!neutral[selectedDateIndex].length && (
+						{!!neutral[selectedDateIndex]?.length && (
 							<div className="">
 								<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">
 									neutral
