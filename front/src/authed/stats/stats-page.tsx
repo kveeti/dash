@@ -42,6 +42,7 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 			query: {
 				start: time.start.toDate(timeZone).toISOString(),
 				end: time.end.toDate(timeZone).toISOString(),
+				tz: timeZone,
 			},
 		},
 	});

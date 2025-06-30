@@ -798,6 +798,7 @@ export interface operations {
             query: {
                 start: string;
                 end: string;
+                tz: string;
             };
             header?: never;
             path?: never;

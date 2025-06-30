@@ -6,6 +6,7 @@ use axum::{
     response::IntoResponse,
 };
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -16,6 +17,8 @@ use crate::{auth_middleware::LoggedInUser, data::Tx, error::ApiError, state::App
 pub struct Input {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
+    #[param(value_type = String)]
+    pub tz: Tz,
 }
 
 #[derive(Debug, ToSchema, Serialize)]
@@ -62,8 +65,8 @@ pub async fn stats(
             .data
             .tx_stats(&user.id, &input.start, &input.end)
             .await?,
-        &input.start.date_naive(),
-        &input.end.date_naive(),
+        &input.start.with_timezone(&input.tz).naive_local().date(),
+        &input.end.with_timezone(&input.tz).naive_local().date(),
     );
 
     return Ok(Json(result));
