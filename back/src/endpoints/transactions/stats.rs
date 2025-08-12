@@ -148,7 +148,7 @@ fn compute(
         }
         let month = tx.date.month();
         let year = tx.date.year();
-        let period = format!("{year}-{month}");
+        let period = format!("{year}-{month:02}");
         period_txs.entry(period).or_default().push(tx);
     }
 
