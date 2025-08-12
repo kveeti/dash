@@ -128,7 +128,7 @@ fn compute(
     let end_month = end_date.month();
 
     loop {
-        periods.push(format!("{year}-{month}"));
+        periods.push(format!("{year}-{month:02}"));
 
         if year == end_year && month == end_month {
             break;
