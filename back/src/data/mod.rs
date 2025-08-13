@@ -8,7 +8,6 @@ mod id;
 pub use id::create_id;
 
 mod category;
-pub use category::*;
 mod user;
 pub use user::*;
 mod account;

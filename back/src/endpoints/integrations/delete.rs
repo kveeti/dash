@@ -8,14 +8,14 @@ use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
 use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen};
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     delete,
     path = "/v1/integrations/{integration_name}",
     operation_id = "v1/integrations/delete",
     params(
         ("integration_name" = String, description = "integration name"),
     ),
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn delete(
     State(state): State<AppState>,

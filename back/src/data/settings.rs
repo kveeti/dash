@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::{query, query_as};
-use utoipa::ToSchema;
 
 use super::Data;
 
@@ -10,7 +9,7 @@ impl Data {
     pub async fn save_settings(
         &self,
         user_id: &str,
-        settings: Settings,
+        settings: UserSettings,
     ) -> Result<(), sqlx::Error> {
         query!(
             r#"
@@ -35,9 +34,9 @@ impl Data {
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn get_settings(&self, user_id: &str) -> Result<Option<Settings>, sqlx::Error> {
+    pub async fn get_settings(&self, user_id: &str) -> Result<Option<UserSettings>, sqlx::Error> {
         let row = query_as!(
-            Settings,
+            UserSettings,
             r#"
             select locale, timezone from user_settings
             where user_id = $1
@@ -52,8 +51,9 @@ impl Data {
     }
 }
 
-#[derive(Debug, ToSchema, Serialize)]
-pub struct Settings {
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
+pub struct UserSettings {
     pub locale: Option<String>,
     pub timezone: Option<String>,
 }

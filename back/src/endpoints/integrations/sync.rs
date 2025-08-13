@@ -12,14 +12,14 @@ use crate::{
 
 use super::gocardless_nordigen::{GoCardlessNordigen, SavedDataGoCardlessNordigen};
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     post,
     path = "/v1/integrations/sync",
     operation_id = "v1/integrations/sync",
     responses(
         (status = 200, body = ()),
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(), ApiError> {
     let datas = state

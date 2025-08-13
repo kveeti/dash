@@ -6,17 +6,17 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Deserialize;
-use utoipa::ToSchema;
 
 use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct CategoryUpdateInput {
     pub name: String,
     pub is_neutral: bool,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     patch,
     path = "/v1/categories/{id}",
     operation_id = "v1/categories/update",
@@ -30,7 +30,7 @@ pub struct CategoryUpdateInput {
     responses(
         (status = 200, body = ()),
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn update(
     State(state): State<AppState>,

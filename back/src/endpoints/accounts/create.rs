@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use anyhow::{Context, Result};
 use axum::{Json, extract::State, response::IntoResponse};
 use serde::Deserialize;
-use utoipa::ToSchema;
 
 use crate::{
     auth_middleware::LoggedInUser,
@@ -12,12 +11,13 @@ use crate::{
     state::AppState,
 };
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct CreateAccountInput {
     pub name: String,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     post,
     path = "/v1/accounts",
     operation_id = "v1/accounts/create",
@@ -28,7 +28,7 @@ pub struct CreateAccountInput {
     responses(
         (status = 201, body = ())
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn create(
     State(state): State<AppState>,

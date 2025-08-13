@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
-use serde::Serialize;
-use sqlx::{QueryBuilder, prelude::FromRow, query};
-use utoipa::ToSchema;
+use sqlx::{QueryBuilder, query};
+
+use crate::data::{TxCategory, TxCategoryWithCounts};
 
 use super::Data;
 
@@ -11,7 +11,7 @@ impl Data {
         &self,
         user_id: &str,
         search_text: &Option<String>,
-    ) -> Result<Vec<CategoryWithCounts>, sqlx::Error> {
+    ) -> Result<Vec<TxCategoryWithCounts>, sqlx::Error> {
         let mut qb = QueryBuilder::new(
             "select tc.id, tc.name, tc.is_neutral, coalesce(count(t.id), 0)::bigint as tx_count
              from transaction_categories tc
@@ -28,7 +28,7 @@ impl Data {
 
         qb.push(" group by tc.id");
 
-        let query = qb.build_query_as::<CategoryWithCounts>();
+        let query = qb.build_query_as::<TxCategoryWithCounts>();
         let rows = query.fetch_all(&self.pg_pool).await?;
 
         Ok(rows)
@@ -39,7 +39,7 @@ impl Data {
         &self,
         user_id: &str,
         search_text: &Option<String>,
-    ) -> Result<Vec<Category>, sqlx::Error> {
+    ) -> Result<Vec<TxCategory>, sqlx::Error> {
         let mut qb = QueryBuilder::new(
             "select tc.id, tc.name, tc.is_neutral
              from transaction_categories tc
@@ -53,7 +53,7 @@ impl Data {
             qb.push_bind(format!("%{}%", search_text));
         }
 
-        let query = qb.build_query_as::<Category>();
+        let query = qb.build_query_as::<TxCategory>();
         let rows = query.fetch_all(&self.pg_pool).await?;
 
         Ok(rows)
@@ -161,19 +161,4 @@ impl Data {
             Ok(false)
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema, FromRow)]
-pub struct Category {
-    pub id: String,
-    pub name: String,
-    pub is_neutral: bool,
-}
-
-#[derive(Debug, Clone, Serialize, ToSchema, FromRow)]
-pub struct CategoryWithCounts {
-    pub id: String,
-    pub name: String,
-    pub is_neutral: bool,
-    pub tx_count: i64,
 }

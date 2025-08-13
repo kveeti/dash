@@ -35,11 +35,16 @@ pub struct ErrorDetails(pub HashMap<String, String>);
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status_code, error_message, details) = match self {
-            ApiError::UnexpectedError(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Some("unexpected error".to_string()),
-                None,
-            ),
+            ApiError::UnexpectedError(ref err) => {
+                tracing::error!("unexpected error: {err:#}");
+
+                #[cfg(debug_assertions)]
+                let error_message = Some(format!("{err:#}"));
+                #[cfg(not(debug_assertions))]
+                let error_message = Some("unexpected error".to_string());
+
+                (StatusCode::INTERNAL_SERVER_ERROR, error_message, None)
+            }
             ApiError::NoAuth(_) => (StatusCode::UNAUTHORIZED, None, None),
             ApiError::NoAccess(details) => (StatusCode::FORBIDDEN, Some(details), None),
             ApiError::NotFound(_) => (StatusCode::NOT_FOUND, None, None),

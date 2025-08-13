@@ -1,5 +1,4 @@
-mod openapi;
-pub use openapi::*;
+pub mod openapi;
 
 pub mod auth;
 

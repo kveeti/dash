@@ -4,16 +4,16 @@ use axum::{
 };
 use http::StatusCode;
 use serde::Deserialize;
-use utoipa::ToSchema;
 
 use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct Input {
     pub id: String,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     post,
     path = "/v1/transactions/{id}/linked",
     operation_id = "v1/transactions/id/linked",
@@ -28,7 +28,7 @@ pub struct Input {
         (status = 201, body = ()),
         (status = 400, description = "Bad request"),
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn link(
     State(state): State<AppState>,
@@ -45,7 +45,7 @@ pub async fn link(
     Ok(StatusCode::CREATED)
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     delete,
     path = "/v1/transactions/{id}/linked/{linked_id}",
     params(
@@ -56,7 +56,7 @@ pub async fn link(
         (status = 204, body = ()),
         (status = 400, description = "Bad request"),
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn unlink(
     State(state): State<AppState>,

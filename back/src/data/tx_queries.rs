@@ -5,14 +5,15 @@ use futures::TryStreamExt;
 use indexmap::IndexMap;
 use serde::Serialize;
 use sqlx::{Postgres, QueryBuilder, Row, prelude::FromRow, query_as};
-use utoipa::ToSchema;
 
-use crate::endpoints::transactions::query::TransactionsQueryOutput;
+use crate::{
+    data::Account,
+    endpoints::transactions::{query::TransactionsQueryOutput, stats::StatsTx},
+};
 
-use super::{Account, Category, Data};
+use super::Data;
 
 impl Data {
-    #[tracing::instrument(skip(self))]
     pub async fn query_transactions(
         &self,
         user_id: &str,
@@ -154,7 +155,7 @@ impl Data {
                     category: if let Some(cat_id) = category_id {
                         let name: String = row.try_get("c_name").expect("c_name");
                         let is_neutral: bool = row.try_get("c_is_neutral").expect("c_is_neutral");
-                        Some(Category {
+                        Some(TxCategory {
                             id: cat_id,
                             name,
                             is_neutral,
@@ -248,7 +249,7 @@ impl Data {
         user_id: &str,
         start: &DateTime<Utc>,
         end: &DateTime<Utc>,
-    ) -> Result<HashMap<String, Tx>, sqlx::Error> {
+    ) -> Result<HashMap<String, StatsTx>, sqlx::Error> {
         let mut rows = query_as!(
             TxRow,
             r#"
@@ -281,10 +282,10 @@ impl Data {
         )
         .fetch(&self.pg_pool);
 
-        let mut tx_map: HashMap<String, Tx> = HashMap::default();
+        let mut tx_map: HashMap<String, StatsTx> = HashMap::default();
 
         while let Some(row) = rows.try_next().await? {
-            let tx = tx_map.entry(row.id.to_owned()).or_insert_with(|| Tx {
+            let tx = tx_map.entry(row.id.to_owned()).or_insert_with(|| StatsTx {
                 id: row.id,
                 date: row.date,
                 counter_party: row.counter_party,
@@ -293,7 +294,7 @@ impl Data {
                 currency: row.currency,
                 links: vec![],
                 category: if let Some(cat_id) = row.category_id {
-                    Some(Category {
+                    Some(TxCategory {
                         id: cat_id,
                         name: row.cat_name.expect("checked cat_name"),
                         is_neutral: row.cat_is_ne.expect("checked is_ne"),
@@ -312,7 +313,8 @@ impl Data {
     }
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct QueryTx {
     pub id: String,
     pub date: DateTime<Utc>,
@@ -320,19 +322,21 @@ pub struct QueryTx {
     pub counter_party: String,
     pub additional: Option<String>,
     pub currency: String,
-    pub category: Option<Category>,
+    pub category: Option<TxCategory>,
     pub account: Option<Account>,
     pub links: Vec<Link>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct Link {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
     pub tx: LinkedTx,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct LinkedTx {
     pub id: String,
     pub date: DateTime<Utc>,
@@ -345,8 +349,8 @@ pub struct LinkedTx {
 #[derive(Debug)]
 pub struct QueryTxInput {
     pub search_text: Option<String>,
-    pub cursor: Option<QueryTxInputCursor>,
     pub limit: Option<i8>,
+    pub cursor: Option<QueryTxInputCursor>,
 }
 
 #[derive(Debug)]
@@ -355,7 +359,8 @@ pub enum QueryTxInputCursor {
     Right(String),
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct SyncTx {
     pub date: DateTime<Utc>,
     pub counter_party: String,
@@ -377,14 +382,51 @@ struct TxRow {
     linked_id: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct Tx {
+    pub id: String,
+    pub date: DateTime<Utc>,
+    pub amount: f32,
+    pub counter_party: String,
+    pub additional: Option<String>,
+    pub currency: String,
+    pub category: Option<TxCategory>,
+    pub account: Option<Account>,
+    pub links: Vec<TxLink>,
+}
+
+#[derive(Debug, Serialize, FromRow)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
+pub struct TxCategory {
+    pub id: String,
+    pub name: String,
+    pub is_neutral: bool,
+}
+#[derive(Debug, Clone, Serialize, FromRow)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
+pub struct TxCategoryWithCounts {
+    pub id: String,
+    pub name: String,
+    pub is_neutral: bool,
+    pub tx_count: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
+pub struct TxLink {
+    pub created_at: DateTime<Utc>,
+    pub updated_at: Option<DateTime<Utc>>,
+    pub tx: TxLinkLinkedTx,
+}
+
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
+pub struct TxLinkLinkedTx {
     pub id: String,
     pub date: DateTime<Utc>,
     pub counter_party: String,
     pub additional: Option<String>,
     pub currency: String,
-    pub category: Option<Category>,
     pub amount: f32,
-    pub links: Vec<String>,
 }

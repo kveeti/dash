@@ -32,7 +32,6 @@ use openidconnect::{
 use reqwest::{ClientBuilder, redirect};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use utoipa::IntoParams;
 
 use crate::{
     auth_middleware::LoggedInUser,
@@ -45,13 +44,13 @@ use crate::{
 const COOKIE_AUTH_STATE: &'static str = "auth_state";
 pub const COOKIE_AUTH: &'static str = "auth";
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     get,
     path = "/v1/auth/init",
     responses(
         (status = 307)
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn init(
     State(state): State<AppState>,
@@ -88,13 +87,14 @@ pub async fn init(
     return Ok((headers, Redirect::temporary(&auth_url.to_string())).into_response());
 }
 
-#[derive(IntoParams, Deserialize)]
+#[derive(Deserialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::IntoParams))]
 pub struct AuthCallbackQuery {
     pub code: String,
     pub state: String,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     get,
     path = "/auth/callback",
     params(
@@ -103,7 +103,7 @@ pub struct AuthCallbackQuery {
     responses(
         (status = 200)
     )
-)]
+))]
 #[tracing::instrument(skip(state, cookies, query))]
 pub async fn callback(
     State(state): State<AppState>,
@@ -224,13 +224,13 @@ pub async fn callback(
     return Ok((headers, Redirect::temporary(&state.config.front_base_url)).into_response());
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     get,
     path = "/v1/auth/logout",
     responses(
         (status = 307)
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn logout(
     State(state): State<AppState>,
@@ -260,13 +260,13 @@ pub async fn logout(
 }
 
 #[cfg(debug_assertions)]
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     get,
     path = "/auth/___dev_login___",
     responses(
         (status = 200)
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn ___dev_login___(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let created_at = Utc::now();

@@ -6,7 +6,7 @@ use http::StatusCode;
 
 use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     delete,
     path = "/v1/transactions/{id}",
     operation_id = "v1/transactions/delete",
@@ -16,7 +16,7 @@ use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
     responses(
         (status = 204, body = ())
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn delete(
     State(state): State<AppState>,

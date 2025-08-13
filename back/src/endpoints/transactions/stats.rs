@@ -8,20 +8,21 @@ use axum::{
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use chrono_tz::Tz;
 use serde::{Deserialize, Serialize};
-use utoipa::{IntoParams, ToSchema};
 
-use crate::{auth_middleware::LoggedInUser, data::Tx, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, data::TxCategory, error::ApiError, state::AppState};
 
-#[derive(Debug, Deserialize, IntoParams)]
-#[into_params(parameter_in = Query)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::IntoParams))]
+#[cfg_attr(feature = "docs", into_params(parameter_in = Query))]
 pub struct Input {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
-    #[param(value_type = String)]
+    #[cfg_attr(feature = "docs", param(value_type = String))]
     pub tz: Tz,
 }
 
-#[derive(Debug, ToSchema, Serialize)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct Output {
     pub dates: Vec<String>,
     pub i_cats: Vec<Vec<String>>,
@@ -37,13 +38,14 @@ pub struct Output {
     pub te: f32,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub enum OutputDataValue {
     Period(String),
     Value(f32),
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     get,
     path = "/v1/transactions/stats",
     operation_id = "v1/transactions/stats",
@@ -53,9 +55,9 @@ pub enum OutputDataValue {
     responses(
         (status = 200, body = Output)
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
-pub async fn stats(
+pub async fn get_stats(
     State(state): State<AppState>,
     user: LoggedInUser,
     input: Query<Input>,
@@ -73,7 +75,7 @@ pub async fn stats(
 }
 
 fn compute(
-    mut tx_map: HashMap<String, Tx>,
+    mut tx_map: HashMap<String, StatsTx>,
     start_date: &NaiveDate,
     end_date: &NaiveDate,
 ) -> Output {
@@ -141,7 +143,7 @@ fn compute(
         }
     }
 
-    let mut period_txs: HashMap<String, Vec<&Tx>> = HashMap::new();
+    let mut period_txs: HashMap<String, Vec<&StatsTx>> = HashMap::new();
     for tx in tx_map.values() {
         if tx.amount == 0.0 {
             continue;
@@ -242,4 +244,15 @@ fn compute(
         ti: total_income,
         te: total_expenses,
     };
+}
+
+pub struct StatsTx {
+    pub id: String,
+    pub date: DateTime<Utc>,
+    pub amount: f32,
+    pub counter_party: String,
+    pub additional: Option<String>,
+    pub currency: String,
+    pub category: Option<TxCategory>,
+    pub links: Vec<String>,
 }

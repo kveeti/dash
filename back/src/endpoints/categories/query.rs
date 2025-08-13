@@ -4,18 +4,22 @@ use axum::{
     response::IntoResponse,
 };
 use serde::Deserialize;
-use utoipa::{IntoParams, ToSchema};
 
-use crate::{auth_middleware::LoggedInUser, data::Category, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, error::ApiError, state::AppState};
 
-#[derive(Debug, Deserialize, ToSchema, IntoParams)]
-#[into_params(parameter_in = Query)]
+#[cfg(feature = "docs")]
+use crate::data::TxCategory;
+
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "docs", derive(utoipa::IntoParams))]
+#[cfg_attr(feature = "docs", into_params(parameter_in = Query))]
 pub struct Input {
     pub search_text: Option<String>,
     pub include_counts: Option<bool>,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     get,
     path = "/v1/categories",
     operation_id = "v1/categories/query",
@@ -23,9 +27,9 @@ pub struct Input {
         Input
     ),
     responses(
-        (status = 200, body = Vec<Category>),
+        (status = 200, body = Vec<TxCategory>),
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn query(
     State(state): State<AppState>,

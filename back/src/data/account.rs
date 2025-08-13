@@ -1,7 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::{query, query_as};
-use utoipa::ToSchema;
 
 use super::Data;
 
@@ -80,13 +79,15 @@ impl Data {
     }
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct Account {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct AccountWithExternal {
     pub id: String,
     pub name: String,

@@ -5,7 +5,7 @@ use axum::extract::State;
 use axum::response::IntoResponse;
 use http::StatusCode;
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     delete,
     path = "/v1/categories/{id}",
     operation_id = "v1/categories/delete",
@@ -16,7 +16,7 @@ use http::StatusCode;
         (status = 204),
         (status = 400),
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn delete(
     State(state): State<AppState>,

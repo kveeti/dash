@@ -1,19 +1,18 @@
 use axum::{Json, extract::State, response::IntoResponse};
 use serde::Serialize;
-use utoipa::ToSchema;
 
 use crate::{
     auth_middleware::LoggedInUser, config::EnvironmentVariables, error::ApiError, state::AppState,
 };
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     get,
     path = "/v1/integrations",
     operation_id = "v1/integrations/get",
     responses(
         (status = 200, body = GetIntegrationsOutput),
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn get(
     State(state): State<AppState>,
@@ -77,13 +76,14 @@ pub fn allowed_integrations(envs: &EnvironmentVariables) -> Vec<AllowedIntegrati
     return allowed_integrations;
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct GetIntegrationsOutput {
     connected: Vec<ConnectedIntegration>,
     available: Vec<Integration>,
 }
-
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct AllowedIntegration {
     pub label: String,
     pub name: String,
@@ -91,14 +91,16 @@ pub struct AllowedIntegration {
     pub days_back: u32,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct Integration {
     pub label: String,
     pub name: String,
     pub link: String,
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct ConnectedIntegration {
     pub label: String,
     pub name: String,

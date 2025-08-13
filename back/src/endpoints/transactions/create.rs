@@ -8,7 +8,6 @@ use chrono::{DateTime, Utc};
 use http::StatusCode;
 use serde::Deserialize;
 use serde_with::{NoneAsEmptyString, serde_as};
-use utoipa::ToSchema;
 
 use crate::{
     auth_middleware::LoggedInUser,
@@ -18,7 +17,8 @@ use crate::{
 };
 
 #[serde_as]
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct CreateTransactionInput {
     pub counter_party: String,
     pub date: DateTime<Utc>,
@@ -30,7 +30,7 @@ pub struct CreateTransactionInput {
     pub account: Option<String>,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     post,
     path = "/v1/transactions",
     operation_id = "v1/transactions/create",
@@ -41,7 +41,7 @@ pub struct CreateTransactionInput {
     responses(
         (status = 201, body = ())
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn create(
     State(state): State<AppState>,

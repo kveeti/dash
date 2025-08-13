@@ -1,26 +1,25 @@
+use crate::{auth_middleware::LoggedInUser, data::UserSettings, error::ApiError, state::AppState};
 use axum::{Json, extract::State, response::IntoResponse};
 use cookie::CookieBuilder;
 use http::{HeaderMap, header};
 use openidconnect::CsrfToken;
 use serde::Serialize;
-use utoipa::ToSchema;
 
-use crate::{auth_middleware::LoggedInUser, data::Settings, error::ApiError, state::AppState};
-
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct MeOutput {
     pub id: String,
-    pub settings: Option<Settings>,
+    pub settings: Option<UserSettings>,
     pub csrf: String,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     get,
     path = "/v1/@me",
     responses(
         (status = 200, body = MeOutput)
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn get_me(
     State(state): State<AppState>,

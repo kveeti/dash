@@ -2,7 +2,6 @@ use anyhow::Context;
 use axum::{Json, extract::State, response::IntoResponse};
 use serde::{Deserialize, Serialize};
 use serde_with::{NoneAsEmptyString, serde_as};
-use utoipa::ToSchema;
 
 use crate::{
     auth_middleware::LoggedInUser,
@@ -12,7 +11,8 @@ use crate::{
 };
 
 #[serde_as]
-#[derive(Deserialize, ToSchema, Debug)]
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct TransactionsQueryInput {
     #[serde_as(as = "NoneAsEmptyString")]
     pub search_text: Option<String>,
@@ -23,14 +23,15 @@ pub struct TransactionsQueryInput {
     pub limit: Option<i8>,
 }
 
-#[derive(Serialize, ToSchema, Debug)]
+#[derive(Serialize, Debug)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct TransactionsQueryOutput {
     pub transactions: Vec<QueryTx>,
     pub next_id: Option<String>,
     pub prev_id: Option<String>,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     post,
     path = "/v1/transactions/query",
     operation_id = "v1/transactions/query",
@@ -41,7 +42,7 @@ pub struct TransactionsQueryOutput {
     responses(
         (status = 200, body = TransactionsQueryOutput),
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn query(
     State(state): State<AppState>,

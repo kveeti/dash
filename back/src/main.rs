@@ -1,5 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
+#[cfg(feature = "docs")]
+use crate::endpoints::openapi::openapi::openapi;
 use crate::endpoints::*;
 use auth_middleware::csrf_middleware;
 use axum::{
@@ -82,8 +84,9 @@ async fn main() {
         .with(otel_layer)
         .with(
             tracing_subscriber::fmt::layer()
-                .with_line_number(false)
-                .with_file(false),
+                .with_line_number(cfg!(debug_assertions))
+                .with_file(cfg!(debug_assertions))
+                .with_target(cfg!(debug_assertions)),
         )
         .init();
 
@@ -97,21 +100,22 @@ async fn main() {
     let state_for_pending = state.clone();
     tokio::spawn(async move {
         let _ = do_pending_imports(&state_for_pending).await;
+        drop(state_for_pending);
     });
 
     let v1_transactions = Router::new()
-        .route("/stats", get(transactions::stats))
-        .route("/query", post(transactions::query))
-        .route("/", post(transactions::create))
-        .route("/bulk", post(transactions::bulk))
+        .route("/stats", get(transactions::stats::get_stats))
+        .route("/query", post(transactions::query::query))
+        .route("/", post(transactions::create::create))
+        .route("/bulk", post(transactions::bulk::bulk))
         .route(
             "/import/{account_id}/{file_type}",
-            post(transactions::import),
+            post(transactions::import::import),
         )
-        .route("/{id}", patch(transactions::update))
-        .route("/{id}", delete(transactions::delete))
-        .route("/{id}/linked", post(transactions::link))
-        .route("/{id}/linked/{id}", delete(transactions::unlink));
+        .route("/{id}", patch(transactions::update::update))
+        .route("/{id}", delete(transactions::delete::delete))
+        .route("/{id}/linked", post(transactions::links::link))
+        .route("/{id}/linked/{id}", delete(transactions::links::unlink));
 
     let v1_categories = Router::new()
         .route("/", get(categories::query).post(categories::create))
@@ -158,8 +162,10 @@ async fn main() {
         .nest("/accounts", v1_accounts)
         .nest("/settings", v1_user_settings)
         .nest("/auth", v1_auth)
-        .route("/@me", get(me::get_me))
-        .route("/openapi.json", get(openapi));
+        .route("/@me", get(me::get_me));
+
+    #[cfg(feature = "docs")]
+    let v1 = v1.route("/openapi.json", get(openapi));
 
     let routes = Router::new()
         .nest("/v1", v1)

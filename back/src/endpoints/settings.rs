@@ -1,12 +1,12 @@
 use axum::{Json, extract::State, response::IntoResponse};
 use serde::Deserialize;
 use serde_with::{NoneAsEmptyString, serde_as};
-use utoipa::ToSchema;
 
-use crate::{auth_middleware::LoggedInUser, data::Settings, error::ApiError, state::AppState};
+use crate::{auth_middleware::LoggedInUser, data::UserSettings, error::ApiError, state::AppState};
 
 #[serde_as]
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct SaveSettingsInput {
     #[serde_as(as = "NoneAsEmptyString")]
     pub locale: Option<String>,
@@ -14,7 +14,7 @@ pub struct SaveSettingsInput {
     pub timezone: Option<String>,
 }
 
-#[utoipa::path(
+#[cfg_attr(feature = "docs", utoipa::path(
     post,
     path = "/v1/settings",
     operation_id = "v1/settings/save",
@@ -25,7 +25,7 @@ pub struct SaveSettingsInput {
     responses(
         (status = 200, body = ())
     )
-)]
+))]
 #[tracing::instrument(skip(state))]
 pub async fn save(
     State(state): State<AppState>,
@@ -36,7 +36,7 @@ pub async fn save(
         .data
         .save_settings(
             &user.id,
-            Settings {
+            UserSettings {
                 locale: payload.locale,
                 timezone: payload.timezone,
             },
