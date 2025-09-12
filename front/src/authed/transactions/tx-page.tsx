@@ -1,5 +1,6 @@
 import { PlusIcon } from "@radix-ui/react-icons";
 import { UseQueryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { startOfDay } from "date-fns";
 import { Tooltip } from "radix-ui";
 import { FormEvent, useRef, useState } from "react";
 import * as Rac from "react-aria-components";
@@ -20,9 +21,10 @@ import { Input } from "../../ui/input";
 import { Link } from "../../ui/link";
 import * as Sidebar from "../../ui/sidebar";
 import { Spinner } from "../../ui/spinner";
+import { Textarea } from "../../ui/textarea";
 import { TooltipContent } from "../../ui/tooltip";
 import { useLocaleStuff } from "../use-formatting";
-import { AccountField, CategoryField, DateField } from "./new-tx-page";
+import { AccountField, CategoryField, CreateCategory, DateField } from "./new-tx-page";
 
 export type Tx =
 	paths["/v1/transactions/query"]["post"]["responses"]["200"]["content"]["application/json"]["transactions"][number];
@@ -128,7 +130,7 @@ export default function TxPage() {
 							<SelectedTx
 								opts={opts}
 								unselect={() => setSelectedTxId(null)}
-								tx={selectedTx}
+								tx={{ ...selectedTx, date: new Date(selectedTx.date) }}
 							/>
 						</div>
 					)}
@@ -139,7 +141,6 @@ export default function TxPage() {
 						s={selectedKeys}
 						setS={setSelectedKeys}
 						selectingEnabled={selectingEnabled}
-						setSelectingEnabled={setSelectingEnabled}
 					/>
 				</>
 			)}
@@ -153,14 +154,12 @@ function TxList({
 	s,
 	setS,
 	selectingEnabled,
-	setSelectingEnabled,
 }: {
 	list: Array<Tx>;
 	onTxClick: (tx: Tx) => void;
 	s: Rac.Selection;
 	setS: (s: Rac.Selection) => void;
 	selectingEnabled: boolean;
-	setSelectingEnabled: (val: boolean) => void;
 }) {
 	const { f } = useLocaleStuff();
 
@@ -341,11 +340,143 @@ function SelectedTx({
 	unselect,
 }: {
 	opts: UseQueryOptions;
-	tx: Tx;
+	tx: Tx & { date: Date };
 	unselect: () => void;
 }) {
 	const { f } = useLocaleStuff();
 
+	return (
+		<Sidebar.Root modal={false} defaultOpen onOpenChange={unselect}>
+			<Sidebar.Content
+				className="relative space-y-2"
+				onInteractOutside={(e) => e.preventDefault()}
+			>
+				<Sidebar.Title>{tx.counter_party}</Sidebar.Title>
+
+				<div className="!absolute top-1 right-1">
+					<CopyButton value={tx.id} label="copy transaction id" />
+					<Sidebar.Close asChild>
+						<Button size="icon" variant="ghost" autoFocus>
+							<IconCross />
+						</Button>
+					</Sidebar.Close>
+				</div>
+
+				<p className="text-base">{f.amount.format(tx.amount)}</p>
+
+				<p>{f.sidebarDate.format(tx.date)}</p>
+
+				<p className="text-gray-11 break-words">{tx.additional}</p>
+
+				<div className="mt-3 flex flex-col gap-2">
+					<QuickEdit tx={tx} opts={opts} />
+
+					<Links opts={opts} tx={tx} links={tx.links} />
+
+					<details className="w-full">
+						<summary className="border-gray-5 focus h-10 border px-3 py-2">
+							<span className="leading-none select-none">edit</span>
+						</summary>
+
+						<FullEdit tx={tx} opts={opts} />
+					</details>
+				</div>
+			</Sidebar.Content>
+		</Sidebar.Root>
+	);
+}
+
+function QuickEdit({ tx, opts }: { tx: Tx & { date: Date }; opts: UseQueryOptions }) {
+	const qc = useQueryClient();
+	const mutation = api.useMutation("patch", "/v1/transactions/{id}", {
+		onSuccess: () => {
+			qc.invalidateQueries(opts);
+		},
+	});
+
+	function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		if (mutation.isPending) return;
+
+		const data = Object.fromEntries(new FormData(event.currentTarget));
+
+		mutation
+			.mutateAsync({
+				params: { path: { id: tx.id } },
+				body: {
+					date: tx.date,
+					amount: tx.amount,
+					counter_party: tx.counter_party,
+					additional: tx.additional,
+					account_id: tx.account?.id,
+					category_id: data.category_id || null,
+					categorize_on: startOfDay(new Date(data.categorize_on)).toISOString(),
+					notes: data.notes || null,
+				},
+			})
+			.catch(errorToast("error updating transaction"));
+	}
+
+	return (
+		<form onSubmit={onSubmit} className="flex flex-col space-y-4">
+			<Textarea
+				label="notes"
+				name="notes"
+				placeholder="Rent payment, Project materials, Team lunch"
+				defaultValue={tx.notes ?? undefined}
+			/>
+
+			<CategorySection category={tx.category} />
+
+			<DateField
+				label="categorize on"
+				name="categorize_on"
+				granularity="day"
+				defaultValue={tx.categorize_on ? new Date(tx.categorize_on) : undefined}
+			/>
+
+			<div className="flex justify-end">
+				<Button type="submit" isLoading={mutation.isPending}>
+					save
+				</Button>
+			</div>
+		</form>
+	);
+}
+
+function CategorySection({ category }: { category: Tx["category"] }) {
+	const [optimisticCategory, setOptimisticCategory] = useState(category);
+	const [name, setName] = useState<string | null>(null);
+	const refetch = useRef<() => void>(() => {});
+
+	return (
+		<div className="flex items-end gap-3">
+			<CategoryField
+				name="category_id"
+				label="category"
+				defaultValue={optimisticCategory}
+				key={optimisticCategory?.id}
+				onCreate={setName}
+				refetchRef={refetch}
+			/>
+
+			<CreateCategory
+				isOpen={!!name}
+				onCancel={() => {
+					setName(null);
+				}}
+				defaultValue={name ?? undefined}
+				onCreated={(newCategory) => {
+					setOptimisticCategory(newCategory);
+					refetch?.current?.();
+					setName(null);
+				}}
+			/>
+		</div>
+	);
+}
+
+function FullEdit({ tx, opts }: { tx: Tx & { date: Date }; opts: UseQueryOptions }) {
 	const qc = useQueryClient();
 	const mutation = api.useMutation("patch", "/v1/transactions/{id}", {
 		onSuccess: () => {
@@ -367,96 +498,39 @@ function SelectedTx({
 					amount: Number(data.amount),
 					counter_party: data.counter_party,
 					additional: data.additional || null,
-					category: data.category,
-					account: data.account,
+					category_id: tx.category?.id,
+					//categorize_on: tx.categorize_on,
+					account_id: data.account_id,
+					notes: data.notes,
 				},
 			})
 			.catch(errorToast("error updating transaction"));
 	}
 
-	const txDate = new Date(tx.date);
-
 	return (
-		<Sidebar.Root modal={false} defaultOpen onOpenChange={unselect}>
-			<Sidebar.Content
-				className="relative space-y-2"
-				onInteractOutside={(e) => e.preventDefault()}
-			>
-				<Sidebar.Title>{tx.counter_party}</Sidebar.Title>
+		<form onSubmit={onSubmit} className="mx-2 space-y-4 pt-3">
+			<Input name="counter_party" label="counter party" defaultValue={tx.counter_party} />
 
-				<div className="!absolute top-1 right-1">
-					<CopyButton value={tx.id} label="copy transaction id" />
-					<Sidebar.Close asChild>
-						<Button size="icon" variant="ghost" autoFocus>
-							<IconCross />
-						</Button>
-					</Sidebar.Close>
-				</div>
+			<Input label="amount" name="amount" defaultValue={tx.amount} />
 
-				<p className="text-base">{f.amount.format(tx.amount)}</p>
+			<DateField label="date" name="date" granularity="second" defaultValue={tx.date} />
 
-				<p>{f.sidebarDate.format(txDate)}</p>
+			<Textarea
+				name="additional"
+				label="additional"
+				defaultValue={tx.additional ?? undefined}
+			/>
 
-				<p className="text-gray-11 break-words">{tx.additional}</p>
+			<AccountField name="account_id" label="account" defaultValue={tx.account} />
 
-				<div className="mt-3 flex flex-col gap-2">
-					<details className="w-full">
-						<summary className="border-gray-5 focus h-10 border px-3 py-2">
-							<span className="leading-none select-none">edit</span>
-						</summary>
+			<div className="flex justify-between gap-2">
+				<DeleteTransaction opts={opts} id={tx.id} counterParty={tx.counter_party} />
 
-						<form onSubmit={onSubmit} className="space-y-4 pt-2">
-							<Input
-								name="counter_party"
-								label="counter party"
-								defaultValue={tx.counter_party}
-							/>
-
-							<Input label="amount" name="amount" defaultValue={tx.amount} />
-
-							<DateField
-								label="date"
-								name="date"
-								granularity="second"
-								defaultValue={txDate}
-							/>
-
-							<Input
-								name="additional"
-								label="additional"
-								defaultValue={tx.additional ?? undefined}
-							/>
-
-							<CategoryField
-								name="category"
-								label="category"
-								defaultValue={tx.category}
-							/>
-
-							<AccountField
-								name="account"
-								label="account"
-								defaultValue={tx.account}
-							/>
-
-							<div className="flex justify-between gap-2">
-								<DeleteTransaction
-									opts={opts}
-									id={tx.id}
-									counterParty={tx.counter_party}
-								/>
-
-								<Button type="submit" isLoading={mutation.isPending}>
-									save
-								</Button>
-							</div>
-						</form>
-					</details>
-
-					<Links opts={opts} tx={tx} links={tx.links} />
-				</div>
-			</Sidebar.Content>
-		</Sidebar.Root>
+				<Button type="submit" isLoading={mutation.isPending}>
+					save
+				</Button>
+			</div>
+		</form>
 	);
 }
 
@@ -537,7 +611,7 @@ function Links({ opts, tx, links }: { opts: UseQueryOptions; tx: Tx; links: Tx["
 				<span className="leading-none select-none">links</span>
 			</summary>
 
-			<form onSubmit={onSubmit} className="flex w-full items-end gap-2 pt-2">
+			<form onSubmit={onSubmit} className="flex w-full items-end gap-2 px-2 pt-2">
 				<Input
 					label="tx id"
 					name="link_id"
@@ -553,7 +627,7 @@ function Links({ opts, tx, links }: { opts: UseQueryOptions; tx: Tx; links: Tx["
 			</form>
 
 			{!!links.length && (
-				<ul className="space-y-2 pt-4">
+				<ul className="space-y-2 px-2 pt-4">
 					{links.map((l) => (
 						<li className="border-gray-5 relative flex flex-col gap-1 border p-2">
 							<div className="absolute top-1 right-1">

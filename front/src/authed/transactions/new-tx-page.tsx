@@ -2,9 +2,10 @@ import * as ak from "@ariakit/react";
 import { parseDateTime } from "@internationalized/date";
 import { CalendarIcon } from "@radix-ui/react-icons";
 import { useQueryClient } from "@tanstack/react-query";
+import { log } from "console";
 import { format } from "date-fns";
 import { Tooltip } from "radix-ui";
-import { FormEvent, startTransition, useId, useState } from "react";
+import { FormEvent, MutableRefObject, startTransition, useId, useState } from "react";
 import * as Rac from "react-aria-components";
 import { useAsyncList } from "react-stately";
 
@@ -20,6 +21,7 @@ import { IconPlus } from "../../ui/icons/plus";
 import { Error, Input, LabelWrapper, inputStyles, labelStyles } from "../../ui/input";
 import { Link } from "../../ui/link";
 import { Spinner } from "../../ui/spinner";
+import { Textarea } from "../../ui/textarea";
 import { TooltipContent } from "../../ui/tooltip";
 import { useDialog } from "../../ui/use-dialog";
 import { useLocaleStuff } from "../use-formatting";
@@ -39,14 +41,16 @@ export default function NewTxPage() {
 					amount: Number(data.get("amount") as unknown as string),
 					counter_party: data.get("counterParty") as unknown as string,
 					additional: data.get("additional") as unknown as string,
-					account: data.get("account") as string | null,
-					category: data.get("category") as string | null,
+					notes: data.get("notes") as unknown as string,
+					account_id: data.get("account_id") as string | null,
+					category_id: data.get("category_id") as string | null,
 				},
 			})
 			.then(() => {
 				e.target.counterParty.value = "";
 				e.target.amount.value = "";
 				e.target.additional.value = "";
+				e.target.notes.value = "";
 				e.target.counterParty.focus();
 			});
 	}
@@ -65,16 +69,18 @@ export default function NewTxPage() {
 
 				<DateField name="date" label="date" granularity="minute" />
 
-				<Input name="additional" label="additional" autoComplete="off" />
+				<Textarea name="additional" label="additional" autoComplete="off" />
+
+				<Textarea name="notes" label="notes" autoComplete="off" />
 
 				<div className="flex items-end gap-3">
-					<CategoryField name="category" label="category" />
+					<CategoryField name="category_id" label="category" />
 
 					<CreateCategory />
 				</div>
 
 				<div className="flex items-end gap-3">
-					<AccountField name="account" label="account" />
+					<AccountField name="account_id" label="account" />
 
 					<CreateAccount />
 				</div>
@@ -98,7 +104,7 @@ export function DateField({
 	label: string;
 	error?: string;
 	defaultValue?: Date;
-	granularity: "second" | "minute";
+	granularity: "day" | "hour" | "minute" | "second";
 }) {
 	const { hourCycle } = useLocaleStuff();
 	const _defaultValue = parseDateTime(format(defaultValue, "yyyy-MM-dd'T'HH:mm:ss"));
@@ -337,14 +343,24 @@ export function CreateAccount() {
 	);
 }
 
-export function CreateCategory() {
+export function CreateCategory({
+	defaultValue,
+	isOpen = false,
+	onCancel,
+	onCreated,
+}: {
+	defaultValue?: string;
+	isOpen: boolean;
+	onCancel?: () => void;
+	onCreated?: (newCategory: { id: string; name: string; is_neutral: boolean }) => void;
+}) {
 	const qc = useQueryClient();
 	const mutation = api.useMutation("post", "/v1/categories", {
 		onSuccess: () => {
 			qc.invalidateQueries(api.queryOptions("get", "/v1/categories"));
 		},
 	});
-	const d = useDialog();
+	const d = useDialog(isOpen);
 
 	function handleSubmit(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -358,8 +374,9 @@ export function CreateCategory() {
 			.mutateAsync({
 				body: { name, is_neutral: isNeutral === "on" },
 			})
-			.then(() => {
+			.then((newCategory) => {
 				d.close();
+				onCreated?.(newCategory);
 			})
 			.catch(errorToast("error creating category"));
 	}
@@ -381,13 +398,20 @@ export function CreateCategory() {
 				<Dialog.Title>new category</Dialog.Title>
 
 				<form className="mt-4 space-y-6" onSubmit={handleSubmit}>
-					<Input label="name" name="name" autoComplete="off" />
+					<Input
+						label="name"
+						name="name"
+						defaultValue={defaultValue}
+						autoComplete="off"
+					/>
 
 					<Checkbox label="is neutral" name="isNeutral" />
 
 					<div className="flex justify-end gap-3">
 						<Dialog.Close asChild>
-							<Button variant="ghost">cancel</Button>
+							<Button variant="ghost" onClick={() => onCancel?.()}>
+								cancel
+							</Button>
 						</Dialog.Close>
 
 						<Button type="submit" isLoading={mutation.isPending}>
@@ -405,6 +429,8 @@ export function CategoryField({
 	label,
 	error,
 	defaultValue,
+	onCreate,
+	refetchRef,
 }: {
 	name: string;
 	label?: string;
@@ -413,6 +439,8 @@ export function CategoryField({
 		id: string;
 		name: string;
 	};
+	onCreate?: (name: string) => void;
+	refetchRef?: MutableRefObject<() => void>;
 }) {
 	const [s, setS] = useState<{
 		value: string;
@@ -436,6 +464,10 @@ export function CategoryField({
 		},
 	});
 
+	if (refetchRef) {
+		refetchRef.current = list.reload;
+	}
+
 	function onSelect(val: string) {
 		const existing = list.items.find((x) => x.id === val);
 		if (!existing) {
@@ -450,7 +482,6 @@ export function CategoryField({
 	return (
 		<div className="w-full">
 			<ak.ComboboxProvider
-				value={list.filterText}
 				setValue={(val) => {
 					startTransition(() => {
 						list.setFilterText(val);
@@ -502,6 +533,18 @@ export function CategoryField({
 									{x.name}
 								</SelectComboItem>
 							))}
+
+							{list.filterText && (
+								<SelectComboItem
+									value={list.filterText}
+									onClick={(e) => {
+										e.preventDefault();
+										onCreate?.(list.filterText);
+									}}
+								>
+									create "{list.filterText}"
+								</SelectComboItem>
+							)}
 						</ak.ComboboxList>
 					</ak.SelectPopover>
 				</ak.SelectProvider>

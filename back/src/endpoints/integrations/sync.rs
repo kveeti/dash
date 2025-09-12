@@ -124,7 +124,9 @@ pub async fn sync(State(state): State<AppState>, user: LoggedInUser) -> Result<(
                                     .to_owned(),
                                 counter_party: counter_party.to_owned(),
                                 date: date.and_time(NaiveTime::default()).and_utc(),
+                                categorize_on: None,
                                 amount,
+                                notes: None,
                             });
                         }
                     }

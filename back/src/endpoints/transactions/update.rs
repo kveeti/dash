@@ -20,14 +20,17 @@ use crate::{
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct TransactionUpdateInput {
+    pub categorize_on: Option<DateTime<Utc>>,
     pub counter_party: String,
     pub date: DateTime<Utc>,
     pub amount: f32,
     #[serde_as(as = "NoneAsEmptyString")]
     pub additional: Option<String>,
     #[serde_as(as = "NoneAsEmptyString")]
-    pub category: Option<String>,
-    pub account: Option<String>,
+    pub notes: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
+    pub category_id: Option<String>,
+    pub account_id: Option<String>,
 }
 
 #[cfg_attr(feature = "docs", utoipa::path(
@@ -64,7 +67,7 @@ pub async fn update(
         );
     }
 
-    let account = match payload.account {
+    let account = match payload.account_id {
         Some(ref acc) => {
             let account = acc.trim();
             if account.is_empty() {
@@ -93,8 +96,10 @@ pub async fn update(
     let account = account.unwrap();
 
     let tx = UpdateTx {
+        categorize_on: payload.categorize_on,
         counter_party: &payload.counter_party,
         additional: payload.additional.as_deref(),
+        notes: payload.notes.as_deref(),
         amount: payload.amount,
         currency: &"EUR".to_string(),
         date: payload.date,
@@ -102,7 +107,7 @@ pub async fn update(
 
     state
         .data
-        .update_tx_2(&user.id, &id, &tx, account, payload.category)
+        .update_tx_2(&user.id, &id, &tx, account, payload.category_id)
         .await?;
 
     return Ok(StatusCode::OK);

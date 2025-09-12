@@ -22,12 +22,15 @@ use crate::{
 pub struct CreateTransactionInput {
     pub counter_party: String,
     pub date: DateTime<Utc>,
+    pub categorize_on: Option<DateTime<Utc>>,
     pub amount: f32,
     #[serde_as(as = "NoneAsEmptyString")]
     pub additional: Option<String>,
     #[serde_as(as = "NoneAsEmptyString")]
-    pub category: Option<String>,
-    pub account: Option<String>,
+    pub notes: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
+    pub category_id: Option<String>,
+    pub account_id: String,
 }
 
 #[cfg_attr(feature = "docs", utoipa::path(
@@ -60,25 +63,6 @@ pub async fn create(
         );
     }
 
-    let account = match payload.account {
-        Some(ref acc) => {
-            let account = acc.trim();
-            if account.is_empty() {
-                errors.insert("account".to_owned(), "required".to_owned());
-                None
-            } else if account.len() > 250 {
-                errors.insert("account".to_owned(), "must be shorter than 250".to_owned());
-                None
-            } else {
-                Some(account.to_owned())
-            }
-        }
-        None => {
-            errors.insert("account".to_owned(), "required".to_owned());
-            None
-        }
-    };
-
     if !errors.is_empty() {
         return Err(ApiError::BadRequestDetails(
             "invalid request".to_owned(),
@@ -86,20 +70,20 @@ pub async fn create(
         ));
     }
 
-    let account = account.unwrap();
-
     let tx = InsertTx {
         id: create_id(),
+        date: payload.date,
+        categorize_on: payload.categorize_on,
         counter_party: counter_party.to_owned(),
         additional: payload.additional,
+        notes: payload.notes,
         amount: payload.amount,
         currency: "EUR".to_owned(),
-        date: payload.date,
     };
 
     state
         .data
-        .insert_tx(&user.id, &tx, account, payload.category)
+        .insert_tx(&user.id, &tx, payload.account_id, payload.category_id)
         .await?;
 
     return Ok(StatusCode::CREATED);

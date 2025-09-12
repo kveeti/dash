@@ -1,7 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-export function useDialog() {
-	const [isOpen, setIsOpen] = useState(false);
+export function useDialog(isOpen = false) {
+	const [_isOpen, setIsOpen] = useState(isOpen);
+
+	useEffect(() => {
+		setIsOpen(isOpen);
+	}, [isOpen]);
 
 	function open() {
 		setIsOpen(true);
@@ -15,7 +19,7 @@ export function useDialog() {
 		open,
 		close,
 		props: {
-			open: isOpen,
+			open: _isOpen,
 			onOpenChange: setIsOpen,
 		},
 	};

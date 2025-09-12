@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::{
     auth_middleware::LoggedInUser,
-    data::create_id,
+    data::{TxCategory, create_id},
     error::{ApiError, ErrorDetails},
     state::AppState,
 };
@@ -27,7 +27,7 @@ pub struct CreateCategoryInput {
         content_type = "application/json",
     ),
     responses(
-        (status = 201, body = ())
+        (status = 201, body = TxCategory)
     )
 ))]
 #[tracing::instrument(skip(state))]
@@ -60,5 +60,9 @@ pub async fn create(
         .await
         .context("error inserting category")?;
 
-    Ok(())
+    Ok(Json(TxCategory {
+        id: category_id.clone(),
+        name: name.to_owned(),
+        is_neutral: payload.is_neutral,
+    }))
 }

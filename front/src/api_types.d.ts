@@ -300,11 +300,6 @@ export interface components {
             id: string;
             name: string;
         };
-        Category: {
-            id: string;
-            is_neutral: boolean;
-            name: string;
-        };
         CategoryUpdateInput: {
             is_neutral: boolean;
             name: string;
@@ -321,14 +316,17 @@ export interface components {
             name: string;
         };
         CreateTransactionInput: {
-            account?: string | null;
+            account_id: string;
             additional?: string | null;
             /** Format: float */
             amount: number;
-            category?: string | null;
+            /** Format: date-time */
+            categorize_on?: string | null;
+            category_id?: string | null;
             counter_party: string;
             /** Format: date-time */
             date: string;
+            notes?: string | null;
         };
         GetIntegrationsOutput: {
             available: components["schemas"]["Integration"][];
@@ -362,7 +360,7 @@ export interface components {
         MeOutput: {
             csrf: string;
             id: string;
-            settings?: null | components["schemas"]["Settings"];
+            settings?: null | components["schemas"]["UserSettings"];
         };
         Output: {
             dates: string[];
@@ -385,19 +383,18 @@ export interface components {
             additional?: string | null;
             /** Format: float */
             amount: number;
-            category?: null | components["schemas"]["Category"];
+            /** Format: date-time */
+            categorize_on?: string | null;
+            category?: null | components["schemas"]["TxCategory"];
             counter_party: string;
             currency: string;
             /** Format: date-time */
             date: string;
             id: string;
             links: components["schemas"]["Link"][];
+            notes?: string | null;
         };
         SaveSettingsInput: {
-            locale?: string | null;
-            timezone?: string | null;
-        };
-        Settings: {
             locale?: string | null;
             timezone?: string | null;
         };
@@ -406,14 +403,17 @@ export interface components {
             ids: string[];
         };
         TransactionUpdateInput: {
-            account?: string | null;
+            account_id?: string | null;
             additional?: string | null;
             /** Format: float */
             amount: number;
-            category?: string | null;
+            /** Format: date-time */
+            categorize_on?: string | null;
+            category_id?: string | null;
             counter_party: string;
             /** Format: date-time */
             date: string;
+            notes?: string | null;
         };
         TransactionsQueryInput: {
             left?: string | null;
@@ -426,6 +426,15 @@ export interface components {
             next_id?: string | null;
             prev_id?: string | null;
             transactions: components["schemas"]["QueryTx"][];
+        };
+        TxCategory: {
+            id: string;
+            is_neutral: boolean;
+            name: string;
+        };
+        UserSettings: {
+            locale?: string | null;
+            timezone?: string | null;
         };
     };
     responses: never;
@@ -570,7 +579,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Category"][];
+                    "application/json": components["schemas"]["TxCategory"][];
                 };
             };
         };
@@ -593,7 +602,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TxCategory"];
                 };
             };
         };

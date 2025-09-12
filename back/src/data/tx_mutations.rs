@@ -384,25 +384,38 @@ impl Data {
 
         query!(
             r#"
-           insert into transactions (
-               id, user_id, created_at, updated_at, date, amount, currency, 
-               counter_party, additional, account_id, category_id
-           )
-           select 
-               $1, $2::text, $3, $3, $4, $5, $6, $7, $8,
-               (select id from accounts where id = $9 and user_id = $2::text),
-               (select id from transaction_categories where id = $10::text and user_id = $2::text)
+            insert into transactions (
+                id,
+                user_id,
+                created_at,
+                updated_at,
+                date,
+                categorize_on,
+                amount,
+                currency,
+                counter_party,
+                additional,
+                notes,
+                account_id,
+                category_id
+            )
+            select 
+                $1, $2::text, $3, $3, $4, $5, $6, $7, $8, $9, $10,
+                (select id from accounts where id = $11 and user_id = $2::text),
+                (select id from transaction_categories where id = $12::text and user_id = $2::text)
            "#,
             tx_id,            // $1
             user_id,          // $2
             now,              // $3
             tx.date,          // $4
-            tx.amount,        // $5
-            tx.currency,      // $6
-            tx.counter_party, // $7
-            tx.additional,    // $8
-            account_id,       // $9
-            category_id,      // $10
+            tx.categorize_on, // $5
+            tx.amount,        // $6
+            tx.currency,      // $7
+            tx.counter_party, // $8
+            tx.additional,    // $9
+            tx.notes,         // $10
+            account_id,       // $11
+            category_id,      // $12
         )
         .execute(&self.pg_pool)
         .await?;
@@ -422,29 +435,33 @@ impl Data {
         let now = Utc::now();
 
         query!(
-           r#"
-           update transactions
-           set
-               updated_at = $1,
-               date = $2,
-               amount = $3,
-               currency = $4,
-               counter_party = $5,
-               additional = $6,
-               account_id = (select id from accounts where id = $7 and user_id = $8::text),
-               category_id = (select id from transaction_categories where id = $9::text and user_id = $8::text)
-           where id = $10 and user_id = $8::text
-           "#,
-           now,                    // $1
-           input.date,             // $2
-           input.amount,           // $3
-           input.currency,         // $4
-           input.counter_party,    // $5
-           input.additional,       // $6
-           account_id,             // $7
-           user_id,                // $8
-           category_id,            // $9
-           tx_id,                  // $10
+            r#"
+            update transactions
+            set
+                updated_at = $1,
+                date = $2,
+                categorize_on = $3,
+                amount = $4,
+                currency = $5,
+                counter_party = $6,
+                additional = $7,
+                notes = $8,
+                account_id = (select id from accounts where id = $9 and user_id = $10::text),
+                category_id = (select id from transaction_categories where id = $11::text and user_id = $10::text)
+            where id = $12 and user_id = $10::text
+            "#,
+            now,                    // $1
+            input.date,             // $2
+            input.categorize_on,    // $3
+            input.amount,           // $4
+            input.currency,         // $5
+            input.counter_party,    // $6
+            input.additional,       // $7
+            input.notes,            // $8
+            account_id,             // $9
+            user_id,                // $10
+            category_id,            // $11
+            tx_id,                  // $12
        )
        .execute(&self.pg_pool)
        .await?;
@@ -596,18 +613,22 @@ pub async fn do_pending_imports(state: &AppState) -> Result<(), anyhow::Error> {
 #[derive(Debug)]
 pub struct UpdateTx<'a> {
     pub date: DateTime<Utc>,
+    pub categorize_on: Option<DateTime<Utc>>,
     pub counter_party: &'a str,
     pub additional: Option<&'a str>,
     pub currency: &'a str,
     pub amount: f32,
+    pub notes: Option<&'a str>,
 }
 
 #[derive(Debug)]
 pub struct InsertTx {
     pub id: String,
     pub date: DateTime<Utc>,
+    pub categorize_on: Option<DateTime<Utc>>,
     pub counter_party: String,
     pub additional: Option<String>,
     pub currency: String,
     pub amount: f32,
+    pub notes: Option<String>,
 }

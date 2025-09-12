@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use futures::TryStreamExt;
 use indexmap::IndexMap;
 use serde::Serialize;
-use sqlx::{Postgres, QueryBuilder, Row, prelude::FromRow, query_as};
+use sqlx::{Postgres, QueryBuilder, Row, prelude::FromRow, query, query_as};
 
 use crate::{
     data::Account,
@@ -24,11 +24,13 @@ impl Data {
             select
                 t.id as id,
                 t.date as date,
+                t.categorize_on as categorize_on,
                 t.counter_party as counter_party,
                 t.amount as amount,
                 t.category_id as category_id,
                 t.currency as currency,
                 t.additional as additional,
+                t.notes as notes,
 
                 c.name as c_name,
                 c.is_neutral as c_is_neutral,
@@ -125,69 +127,50 @@ impl Data {
         }
 
         for row in rows {
-            let id: &str = row.try_get("id").expect("id");
+            let id: &str = row.get_unchecked("id");
 
-            let link_id: Option<String> = row.try_get("l_id").expect("l_id");
+            let link_id: Option<String> = row.get_unchecked("l_id");
 
-            let tx = tx_map.entry(id.to_owned()).or_insert_with(|| {
-                let date: DateTime<Utc> = row.try_get("date").expect("date");
-                let counter_party: String = row.try_get("counter_party").expect("counter_party");
-                let amount: f32 = row.try_get("amount").expect("amount");
-                let additional: Option<String> = row.try_get("additional").expect("additional");
-                let currency: String = row.try_get("currency").expect("currency");
-                let category_id: Option<String> = row.try_get("category_id").expect("category_id");
-                let account_id: Option<String> = row.try_get("account_id").expect("account_id");
-
-                QueryTx {
-                    id: id.to_owned(),
-                    date,
-                    counter_party,
-                    amount,
-                    additional,
-                    currency,
-                    links: vec![],
-                    account: if let Some(acc_id) = account_id {
-                        let name: String = row.try_get("account_name").expect("account_name");
-                        Some(Account { id: acc_id, name })
-                    } else {
-                        None
-                    },
-                    category: if let Some(cat_id) = category_id {
-                        let name: String = row.try_get("c_name").expect("c_name");
-                        let is_neutral: bool = row.try_get("c_is_neutral").expect("c_is_neutral");
-                        Some(TxCategory {
-                            id: cat_id,
-                            name,
-                            is_neutral,
-                        })
-                    } else {
-                        None
-                    },
-                }
+            let tx = tx_map.entry(id.to_owned()).or_insert_with(|| QueryTx {
+                id: id.to_owned(),
+                date: row.get_unchecked("date"),
+                categorize_on: row.get_unchecked("categorize_on"),
+                counter_party: row.get_unchecked("counter_party"),
+                amount: row.get_unchecked("amount"),
+                additional: row.get_unchecked("additional"),
+                notes: row.get_unchecked("notes"),
+                currency: row.get_unchecked("currency"),
+                links: vec![],
+                account: if let Some(acc_id) = row.get_unchecked("account_id") {
+                    let name: String = row.get_unchecked("account_name");
+                    Some(Account { id: acc_id, name })
+                } else {
+                    None
+                },
+                category: if let Some(cat_id) = row.get_unchecked("category_id") {
+                    let name: String = row.get_unchecked("c_name");
+                    let is_neutral: bool = row.get_unchecked("c_is_neutral");
+                    Some(TxCategory {
+                        id: cat_id,
+                        name,
+                        is_neutral,
+                    })
+                } else {
+                    None
+                },
             });
 
             if let Some(l_id) = link_id {
-                let created_at: DateTime<Utc> =
-                    row.try_get("link_created_at").expect("link_created_at");
-                let updated_at: Option<DateTime<Utc>> =
-                    row.try_get("link_updated_at").expect("link_updated_at");
-                let date: DateTime<Utc> = row.try_get("l_date").expect("l_date");
-                let counter_party: String =
-                    row.try_get("l_counter_party").expect("l_counter_party");
-                let additional: Option<String> = row.try_get("l_additional").expect("l_additional");
-                let currency: String = row.try_get("l_currency").expect("l_currency");
-                let amount: f32 = row.try_get("l_amount").expect("l_amount");
-
                 tx.links.push(Link {
-                    created_at,
-                    updated_at,
+                    created_at: row.get_unchecked("link_created_at"),
+                    updated_at: row.get_unchecked("link_updated_at"),
                     tx: LinkedTx {
                         id: l_id,
-                        date,
-                        counter_party,
-                        additional,
-                        currency,
-                        amount,
+                        date: row.get_unchecked("l_date"),
+                        counter_party: row.get_unchecked("l_counter_party"),
+                        additional: row.get_unchecked("l_additional"),
+                        currency: row.get_unchecked("l_currency"),
+                        amount: row.get_unchecked("l_amount"),
                     },
                 });
             }
@@ -250,19 +233,18 @@ impl Data {
         start: &DateTime<Utc>,
         end: &DateTime<Utc>,
     ) -> Result<HashMap<String, StatsTx>, sqlx::Error> {
-        let mut rows = query_as!(
-            TxRow,
+        let mut rows = query(
             r#"
             select
                 t.id as id,
-                t.date as date,
+                coalesce(t.date, t.categorize_on) as date,
                 t.counter_party as counter_party,
                 t.amount as amount,
                 t.category_id as category_id,
                 t.additional as additional,
                 t.currency as currency,
-                c.name as "cat_name?",
-                c.is_neutral as "cat_is_ne?",
+                c.name as cat_name,
+                c.is_neutral as cat_is_ne,
 
                 linked.id as "linked_id?"
             from transactions t
@@ -275,36 +257,38 @@ impl Data {
 
             where t.user_id = $1
             and t.date between $2 and $3
-            "#,
-            user_id,
-            start,
-            end
+            "#
         )
+        .bind(user_id)
+        .bind(start)
+        .bind(end)
         .fetch(&self.pg_pool);
 
         let mut tx_map: HashMap<String, StatsTx> = HashMap::default();
 
         while let Some(row) = rows.try_next().await? {
-            let tx = tx_map.entry(row.id.to_owned()).or_insert_with(|| StatsTx {
-                id: row.id,
-                date: row.date,
-                counter_party: row.counter_party,
-                amount: row.amount,
-                additional: row.additional,
-                currency: row.currency,
+            let id: String = row.get_unchecked("id");
+
+            let tx = tx_map.entry(id.to_owned()).or_insert_with(|| StatsTx {
+                id,
+                date: row.get_unchecked("date"),
+                counter_party: row.get_unchecked("counter_party"),
+                amount: row.get_unchecked("amount"),
+                additional: row.get_unchecked("additional"),
+                currency: row.get_unchecked("currency"),
                 links: vec![],
-                category: if let Some(cat_id) = row.category_id {
+                category: if let Some(cat_id) = row.get_unchecked("category_id") {
                     Some(TxCategory {
                         id: cat_id,
-                        name: row.cat_name.expect("checked cat_name"),
-                        is_neutral: row.cat_is_ne.expect("checked is_ne"),
+                        name: row.get_unchecked("cat_name"),
+                        is_neutral: row.get_unchecked("cat_is_ne"),
                     })
                 } else {
                     None
                 },
             });
 
-            if let Some(linked_id) = row.linked_id {
+            if let Some(linked_id) = row.get_unchecked("linked_id") {
                 tx.links.push(linked_id);
             }
         }
@@ -318,9 +302,11 @@ impl Data {
 pub struct QueryTx {
     pub id: String,
     pub date: DateTime<Utc>,
+    pub categorize_on: Option<DateTime<Utc>>,
     pub amount: f32,
     pub counter_party: String,
     pub additional: Option<String>,
+    pub notes: Option<String>,
     pub currency: String,
     pub category: Option<TxCategory>,
     pub account: Option<Account>,
@@ -367,26 +353,12 @@ pub struct SyncTx {
     pub amount: f32,
 }
 
-#[derive(Debug, FromRow)]
-struct TxRow {
-    id: String,
-    date: DateTime<Utc>,
-    amount: f32,
-    counter_party: String,
-    additional: Option<String>,
-    currency: String,
-    category_id: Option<String>,
-    cat_name: Option<String>,
-    cat_is_ne: Option<bool>,
-
-    linked_id: Option<String>,
-}
-
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "docs", derive(utoipa::ToSchema))]
 pub struct Tx {
     pub id: String,
     pub date: DateTime<Utc>,
+    pub categorize_on: Option<DateTime<Utc>>,
     pub amount: f32,
     pub counter_party: String,
     pub additional: Option<String>,

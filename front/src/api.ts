@@ -19,7 +19,7 @@ export const fetchClient = createFetchClient<paths>({
 });
 
 export let csrf: string | undefined = win.__ME_LOADER__.promise
-	? win.__ME_LOADER__.promise.then((me) => me.csrf)
+	? win.__ME_LOADER__.promise.then((me) => me?.csrf)
 	: win.__ME_LOADER__.data?.csrf;
 
 fetchClient.use({
