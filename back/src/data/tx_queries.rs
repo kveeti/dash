@@ -246,7 +246,7 @@ impl Data {
                 c.name as cat_name,
                 c.is_neutral as cat_is_ne,
 
-                linked.id as "linked_id?"
+                linked.id as linked_id
             from transactions t
             left join transaction_categories c on t.category_id = c.id
 
