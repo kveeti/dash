@@ -237,7 +237,7 @@ impl Data {
             r#"
             select
                 t.id as id,
-                coalesce(t.date, t.categorize_on) as date,
+                coalesce(t.categorize_on, t.date) as date,
                 t.counter_party as counter_party,
                 t.amount as amount,
                 t.category_id as category_id,
