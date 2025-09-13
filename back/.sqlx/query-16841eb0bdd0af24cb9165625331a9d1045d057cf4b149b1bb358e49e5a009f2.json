@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            update transactions\n            set\n                updated_at = $1,\n                date = $2,\n                categorize_on = $3,\n                amount = $4,\n                currency = $5,\n                counter_party = $6,\n                additional = $7,\n                notes = $8,\n                account_id = (select id from accounts where id = $9 and user_id = $10::text),\n                category_id = (select id from transaction_categories where id = $11::text and user_id = $10::text)\n            where id = $12 and user_id = $10::text\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Float4",
+        "Varchar",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "16841eb0bdd0af24cb9165625331a9d1045d057cf4b149b1bb358e49e5a009f2"
+}
