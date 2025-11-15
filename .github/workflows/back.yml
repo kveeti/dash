@@ -35,7 +35,8 @@ jobs:
 
   build_and_push_docker_image:
     name: build and push docker image
-    runs-on: ubuntu-24.04-arm
+#    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     needs: checks
     defaults:
       run:
@@ -47,7 +48,8 @@ jobs:
       - name: setup rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@9d7e65c320fdb52dcd45ffaa68deb6c02c8754d9 # 1.12.0
         with:
-          target: aarch64-unknown-linux-musl
+#          target: aarch64-unknown-linux-musl
+          target: x86_64-unknown-linux-musl
           cache-workspaces: "${{ env.DIR }}"
 
       - name: setup sccache
@@ -60,9 +62,13 @@ jobs:
           version: 1.2.4-2
 
       - name: build binary
+#        run: |
+#          cargo build --release --target aarch64-unknown-linux-musl && \
+#          cp ./target/aarch64-unknown-linux-musl/release/money_backend ./money_backend && \
+#          chmod +x money_backend
         run: |
-          cargo build --release --target aarch64-unknown-linux-musl && \
-          cp ./target/aarch64-unknown-linux-musl/release/money_backend ./money_backend && \
+          cargo build --release --target x86_64-unknown-linux-musl && \
+          cp ./target/x86_64-unknown-linux-musl/release/money_backend ./money_backend && \
           chmod +x money_backend
         env:
           SCCACHE_GHA_ENABLED: "true"
@@ -96,8 +102,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           context: ${{ env.DIR }}
-          file: ${{ env.DIR }}/Dockerfile.arm
-          platforms: linux/arm64
+          file: ${{ env.DIR }}/Dockerfile
+#          platforms: linux/arm64
+          platforms: linux/amd64
           cache-from: type=registry,ref=${{ env.DOCKERHUB_IMAGE }}:buildcache
           cache-to: type=registry,ref=${{ env.DOCKERHUB_IMAGE }}:buildcache,mode=max
 
