@@ -372,8 +372,14 @@ export interface components {
             n_cats: string[][];
             /** Format: float */
             te: number;
+            te_cats: string[];
+            te_vals: number[];
             /** Format: float */
             ti: number;
+            ti_cats: string[];
+            ti_vals: number[];
+            tn_cats: string[];
+            tn_vals: number[];
             tte: number[];
             tti: number[];
             ttn: number[];

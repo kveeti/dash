@@ -133,7 +133,7 @@ async fn main() {
 
     // dev login in debug mode
     #[cfg(debug_assertions)]
-    let v1_auth = v1_auth_base.route("/___dev_login___", post(auth::___dev_login___));
+    let v1_auth = v1_auth_base.route("/___dev_login___", get(auth::___dev_login___));
     #[cfg(not(debug_assertions))]
     let v1_auth = v1_auth_base;
 
