@@ -4,8 +4,8 @@ import { Tooltip } from "radix-ui";
 import { FormEvent, startTransition, useMemo, useState } from "react";
 
 import { api, useMe, useSetMe } from "../api";
+import { API_BASE_URL } from "../lib/constants";
 import { errorToast } from "../lib/error-toast";
-import { things } from "../things";
 import { Button } from "../ui/button";
 import { IconCross } from "../ui/icons/cross";
 import { LabelWrapper, inputStyles, labelStyles } from "../ui/input";
@@ -113,7 +113,7 @@ export default function SettingsPage() {
 										<li>
 											<a
 												className={textLinkStyles}
-												href={things.apiBase + c.link}
+												href={API_BASE_URL + c.link}
 											>
 												{c.label}
 											</a>

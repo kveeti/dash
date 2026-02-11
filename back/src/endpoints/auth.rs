@@ -57,7 +57,7 @@ pub async fn init(
     user: Option<LoggedInUser>,
 ) -> Result<impl IntoResponse, ApiError> {
     if user.is_some() {
-        return Ok((Redirect::temporary(&state.config.front_base_url)).into_response());
+        return Ok((Redirect::temporary("/")).into_response());
     }
 
     let (_, oidc_client) = create_oidc(&state.config).await?;
@@ -112,7 +112,7 @@ pub async fn callback(
     user: Option<LoggedInUser>,
 ) -> Result<impl IntoResponse, ApiError> {
     if user.is_some() {
-        return Ok((Redirect::temporary(&state.config.front_base_url)).into_response());
+        return Ok((Redirect::temporary("/")).into_response());
     }
 
     let (http_client, oidc_client) = create_oidc(&state.config).await?;
@@ -221,7 +221,7 @@ pub async fn callback(
         create_state_cookie(None, state.config.use_secure_cookies),
     );
 
-    return Ok((headers, Redirect::temporary(&state.config.front_base_url)).into_response());
+    return Ok((headers, Redirect::temporary("/")).into_response());
 }
 
 #[cfg_attr(feature = "docs", utoipa::path(
@@ -256,7 +256,7 @@ pub async fn logout(
             });
     }
 
-    return Ok((headers, Redirect::temporary(&state.config.front_base_url)));
+    return Ok((headers, Redirect::temporary("/")));
 }
 
 #[cfg(debug_assertions)]
@@ -301,7 +301,7 @@ pub async fn ___dev_login___(State(state): State<AppState>) -> Result<impl IntoR
         ),
     );
 
-    return Ok((headers, Redirect::temporary(&state.config.front_base_url)));
+    return Ok((headers, Redirect::temporary("/")));
 }
 
 fn create_auth_cookie(val: Option<&str>, is_secure: bool) -> HeaderValue {
@@ -359,7 +359,7 @@ async fn create_oidc(config: &Config) -> Result<(reqwest::Client, OidcClient), A
     .set_redirect_uri(
         RedirectUrl::new(format!(
             "{base}/api/v1/auth/callback",
-            base = config.back_base_url
+            base = config.base_url
         ))
         .context("error parsing auth redirect url")?,
     );

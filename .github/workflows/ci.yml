@@ -1,0 +1,207 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'back/**'
+      - 'front/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'back/**'
+      - 'front/**'
+
+env:
+  DOCKERHUB_USERNAME: veetik
+  DOCKERHUB_IMAGE: veetik/money
+  FRONT_DIR: front
+  BACK_DIR: back
+
+jobs:
+  amd64_build_and_push_docker_image:
+    name: build and push docker image (amd64)
+    runs-on: ubuntu-24.04
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # 6.0.1
+
+      - name: "frontend: setup bun"
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # 2.1.2
+
+      - name: "frontend: install deps"
+        working-directory: ${{ env.FRONT_DIR }}
+        run: bun i --frozen-lockfile
+
+      - name: "frontend: install deps"
+        working-directory: ${{ env.FRONT_DIR }}
+        run: bun install --frozen-lockfile
+
+      - name: "frontend: build"
+        working-directory: ${{ env.FRONT_DIR }}
+        run: bun run build
+
+      - name: "backend: setup rust toolchain"
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # 1.15.2
+        with:
+          target: x86_64-unknown-linux-musl
+          rust-src-dir: ${{ env.BACK_DIR }}
+
+      - name: "backend: setup sccache"
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # 0.0.9
+
+      - name: "backend: install musl-tools"
+        uses: awalsh128/cache-apt-pkgs-action@acb598e5ddbc6f68a970c5da0688d2f3a9f04d05 # 1.6.0
+        with:
+          packages: musl-tools=1.2.4-2
+
+      - name: "backend: build binary"
+        working-directory: ${{ env.BACK_DIR }}
+        run: |
+          cargo build --release --target x86_64-unknown-linux-musl && \
+          cp ./target/x86_64-unknown-linux-musl/release/backend ./backend && \
+          chmod +x ./backend
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: "sccache"
+
+      - name: "docker: setup qemu"
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # 3.7.0
+
+      - name: "docker: setup buildx"
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # 3.12.0
+
+      - name: "docker: login to dockerhub"
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # 3.7.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: "docker: build and push image"
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # 6.18.0
+        with:
+          push: true
+          context: .
+          platforms: linux/amd64
+          provenance: false
+          outputs: type=image,name=${{ env.DOCKERHUB_IMAGE }},push-by-digest=true,name-canonical=true
+
+
+  arm64_build_and_push_docker_image:
+    name: build and push docker image (arm64)
+    runs-on: ubuntu-24.04-arm
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # 6.0.1
+
+      - name: "frontend: setup bun"
+        uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # 2.1.2
+
+      - name: "frontend: install deps"
+        working-directory: ${{ env.FRONT_DIR }}
+        run: bun i --frozen-lockfile
+
+      - name: "frontend: install deps"
+        working-directory: ${{ env.FRONT_DIR }}
+        run: bun install --frozen-lockfile
+
+      - name: "frontend: build"
+        working-directory: ${{ env.FRONT_DIR }}
+        run: bun run build
+
+      - name: "backend: setup rust toolchain"
+        uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # 1.15.2
+        with:
+          target: aarch64-unknown-linux-musl
+          rust-src-dir: ${{ env.BACK_DIR }}
+
+      - name: "backend: setup sccache"
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # 0.0.9
+
+      - name: "backend: install musl-tools"
+        uses: awalsh128/cache-apt-pkgs-action@acb598e5ddbc6f68a970c5da0688d2f3a9f04d05 # 1.6.0
+        with:
+          packages: musl-tools=1.2.4-2 gcc-aarch64-linux-gnu
+
+      - name: "backend: build binary"
+        working-directory: ${{ env.BACK_DIR }}
+        run: |
+          cargo build --release --target aarch64-unknown-linux-musl && \
+          cp ./target/aarch64-unknown-linux-musl/release/backend ./backend && \
+          chmod +x ./backend
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+          RUSTC_WRAPPER: "sccache"
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: aarch64-linux-gnu-gcc
+          CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
+          CFLAGS_aarch64_unknown_linux_musl: "-U_FORTIFY_SOURCE"
+
+      - name: "docker: setup qemu"
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # 3.7.0
+
+      - name: "docker: setup buildx"
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # 3.12.0
+
+      - name: "docker: login to dockerhub"
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # 3.7.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: "docker: build and push image"
+        id: build
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # 6.18.0
+        with:
+          push: true
+          context: .
+          platforms: linux/arm64
+          provenance: false
+          outputs: type=image,name=${{ env.DOCKERHUB_IMAGE }},push-by-digest=true,name-canonical=true
+
+  merge:
+    name: create multi-arch manifest
+    runs-on: ubuntu-24.04
+    needs:
+      - amd64_build_and_push_docker_image
+      - arm64_build_and_push_docker_image
+    steps:
+      - name: "docker: setup buildx"
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # 3.12.0
+
+      - name: "docker: login to dockerhub"
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # 3.7.0
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: "docker: generate metadata"
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # 5.10.0
+        id: meta
+        with:
+          images: ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            type=sha
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: "docker: create manifest and push"
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            ${{ env.DOCKERHUB_IMAGE }}@${{ needs.amd64_build_and_push_docker_image.outputs.digest }} \
+            ${{ env.DOCKERHUB_IMAGE }}@${{ needs.arm64_build_and_push_docker_image.outputs.digest }}
+
+      - name: "output: image tags"
+        run: |
+          {
+            echo "## 🐳 Docker Image Tags"
+            echo ""
+            echo "\`\`\`"
+            jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"

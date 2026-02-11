@@ -2,7 +2,7 @@ import { HamburgerMenuIcon } from "@radix-ui/react-icons";
 import { type ReactNode } from "react";
 import { useRoute } from "wouter";
 
-import { things } from "../things";
+import { API_BASE_URL } from "../lib/constants";
 import { Button } from "../ui/button";
 import * as Dropdown from "../ui/dropdown";
 import { FastLink, SlowLink } from "../ui/link";
@@ -83,7 +83,7 @@ function Hamburger() {
 					<SlowLink href="/settings">settings</SlowLink>
 				</Dropdown.Item>
 				<Dropdown.Item asChild>
-					<a href={things.apiBase + "/v1/auth/logout"}>logout</a>
+					<a href={API_BASE_URL + "/v1/auth/logout"}>logout</a>
 				</Dropdown.Item>
 			</Dropdown.Content>
 		</Dropdown.Root>

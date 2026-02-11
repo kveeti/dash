@@ -9,8 +9,7 @@ use crate::endpoints::integrations::get::{AllowedIntegration, allowed_integratio
 pub struct EnvironmentVariables {
     pub database_url: String,
     pub secret: String,
-    pub front_base_url: String,
-    pub back_base_url: String,
+    pub base_url: String,
     pub auth_url: String,
     pub auth_client_id: String,
     pub auth_client_secret: String,
@@ -24,13 +23,14 @@ pub struct EnvironmentVariables {
     pub gcn_secret_key: String,
     pub gcn_base_url: String,
     pub gcn_allow_sandbox: bool,
+
+    pub frontend_dir: Option<String>,
 }
 
 pub struct Config {
     pub database_url: String,
     pub secret: String,
-    pub front_base_url: String,
-    pub back_base_url: String,
+    pub base_url: String,
     pub auth_url: String,
     pub auth_client_id: String,
     pub auth_client_secret: String,
@@ -43,6 +43,8 @@ pub struct Config {
     pub gcn_secret_id: String,
     pub gcn_secret_key: String,
     pub gcn_base_url: String,
+
+    pub frontend_dir: Option<String>,
 
     pub allowed_integrations: Vec<AllowedIntegration>,
 }
@@ -59,8 +61,7 @@ impl Config {
         return Ok(Config {
             database_url: envs.database_url,
             secret: envs.secret,
-            front_base_url: envs.front_base_url,
-            back_base_url: envs.back_base_url,
+            base_url: envs.base_url,
             auth_url: envs.auth_url,
             auth_client_id: envs.auth_client_id,
             auth_client_secret: envs.auth_client_secret,
@@ -72,6 +73,8 @@ impl Config {
             gcn_secret_id: envs.gcn_secret_id,
             gcn_secret_key: envs.gcn_secret_key,
             gcn_base_url: envs.gcn_base_url,
+
+            frontend_dir: envs.frontend_dir,
 
             allowed_integrations,
         });

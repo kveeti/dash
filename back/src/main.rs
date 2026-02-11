@@ -15,10 +15,7 @@ use axum::{
 use config::Config;
 use data::{Data, do_pending_imports};
 use error::ApiError;
-use http::{
-    HeaderName, HeaderValue, Method,
-    header::{self, USER_AGENT},
-};
+use http::header::USER_AGENT;
 use opentelemetry::{
     KeyValue,
     global::{self},
@@ -39,7 +36,7 @@ use opentelemetry_semantic_conventions::{
 };
 use state::AppState;
 use tokio::{net::TcpListener, signal};
-use tower_http::{cors::CorsLayer, limit::RequestBodyLimitLayer, trace::TraceLayer};
+use tower_http::{limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing::field::Empty;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -49,6 +46,7 @@ pub mod config;
 pub mod data;
 pub mod endpoints;
 pub mod error;
+mod frontend;
 pub mod state;
 pub mod statement_parsing;
 
@@ -175,7 +173,6 @@ async fn main() {
             250 * 1024 * 1024, /* 250mb */
         ))
         .layer(middleware::from_fn(csrf_middleware))
-        .layer(cors(&config))
         .with_state(state)
         .layer(
             TraceLayer::new_for_http()
@@ -208,13 +205,19 @@ async fn main() {
                 })
         );
 
-    let api = Router::new().nest("/api", routes);
+    let app = Router::new().nest("/api", routes);
+    let app = if let Some(frontend_dir) = &config.frontend_dir {
+        tracing::info!("serving frontend from {frontend_dir}");
+        app.merge(frontend::router(frontend_dir))
+    } else {
+        app
+    };
 
     let listener = TcpListener::bind(format!("0.0.0.0:{port}", port = config.port))
         .await
         .unwrap();
     tracing::info!("listening on {}", listener.local_addr().unwrap());
-    axum::serve(listener, api)
+    axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
         .unwrap();
@@ -241,34 +244,6 @@ pub async fn tracer_middleware(request: Request, next: Next) -> Result<Response,
     span.end();
 
     Ok(res)
-}
-
-#[tracing::instrument(skip(config))]
-fn cors(config: &Config) -> CorsLayer {
-    CorsLayer::new()
-        .allow_methods([
-            Method::OPTIONS,
-            Method::HEAD,
-            Method::GET,
-            Method::POST,
-            Method::PATCH,
-            Method::DELETE,
-        ])
-        .allow_headers([
-            header::CONTENT_TYPE,
-            header::AUTHORIZATION,
-            header::ACCEPT,
-            header::ACCEPT_ENCODING,
-            header::ACCEPT_LANGUAGE,
-            "x-csrf".parse::<HeaderName>().expect("x-csrf header"),
-        ])
-        .allow_origin(
-            config
-                .front_base_url
-                .parse::<HeaderValue>()
-                .expect("allow origin value"),
-        )
-        .allow_credentials(true)
 }
 
 async fn shutdown_signal() {
