@@ -12,7 +12,11 @@ export default defineConfig({
 			},
 		}),
 	],
-	server: { port: 33000, host: "0.0.0.0" },
+	server: {
+		proxy: { "/api": "http://localhost:8000" },
+		port: 33000,
+		host: "0.0.0.0",
+	},
 	html: {
 		template: "./src/index.html",
 	},

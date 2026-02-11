@@ -4,8 +4,8 @@ import { ChangeEvent, FormEvent, startTransition, useId, useMemo, useRef, useSta
 import { toast } from "sonner";
 
 import { csrf } from "../../api";
+import { API_BASE_URL } from "../../lib/constants";
 import { errorToast } from "../../lib/error-toast";
-import { things } from "../../things";
 import { Button } from "../../ui/button";
 import { IconChevronsUpDown } from "../../ui/icons/chevrons-up-down";
 import { Label, LabelWrapper, Error as _Error, labelStyles } from "../../ui/input";
@@ -239,7 +239,7 @@ export async function api<TReturnValue>(path: string, props: Props) {
 	}
 
 	return fetch(
-		things.apiBase + path + (props.query ? "?" + new URLSearchParams(props.query) : ""),
+		API_BASE_URL + path + (props.query ? "?" + new URLSearchParams(props.query) : ""),
 		fetchProps
 	)
 		.then(async (res) => {

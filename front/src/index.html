@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
 	<head>
-		<link rel="preconnect" href="<%= import.meta.env.PUBLIC_API_BASE_URL %>" />
+		<link rel="preconnect" href="/api" />
 		<meta charset="UTF-8" />
 		<meta
 			name="viewport"
@@ -16,7 +16,7 @@
 
 		<script>
 			const key = "__ME_LOADER__";
-			const apiBase = "<%= import.meta.env.PUBLIC_API_BASE_URL %>";
+			const apiBase = "/api";
 
 			window[key] = { data: null, promise: null };
 			const p = fetch(apiBase + "/v1/@me", { credentials: "include" })

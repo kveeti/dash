@@ -210,7 +210,7 @@ pub async fn connect_callback(
         return Err(ApiError::BadRequest("no saved data".to_string()));
     }
 
-    Ok(Redirect::to(&state.config.front_base_url))
+    Ok(Redirect::to("/"))
 }
 
 use reqwest::{Client, ClientBuilder};
@@ -324,7 +324,7 @@ impl GoCardlessNordigen {
             .bearer_auth(&self.access_token)
             .json(&json!({
                 "institution_id": institution_id,
-                "redirect": format!("{api_base}/api/v1/integrations/gocardless-nordigen/connect-callback/{institution_id}", api_base = config.back_base_url),
+                "redirect": format!("{api_base}/api/v1/integrations/gocardless-nordigen/connect-callback/{institution_id}", api_base = config.base_url),
                 "agreement": eua.id,
                 "user_language": "EN"
             }))
