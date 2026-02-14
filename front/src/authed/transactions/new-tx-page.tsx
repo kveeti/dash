@@ -67,7 +67,12 @@ export default function NewTxPage() {
 
 				<Input name="amount" label="amount" autoComplete="off" />
 
-				<DateField name="date" label="date" granularity="minute" />
+				<DateField
+					name="date"
+					label="date"
+					granularity="minute"
+					defaultValue={new Date()}
+				/>
 
 				<Textarea name="additional" label="additional" autoComplete="off" />
 
@@ -97,7 +102,7 @@ export function DateField({
 	name,
 	label,
 	error,
-	defaultValue = new Date(),
+	defaultValue,
 	granularity,
 }: {
 	name: string;
@@ -107,7 +112,9 @@ export function DateField({
 	granularity: "day" | "hour" | "minute" | "second";
 }) {
 	const { hourCycle } = useLocaleStuff();
-	const _defaultValue = parseDateTime(format(defaultValue, "yyyy-MM-dd'T'HH:mm:ss"));
+	const _defaultValue = defaultValue
+		? parseDateTime(format(defaultValue, "yyyy-MM-dd'T'HH:mm:ss"))
+		: null;
 
 	const id = useId();
 	const errorId = error ? id + "-error" : undefined;

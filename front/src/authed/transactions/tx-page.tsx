@@ -410,7 +410,9 @@ function QuickEdit({ tx, opts }: { tx: Tx & { date: Date }; opts: UseQueryOption
 					additional: tx.additional,
 					account_id: tx.account?.id,
 					category_id: data.category_id || null,
-					categorize_on: startOfDay(new Date(data.categorize_on)).toISOString(),
+					categorize_on: data.categorize_on
+						? startOfDay(new Date(data.categorize_on)).toISOString()
+						: null,
 					notes: data.notes || null,
 				},
 			})
