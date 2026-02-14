@@ -36,6 +36,12 @@ pub struct Output {
     pub ttn: Vec<f32>,
     pub ti: f32,
     pub te: f32,
+    pub ti_cats: Vec<String>,
+    pub ti_vals: Vec<f32>,
+    pub te_cats: Vec<String>,
+    pub te_vals: Vec<f32>,
+    pub tn_cats: Vec<String>,
+    pub tn_vals: Vec<f32>,
 }
 
 #[derive(Serialize)]
@@ -168,6 +174,10 @@ fn compute(
     let mut total_income: f32 = 0.0;
     let mut total_expenses: f32 = 0.0;
 
+    let mut total_i_cat_amounts: HashMap<String, f32> = HashMap::new();
+    let mut total_e_cat_amounts: HashMap<String, f32> = HashMap::new();
+    let mut total_n_cat_amounts: HashMap<String, f32> = HashMap::new();
+
     for (index, period) in periods.iter().enumerate() {
         match period_txs.get(period) {
             None => continue,
@@ -192,14 +202,17 @@ fn compute(
 
                     if cat_is_neutral {
                         period_ttn += abs_amount;
-                        *n_cat_amounts.entry(cat_name).or_default() += abs_amount;
+                        *n_cat_amounts.entry(cat_name.clone()).or_default() += abs_amount;
+                        *total_n_cat_amounts.entry(cat_name).or_default() += abs_amount;
                     } else if amount > 0.0 {
                         period_tti += abs_amount;
-                        *i_cat_amounts.entry(cat_name).or_default() += abs_amount;
+                        *i_cat_amounts.entry(cat_name.clone()).or_default() += abs_amount;
+                        *total_i_cat_amounts.entry(cat_name).or_default() += abs_amount;
                         total_income += abs_amount;
                     } else if amount < 0.0 {
                         period_tte += abs_amount;
-                        *e_cat_amounts.entry(cat_name).or_default() += abs_amount;
+                        *e_cat_amounts.entry(cat_name.clone()).or_default() += abs_amount;
+                        *total_e_cat_amounts.entry(cat_name).or_default() += abs_amount;
                         total_expenses += abs_amount;
                     }
                 }
@@ -230,6 +243,18 @@ fn compute(
         }
     }
 
+    let mut total_i_pairs: Vec<_> = total_i_cat_amounts.into_iter().collect();
+    total_i_pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    let (ti_cats, ti_vals): (Vec<_>, Vec<_>) = total_i_pairs.into_iter().unzip();
+
+    let mut total_e_pairs: Vec<_> = total_e_cat_amounts.into_iter().collect();
+    total_e_pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    let (te_cats, te_vals): (Vec<_>, Vec<_>) = total_e_pairs.into_iter().unzip();
+
+    let mut total_n_pairs: Vec<_> = total_n_cat_amounts.into_iter().collect();
+    total_n_pairs.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    let (tn_cats, tn_vals): (Vec<_>, Vec<_>) = total_n_pairs.into_iter().unzip();
+
     return Output {
         dates: periods,
         e,
@@ -243,6 +268,12 @@ fn compute(
         ttn,
         ti: total_income,
         te: total_expenses,
+        ti_cats,
+        ti_vals,
+        te_cats,
+        te_vals,
+        tn_cats,
+        tn_vals,
     };
 }
 

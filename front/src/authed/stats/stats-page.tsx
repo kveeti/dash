@@ -69,7 +69,6 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 		dates,
 		tti,
 		tte,
-		ttn,
 		e: expenses,
 		i: income,
 		n: neutral,
@@ -78,9 +77,29 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 		e_cats,
 		i_cats,
 		n_cats,
+		ti_cats,
+		ti_vals,
+		te_cats,
+		te_vals,
+		tn_cats,
+		tn_vals,
 	} = q.data;
 
 	const selectedDate = typeof selectedDateIndex === "number" ? dates[selectedDateIndex] : null;
+	const isTotalSelected = selectedDateIndex === null;
+
+	const selectedIncomeVals = isTotalSelected ? ti_vals : income[selectedDateIndex!];
+	const selectedIncomeCats = isTotalSelected ? ti_cats : i_cats[selectedDateIndex!];
+	const selectedIncomeTotal = isTotalSelected ? ti : tti[selectedDateIndex!];
+
+	const selectedExpenseVals = isTotalSelected ? te_vals : expenses[selectedDateIndex!];
+	const selectedExpenseCats = isTotalSelected ? te_cats : e_cats[selectedDateIndex!];
+
+	const selectedNeutralVals = isTotalSelected ? tn_vals : neutral[selectedDateIndex!];
+	const selectedNeutralCats = isTotalSelected ? tn_cats : n_cats[selectedDateIndex!];
+
+	const selectedIncomeSummary = isTotalSelected ? ti : tti[selectedDateIndex!];
+	const selectedExpenseSummary = isTotalSelected ? te : tte[selectedDateIndex!];
 
 	return (
 		<div className="flex w-full gap-3">
@@ -100,6 +119,7 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 
 						return (
 							<div
+								key={dateIndex}
 								className={
 									"relative " +
 									(selectedDateIndex === dateIndex
@@ -129,177 +149,126 @@ function Thing2({ time }: { time: Rac.DateRange }) {
 					})}
 				</div>
 
-				<div className="">
-					<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">total</h2>
-
-					<div className="divide-gray-4 divide-y">
-						<div className="space-y-1 p-1">
-							<Row
-								width={getClamp(0, Math.max(ti, te))(ti)}
-								value={f.amount.format(ti)}
-								label={"+"}
-							/>
-							<Row
-								width={getClamp(0, Math.max(ti, te))(te)}
-								value={f.amount.format(te)}
-								label={"-"}
-							/>
-						</div>
-
-						<div>
-							<span
-								className={
-									"flex justify-end px-3 py-1 text-xs" +
-									(ti - te < 0 ? " text-red-10" : "")
-								}
-							>
-								{f.amount.format(ti - te)}
-							</span>
-						</div>
-					</div>
+				<div
+					className={
+						"relative " +
+						(selectedDateIndex === null ? "outline-gray-10 outline-3" : "")
+					}
+					onMouseEnter={() => setSelectedDateIndex(null)}
+				>
+					<SummarySection income={ti} expenses={te} f={f} />
 				</div>
 			</div>
 
 			<div className="sticky top-14 flex h-max w-full flex-col gap-3 pb-2">
-				{typeof selectedDateIndex === "number" && selectedDate && (
+				{(isTotalSelected || selectedDate) && (
 					<div className="flex w-full flex-col gap-3">
-						<h2>{format(selectedDate, "MMM, yyyy")}</h2>
+						<h2>{isTotalSelected ? "total" : format(selectedDate!, "MMM, yyyy")}</h2>
 
-						<div className="">
-							<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">
-								income
-							</h2>
+						<CategorySection
+							title="income"
+							vals={selectedIncomeVals}
+							cats={selectedIncomeCats}
+							total={selectedIncomeTotal}
+							emptyMessage="no income"
+							f={f}
+						/>
 
-							<div className="divide-gray-4 divide-y">
-								{!income[selectedDateIndex]?.length ? (
-									<p className="px-2 py-1.5 text-xs">no income</p>
-								) : (
-									income[selectedDateIndex].map((val, index) => {
-										let cat = i_cats[selectedDateIndex][index];
-										if (cat === "__uncategorized__") {
-											cat = "uncategorized";
-										}
-										const i = tti[selectedDateIndex];
-										const clamp = getClamp(0, Math.max(i, val));
+						<CategorySection
+							title="expenses"
+							vals={selectedExpenseVals}
+							cats={selectedExpenseCats}
+							total={selectedIncomeTotal}
+							emptyMessage="no expenses"
+							f={f}
+						/>
 
-										return (
-											<div className="space-y-1 px-1 py-1">
-												<Row
-													width={clamp(val)}
-													value={f.amount.format(val)}
-													label={cat}
-												/>
-											</div>
-										);
-									})
-								)}
-							</div>
-						</div>
-
-						<div className="">
-							<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">
-								expenses
-							</h2>
-
-							<div className="divide-gray-4 divide-y">
-								{!expenses[selectedDateIndex]?.length ? (
-									<p className="px-2 py-1.5 text-xs">no expenses</p>
-								) : (
-									expenses[selectedDateIndex].map((val, index) => {
-										let cat = e_cats[selectedDateIndex][index];
-										if (cat === "__uncategorized__") {
-											cat = "uncategorized";
-										}
-										const i = tti[selectedDateIndex];
-										const clamp = getClamp(0, Math.max(i, val));
-
-										return (
-											<div className="space-y-1 px-1 py-1">
-												<Row
-													width={clamp(val)}
-													value={f.amount.format(val)}
-													label={cat}
-												/>
-											</div>
-										);
-									})
-								)}
-							</div>
-						</div>
-
-						{!!neutral[selectedDateIndex]?.length && (
-							<div className="">
-								<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">
-									neutral
-								</h2>
-
-								<div className="divide-gray-4 divide-y">
-									{neutral[selectedDateIndex].map((val, index) => {
-										let cat = n_cats[selectedDateIndex][index];
-										if (cat === "__uncategorized__") {
-											cat = "uncategorized";
-										}
-										const i = tti[selectedDateIndex];
-										const clamp = getClamp(0, Math.max(i, val));
-
-										return (
-											<div className="space-y-1 px-1 py-1">
-												<Row
-													width={clamp(val)}
-													value={f.amount.format(val)}
-													label={cat}
-												/>
-											</div>
-										);
-									})}
-								</div>
-							</div>
+						{selectedNeutralVals?.length > 0 && (
+							<CategorySection
+								title="neutral"
+								vals={selectedNeutralVals}
+								cats={selectedNeutralCats}
+								total={selectedIncomeTotal}
+								emptyMessage="no neutral"
+								f={f}
+							/>
 						)}
 
-						{(() => {
-							const i = tti[selectedDateIndex];
-							const e = tte[selectedDateIndex];
-
-							const clamp = getClamp(0, Math.max(i, e));
-
-							const sum = i - e;
-
-							return (
-								<div className="">
-									<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">
-										total
-									</h2>
-
-									<div className="divide-gray-4 divide-y">
-										<div className="space-y-1 p-1">
-											<Row
-												width={clamp(i)}
-												value={f.amount.format(i)}
-												label={"+"}
-											/>
-											<Row
-												width={clamp(e)}
-												value={f.amount.format(e)}
-												label={"-"}
-											/>
-										</div>
-
-										<div>
-											<span
-												className={
-													"flex justify-end px-3 py-1 text-xs" +
-													(sum < 0 ? " text-red-10" : "")
-												}
-											>
-												{f.amount.format(sum)}
-											</span>
-										</div>
-									</div>
-								</div>
-							);
-						})()}
+						<SummarySection
+							income={selectedIncomeSummary}
+							expenses={selectedExpenseSummary}
+							f={f}
+						/>
 					</div>
 				)}
+			</div>
+		</div>
+	);
+}
+
+function formatCategory(cat: string): string {
+	return cat === "__uncategorized__" ? "uncategorized" : cat;
+}
+
+interface CategorySectionProps {
+	title: string;
+	vals: number[] | undefined;
+	cats: string[] | undefined;
+	total: number;
+	emptyMessage: string;
+	f: { amount: { format: (n: number) => string } };
+}
+
+function CategorySection({ title, vals, cats, total, emptyMessage, f }: CategorySectionProps) {
+	return (
+		<div className="">
+			<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">{title}</h2>
+			<div className="divide-gray-4 divide-y">
+				{!vals?.length ? (
+					<p className="px-2 py-1.5 text-xs">{emptyMessage}</p>
+				) : (
+					vals.map((val, index) => {
+						const cat = formatCategory(cats![index]);
+						const clamp = getClamp(0, Math.max(total, val));
+						return (
+							<div key={index} className="space-y-1 px-1 py-1">
+								<Row width={clamp(val)} value={f.amount.format(val)} label={cat} />
+							</div>
+						);
+					})
+				)}
+			</div>
+		</div>
+	);
+}
+
+interface SummarySectionProps {
+	income: number;
+	expenses: number;
+	f: { amount: { format: (n: number) => string } };
+}
+
+function SummarySection({ income, expenses, f }: SummarySectionProps) {
+	const clamp = getClamp(0, Math.max(income, expenses));
+	const sum = income - expenses;
+
+	return (
+		<div className="">
+			<h2 className="bg-gray-a2 flex gap-3 px-3 py-1 text-xs font-medium">total</h2>
+			<div className="divide-gray-4 divide-y">
+				<div className="space-y-1 p-1">
+					<Row width={clamp(income)} value={f.amount.format(income)} label={"+"} />
+					<Row width={clamp(expenses)} value={f.amount.format(expenses)} label={"-"} />
+				</div>
+				<div>
+					<span
+						className={
+							"flex justify-end px-3 py-1 text-xs" + (sum < 0 ? " text-red-10" : "")
+						}
+					>
+						{f.amount.format(sum)}
+					</span>
+				</div>
 			</div>
 		</div>
 	);
