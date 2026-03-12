@@ -186,8 +186,8 @@ pub async fn connect_callback(
         let insert_accounts = account_map
             .iter()
             .map(|account| crate::data::InsertManyAccount {
-                id: account.id.to_owned(),
                 external_id: account.iban.to_owned(),
+                name: account.iban.to_owned(),
             })
             .collect();
 

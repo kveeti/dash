@@ -1,7 +1,14 @@
 use anyhow::Context;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::{Postgres, QueryBuilder, query, query_as};
+use sqlx::{query, query_as};
+
+use super::create_id;
+
+use crate::endpoints::integrations::{
+    enable_banking::SavedDataEnableBanking, gocardless_nordigen::SavedDataGoCardlessNordigen,
+};
 
 use super::Data;
 
@@ -13,7 +20,7 @@ impl Data {
     ) -> Result<Vec<UserBankIntergration>, sqlx::Error> {
         let rows = query_as!(
             UserBankIntergration,
-            "select name, data from user_bank_integrations where user_id = $1",
+            "select name, data, created_at from user_bank_integrations where user_id = $1 and deleted_at is null",
             user_id
         )
         .fetch_all(&self.pg_pool)
@@ -30,7 +37,7 @@ impl Data {
     ) -> Result<Option<UserBankIntergration>, sqlx::Error> {
         let row = query_as!(
             UserBankIntergration,
-            "select name, data from user_bank_integrations where user_id = $1 and name = $2",
+            "select name, data, created_at from user_bank_integrations where user_id = $1 and name = $2 and deleted_at is null",
             user_id,
             name
         )
@@ -109,31 +116,31 @@ impl Data {
         .await
         .context("error upserting user_bank_integrations")?;
 
-        if accounts.len() != 0 {
-            let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(
+        for account in accounts {
+            let new_id = create_id();
+            query!(
                 r#"
-                insert into accounts (
-                    id,
-                    user_id,
-                    created_at,
-                    external_id,
-                    name
+                insert into accounts (id, user_id, created_at, external_id, name)
+                values (
+                    coalesce(
+                        (select id from accounts where user_id = $1 and external_id = $2),
+                        $3
+                    ),
+                    $1, $4, $2, $5
                 )
+                on conflict (id) do update set
+                    external_id = excluded.external_id,
+                    name = excluded.name
                 "#,
-            );
-
-            builder.push_values(accounts, |mut b, account| {
-                b.push_bind(account.id);
-                b.push_bind(user_id);
-                b.push_bind(now);
-                b.push_bind(account.external_id.to_owned());
-                b.push_bind(account.external_id);
-            });
-
-            builder.push("on conflict (id) do nothing");
-
-            let query = builder.build();
-            query.execute(&mut *tx).await?;
+                user_id,
+                account.external_id,
+                new_id,
+                now,
+                account.name,
+            )
+            .execute(&mut *tx)
+            .await
+            .context("error upserting account")?;
         }
 
         tx.commit().await.context("error committing transaction")?;
@@ -149,8 +156,9 @@ impl Data {
     ) -> Result<(), sqlx::Error> {
         query!(
             r#"
-            delete from user_bank_integrations
-            where user_id = $1 and name = $2
+            update user_bank_integrations
+            set deleted_at = now()
+            where user_id = $1 and name = $2 and deleted_at is null
             "#,
             user_id,
             name
@@ -162,13 +170,27 @@ impl Data {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SavedDataEnvelope {
+    GocardlessNordigen {
+        #[serde(flatten)]
+        data: SavedDataGoCardlessNordigen,
+    },
+    EnableBanking {
+        #[serde(flatten)]
+        data: SavedDataEnableBanking,
+    },
+}
+
 pub struct UserBankIntergration {
     pub name: String,
     pub data: Value,
+    pub created_at: DateTime<Utc>,
 }
 
 #[derive(Debug)]
 pub struct InsertManyAccount {
-    pub id: String,
     pub external_id: String,
+    pub name: String,
 }

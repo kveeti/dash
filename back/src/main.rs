@@ -152,6 +152,22 @@ async fn main() {
                     "/connect-callback/{institution_id}",
                     get(integrations::gocardless_nordigen::connect_callback),
                 ),
+        )
+        .nest(
+            "/enable-banking",
+            Router::new()
+                // .route(
+                //     "/institutions",
+                //     get(integrations::enable_banking::institutions),
+                // )
+                .route(
+                    "/connect-init",
+                    get(integrations::enable_banking::connect_init),
+                )
+                .route(
+                    "/connect-callback",
+                    get(integrations::enable_banking::connect_callback),
+                ),
         );
     let v1 = Router::new()
         .nest("/transactions", v1_transactions)

@@ -305,6 +305,10 @@ export interface components {
             name: string;
         };
         ConnectedIntegration: {
+            accounts: string[];
+            /** Format: date-time */
+            connected_at: string;
+            duplicate_of: string[];
             label: string;
             name: string;
         };

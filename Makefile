@@ -4,6 +4,7 @@ ifneq (,$(wildcard ./.env))
 endif
 
 .PHONY: all
+MAKEFLAGS += -j
 
 frontinit:
 	@cd front && bun install
@@ -11,8 +12,7 @@ backinit:
 	@cd back && cargo fetch
 	@cargo install sqlx-cli --no-default-features --features postgres
 	@cargo install cargo-watch
-init:
-	@make -j2 backinit frontinit
+init: backinit frontinit
 
 mocks:
 	@cd mock_integrations && bun --watch --no-clear-screen src/index.ts
@@ -20,32 +20,26 @@ mocks:
 frontdev:
 	@cd front && bun run dev
 backdev:
-	@cd back && cargo watch -x run
-dev: 
-	@make -j3 backdev frontdev mocks
+	@cd back && cargo watch -x 'run --bin backend'
+dev: backdev frontdev mocks
 
 frontbuild:
 	@cd front && bun run build
 backbuild:
 	@cd back && cargo build --release
-build:
-	@make -j2 backbuild frontbuild
+build: backbuild frontbuild
 
 frontpre:
 	@cd front && bun run build && bun run preview
 backpre:
 	@cd back && cargo run --release
-pre:
-	@make -j2 backpre frontpre
+pre: backpre frontpre
 
 db:
-	@docker exec -it dash_db psql -U pg -d db -p 5432
+	@psql -U postgres -d postgres -h localhost -p 5556
 
 dbreset:
-	@docker-compose down db -v -t 1 && \
-	docker-compose up db -d && \
-	sleep 2 && \
-	cd back && sqlx migrate run
+	cd back && cargo sqlx migrate run
 
 up:
 	@docker compose up -d

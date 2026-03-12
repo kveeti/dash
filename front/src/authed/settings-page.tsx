@@ -8,8 +8,7 @@ import { API_BASE_URL } from "../lib/constants";
 import { errorToast } from "../lib/error-toast";
 import { Button } from "../ui/button";
 import { IconCross } from "../ui/icons/cross";
-import { LabelWrapper, inputStyles, labelStyles } from "../ui/input";
-import { textLinkStyles } from "../ui/link";
+import { Input, LabelWrapper, inputStyles, labelStyles } from "../ui/input";
 import { Spinner } from "../ui/spinner";
 import { TooltipContent } from "../ui/tooltip";
 import { Heading } from "../ui/typography";
@@ -99,29 +98,17 @@ export default function SettingsPage() {
 								<h3 className="mb-1 font-medium">connected</h3>
 								<ul>
 									{integrations.data?.connected.map((c) => (
-										<ConnectedIntegration integration={c} />
+										<ConnectedIntegration
+									key={c.name}
+									integration={c}
+									allConnected={integrations.data!.connected}
+								/>
 									))}
 								</ul>
 							</div>
 						)}
 
-						{!!integrations.data?.available.length && (
-							<div>
-								<h3 className="mb-1 font-medium">available</h3>
-								<ul>
-									{integrations.data?.available.map((c) => (
-										<li>
-											<a
-												className={textLinkStyles}
-												href={API_BASE_URL + c.link}
-											>
-												{c.label}
-											</a>
-										</li>
-									))}
-								</ul>
-							</div>
-						)}
+						<ConnectEnableBanking />
 					</>
 				)}
 			</div>
@@ -129,7 +116,19 @@ export default function SettingsPage() {
 	);
 }
 
-function ConnectedIntegration({ integration }: { integration: { name: string; label: string } }) {
+function ConnectedIntegration({
+	integration,
+	allConnected,
+}: {
+	integration: {
+		name: string;
+		label: string;
+		accounts: string[];
+		connected_at: string;
+		duplicate_of: string[];
+	};
+	allConnected: { name: string; label: string; connected_at: string }[];
+}) {
 	const mutation = useDeleteConnectedIntegration();
 
 	function handleClick() {
@@ -139,6 +138,21 @@ function ConnectedIntegration({ integration }: { integration: { name: string; la
 			.mutateAsync({ params: { path: { integration_name: integration.name } } })
 			.catch(errorToast("error deleting integration"));
 	}
+
+	const connectedDate = new Date(integration.connected_at).toLocaleDateString(
+		undefined,
+		{ month: "short", day: "numeric", year: "numeric" },
+	);
+
+	const duplicateLabels = integration.duplicate_of.map((name) => {
+		const other = allConnected.find((c) => c.name === name);
+		if (!other) return name;
+		const otherDate = new Date(other.connected_at).toLocaleDateString(
+			undefined,
+			{ month: "short", day: "numeric" },
+		);
+		return `${other.label} (connected ${otherDate})`;
+	});
 
 	return (
 		<li className="flex items-center gap-2">
@@ -155,8 +169,44 @@ function ConnectedIntegration({ integration }: { integration: { name: string; la
 				</Tooltip.Trigger>
 				<TooltipContent>delete</TooltipContent>
 			</Tooltip.Root>
-			{integration.label}
+			<div>
+				<span>{integration.label}</span>
+				<p className="text-gray-11 text-sm">{connectedDate}</p>
+				{integration.accounts.length > 0 && (
+					<p className="text-gray-11 text-sm">{integration.accounts.join(", ")}</p>
+				)}
+				{duplicateLabels.length > 0 && (
+					<p className="text-sm text-yellow-600">
+						shares accounts with {duplicateLabels.join(", ")}
+					</p>
+				)}
+			</div>
 		</li>
+	);
+}
+
+function ConnectEnableBanking() {
+	function handleSubmit(e: FormEvent<HTMLFormElement>) {
+		e.preventDefault();
+		const form = e.currentTarget;
+		const country = form.country.value.trim();
+		const name = form.bank_name.value.trim();
+		if (!country || !name) return;
+
+		window.location.href = `${API_BASE_URL}/v1/integrations/enable-banking/connect-init?country=${encodeURIComponent(country)}&name=${encodeURIComponent(name)}`;
+	}
+
+	return (
+		<div>
+			<h3 className="mb-1 font-medium">new connection</h3>
+			<form className="space-y-4" onSubmit={handleSubmit}>
+				<Input name="country" label="country" placeholder="FI" maxLength={2} />
+				<Input name="bank_name" label="bank name" placeholder="OP" />
+				<div className="flex justify-end">
+					<Button type="submit">connect</Button>
+				</div>
+			</form>
+		</div>
 	);
 }
 

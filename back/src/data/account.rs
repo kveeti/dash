@@ -63,6 +63,23 @@ impl Data {
     }
 
     #[tracing::instrument(skip(self))]
+    pub async fn get_account_id_by_external_id(
+        &self,
+        user_id: &str,
+        external_id: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        let row = query!(
+            "select id from accounts where user_id = $1 and external_id = $2",
+            user_id,
+            external_id
+        )
+        .fetch_optional(&self.pg_pool)
+        .await?;
+
+        Ok(row.map(|r| r.id))
+    }
+
+    #[tracing::instrument(skip(self))]
     pub async fn get_accounts(
         &self,
         user_id: &str,

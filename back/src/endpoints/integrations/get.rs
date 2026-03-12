@@ -1,8 +1,12 @@
+use std::collections::HashMap;
+
 use axum::{Json, extract::State, response::IntoResponse};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 use crate::{
-    auth_middleware::LoggedInUser, config::EnvironmentVariables, error::ApiError, state::AppState,
+    auth_middleware::LoggedInUser, config::EnvironmentVariables, data::SavedDataEnvelope,
+    error::ApiError, state::AppState,
 };
 
 #[cfg_attr(feature = "docs", utoipa::path(
@@ -32,20 +36,60 @@ pub async fn get(
         })
         .collect();
 
-    let connected = connected
+    let connected: Vec<ConnectedIntegration> = connected
         .iter()
         .map(|i| {
-            let ai = &state
-                .config
-                .allowed_integrations
-                .iter()
-                .find(|ai| i.name == ai.name)
-                .unwrap();
+            let data = serde_json::from_value::<SavedDataEnvelope>(i.data.to_owned())
+                .expect("deserializing saved data");
 
-            ConnectedIntegration {
-                label: ai.label.to_string(),
-                name: ai.name.to_string(),
+            match data {
+                SavedDataEnvelope::GocardlessNordigen { data } => ConnectedIntegration {
+                    label: data.institution_id.to_owned(),
+                    name: i.name.to_owned(),
+                    accounts: data.account_map.iter().map(|a| a.iban.to_owned()).collect(),
+                    connected_at: i.created_at,
+                    duplicate_of: vec![],
+                },
+                SavedDataEnvelope::EnableBanking { data } => ConnectedIntegration {
+                    label: format!("{} {}", data.aspsp.name, data.aspsp.country),
+                    name: i.name.to_owned(),
+                    accounts: data
+                        .accounts
+                        .iter()
+                        .map(|a| a.account_id.iban.to_owned())
+                        .collect(),
+                    connected_at: i.created_at,
+                    duplicate_of: vec![],
+                },
             }
+        })
+        .collect();
+
+    // Detect duplicate accounts across integrations
+    let mut iban_to_names: HashMap<String, Vec<String>> = HashMap::new();
+    for c in &connected {
+        for iban in &c.accounts {
+            iban_to_names
+                .entry(iban.clone())
+                .or_default()
+                .push(c.name.clone());
+        }
+    }
+
+    let connected: Vec<ConnectedIntegration> = connected
+        .into_iter()
+        .map(|mut c| {
+            let mut duplicates: Vec<String> = c
+                .accounts
+                .iter()
+                .flat_map(|iban| iban_to_names.get(iban).into_iter().flatten())
+                .filter(|name| **name != c.name)
+                .cloned()
+                .collect();
+            duplicates.sort();
+            duplicates.dedup();
+            c.duplicate_of = duplicates;
+            c
         })
         .collect();
 
@@ -104,4 +148,7 @@ pub struct Integration {
 pub struct ConnectedIntegration {
     pub label: String,
     pub name: String,
+    pub accounts: Vec<String>,
+    pub connected_at: DateTime<Utc>,
+    pub duplicate_of: Vec<String>,
 }
