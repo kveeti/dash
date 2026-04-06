@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { FastLink } from "./components/link";
+import { CommandPalette } from "./components/command-palette";
 import { useRoute } from "wouter";
 
 export function Layout(props: { children: ReactNode }) {
   return (
     <div className="mx-auto flex max-w-[800px]">
       <Nav />
+      <CommandPalette />
 
       {props.children}
     </div>
