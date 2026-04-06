@@ -18,10 +18,10 @@ mocks:
 	@cd mock_integrations && bun --watch --no-clear-screen src/index.ts
 
 frontdev:
-	@cd front && bun run dev
+	@cd react-local && bun run dev
 backdev:
-	@cd back && cargo watch -x 'run --bin backend'
-dev: backdev frontdev mocks
+	@cd sync && cargo watch -x 'run'
+dev: backdev frontdev
 
 frontbuild:
 	@cd front && bun run build

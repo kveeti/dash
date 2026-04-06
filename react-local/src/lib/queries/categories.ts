@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDb } from "../../providers";
 import type { DbHandle } from "../db";
 import { id } from "../id";
+import { nextSeq } from "../sync";
 
 export type CategoryWithCount = {
 	id: string;
@@ -51,8 +52,8 @@ async function getCategories(db: DbHandle, search?: string) {
 		return db.query<CategoryWithCount>(
 			`select c.id, c.name, c.is_neutral, count(t.id) as tx_count
 			 from categories c
-			 left join transactions t on c.id = t.category_id
-			 where c.name like ?
+			 left join transactions t on c.id = t.category_id and t.deleted_at is null
+			 where c.deleted_at is null and c.name like ?
 			 group by c.id
 			 order by c.name`,
 			[`%${search}%`]
@@ -61,7 +62,8 @@ async function getCategories(db: DbHandle, search?: string) {
 	return db.query<CategoryWithCount>(
 		`select c.id, c.name, c.is_neutral, count(t.id) as tx_count
 		 from categories c
-		 left join transactions t on c.id = t.category_id
+		 left join transactions t on c.id = t.category_id and t.deleted_at is null
+		 where c.deleted_at is null
 		 group by c.id
 		 order by c.name`
 	);
@@ -71,11 +73,14 @@ async function createCategory(
 	db: DbHandle,
 	cat: { name: string; is_neutral: boolean }
 ) {
-	const now = new Date().toISOString();
-	await db.exec(
-		"insert into categories (id, created_at, name, is_neutral) values (?, ?, ?, ?)",
-		[id(), now, cat.name, cat.is_neutral ? 1 : 0]
-	);
+	await db.withTx(async () => {
+		const now = new Date().toISOString();
+		const seq = await nextSeq(db);
+		await db.exec(
+			"insert into categories (id, created_at, updated_at, name, is_neutral, local_seq) values (?, ?, ?, ?, ?, ?)",
+			[id(), now, now, cat.name, cat.is_neutral ? 1 : 0, seq]
+		);
+	});
 }
 
 async function updateCategory(
@@ -83,38 +88,54 @@ async function updateCategory(
 	categoryId: string,
 	cat: { name: string; is_neutral: boolean }
 ) {
-	const now = new Date().toISOString();
-	await db.exec(
-		"update categories set name = ?, is_neutral = ?, updated_at = ? where id = ?",
-		[cat.name, cat.is_neutral ? 1 : 0, now, categoryId]
-	);
+	await db.withTx(async () => {
+		const now = new Date().toISOString();
+		const seq = await nextSeq(db);
+		await db.exec(
+			"update categories set name = ?, is_neutral = ?, updated_at = ?, local_seq = ? where id = ?",
+			[cat.name, cat.is_neutral ? 1 : 0, now, seq, categoryId]
+		);
+	});
 }
 
 async function deleteCategory(
 	db: DbHandle,
 	categoryId: string
 ): Promise<boolean> {
-	const rows = await db.query<{ c: number }>(
-		"select count(*) as c from transactions where category_id = ?",
-		[categoryId]
-	);
-	if (rows[0].c > 0) return false;
-	await db.exec("delete from categories where id = ?", [categoryId]);
-	return true;
+	return db.withTx(async () => {
+		const rows = await db.query<{ c: number }>(
+			"select count(*) as c from transactions where category_id = ? and deleted_at is null",
+			[categoryId]
+		);
+		if (rows[0].c > 0) return false;
+		const now = new Date().toISOString();
+		const seq = await nextSeq(db);
+		await db.exec(
+			"update categories set deleted_at = ?, updated_at = ?, local_seq = ? where id = ?",
+			[now, now, seq, categoryId]
+		);
+		return true;
+	});
 }
 
 export async function getOrCreateCategoryByName(
 	db: DbHandle,
 	name: string
 ): Promise<string> {
-	const rows = await db.query<{ id: string }>("select id from categories where name = ?", [name]);
-	if (rows.length > 0) return rows[0].id;
+	return db.withTx(async () => {
+		const rows = await db.query<{ id: string }>(
+			"select id from categories where name = ? and deleted_at is null",
+			[name],
+		);
+		if (rows.length > 0) return rows[0].id;
 
-	const newId = id();
-	const now = new Date().toISOString();
-	await db.exec(
-		"insert into categories (id, created_at, name, is_neutral) values (?, ?, ?, ?)",
-		[newId, now, name, 0]
-	);
-	return newId;
+		const newId = id();
+		const now = new Date().toISOString();
+		const seq = await nextSeq(db);
+		await db.exec(
+			"insert into categories (id, created_at, updated_at, name, is_neutral, local_seq) values (?, ?, ?, ?, ?, ?)",
+			[newId, now, now, name, 0, seq]
+		);
+		return newId;
+	});
 }

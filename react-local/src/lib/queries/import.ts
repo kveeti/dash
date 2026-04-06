@@ -1,5 +1,6 @@
 import type { DbHandle } from "../db";
 import { id } from "../id";
+import { nextSeqBatch } from "../sync";
 import { getOrCreateAccountByName } from "./accounts";
 import { getOrCreateCategoryByName } from "./categories";
 
@@ -161,13 +162,15 @@ export async function importCsv(
 
 	const now = new Date().toISOString();
 	const BATCH = 50;
-	await db.exec("begin transaction");
-	try {
+	return db.withTx(async () => {
 		for (let i = 0; i < parsed.length; i += BATCH) {
 			const batch = parsed.slice(i, i + BATCH);
-			const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
-			const values = batch.flatMap(({ row }) => [
+			const highSeq = await nextSeqBatch(db, batch.length);
+			const baseSeq = highSeq - batch.length + 1;
+			const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+			const values = batch.flatMap(({ row }, idx) => [
 				id(),
+				now,
 				now,
 				row.date,
 				row.amount,
@@ -176,19 +179,15 @@ export async function importCsv(
 				row.additional ?? null,
 				row.category_name ? categoryCache.get(row.category_name)! : null,
 				accountId,
+				baseSeq + idx,
 			]);
 			await db.exec(
 				`insert into transactions
-				 (id, created_at, date, amount, currency, counter_party, additional, category_id, account_id)
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id, local_seq)
 				 values ${placeholders}`,
 				values
 			);
 		}
-		await db.exec("commit");
-	} catch (error) {
-		await db.exec("rollback");
-		throw error;
-	}
-
-	return { imported: parsed.length, skipped, errors };
+		return { imported: parsed.length, skipped, errors };
+	});
 }
