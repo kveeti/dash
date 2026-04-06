@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import { useDb } from "../../providers";
 import { id } from "../id";
 import type { DbHandle } from "../db";
-import { nextSeq } from "../sync";
 
 export function useTransactionsQuery(props: {
 	search: string | undefined;
@@ -173,13 +172,12 @@ export function useCreateTransactionMutation() {
 			notes?: string;
 			category_id?: string;
 			account_id: string;
-		}) => db.withTx(async () => {
+		}) => {
 			const now = new Date().toISOString();
-			const seq = await nextSeq(db);
-			await db.exec(
+			return db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id, local_seq)
-				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id)
+				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				[
 					id(),
 					now,
@@ -192,10 +190,9 @@ export function useCreateTransactionMutation() {
 					tx.notes ?? null,
 					tx.category_id ?? null,
 					tx.account_id,
-					seq,
 				]
 			);
-		}),
+		},
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["transactions"] });
 			qc.invalidateQueries({ queryKey: ["transaction"] });
@@ -219,22 +216,20 @@ export function useUpdateTransactionMutation() {
 				category_id?: string;
 				account_id: string;
 			};
-		}) => db.withTx(async () => {
+		}) => {
 			const now = new Date().toISOString();
-			const seq = await nextSeq(db);
-			await db.exec(
+			return db.exec(
 				`update transactions set
  				 updated_at = ?, date = ?, amount = ?, currency = ?,
  				 counter_party = ?, additional = ?, notes = ?, category_id = ?, account_id = ?,
- 				 local_seq = ?
  				 where id = ?`,
 				[
 					now, tx.date, tx.amount, tx.currency,
 					tx.counter_party, tx.additional ?? null, tx.notes ?? null,
-					tx.category_id ?? null, tx.account_id, seq, txId,
+					tx.category_id ?? null, tx.account_id, txId,
 				]
 			);
-		}),
+		},
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["transactions"] });
 			qc.invalidateQueries({ queryKey: ["transaction"] });

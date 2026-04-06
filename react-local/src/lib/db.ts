@@ -137,25 +137,7 @@ export function getDb() {
 			transaction_b_id text not null references transactions(id),
 			created_at text not null,
 			primary key (transaction_a_id, transaction_b_id)
-		)`,
-			`alter table accounts add column external_id text`,
-			// sync support: local_seq + deleted_at on all tables
-			`alter table categories add column local_seq integer not null default 0`,
-			`alter table categories add column deleted_at text`,
-			`alter table accounts add column local_seq integer not null default 0`,
-			`alter table accounts add column deleted_at text`,
-			`alter table transactions add column local_seq integer not null default 0`,
-			`alter table transactions add column deleted_at text`,
-			`alter table transaction_links add column local_seq integer not null default 0`,
-			`alter table transaction_links add column deleted_at text`,
-			`alter table transaction_links add column updated_at text`,
-			// sync counters table (device-local, never synced)
-			`create table if not exists _sync (
-			seq integer not null default 0,
-			last_pushed_seq integer not null default 0,
-			cursor integer not null default 0
-		)`,
-			`insert into _sync (seq, last_pushed_seq, cursor) values (0, 0, 0)`,
+		)`
 		];
 
 		const versionRows = await query<{ current: number }>("select current from version limit 1");

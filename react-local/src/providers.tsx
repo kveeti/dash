@@ -1,86 +1,20 @@
-import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { getDb } from "./lib/db";
-import { getSyncConfig, sync } from "./lib/sync";
 
 const queryClient = new QueryClient()
-
-const SCHEMA_VERSION = 1;
 
 export function Providers(props: { children: ReactNode }) {
   return (
     <I18nProvider>
       <DbProvider>
         <QueryClientProvider client={queryClient}>
-          <AutoSync />
           {props.children}
         </QueryClientProvider>
       </DbProvider>
     </I18nProvider>
   );
 }
-
-function AutoSync() {
-  const db = useDb();
-  const qc = useQueryClient();
-  const syncingRef = useRef(false);
-  const schemaErrorRef = useRef(false);
-
-  useEffect(() => {
-    async function doSync() {
-      if (schemaErrorRef.current) return;
-
-      const config = getSyncConfig();
-      if (!config) return;
-
-      if (syncingRef.current) return;
-      syncingRef.current = true;
-
-      try {
-        const result = await sync(db, config, SCHEMA_VERSION);
-        if (result.pulled > 0) {
-          qc.invalidateQueries();
-        }
-      } catch (e: any) {
-        if (e.message?.includes("newer schema")) {
-          schemaErrorRef.current = true;
-          console.error("sync stopped: remote has newer schema, please update the app");
-        } else {
-          console.error("auto-sync failed:", e);
-        }
-      } finally {
-        syncingRef.current = false;
-      }
-    }
-
-    // sync immediately on mount
-    doSync();
-
-    // sync when a write happens (debounced 1s to batch rapid writes)
-    let dirtyTimeout: ReturnType<typeof setTimeout> | null = null;
-    function onDirty() {
-      if (dirtyTimeout) clearTimeout(dirtyTimeout);
-      dirtyTimeout = setTimeout(doSync, 1_000);
-    }
-    window.addEventListener("dash-sync-dirty", onDirty);
-
-    // also sync every 30s while tab is visible (catch anything missed)
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        doSync();
-      }
-    }, 30_000);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("dash-sync-dirty", onDirty);
-      if (dirtyTimeout) clearTimeout(dirtyTimeout);
-    };
-  }, [db, qc]);
-
-  return null;
-}
-
 
 const DbContext = createContext<ReturnType<typeof getDb> | null>(null);
 

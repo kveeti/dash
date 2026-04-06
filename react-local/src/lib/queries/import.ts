@@ -1,6 +1,5 @@
 import type { DbHandle } from "../db";
 import { id } from "../id";
-import { nextSeqBatch } from "../sync";
 import { getOrCreateAccountByName } from "./accounts";
 import { getOrCreateCategoryByName } from "./categories";
 
@@ -165,9 +164,7 @@ export async function importCsv(
 	return db.withTx(async () => {
 		for (let i = 0; i < parsed.length; i += BATCH) {
 			const batch = parsed.slice(i, i + BATCH);
-			const highSeq = await nextSeqBatch(db, batch.length);
-			const baseSeq = highSeq - batch.length + 1;
-			const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+			const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
 			const values = batch.flatMap(({ row }, idx) => [
 				id(),
 				now,
@@ -179,11 +176,10 @@ export async function importCsv(
 				row.additional ?? null,
 				row.category_name ? categoryCache.get(row.category_name)! : null,
 				accountId,
-				baseSeq + idx,
 			]);
 			await db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id, local_seq)
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id)
 				 values ${placeholders}`,
 				values
 			);

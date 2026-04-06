@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDb } from "../../providers";
 import type { DbHandle } from "../db";
 import { id } from "../id";
-import { nextSeq } from "../sync";
 
 export type CategoryWithCount = {
 	id: string;
@@ -75,10 +74,9 @@ async function createCategory(
 ) {
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
-		const seq = await nextSeq(db);
 		await db.exec(
-			"insert into categories (id, created_at, updated_at, name, is_neutral, local_seq) values (?, ?, ?, ?, ?, ?)",
-			[id(), now, now, cat.name, cat.is_neutral ? 1 : 0, seq]
+			"insert into categories (id, created_at, updated_at, name, is_neutral) values (?, ?, ?, ?, ?)",
+			[id(), now, now, cat.name, cat.is_neutral ? 1 : 0]
 		);
 	});
 }
@@ -90,10 +88,9 @@ async function updateCategory(
 ) {
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
-		const seq = await nextSeq(db);
 		await db.exec(
-			"update categories set name = ?, is_neutral = ?, updated_at = ?, local_seq = ? where id = ?",
-			[cat.name, cat.is_neutral ? 1 : 0, now, seq, categoryId]
+			"update categories set name = ?, is_neutral = ?, updated_at = ? where id = ?",
+			[cat.name, cat.is_neutral ? 1 : 0, now, categoryId]
 		);
 	});
 }
@@ -109,10 +106,9 @@ async function deleteCategory(
 		);
 		if (rows[0].c > 0) return false;
 		const now = new Date().toISOString();
-		const seq = await nextSeq(db);
 		await db.exec(
-			"update categories set deleted_at = ?, updated_at = ?, local_seq = ? where id = ?",
-			[now, now, seq, categoryId]
+			"update categories set deleted_at = ?, updated_at = ? where id = ?",
+			[now, now, categoryId]
 		);
 		return true;
 	});
@@ -131,10 +127,9 @@ export async function getOrCreateCategoryByName(
 
 		const newId = id();
 		const now = new Date().toISOString();
-		const seq = await nextSeq(db);
 		await db.exec(
-			"insert into categories (id, created_at, updated_at, name, is_neutral, local_seq) values (?, ?, ?, ?, ?, ?)",
-			[newId, now, now, name, 0, seq]
+			"insert into categories (id, created_at, updated_at, name, is_neutral) values (?, ?, ?, ?, ?)",
+			[newId, now, now, name, 0]
 		);
 		return newId;
 	});
