@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tansta
 import { useDb } from "../../providers";
 import { id } from "../id";
 import type { DbHandle } from "../db";
+import { nextSeq } from "../sync";
 
 export function useTransactionsQuery(props: {
 	search: string | undefined;
@@ -45,7 +46,7 @@ async function getTransactions(db, opts?: {
 		left join accounts a on t.account_id = a.id`;
 
 	const params: any[] = [];
-	const wheres: string[] = [];
+	const wheres: string[] = ["t.deleted_at is null"];
 
 	if (opts?.search) {
 		wheres.push("(t.counter_party like ? or t.additional like ?)");
@@ -69,9 +70,7 @@ async function getTransactions(db, opts?: {
 		}
 	}
 
-	if (wheres.length) {
-		sql += " where " + wheres.join(" and ");
-	}
+	sql += " where " + wheres.join(" and ");
 
 	const order = direction === "left" ? "asc" : "desc";
 	sql += ` order by t.date ${order}, t.id ${order} limit ?`;
@@ -122,7 +121,7 @@ async function getTransactionById(db: DbHandle, id: string): Promise<Transaction
 		from transactions t
 		left join categories c on t.category_id = c.id
 		left join accounts a on t.account_id = a.id
-		where t.id = ?
+		where t.id = ? and t.deleted_at is null
 	`, [id]);
 	return rows[0] ?? null;
 }
@@ -174,14 +173,16 @@ export function useCreateTransactionMutation() {
 			notes?: string;
 			category_id?: string;
 			account_id: string;
-		}) => {
+		}) => db.withTx(async () => {
 			const now = new Date().toISOString();
-			return db.exec(
+			const seq = await nextSeq(db);
+			await db.exec(
 				`insert into transactions
-				 (id, created_at, date, amount, currency, counter_party, additional, notes, category_id, account_id)
-				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id, local_seq)
+				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				[
 					id(),
+					now,
 					now,
 					tx.date,
 					tx.amount,
@@ -191,9 +192,10 @@ export function useCreateTransactionMutation() {
 					tx.notes ?? null,
 					tx.category_id ?? null,
 					tx.account_id,
+					seq,
 				]
 			);
-		},
+		}),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["transactions"] });
 			qc.invalidateQueries({ queryKey: ["transaction"] });
@@ -217,20 +219,22 @@ export function useUpdateTransactionMutation() {
 				category_id?: string;
 				account_id: string;
 			};
-		}) => {
+		}) => db.withTx(async () => {
 			const now = new Date().toISOString();
-			return db.exec(
+			const seq = await nextSeq(db);
+			await db.exec(
 				`update transactions set
  				 updated_at = ?, date = ?, amount = ?, currency = ?,
- 				 counter_party = ?, additional = ?, notes = ?, category_id = ?, account_id = ?
+ 				 counter_party = ?, additional = ?, notes = ?, category_id = ?, account_id = ?,
+ 				 local_seq = ?
  				 where id = ?`,
 				[
 					now, tx.date, tx.amount, tx.currency,
 					tx.counter_party, tx.additional ?? null, tx.notes ?? null,
-					tx.category_id ?? null, tx.account_id, txId,
+					tx.category_id ?? null, tx.account_id, seq, txId,
 				]
 			);
-		},
+		}),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["transactions"] });
 			qc.invalidateQueries({ queryKey: ["transaction"] });
