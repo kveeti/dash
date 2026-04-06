@@ -24,9 +24,12 @@ function AutoSync() {
   const db = useDb();
   const qc = useQueryClient();
   const syncingRef = useRef(false);
+  const schemaErrorRef = useRef(false);
 
   useEffect(() => {
     async function doSync() {
+      if (schemaErrorRef.current) return;
+
       const config = getSyncConfig();
       if (!config) return;
 
@@ -38,8 +41,13 @@ function AutoSync() {
         if (result.pulled > 0) {
           qc.invalidateQueries();
         }
-      } catch (e) {
-        console.error("auto-sync failed:", e);
+      } catch (e: any) {
+        if (e.message?.includes("newer schema")) {
+          schemaErrorRef.current = true;
+          console.error("sync stopped: remote has newer schema, please update the app");
+        } else {
+          console.error("auto-sync failed:", e);
+        }
       } finally {
         syncingRef.current = false;
       }
