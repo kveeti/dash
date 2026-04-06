@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDb } from "../../providers";
 import type { DbHandle } from "../db";
 import { id } from "../id";
-import { nextSeq } from "../sync";
 
 export type Account = {
 	id: string;
@@ -37,10 +36,9 @@ export async function createAccount(
 	return db.withTx(async () => {
 		const newId = id();
 		const now = new Date().toISOString();
-		const seq = await nextSeq(db);
 		await db.exec(
-			"insert into accounts (id, created_at, updated_at, name, local_seq) values (?, ?, ?, ?, ?)",
-			[newId, now, now, name, seq],
+			"insert into accounts (id, created_at, updated_at, name) values (?, ?, ?, ?)",
+			[newId, now, now, name],
 		);
 		return newId;
 	});
