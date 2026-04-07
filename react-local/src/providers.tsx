@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, MutationCache } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { getDb } from "./lib/db";
 import type { SyncAuth } from "./lib/sync-auth";
@@ -7,7 +7,17 @@ import { runSync, clearSyncState } from "./lib/sync-engine";
 
 export type SyncStatus = "unconfigured" | "locked" | "idle" | "syncing" | "error";
 
-const queryClient = new QueryClient()
+// Debounced sync trigger — will be wired up by SyncAuthProvider
+let _debouncedSync: (() => void) | null = null;
+
+const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onSuccess: () => {
+      // Trigger debounced sync after any successful mutation
+      _debouncedSync?.();
+    },
+  }),
+})
 
 export function Providers(props: { children: ReactNode }) {
   return (
@@ -143,6 +153,9 @@ function SyncAuthProvider({ children }: { children: ReactNode }) {
         const now = new Date();
         setLastSyncAt(now);
         localStorage.setItem(LS_LAST_SYNC_AT, now.toISOString());
+        if (result.pulled > 0) {
+          queryClient.invalidateQueries();
+        }
       }
     } catch (e: any) {
       setStatus("error");
@@ -167,6 +180,21 @@ function SyncAuthProvider({ children }: { children: ReactNode }) {
     await sync();
   }, [sync]);
 
+  // Debounced sync: triggered by mutations via MutationCache
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    _debouncedSync = () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        sync();
+      }, 2000);
+    };
+    return () => {
+      _debouncedSync = null;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [sync]);
+
   // Auto-sync: on unlock, every 5 min, on tab focus
   useEffect(() => {
     if (!auth) return;
@@ -182,6 +210,49 @@ function SyncAuthProvider({ children }: { children: ReactNode }) {
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [auth, sync]);
+
+  // SSE: listen for push notifications from other devices
+  useEffect(() => {
+    if (!auth) return;
+    const serverUrl = getSyncServerUrl();
+    if (!serverUrl) return;
+
+    const controller = new AbortController();
+    let running = true;
+
+    (async () => {
+      while (running) {
+        try {
+          const res = await fetch(`${serverUrl}/sync/events`, {
+            headers: { Authorization: `Bearer ${auth.token}` },
+            signal: controller.signal,
+          });
+          if (!res.ok || !res.body) break;
+
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+
+          while (running) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const text = decoder.decode(value, { stream: true });
+            if (text.includes("event:sync") || text.includes("event: sync")) {
+              sync();
+            }
+          }
+        } catch (e: any) {
+          if (e.name === "AbortError") break;
+          // Reconnect after 5s on error
+          await new Promise(r => setTimeout(r, 5000));
+        }
+      }
+    })();
+
+    return () => {
+      running = false;
+      controller.abort();
     };
   }, [auth, sync]);
 

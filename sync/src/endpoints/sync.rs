@@ -1,9 +1,14 @@
-use axum::{Json, extract::{Query, State}};
+use std::convert::Infallible;
+use axum::{Json, extract::{Query, State}, response::sse::{Event, Sse}};
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
+use tokio_stream::StreamExt as _;
+use tokio_stream::wrappers::BroadcastStream;
 
 use crate::error::ApiError;
 use crate::middleware::AuthUser;
+use crate::state::SyncNotifier;
 
 #[derive(Serialize)]
 pub struct HandshakeResponse {
@@ -14,6 +19,29 @@ pub async fn handshake(_user: AuthUser) -> Json<HandshakeResponse> {
     Json(HandshakeResponse {
         server_time_ms: chrono::Utc::now().timestamp_millis(),
     })
+}
+
+// --- SSE events ---
+
+pub async fn events(
+    user: AuthUser,
+    State(notifier): State<SyncNotifier>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    tracing::info!("SSE client connected: user={}", user.user_id);
+    let rx = notifier.subscribe(user.user_id);
+    let stream = BroadcastStream::new(rx)
+        .filter_map(|result| {
+            // Skip lagged messages
+            match result {
+                Ok(()) => Some(Ok(Event::default().event("sync").data(""))),
+                Err(_) => None,
+            }
+        });
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(std::time::Duration::from_secs(30))
+    )
 }
 
 // --- Pull ---
@@ -129,6 +157,7 @@ pub struct PushResponse {
 pub async fn push(
     user: AuthUser,
     State(pool): State<PgPool>,
+    State(notifier): State<SyncNotifier>,
     Json(req): Json<PushRequest>,
 ) -> Result<Json<PushResponse>, ApiError> {
     let mut accepted = Vec::new();
@@ -190,6 +219,12 @@ pub async fn push(
     .0;
 
     tx.commit().await?;
+
+    // Notify other connected clients that new data is available
+    if !accepted.is_empty() {
+        tracing::info!("notifying SSE clients: user={}, accepted={}", user.user_id, accepted.len());
+        notifier.notify(user.user_id);
+    }
 
     Ok(Json(PushResponse { accepted, rejected, max_server_version: max_version }))
 }

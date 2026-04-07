@@ -68,6 +68,7 @@ async fn main() {
     let state = AppState {
         pool,
         jwt_secret: config.jwt_secret,
+        notifier: state::SyncNotifier::default(),
     };
 
     let cors = match &config.cors_origin {
@@ -95,6 +96,7 @@ async fn main() {
         .route("/sync/handshake", get(endpoints::sync::handshake))
         .route("/sync/pull", get(endpoints::sync::pull))
         .route("/sync/push", post(endpoints::sync::push))
+        .route("/sync/events", get(endpoints::sync::events))
         .layer(cors)
         .with_state(state);
 
