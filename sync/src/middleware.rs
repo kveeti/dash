@@ -22,14 +22,19 @@ impl FromRequestParts<AppState> for AuthUser {
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-        let header = parts
+        let cookie_header = parts
             .headers
-            .get("authorization")
+            .get("cookie")
             .and_then(|v| v.to_str().ok())
             .ok_or(ApiError::Unauthorized)?;
 
-        let token = header
-            .strip_prefix("Bearer ")
+        let token = cookie_header
+            .split(';')
+            .filter_map(|s| {
+                let s = s.trim();
+                s.strip_prefix("dash_token=")
+            })
+            .next()
             .ok_or(ApiError::Unauthorized)?;
 
         let data = decode::<Claims>(

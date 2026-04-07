@@ -10,7 +10,6 @@ import {
 } from "./crypto";
 
 const LS_USER_ID = "dash_sync_user_id";
-const LS_TOKEN = "dash_sync_token";
 const LS_SERVER_SALT = "dash_sync_server_salt";
 const IDB_NAME = "dash_sync_keys";
 const IDB_STORE = "keys";
@@ -18,7 +17,6 @@ const IDB_KEY = "dek";
 
 export interface SyncAuth {
 	userId: string;
-	token: string;
 	serverSalt: string;
 	dek: CryptoKey;
 }
@@ -26,20 +24,17 @@ export interface SyncAuth {
 /** Read persisted auth identifiers (no DEK — that's in IDB) */
 export function getPersistedAuth(): {
 	userId: string;
-	token: string;
 	serverSalt: string;
 } | null {
 	const userId = localStorage.getItem(LS_USER_ID);
-	const token = localStorage.getItem(LS_TOKEN);
 	const serverSalt = localStorage.getItem(LS_SERVER_SALT);
-	if (!userId || !token || !serverSalt) return null;
-	return { userId, token, serverSalt };
+	if (!userId || !serverSalt) return null;
+	return { userId, serverSalt };
 }
 
 /** Persist auth identifiers after signup/login */
-export function persistAuth(userId: string, token: string, serverSalt: string) {
+export function persistAuth(userId: string, serverSalt: string) {
 	localStorage.setItem(LS_USER_ID, userId);
-	localStorage.setItem(LS_TOKEN, token);
 	localStorage.setItem(LS_SERVER_SALT, serverSalt);
 }
 
@@ -97,17 +92,20 @@ async function clearPersistedDek(): Promise<void> {
 	});
 }
 
-/** Clear all persisted auth state */
-export function clearAuth() {
+/** Clear all persisted auth state and server cookie */
+export async function clearAuth(serverUrl: string) {
 	localStorage.removeItem(LS_USER_ID);
-	localStorage.removeItem(LS_TOKEN);
 	localStorage.removeItem(LS_SERVER_SALT);
 	clearPersistedDek();
-}
-
-/** Update just the token (e.g. after refresh) */
-export function persistToken(token: string) {
-	localStorage.setItem(LS_TOKEN, token);
+	// Clear the HttpOnly cookie via server endpoint
+	try {
+		await fetch(`${serverUrl}/auth/logout`, {
+			method: "POST",
+			credentials: "include",
+		});
+	} catch {
+		// Best-effort — cookie will expire on its own
+	}
 }
 
 /**
@@ -133,6 +131,7 @@ export async function signup(
 
 	const res = await fetch(`${serverUrl}/auth/signup`, {
 		method: "POST",
+		credentials: "include",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			server_salt: serverSalt,
@@ -146,10 +145,10 @@ export async function signup(
 		throw new Error(`Signup failed: ${text}`);
 	}
 
-	const data: { user_id: string; token: string } = await res.json();
-	persistAuth(data.user_id, data.token, serverSalt);
+	const data: { user_id: string } = await res.json();
+	persistAuth(data.user_id, serverSalt);
 
-	return { userId: data.user_id, token: data.token, serverSalt, dek };
+	return { userId: data.user_id, serverSalt, dek };
 }
 
 /**
@@ -176,9 +175,10 @@ export async function login(
 	const authKeyBytes = await deriveAuthKey(masterKey);
 	const kek = await deriveKek(masterKey);
 
-	// 3. Login
+	// 3. Login (cookie set automatically via Set-Cookie)
 	const loginRes = await fetch(`${serverUrl}/auth/login`, {
 		method: "POST",
+		credentials: "include",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify({
 			user_id: userId,
@@ -192,7 +192,6 @@ export async function login(
 	}
 
 	const data: {
-		token: string;
 		encrypted_dek: string | null;
 		server_salt: string;
 	} = await loginRes.json();
@@ -201,9 +200,9 @@ export async function login(
 	if (!data.encrypted_dek) throw new Error("No encrypted DEK on server");
 	const dek = await unwrapDek(base64ToUint8(data.encrypted_dek), kek);
 
-	persistAuth(userId, data.token, serverSalt);
+	persistAuth(userId, serverSalt);
 
-	return { userId, token: data.token, serverSalt, dek };
+	return { userId, serverSalt, dek };
 }
 
 /**

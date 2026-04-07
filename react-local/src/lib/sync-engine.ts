@@ -70,14 +70,13 @@ export function clearSyncState() {
 
 async function apiFetch(
 	url: string,
-	token: string,
 	init?: RequestInit,
 ): Promise<Response> {
 	const res = await fetch(url, {
 		...init,
+		credentials: "include",
 		headers: {
 			...(init?.headers ?? {}),
-			Authorization: `Bearer ${token}`,
 			"Content-Type": "application/json",
 		},
 	});
@@ -89,8 +88,8 @@ async function apiFetch(
 
 // --- Clock drift check ---
 
-async function checkClockDrift(serverUrl: string, token: string): Promise<void> {
-	const res = await apiFetch(`${serverUrl}/sync/handshake`, token);
+async function checkClockDrift(serverUrl: string): Promise<void> {
+	const res = await apiFetch(`${serverUrl}/sync/handshake`);
 	if (!res.ok) throw new Error("Handshake failed");
 	const { server_time_ms }: { server_time_ms: number } = await res.json();
 	const drift = Math.abs(Date.now() - server_time_ms);
@@ -107,7 +106,6 @@ async function pull(
 	db: DbHandle,
 	dek: CryptoKey,
 	serverUrl: string,
-	token: string,
 ): Promise<{ pulled: number; forceReset: boolean }> {
 	let sinceVersion = getLastSyncVersion();
 	let totalPulled = 0;
@@ -115,7 +113,6 @@ async function pull(
 	while (true) {
 		const res = await apiFetch(
 			`${serverUrl}/sync/pull?since_version=${sinceVersion}&limit=1000`,
-			token,
 		);
 		if (!res.ok) throw new Error(`Pull failed: ${res.status}`);
 
@@ -216,7 +213,6 @@ async function push(
 	db: DbHandle,
 	dek: CryptoKey,
 	serverUrl: string,
-	token: string,
 ): Promise<{ pushed: number; rejected: number; maxServerVersion: number }> {
 	// Collect all dirty rows first
 	const allDirtyRows: { table: SyncableTable; row: Record<string, any> }[] = [];
@@ -255,7 +251,7 @@ async function push(
 
 	for (let i = 0; i < pushItems.length; i += BATCH) {
 		const batch = pushItems.slice(i, i + BATCH);
-		const result = await pushBatch(db, dek, batch, serverUrl, token, 0);
+		const result = await pushBatch(db, dek, batch, serverUrl, 0);
 		totalPushed += result.pushed;
 		totalRejected += result.rejected;
 		if (result.maxServerVersion > maxServerVersion) {
@@ -279,10 +275,9 @@ async function pushBatch(
 		is_deleted: boolean;
 	}[],
 	serverUrl: string,
-	token: string,
 	attempt: number,
 ): Promise<{ pushed: number; rejected: number; maxServerVersion: number }> {
-	const res = await apiFetch(`${serverUrl}/sync/push`, token, {
+	const res = await apiFetch(`${serverUrl}/sync/push`, {
 		method: "POST",
 		body: JSON.stringify({
 			items: items.map((i) => ({
@@ -327,7 +322,6 @@ async function pushBatch(
 		// Pull the latest version of this item
 		const pullRes = await apiFetch(
 			`${serverUrl}/sync/pull?since_version=0&limit=1`,
-			token,
 		);
 		// For now, just bump our HLC past the server's and retry
 		const newHlc = makeHlc(Date.now(), await getMaxHlc(db));
@@ -361,7 +355,7 @@ async function pushBatch(
 	}
 
 	if (retryItems.length > 0) {
-		const retryResult = await pushBatch(db, dek, retryItems, serverUrl, token, attempt + 1);
+		const retryResult = await pushBatch(db, dek, retryItems, serverUrl, attempt + 1);
 		return {
 			pushed: data.accepted.length + retryResult.pushed,
 			rejected: retryResult.rejected,
@@ -399,14 +393,13 @@ export async function runSync(
 	db: DbHandle,
 	dek: CryptoKey,
 	serverUrl: string,
-	token: string,
 ): Promise<SyncResult> {
 	try {
 		// 1. Clock drift check
-		await checkClockDrift(serverUrl, token);
+		await checkClockDrift(serverUrl);
 
 		// 2. Pull
-		const pullResult = await pull(db, dek, serverUrl, token);
+		const pullResult = await pull(db, dek, serverUrl);
 
 		if (pullResult.forceReset) {
 			return {
@@ -419,7 +412,7 @@ export async function runSync(
 		}
 
 		// 3. Push
-		const pushResult = await push(db, dek, serverUrl, token);
+		const pushResult = await push(db, dek, serverUrl);
 
 		// Advance cursor past our own pushed items so we don't re-pull them
 		if (pushResult.maxServerVersion > 0) {

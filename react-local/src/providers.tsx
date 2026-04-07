@@ -144,7 +144,7 @@ function SyncAuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const result = await runSync(db, auth.dek, serverUrl, auth.token);
+      const result = await runSync(db, auth.dek, serverUrl);
       if (result.error) {
         setStatus("error");
         setError(result.error);
@@ -166,7 +166,8 @@ function SyncAuthProvider({ children }: { children: ReactNode }) {
   }, [auth, db]);
 
   const logout = useCallback(() => {
-    clearAuthStorage();
+    const serverUrl = getSyncServerUrl();
+    clearAuthStorage(serverUrl);
     clearSyncState();
     setAuth(null);
     setStatus("unconfigured");
@@ -226,7 +227,7 @@ function SyncAuthProvider({ children }: { children: ReactNode }) {
       while (running) {
         try {
           const res = await fetch(`${serverUrl}/sync/events`, {
-            headers: { Authorization: `Bearer ${auth.token}` },
+            credentials: "include",
             signal: controller.signal,
           });
           if (!res.ok || !res.body) break;

@@ -54,7 +54,7 @@ export function UnlockForm() {
 					type="button"
 					variant="ghost"
 					onClick={() => {
-						clearAuth();
+						clearAuth(getSyncServerUrl());
 						setAuth(null);
 					}}
 				>

@@ -1,4 +1,9 @@
-use axum::{Router, http::Method, routing::{get, post}};
+use axum::{
+    Router,
+    http::Method,
+    routing::{get, post},
+};
+use hyper::header;
 use sqlx::{PgPool, migrate};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
@@ -69,22 +74,19 @@ async fn main() {
         pool,
         jwt_secret: config.jwt_secret,
         notifier: state::SyncNotifier::default(),
+        cookie_secure: state::CookieSecure(config.cookie_secure),
     };
 
-    let cors = match &config.cors_origin {
-        Some(origin) => CorsLayer::new()
-            .allow_origin(
-                origin
-                    .parse::<hyper::header::HeaderValue>()
-                    .expect("invalid cors origin"),
-            )
-            .allow_methods([Method::GET, Method::POST])
-            .allow_headers(Any),
-        None => CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods([Method::GET, Method::POST])
-            .allow_headers(Any),
-    };
+    let cors = CorsLayer::new()
+        .allow_origin(
+            config
+                .cors_origin
+                .parse::<hyper::header::HeaderValue>()
+                .expect("invalid CORS_ORIGIN"),
+        )
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::CONTENT_TYPE])
+        .allow_credentials(true);
 
     let app = Router::new()
         .route("/health", get(health))
@@ -92,6 +94,7 @@ async fn main() {
         .route("/auth/signup", post(endpoints::auth::signup))
         .route("/auth/salt/{user_id}", get(endpoints::auth::get_salt))
         .route("/auth/login", post(endpoints::auth::login))
+        .route("/auth/logout", post(endpoints::auth::logout))
         // Sync (authenticated via AuthUser extractor)
         .route("/sync/handshake", get(endpoints::sync::handshake))
         .route("/sync/pull", get(endpoints::sync::pull))

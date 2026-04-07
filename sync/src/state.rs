@@ -33,4 +33,9 @@ pub struct AppState {
     pub pool: sqlx::PgPool,
     pub jwt_secret: String,
     pub notifier: SyncNotifier,
+    pub cookie_secure: CookieSecure,
 }
+
+/// Whether to set the Secure flag on auth cookies (derived from CORS_ORIGIN scheme).
+#[derive(Clone)]
+pub struct CookieSecure(pub bool);

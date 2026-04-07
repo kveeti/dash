@@ -1,5 +1,6 @@
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
-use axum::{Json, extract::State, extract::Path};
+use axum::{Json, extract::State, extract::Path, response::IntoResponse};
+use axum::http::header::SET_COOKIE;
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -8,7 +9,17 @@ use uuid::Uuid;
 
 use crate::error::ApiError;
 use crate::middleware::create_token;
-use crate::state::AppState;
+use crate::state::{AppState, CookieSecure};
+
+const COOKIE_NAME: &str = "dash_token";
+const COOKIE_MAX_AGE: i64 = 7 * 24 * 3600; // 7 days
+
+fn make_set_cookie(token: &str, secure: bool) -> String {
+    let secure_flag = if secure { "; Secure" } else { "" };
+    format!(
+        "{COOKIE_NAME}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={COOKIE_MAX_AGE}{secure_flag}"
+    )
+}
 
 #[derive(Deserialize)]
 pub struct SignupRequest {
@@ -20,13 +31,13 @@ pub struct SignupRequest {
 #[derive(Serialize)]
 pub struct SignupResponse {
     pub user_id: String,
-    pub token: String,
 }
 
 pub async fn signup(
     State(state): State<AppState>,
+    State(CookieSecure(secure)): State<CookieSecure>,
     Json(req): Json<SignupRequest>,
-) -> Result<Json<SignupResponse>, ApiError> {
+) -> Result<impl IntoResponse, ApiError> {
     // Decode auth_key from base64
     let auth_key_bytes = BASE64
         .decode(&req.auth_key)
@@ -56,7 +67,10 @@ pub async fn signup(
     let token = create_token(user_id, &state.jwt_secret)
         .map_err(|e| anyhow::anyhow!("failed to create token: {e}"))?;
 
-    Ok(Json(SignupResponse { user_id: ulid.to_string(), token }))
+    Ok((
+        [(SET_COOKIE, make_set_cookie(&token, secure))],
+        Json(SignupResponse { user_id: ulid.to_string() }),
+    ))
 }
 
 #[derive(Serialize)]
@@ -91,15 +105,15 @@ pub struct LoginRequest {
 
 #[derive(Serialize)]
 pub struct LoginResponse {
-    pub token: String,
     pub encrypted_dek: Option<String>,
     pub server_salt: String,
 }
 
 pub async fn login(
     State(state): State<AppState>,
+    State(CookieSecure(secure)): State<CookieSecure>,
     Json(req): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, ApiError> {
+) -> Result<impl IntoResponse, ApiError> {
     let uuid: Uuid = Ulid::from_string(&req.user_id)
         .map_err(|_| ApiError::BadRequest("invalid user_id".into()))?
         .into();
@@ -128,9 +142,21 @@ pub async fn login(
     let token = create_token(uuid, &state.jwt_secret)
         .map_err(|e| anyhow::anyhow!("failed to create token: {e}"))?;
 
-    Ok(Json(LoginResponse {
-        token,
-        encrypted_dek,
-        server_salt,
-    }))
+    Ok((
+        [(SET_COOKIE, make_set_cookie(&token, secure))],
+        Json(LoginResponse {
+            encrypted_dek,
+            server_salt,
+        }),
+    ))
+}
+
+pub async fn logout(
+    State(CookieSecure(secure)): State<CookieSecure>,
+) -> impl IntoResponse {
+    let secure_flag = if secure { "; Secure" } else { "" };
+    (
+        [(SET_COOKIE, format!("{COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0{secure_flag}"))],
+        Json(serde_json::json!({ "ok": true })),
+    )
 }
