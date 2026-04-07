@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { useSyncAuth } from "../../providers";
@@ -7,44 +7,31 @@ import { getSyncServerUrl, setSyncServerUrl } from "../../lib/use-sync";
 
 export function SignupForm() {
 	const { setAuth } = useSyncAuth();
-	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(false);
 
-	const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-		e.preventDefault();
-		const data = new FormData(e.currentTarget);
-		const serverUrl = (data.get("server_url") as string).trim();
-		const passphrase = data.get("passphrase") as string;
-		const confirm = data.get("confirm") as string;
+	const mutation = useMutation({
+		mutationFn: async (data: FormData) => {
+			const serverUrl = (data.get("server_url") as string).trim();
+			const passphrase = data.get("passphrase") as string;
+			const confirm = data.get("confirm") as string;
 
-		if (!serverUrl) {
-			setError("Server URL is required");
-			return;
-		}
-		if (passphrase.length < 8) {
-			setError("Passphrase must be at least 8 characters");
-			return;
-		}
-		if (passphrase !== confirm) {
-			setError("Passphrases don't match");
-			return;
-		}
+			if (!serverUrl) throw new Error("Server URL is required");
+			if (passphrase.length < 8) throw new Error("Passphrase must be at least 8 characters");
+			if (passphrase !== confirm) throw new Error("Passphrases don't match");
 
-		setLoading(true);
-		setError(null);
-		try {
 			setSyncServerUrl(serverUrl);
-			const auth = await signup(passphrase, serverUrl);
-			setAuth(auth);
-		} catch (e: any) {
-			setError(e.message ?? String(e));
-		} finally {
-			setLoading(false);
-		}
-	};
+			return signup(passphrase, serverUrl);
+		},
+		onSuccess: (auth) => setAuth(auth),
+	});
 
 	return (
-		<form onSubmit={handleSubmit} className="flex flex-col gap-3">
+		<form
+			onSubmit={(e) => {
+				e.preventDefault();
+				mutation.mutate(new FormData(e.currentTarget));
+			}}
+			className="flex flex-col gap-3"
+		>
 			<Input
 				label="Server URL"
 				name="server_url"
@@ -62,9 +49,9 @@ export function SignupForm() {
 				name="confirm"
 				type="password"
 			/>
-			{error && <p className="text-red-11 text-xs">{error}</p>}
-			<Button type="submit" disabled={loading}>
-				{loading ? "Creating account..." : "Sign up"}
+			{mutation.error && <p className="text-red-11 text-xs">{mutation.error.message}</p>}
+			<Button type="submit" disabled={mutation.isPending}>
+				{mutation.isPending ? "Creating account..." : "Sign up"}
 			</Button>
 		</form>
 	);

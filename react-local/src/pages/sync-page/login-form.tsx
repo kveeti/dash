@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { useSyncAuth } from "../../providers";
@@ -7,36 +7,29 @@ import { getSyncServerUrl, setSyncServerUrl } from "../../lib/use-sync";
 
 export function LoginForm() {
 	const { setAuth } = useSyncAuth();
-	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(false);
 
-	const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-		e.preventDefault();
-		const data = new FormData(e.currentTarget);
-		const serverUrl = (data.get("server_url") as string).trim();
-		const userId = (data.get("user_id") as string).trim();
-		const passphrase = data.get("passphrase") as string;
+	const mutation = useMutation({
+		mutationFn: async (data: FormData) => {
+			const serverUrl = (data.get("server_url") as string).trim();
+			const userId = (data.get("user_id") as string).trim();
+			const passphrase = data.get("passphrase") as string;
 
-		if (!serverUrl || !userId || !passphrase) {
-			setError("All fields are required");
-			return;
-		}
+			if (!serverUrl || !userId || !passphrase) throw new Error("All fields are required");
 
-		setLoading(true);
-		setError(null);
-		try {
 			setSyncServerUrl(serverUrl);
-			const auth = await login(userId, passphrase, serverUrl);
-			setAuth(auth);
-		} catch (e: any) {
-			setError(e.message ?? String(e));
-		} finally {
-			setLoading(false);
-		}
-	};
+			return login(userId, passphrase, serverUrl);
+		},
+		onSuccess: (auth) => setAuth(auth),
+	});
 
 	return (
-		<form onSubmit={handleSubmit} className="flex flex-col gap-3">
+		<form
+			onSubmit={(e) => {
+				e.preventDefault();
+				mutation.mutate(new FormData(e.currentTarget));
+			}}
+			className="flex flex-col gap-3"
+		>
 			<Input
 				label="Server URL"
 				name="server_url"
@@ -53,9 +46,9 @@ export function LoginForm() {
 				name="passphrase"
 				type="password"
 			/>
-			{error && <p className="text-red-11 text-xs">{error}</p>}
-			<Button type="submit" disabled={loading}>
-				{loading ? "Logging in..." : "Log in"}
+			{mutation.error && <p className="text-red-11 text-xs">{mutation.error.message}</p>}
+			<Button type="submit" disabled={mutation.isPending}>
+				{mutation.isPending ? "Logging in..." : "Log in"}
 			</Button>
 		</form>
 	);
