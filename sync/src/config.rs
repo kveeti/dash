@@ -9,12 +9,14 @@ struct EnvironmentVariables {
     database_url: String,
     port: Option<u16>,
     cors_origin: Option<String>,
+    jwt_secret: String,
 }
 
 pub struct Config {
     pub database_url: String,
     pub port: u16,
     pub cors_origin: Option<String>,
+    pub jwt_secret: String,
 }
 
 impl Config {
@@ -34,6 +36,7 @@ impl Config {
             database_url: envs.database_url,
             port: envs.port.unwrap_or(8001),
             cors_origin: envs.cors_origin,
+            jwt_secret: envs.jwt_secret,
         })
     }
 }

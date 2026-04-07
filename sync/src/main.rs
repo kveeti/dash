@@ -1,4 +1,4 @@
-use axum::{Router, http::Method, routing::get};
+use axum::{Router, http::Method, routing::{get, post}};
 use sqlx::{PgPool, migrate};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
@@ -7,10 +7,10 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
+mod endpoints;
 mod error;
+mod middleware;
 mod state;
-
-use error::ApiError;
 
 #[tokio::main]
 async fn main() {
@@ -40,7 +40,10 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
-    let state = AppState { pool };
+    let state = AppState {
+        pool,
+        jwt_secret: config.jwt_secret,
+    };
 
     let cors = match &config.cors_origin {
         Some(origin) => CorsLayer::new()
@@ -59,6 +62,14 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health))
+        // Auth (unauthenticated)
+        .route("/auth/signup", post(endpoints::auth::signup))
+        .route("/auth/salt/{user_id}", get(endpoints::auth::get_salt))
+        .route("/auth/login", post(endpoints::auth::login))
+        // Sync (authenticated via AuthUser extractor)
+        .route("/sync/handshake", get(endpoints::sync::handshake))
+        .route("/sync/pull", get(endpoints::sync::pull))
+        .route("/sync/push", post(endpoints::sync::push))
         .layer(cors)
         .with_state(state);
 

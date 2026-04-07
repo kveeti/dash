@@ -12,6 +12,12 @@ pub enum ApiError {
 
     #[error("bad request: {0}")]
     BadRequest(String),
+
+    #[error("unauthorized")]
+    Unauthorized,
+
+    #[error("conflict: {0}")]
+    Conflict(String),
 }
 
 impl IntoResponse for ApiError {
@@ -29,6 +35,8 @@ impl IntoResponse for ApiError {
             }
             ApiError::NotFound(_) => (StatusCode::NOT_FOUND, "not found".to_string()),
             ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, err),
+            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".to_string()),
+            ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg),
         };
 
         (status_code, Json(json!({ "error": error_message }))).into_response()
