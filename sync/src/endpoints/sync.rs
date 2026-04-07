@@ -133,27 +133,13 @@ pub async fn push(
     let mut accepted = Vec::new();
     let mut rejected = Vec::new();
 
+    let mut tx = pool.begin().await?;
+
     for item in req.items {
-        // Check existing HLC
-        let existing: Option<(String,)> = sqlx::query_as(
-            "SELECT hlc FROM sync_items WHERE user_id = $1 AND item_id = $2"
-        )
-        .bind(user.user_id)
-        .bind(&item.item_id)
-        .fetch_optional(&pool)
-        .await?;
-
-        if let Some((current_hlc,)) = &existing {
-            if current_hlc.as_str() >= item.hlc.as_str() {
-                rejected.push(RejectedItem {
-                    item_id: item.item_id,
-                    current_hlc: current_hlc.clone(),
-                });
-                continue;
-            }
-        }
-
-        sqlx::query(
+        // Attempt upsert only if incoming HLC wins.
+        // For new rows (no conflict), always insert.
+        // For existing rows, only update if incoming hlc > stored hlc.
+        let result = sqlx::query(
             "INSERT INTO sync_items (user_id, item_id, schema_version, hlc, encrypted_blob, is_deleted, tombstoned_at) \
              VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $6 THEN NOW() ELSE NULL END) \
              ON CONFLICT (user_id, item_id) DO UPDATE SET \
@@ -162,7 +148,8 @@ pub async fn push(
                server_version = nextval('sync_items_server_version_seq'), \
                encrypted_blob = EXCLUDED.encrypted_blob, \
                is_deleted = EXCLUDED.is_deleted, \
-               tombstoned_at = CASE WHEN EXCLUDED.is_deleted THEN NOW() ELSE NULL END"
+               tombstoned_at = CASE WHEN EXCLUDED.is_deleted THEN NOW() ELSE NULL END \
+             WHERE sync_items.hlc < EXCLUDED.hlc"
         )
         .bind(user.user_id)
         .bind(&item.item_id)
@@ -170,11 +157,29 @@ pub async fn push(
         .bind(&item.hlc)
         .bind(&item.encrypted_blob)
         .bind(item.is_deleted)
-        .execute(&pool)
+        .execute(&mut *tx)
         .await?;
 
-        accepted.push(item.item_id);
+        if result.rows_affected() > 0 {
+            accepted.push(item.item_id);
+        } else {
+            // Row existed with hlc >= incoming — fetch current hlc for rejection
+            let current: Option<(String,)> = sqlx::query_as(
+                "SELECT hlc FROM sync_items WHERE user_id = $1 AND item_id = $2"
+            )
+            .bind(user.user_id)
+            .bind(&item.item_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            rejected.push(RejectedItem {
+                item_id: item.item_id,
+                current_hlc: current.map(|r| r.0).unwrap_or_default(),
+            });
+        }
     }
+
+    tx.commit().await?;
 
     Ok(Json(PushResponse { accepted, rejected }))
 }

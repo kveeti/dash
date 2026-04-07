@@ -217,25 +217,24 @@ async function push(
 	serverUrl: string,
 	token: string,
 ): Promise<{ pushed: number; rejected: number }> {
-	// Collect all dirty items across all tables
-	const pushItems: {
-		item_id: string;
-		table: SyncableTable;
-		keys: Record<string, string>;
-		schema_version: number;
-		hlc: string;
-		encrypted_blob: string;
-		is_deleted: boolean;
-	}[] = [];
-
+	// Collect all dirty rows first
+	const allDirtyRows: { table: SyncableTable; row: Record<string, any> }[] = [];
 	for (const table of SYNCABLE_TABLES) {
 		const dirtyRows = await getDirtyItems(db, table);
 		for (const row of dirtyRows) {
+			allDirtyRows.push({ table, row });
+		}
+	}
+
+	if (allDirtyRows.length === 0) return { pushed: 0, rejected: 0 };
+
+	// Encrypt all items in parallel
+	const pushItems = await Promise.all(
+		allDirtyRows.map(async ({ table, row }) => {
 			const id = itemId(table, row);
 			const payload = rowToPayload(table, row);
 			const encrypted = await encryptPayload(JSON.stringify(payload), dek);
-
-			pushItems.push({
+			return {
 				item_id: id,
 				table,
 				keys: parseItemId(id).keys,
@@ -243,16 +242,14 @@ async function push(
 				hlc: row.hlc,
 				encrypted_blob: encrypted,
 				is_deleted: !!row.is_deleted,
-			});
-		}
-	}
+			};
+		}),
+	);
 
-	if (pushItems.length === 0) return { pushed: 0, rejected: 0 };
-
-	// Push in batches of 100
+	// Push in batches of 500
 	let totalPushed = 0;
 	let totalRejected = 0;
-	const BATCH = 100;
+	const BATCH = 500;
 
 	for (let i = 0; i < pushItems.length; i += BATCH) {
 		const batch = pushItems.slice(i, i + BATCH);
@@ -296,10 +293,14 @@ async function pushBatch(
 	if (!res.ok) throw new Error(`Push failed: ${res.status}`);
 	const data: PushResponse = await res.json();
 
-	// Clear dirty flags for accepted items
-	for (const acceptedId of data.accepted) {
-		const { table, keys } = parseItemId(acceptedId);
-		await clearDirtyFlag(db, table, keys);
+	// Clear dirty flags for accepted items in batch
+	if (data.accepted.length > 0) {
+		await db.withTx(async () => {
+			for (const acceptedId of data.accepted) {
+				const { table, keys } = parseItemId(acceptedId);
+				await clearDirtyFlag(db, table, keys);
+			}
+		});
 	}
 
 	if (data.rejected.length === 0) {
