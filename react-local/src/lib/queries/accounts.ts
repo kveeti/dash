@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDb } from "../../providers";
 import type { DbHandle } from "../db";
 import { id } from "../id";
+import { makeHlc } from "../hlc";
+import { getMaxHlc } from "./transactions";
 
 export type Account = {
 	id: string;
@@ -26,7 +28,7 @@ export function useCreateAccountMutation() {
 }
 
 export async function getAccounts(db: DbHandle): Promise<Account[]> {
-	return db.query("select id, name from accounts where deleted_at is null order by name");
+	return db.query("select id, name from accounts where is_deleted = 0 order by name");
 }
 
 export async function createAccount(
@@ -36,9 +38,10 @@ export async function createAccount(
 	return db.withTx(async () => {
 		const newId = id();
 		const now = new Date().toISOString();
+		const hlc = makeHlc(Date.now(), await getMaxHlc(db));
 		await db.exec(
-			"insert into accounts (id, created_at, updated_at, name) values (?, ?, ?, ?)",
-			[newId, now, now, name],
+			"insert into accounts (id, created_at, updated_at, name, hlc, is_dirty) values (?, ?, ?, ?, ?, 1)",
+			[newId, now, now, name, hlc],
 		);
 		return newId;
 	});
@@ -49,7 +52,7 @@ export async function getOrCreateAccountByName(
 	name: string
 ): Promise<string> {
 	const rows = await db.query<{ id: string }>(
-		"select id from accounts where name = ? and deleted_at is null",
+		"select id from accounts where name = ? and is_deleted = 0",
 		[name],
 	);
 	if (rows.length > 0) return rows[0].id;

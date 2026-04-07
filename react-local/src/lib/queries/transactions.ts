@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useDb } from "../../providers";
 import { id } from "../id";
+import { makeHlc } from "../hlc";
 import type { DbHandle } from "../db";
 
 export function useTransactionsQuery(props: {
@@ -45,7 +46,7 @@ async function getTransactions(db, opts?: {
 		left join accounts a on t.account_id = a.id`;
 
 	const params: any[] = [];
-	const wheres: string[] = ["t.deleted_at is null"];
+	const wheres: string[] = ["t.is_deleted = 0"];
 
 	if (opts?.search) {
 		wheres.push("(t.counter_party like ? or t.additional like ?)");
@@ -120,7 +121,7 @@ async function getTransactionById(db: DbHandle, id: string): Promise<Transaction
 		from transactions t
 		left join categories c on t.category_id = c.id
 		left join accounts a on t.account_id = a.id
-		where t.id = ? and t.deleted_at is null
+		where t.id = ? and t.is_deleted = 0
 	`, [id]);
 	return rows[0] ?? null;
 }
@@ -163,7 +164,7 @@ export function useCreateTransactionMutation() {
 	const db = useDb();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: (tx: {
+		mutationFn: async (tx: {
 			date: string;
 			amount: number;
 			currency: string;
@@ -174,10 +175,11 @@ export function useCreateTransactionMutation() {
 			account_id: string;
 		}) => {
 			const now = new Date().toISOString();
+			const hlc = makeHlc(Date.now(), await getMaxHlc(db));
 			return db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id)
-				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id, hlc, is_dirty)
+				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
 				[
 					id(),
 					now,
@@ -190,6 +192,7 @@ export function useCreateTransactionMutation() {
 					tx.notes ?? null,
 					tx.category_id ?? null,
 					tx.account_id,
+					hlc,
 				]
 			);
 		},
@@ -204,7 +207,7 @@ export function useUpdateTransactionMutation() {
 	const db = useDb();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: ({ txId, tx }: {
+		mutationFn: async ({ txId, tx }: {
 			txId: string;
 			tx: {
 				date: string;
@@ -218,15 +221,17 @@ export function useUpdateTransactionMutation() {
 			};
 		}) => {
 			const now = new Date().toISOString();
+			const hlc = makeHlc(Date.now(), await getMaxHlc(db));
 			return db.exec(
 				`update transactions set
  				 updated_at = ?, date = ?, amount = ?, currency = ?,
  				 counter_party = ?, additional = ?, notes = ?, category_id = ?, account_id = ?,
+ 				 hlc = ?, is_dirty = 1
  				 where id = ?`,
 				[
 					now, tx.date, tx.amount, tx.currency,
 					tx.counter_party, tx.additional ?? null, tx.notes ?? null,
-					tx.category_id ?? null, tx.account_id, txId,
+					tx.category_id ?? null, tx.account_id, hlc, txId,
 				]
 			);
 		},
@@ -235,4 +240,16 @@ export function useUpdateTransactionMutation() {
 			qc.invalidateQueries({ queryKey: ["transaction"] });
 		},
 	});
+}
+
+export async function getMaxHlc(db: DbHandle): Promise<string | null> {
+	const rows = await db.query<{ hlc: string | null }>(
+		`select max(hlc) as hlc from (
+			select hlc from categories
+			union all select hlc from accounts
+			union all select hlc from transactions
+			union all select hlc from transaction_links
+		)`
+	);
+	return rows[0]?.hlc ?? null;
 }

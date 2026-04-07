@@ -1,5 +1,6 @@
 import type { DbHandle } from "../db";
-import { id } from "../id";
+import { batchHlc } from "../hlc";
+import { getMaxHlc } from "./transactions";
 import { getOrCreateAccountByName } from "./accounts";
 import { getOrCreateCategoryByName } from "./categories";
 
@@ -120,6 +121,14 @@ function parseCsvLine(line: string, delimiter: string): string[] {
 	return result;
 }
 
+async function deterministicId(date: string, amount: number, accountId: string, counterParty: string): Promise<string> {
+	const input = `${date}|${amount}|${accountId}|${counterParty}`;
+	const encoded = new TextEncoder().encode(input);
+	const hash = await crypto.subtle.digest("SHA-256", encoded);
+	const bytes = new Uint8Array(hash);
+	return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export async function importCsv(
 	db: DbHandle,
 	text: string,
@@ -160,13 +169,22 @@ export async function importCsv(
 	}
 
 	const now = new Date().toISOString();
+	const hlcs = batchHlc(Date.now(), await getMaxHlc(db), parsed.length);
+
+	// Pre-compute deterministic IDs
+	const ids = await Promise.all(
+		parsed.map(({ row }) => deterministicId(row.date, row.amount, accountId, row.counter_party))
+	);
+
 	const BATCH = 50;
 	return db.withTx(async () => {
 		for (let i = 0; i < parsed.length; i += BATCH) {
 			const batch = parsed.slice(i, i + BATCH);
-			const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+			const batchIds = ids.slice(i, i + BATCH);
+			const batchHlcs = hlcs.slice(i, i + BATCH);
+			const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)").join(", ");
 			const values = batch.flatMap(({ row }, idx) => [
-				id(),
+				batchIds[idx],
 				now,
 				now,
 				row.date,
@@ -176,10 +194,11 @@ export async function importCsv(
 				row.additional ?? null,
 				row.category_name ? categoryCache.get(row.category_name)! : null,
 				accountId,
+				batchHlcs[idx],
 			]);
 			await db.exec(
-				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id)
+				`insert or ignore into transactions
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id, hlc, is_dirty)
 				 values ${placeholders}`,
 				values
 			);

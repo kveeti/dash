@@ -137,7 +137,20 @@ export function getDb() {
 			transaction_b_id text not null references transactions(id),
 			created_at text not null,
 			primary key (transaction_a_id, transaction_b_id)
-		)`
+		)`,
+			// Phase 1: Sync metadata columns
+			`alter table categories add column hlc text`,
+			`alter table categories add column is_deleted integer not null default 0`,
+			`alter table categories add column is_dirty integer not null default 0`,
+			`alter table accounts add column hlc text`,
+			`alter table accounts add column is_deleted integer not null default 0`,
+			`alter table accounts add column is_dirty integer not null default 0`,
+			`alter table transactions add column hlc text`,
+			`alter table transactions add column is_deleted integer not null default 0`,
+			`alter table transactions add column is_dirty integer not null default 0`,
+			`alter table transaction_links add column hlc text`,
+			`alter table transaction_links add column is_deleted integer not null default 0`,
+			`alter table transaction_links add column is_dirty integer not null default 0`,
 		];
 
 		const versionRows = await query<{ current: number }>("select current from version limit 1");
