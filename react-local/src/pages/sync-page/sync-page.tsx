@@ -7,7 +7,7 @@ import { UnlockForm } from "./unlock-form";
 import { SyncStatusView } from "./sync-status";
 
 export function SyncPage() {
-	const { status, error, lastSyncAt, sync, logout, forceReset } = useSync();
+	const { auth, status, error, lastSyncAt, sync, logout, forceReset } = useSync();
 
 	if (status === "locked") {
 		return (
@@ -23,6 +23,11 @@ export function SyncPage() {
 
 	return (
 		<Page title="Sync">
+			{auth && (
+				<p className="text-gray-11 text-xs mb-4 font-mono select-all">
+					ID: {auth.userId}
+				</p>
+			)}
 			<SyncStatusView
 				status={status}
 				error={error}

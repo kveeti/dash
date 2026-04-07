@@ -77,6 +77,8 @@ export function TransactionForm({
 		? isoToDatetimeLocal(defaultValues.date)
 		: currentDatetimeLocal();
 
+	console.log({ accounts: accounts.data, account_id: defaultValues?.account_id })
+
 	return (
 		<form className="space-y-3" onSubmit={handleSubmit}>
 			<div className="grid grid-cols-2 gap-3">
