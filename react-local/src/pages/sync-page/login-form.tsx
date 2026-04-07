@@ -7,14 +7,16 @@ import { getSyncServerUrl, setSyncServerUrl } from "../../lib/use-sync";
 
 export function LoginForm() {
 	const { setAuth } = useSyncAuth();
-	const [serverUrl, setServerUrl] = useState(getSyncServerUrl);
-	const [userId, setUserId] = useState("");
-	const [passphrase, setPassphrase] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
+		const data = new FormData(e.currentTarget);
+		const serverUrl = (data.get("server_url") as string).trim();
+		const userId = (data.get("user_id") as string).trim();
+		const passphrase = data.get("passphrase") as string;
+
 		if (!serverUrl || !userId || !passphrase) {
 			setError("All fields are required");
 			return;
@@ -37,21 +39,19 @@ export function LoginForm() {
 		<form onSubmit={handleSubmit} className="flex flex-col gap-3">
 			<Input
 				label="Server URL"
-				value={serverUrl}
-				onChange={(e) => setServerUrl(e.currentTarget.value)}
+				name="server_url"
+				defaultValue={getSyncServerUrl()}
 				placeholder="https://sync.example.com"
 			/>
 			<Input
 				label="User ID"
-				value={userId}
-				onChange={(e) => setUserId(e.currentTarget.value)}
+				name="user_id"
 				placeholder="uuid from signup"
 			/>
 			<Input
 				label="Passphrase"
+				name="passphrase"
 				type="password"
-				value={passphrase}
-				onChange={(e) => setPassphrase(e.currentTarget.value)}
 			/>
 			{error && <p className="text-red-11 text-xs">{error}</p>}
 			<Button type="submit" disabled={loading}>

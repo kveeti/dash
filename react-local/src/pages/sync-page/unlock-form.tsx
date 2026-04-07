@@ -7,12 +7,13 @@ import { getSyncServerUrl } from "../../lib/use-sync";
 
 export function UnlockForm() {
 	const { setAuth } = useSyncAuth();
-	const [passphrase, setPassphrase] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 
-	const handleSubmit = async (e: React.FormEvent) => {
+	const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
 		e.preventDefault();
+		const data = new FormData(e.currentTarget);
+		const passphrase = data.get("passphrase") as string;
 		if (!passphrase) return;
 
 		const serverUrl = getSyncServerUrl();
@@ -40,9 +41,8 @@ export function UnlockForm() {
 			</p>
 			<Input
 				label="Passphrase"
+				name="passphrase"
 				type="password"
-				value={passphrase}
-				onChange={(e) => setPassphrase(e.currentTarget.value)}
 				autoFocus
 			/>
 			{error && <p className="text-red-11 text-xs">{error}</p>}
