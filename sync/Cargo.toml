@@ -22,7 +22,7 @@ base64 = "0.22"
 argon2 = "0.5.3"
 rand = "0.10"
 uuid = { version = "1.23.0", features = ["v4", "serde"] }
-jsonwebtoken = "10.3.0"
+jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 
 [profile.release]
 strip = "debuginfo"

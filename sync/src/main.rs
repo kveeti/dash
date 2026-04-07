@@ -40,6 +40,31 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
+    // Background compaction: delete tombstoned items older than 30 days
+    let compaction_pool = pool.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            match sqlx::query(
+                "DELETE FROM sync_items WHERE is_deleted = TRUE AND tombstoned_at < NOW() - INTERVAL '30 days'"
+            )
+            .execute(&compaction_pool)
+            .await
+            {
+                Ok(result) => {
+                    let count = result.rows_affected();
+                    if count > 0 {
+                        info!("compaction: deleted {count} tombstoned items");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("compaction failed: {e}");
+                }
+            }
+        }
+    });
+
     let state = AppState {
         pool,
         jwt_secret: config.jwt_secret,

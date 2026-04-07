@@ -19,6 +19,7 @@ import {
 	cascadeTombstone,
 	clearDirtyFlag,
 } from "./sync-payload";
+import { CURRENT_SCHEMA_VERSION, migratePayload } from "./sync-schema";
 
 const LS_LAST_SYNC_VERSION = "dash_last_sync_version";
 const MAX_CLOCK_DRIFT_MS = 60_000;
@@ -151,7 +152,17 @@ async function mergeIncoming(
 
 	// Decrypt payload
 	const json = await decryptPayload(item.encrypted_blob, dek);
-	const payload: SyncPayload = JSON.parse(json);
+	let payload: SyncPayload = JSON.parse(json);
+
+	// Schema migration: upgrade old payloads to current version
+	let needsRepush = false;
+	if (item.schema_version < CURRENT_SCHEMA_VERSION) {
+		const migrated = migratePayload(payload, item.schema_version);
+		if (migrated) {
+			payload = migrated;
+			needsRepush = true;
+		}
+	}
 
 	// Get local HLC for this item
 	const localHlc = await getLocalHlc(db, table, keys);
@@ -164,6 +175,22 @@ async function mergeIncoming(
 
 	// Incoming wins — upsert
 	await upsertFromSync(db, table, payload.data, item.hlc, item.is_deleted);
+
+	// If schema was migrated, mark dirty so it gets re-pushed with new version
+	if (needsRepush) {
+		if (table === "transaction_links") {
+			await db.exec(
+				`update transaction_links set is_dirty = 1
+				 where transaction_a_id = ? and transaction_b_id = ?`,
+				[keys.transaction_a_id, keys.transaction_b_id],
+			);
+		} else {
+			await db.exec(
+				`update ${table} set is_dirty = 1 where id = ?`,
+				[keys.id],
+			);
+		}
+	}
 
 	// Cascade tombstones if needed
 	if (item.is_deleted) {
