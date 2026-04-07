@@ -53,6 +53,7 @@ type PushResponseItem = { item_id: string; current_hlc: string };
 type PushResponse = {
 	accepted: string[];
 	rejected: PushResponseItem[];
+	max_server_version: number;
 };
 
 function getLastSyncVersion(): number {
@@ -216,7 +217,7 @@ async function push(
 	dek: CryptoKey,
 	serverUrl: string,
 	token: string,
-): Promise<{ pushed: number; rejected: number }> {
+): Promise<{ pushed: number; rejected: number; maxServerVersion: number }> {
 	// Collect all dirty rows first
 	const allDirtyRows: { table: SyncableTable; row: Record<string, any> }[] = [];
 	for (const table of SYNCABLE_TABLES) {
@@ -226,7 +227,7 @@ async function push(
 		}
 	}
 
-	if (allDirtyRows.length === 0) return { pushed: 0, rejected: 0 };
+	if (allDirtyRows.length === 0) return { pushed: 0, rejected: 0, maxServerVersion: 0 };
 
 	// Encrypt all items in parallel
 	const pushItems = await Promise.all(
@@ -249,6 +250,7 @@ async function push(
 	// Push in batches of 500
 	let totalPushed = 0;
 	let totalRejected = 0;
+	let maxServerVersion = 0;
 	const BATCH = 500;
 
 	for (let i = 0; i < pushItems.length; i += BATCH) {
@@ -256,9 +258,12 @@ async function push(
 		const result = await pushBatch(db, dek, batch, serverUrl, token, 0);
 		totalPushed += result.pushed;
 		totalRejected += result.rejected;
+		if (result.maxServerVersion > maxServerVersion) {
+			maxServerVersion = result.maxServerVersion;
+		}
 	}
 
-	return { pushed: totalPushed, rejected: totalRejected };
+	return { pushed: totalPushed, rejected: totalRejected, maxServerVersion };
 }
 
 async function pushBatch(
@@ -276,7 +281,7 @@ async function pushBatch(
 	serverUrl: string,
 	token: string,
 	attempt: number,
-): Promise<{ pushed: number; rejected: number }> {
+): Promise<{ pushed: number; rejected: number; maxServerVersion: number }> {
 	const res = await apiFetch(`${serverUrl}/sync/push`, token, {
 		method: "POST",
 		body: JSON.stringify({
@@ -304,12 +309,12 @@ async function pushBatch(
 	}
 
 	if (data.rejected.length === 0) {
-		return { pushed: data.accepted.length, rejected: 0 };
+		return { pushed: data.accepted.length, rejected: 0, maxServerVersion: data.max_server_version };
 	}
 
 	if (attempt >= MAX_PUSH_RETRIES) {
 		// Give up on these items — they'll be retried next sync
-		return { pushed: data.accepted.length, rejected: data.rejected.length };
+		return { pushed: data.accepted.length, rejected: data.rejected.length, maxServerVersion: data.max_server_version };
 	}
 
 	// For rejected items: pull that specific item's latest, merge, bump HLC, retry
@@ -360,10 +365,11 @@ async function pushBatch(
 		return {
 			pushed: data.accepted.length + retryResult.pushed,
 			rejected: retryResult.rejected,
+			maxServerVersion: Math.max(data.max_server_version, retryResult.maxServerVersion),
 		};
 	}
 
-	return { pushed: data.accepted.length, rejected: data.rejected.length };
+	return { pushed: data.accepted.length, rejected: data.rejected.length, maxServerVersion: data.max_server_version };
 }
 
 async function getLocalRow(
@@ -414,6 +420,14 @@ export async function runSync(
 
 		// 3. Push
 		const pushResult = await push(db, dek, serverUrl, token);
+
+		// Advance cursor past our own pushed items so we don't re-pull them
+		if (pushResult.maxServerVersion > 0) {
+			const current = getLastSyncVersion();
+			if (pushResult.maxServerVersion > current) {
+				setLastSyncVersion(pushResult.maxServerVersion);
+			}
+		}
 
 		return {
 			pulled: pullResult.pulled,

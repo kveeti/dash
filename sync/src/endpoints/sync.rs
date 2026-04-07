@@ -123,6 +123,7 @@ pub struct RejectedItem {
 pub struct PushResponse {
     pub accepted: Vec<String>,
     pub rejected: Vec<RejectedItem>,
+    pub max_server_version: i64,
 }
 
 pub async fn push(
@@ -179,7 +180,16 @@ pub async fn push(
         }
     }
 
+    // Get the current max server_version for this user so the client can advance its cursor
+    let max_version: i64 = sqlx::query_as::<_, (i64,)>(
+        "SELECT COALESCE(MAX(server_version), 0) FROM sync_items WHERE user_id = $1"
+    )
+    .bind(user.user_id)
+    .fetch_one(&mut *tx)
+    .await?
+    .0;
+
     tx.commit().await?;
 
-    Ok(Json(PushResponse { accepted, rejected }))
+    Ok(Json(PushResponse { accepted, rejected, max_server_version: max_version }))
 }
