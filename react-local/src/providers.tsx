@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, useCallback, type ReactNode } from "react";
 import { getDb } from "./lib/db";
+import type { SyncAuth } from "./lib/sync-auth";
 
 const queryClient = new QueryClient()
 
@@ -8,9 +9,11 @@ export function Providers(props: { children: ReactNode }) {
   return (
     <I18nProvider>
       <DbProvider>
-        <QueryClientProvider client={queryClient}>
-          {props.children}
-        </QueryClientProvider>
+        <SyncAuthProvider>
+          <QueryClientProvider client={queryClient}>
+            {props.children}
+          </QueryClientProvider>
+        </SyncAuthProvider>
       </DbProvider>
     </I18nProvider>
   );
@@ -47,6 +50,33 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const value = useI18nValue();
   return <I18NContext.Provider value={value}>{children}</I18NContext.Provider>;
 }
+
+// --- Sync Auth ---
+
+interface SyncAuthContextValue {
+  auth: SyncAuth | null;
+  setAuth: (auth: SyncAuth | null) => void;
+}
+
+const SyncAuthContext = createContext<SyncAuthContextValue | null>(null);
+
+function SyncAuthProvider({ children }: { children: ReactNode }) {
+  const [auth, setAuthState] = useState<SyncAuth | null>(null);
+  const setAuth = useCallback((a: SyncAuth | null) => setAuthState(a), []);
+  return (
+    <SyncAuthContext.Provider value={{ auth, setAuth }}>
+      {children}
+    </SyncAuthContext.Provider>
+  );
+}
+
+export function useSyncAuth() {
+  const context = useContext(SyncAuthContext);
+  if (!context) throw new Error("useSyncAuth must be used within SyncAuthProvider");
+  return context;
+}
+
+// --- I18n ---
 
 function useI18nValue() {
   const locale = "fi-FI";
