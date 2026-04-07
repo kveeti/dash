@@ -1,7 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext, useMemo, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { getDb } from "./lib/db";
 import type { SyncAuth } from "./lib/sync-auth";
+import { getPersistedAuth, clearAuth as clearAuthStorage } from "./lib/sync-auth";
+import { runSync, clearSyncState } from "./lib/sync-engine";
+
+export type SyncStatus = "unconfigured" | "locked" | "idle" | "syncing" | "error";
 
 const queryClient = new QueryClient()
 
@@ -51,29 +55,136 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   return <I18NContext.Provider value={value}>{children}</I18NContext.Provider>;
 }
 
-// --- Sync Auth ---
+// --- Sync ---
 
-interface SyncAuthContextValue {
-  auth: SyncAuth | null;
-  setAuth: (auth: SyncAuth | null) => void;
+const LS_LAST_SYNC_AT = "dash_last_sync_at";
+const LS_SYNC_SERVER_URL = "dash_sync_server_url";
+const SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
+export function getSyncServerUrl(): string {
+  return localStorage.getItem(LS_SYNC_SERVER_URL) ?? "";
 }
 
-const SyncAuthContext = createContext<SyncAuthContextValue | null>(null);
+export function setSyncServerUrl(url: string) {
+  localStorage.setItem(LS_SYNC_SERVER_URL, url.replace(/\/$/, ""));
+}
+
+interface SyncContextValue {
+  auth: SyncAuth | null;
+  setAuth: (auth: SyncAuth | null) => void;
+  status: SyncStatus;
+  error: string | null;
+  lastSyncAt: Date | null;
+  sync: () => Promise<void>;
+  logout: () => void;
+  forceReset: () => Promise<void>;
+}
+
+const SyncContext = createContext<SyncContextValue | null>(null);
 
 function SyncAuthProvider({ children }: { children: ReactNode }) {
+  const db = useDb();
   const [auth, setAuthState] = useState<SyncAuth | null>(null);
   const setAuth = useCallback((a: SyncAuth | null) => setAuthState(a), []);
+
+  const [status, setStatus] = useState<SyncStatus>(() => {
+    const persisted = getPersistedAuth();
+    return persisted ? "locked" : "unconfigured";
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(() => {
+    const stored = localStorage.getItem(LS_LAST_SYNC_AT);
+    return stored ? new Date(stored) : null;
+  });
+  const syncingRef = useRef(false);
+
+  // Update status when auth changes
+  useEffect(() => {
+    if (auth) {
+      setStatus("idle");
+      setError(null);
+    } else {
+      const persisted = getPersistedAuth();
+      setStatus(persisted ? "locked" : "unconfigured");
+    }
+  }, [auth]);
+
+  const sync = useCallback(async () => {
+    if (!auth || syncingRef.current) return;
+    const serverUrl = getSyncServerUrl();
+    if (!serverUrl) return;
+
+    syncingRef.current = true;
+    setStatus("syncing");
+    setError(null);
+
+    try {
+      const result = await runSync(db, auth.dek, serverUrl, auth.token);
+      if (result.error) {
+        setStatus("error");
+        setError(result.error);
+      } else {
+        setStatus("idle");
+        const now = new Date();
+        setLastSyncAt(now);
+        localStorage.setItem(LS_LAST_SYNC_AT, now.toISOString());
+      }
+    } catch (e: any) {
+      setStatus("error");
+      setError(e.message ?? String(e));
+    } finally {
+      syncingRef.current = false;
+    }
+  }, [auth, db]);
+
+  const logout = useCallback(() => {
+    clearAuthStorage();
+    clearSyncState();
+    setAuth(null);
+    setStatus("unconfigured");
+    setError(null);
+    setLastSyncAt(null);
+    localStorage.removeItem(LS_LAST_SYNC_AT);
+  }, [setAuth]);
+
+  const forceReset = useCallback(async () => {
+    clearSyncState();
+    await sync();
+  }, [sync]);
+
+  // Auto-sync: on unlock, every 5 min, on tab focus
+  useEffect(() => {
+    if (!auth) return;
+
+    sync();
+
+    const interval = setInterval(sync, SYNC_INTERVAL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") sync();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [auth, sync]);
+
   return (
-    <SyncAuthContext.Provider value={{ auth, setAuth }}>
+    <SyncContext.Provider value={{ auth, setAuth, status, error, lastSyncAt, sync, logout, forceReset }}>
       {children}
-    </SyncAuthContext.Provider>
+    </SyncContext.Provider>
   );
 }
 
 export function useSyncAuth() {
-  const context = useContext(SyncAuthContext);
+  const context = useContext(SyncContext);
   if (!context) throw new Error("useSyncAuth must be used within SyncAuthProvider");
   return context;
+}
+
+export function useSync() {
+  return useSyncAuth();
 }
 
 // --- I18n ---

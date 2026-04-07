@@ -126,13 +126,58 @@ async function pull(
 			return { pulled: 0, forceReset: true };
 		}
 
-		for (const item of data.items) {
-			await mergeIncoming(db, dek, item);
-			// Track highest server_version we've seen
-			if (item.server_version > sinceVersion) {
-				sinceVersion = item.server_version;
+		// Decrypt all items in parallel
+		const decrypted = await Promise.all(
+			data.items.map(async (item) => {
+				const json = await decryptPayload(item.encrypted_blob, dek);
+				let payload: SyncPayload = JSON.parse(json);
+				let needsRepush = false;
+				if (item.schema_version < CURRENT_SCHEMA_VERSION) {
+					const migrated = migratePayload(payload, item.schema_version);
+					if (migrated) {
+						payload = migrated;
+						needsRepush = true;
+					}
+				}
+				return { item, payload, needsRepush };
+			}),
+		);
+
+		// Merge all items inside a single transaction
+		await db.withTx(async () => {
+			for (const { item, payload, needsRepush } of decrypted) {
+				// Always advance cursor, even if we skip applying this item
+				if (item.server_version > sinceVersion) {
+					sinceVersion = item.server_version;
+				}
+
+				const { table, keys } = parseItemId(item.item_id);
+				const localHlc = await getLocalHlc(db, table, keys);
+
+				if (localHlc && compareHlc(localHlc, item.hlc) >= 0) continue;
+
+				await upsertFromSync(db, table, payload.data, item.hlc, item.is_deleted);
+
+				if (needsRepush) {
+					if (table === "transaction_links") {
+						await db.exec(
+							`update transaction_links set is_dirty = 1
+							 where transaction_a_id = ? and transaction_b_id = ?`,
+							[keys.transaction_a_id, keys.transaction_b_id],
+						);
+					} else {
+						await db.exec(
+							`update ${table} set is_dirty = 1 where id = ?`,
+							[keys.id],
+						);
+					}
+				}
+
+				if (item.is_deleted) {
+					await cascadeTombstone(db, table, payload.data);
+				}
 			}
-		}
+		});
 
 		totalPulled += data.items.length;
 		setLastSyncVersion(sinceVersion);
@@ -141,61 +186,6 @@ async function pull(
 	}
 
 	return { pulled: totalPulled, forceReset: false };
-}
-
-async function mergeIncoming(
-	db: DbHandle,
-	dek: CryptoKey,
-	item: PullItem,
-): Promise<void> {
-	const { table, keys } = parseItemId(item.item_id);
-
-	// Decrypt payload
-	const json = await decryptPayload(item.encrypted_blob, dek);
-	let payload: SyncPayload = JSON.parse(json);
-
-	// Schema migration: upgrade old payloads to current version
-	let needsRepush = false;
-	if (item.schema_version < CURRENT_SCHEMA_VERSION) {
-		const migrated = migratePayload(payload, item.schema_version);
-		if (migrated) {
-			payload = migrated;
-			needsRepush = true;
-		}
-	}
-
-	// Get local HLC for this item
-	const localHlc = await getLocalHlc(db, table, keys);
-
-	// LWW: highest HLC wins
-	if (localHlc && compareHlc(localHlc, item.hlc) >= 0) {
-		// Local wins — skip, our version will be pushed
-		return;
-	}
-
-	// Incoming wins — upsert
-	await upsertFromSync(db, table, payload.data, item.hlc, item.is_deleted);
-
-	// If schema was migrated, mark dirty so it gets re-pushed with new version
-	if (needsRepush) {
-		if (table === "transaction_links") {
-			await db.exec(
-				`update transaction_links set is_dirty = 1
-				 where transaction_a_id = ? and transaction_b_id = ?`,
-				[keys.transaction_a_id, keys.transaction_b_id],
-			);
-		} else {
-			await db.exec(
-				`update ${table} set is_dirty = 1 where id = ?`,
-				[keys.id],
-			);
-		}
-	}
-
-	// Cascade tombstones if needed
-	if (item.is_deleted) {
-		await cascadeTombstone(db, table, payload.data);
-	}
 }
 
 async function getLocalHlc(

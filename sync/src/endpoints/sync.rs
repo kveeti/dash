@@ -159,6 +159,7 @@ pub async fn push(
              ON CONFLICT (user_id, item_id) DO UPDATE SET \
                schema_version = EXCLUDED.schema_version, \
                hlc = EXCLUDED.hlc, \
+               server_version = nextval('sync_items_server_version_seq'), \
                encrypted_blob = EXCLUDED.encrypted_blob, \
                is_deleted = EXCLUDED.is_deleted, \
                tombstoned_at = CASE WHEN EXCLUDED.is_deleted THEN NOW() ELSE NULL END"
