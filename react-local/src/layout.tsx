@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { FastLink } from "./components/link";
 import { CommandPalette } from "./components/command-palette";
 import { useRoute } from "wouter";
+import { useSync } from "./lib/use-sync";
 
 export function Layout(props: { children: ReactNode }) {
   return (
@@ -38,8 +39,42 @@ export function Nav() {
             <NavLink href="/cats">cats</NavLink>
           </li>
         </div>
+        <div className="flex">
+          <li>
+            <SyncNavLink />
+          </li>
+        </div>
       </ul>
     </nav>
+  );
+}
+
+const syncDotColors = {
+  idle: "bg-green-9",
+  syncing: "bg-yellow-9",
+  error: "bg-red-9",
+  locked: "bg-gray-8",
+  unconfigured: "bg-gray-8",
+} as const;
+
+function SyncNavLink() {
+  const [isActive] = useRoute("/sync");
+  const { status } = useSync();
+
+  let extras = "";
+  if (isActive) extras += " bg-gray-a3";
+
+  return (
+    <FastLink
+      className={
+        "hover:bg-gray-a3 focus flex h-10 items-center justify-center gap-1.5 px-3 -outline-offset-2" +
+        extras
+      }
+      href="/sync"
+    >
+      <span className={`inline-block size-1.5 rounded-full ${syncDotColors[status]}`} />
+      sync
+    </FastLink>
   );
 }
 
