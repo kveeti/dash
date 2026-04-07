@@ -12,6 +12,9 @@ import {
 const LS_USER_ID = "dash_sync_user_id";
 const LS_TOKEN = "dash_sync_token";
 const LS_SERVER_SALT = "dash_sync_server_salt";
+const IDB_NAME = "dash_sync_keys";
+const IDB_STORE = "keys";
+const IDB_KEY = "dek";
 
 export interface SyncAuth {
 	userId: string;
@@ -20,7 +23,7 @@ export interface SyncAuth {
 	dek: CryptoKey;
 }
 
-/** Read persisted auth identifiers (no DEK — that requires passphrase) */
+/** Read persisted auth identifiers (no DEK — that's in IDB) */
 export function getPersistedAuth(): {
 	userId: string;
 	token: string;
@@ -40,11 +43,66 @@ export function persistAuth(userId: string, token: string, serverSalt: string) {
 	localStorage.setItem(LS_SERVER_SALT, serverSalt);
 }
 
+// --- IDB helpers for CryptoKey storage ---
+
+function openKeyDb(): Promise<IDBDatabase> {
+	return new Promise((resolve, reject) => {
+		const req = indexedDB.open(IDB_NAME, 1);
+		req.onupgradeneeded = () => {
+			req.result.createObjectStore(IDB_STORE);
+		};
+		req.onsuccess = () => resolve(req.result);
+		req.onerror = () => reject(req.error);
+	});
+}
+
+/** Persist the DEK as a non-extractable CryptoKey in IDB */
+export async function persistDek(dek: CryptoKey): Promise<void> {
+	// Re-import as non-extractable so the raw bytes can't be read back by JS
+	const raw = await crypto.subtle.exportKey("raw", dek);
+	const nonExtractable = await crypto.subtle.importKey(
+		"raw",
+		raw,
+		{ name: "AES-GCM", length: 256 },
+		false, // non-extractable
+		["encrypt", "decrypt"],
+	);
+	const db = await openKeyDb();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(IDB_STORE, "readwrite");
+		tx.objectStore(IDB_STORE).put(nonExtractable, IDB_KEY);
+		tx.oncomplete = () => { db.close(); resolve(); };
+		tx.onerror = () => { db.close(); reject(tx.error); };
+	});
+}
+
+/** Recover persisted DEK from IDB (non-extractable CryptoKey) */
+export async function getPersistedDek(): Promise<CryptoKey | null> {
+	const db = await openKeyDb();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(IDB_STORE, "readonly");
+		const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+		req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
+		req.onerror = () => { db.close(); reject(req.error); };
+	});
+}
+
+async function clearPersistedDek(): Promise<void> {
+	const db = await openKeyDb();
+	return new Promise((resolve, reject) => {
+		const tx = db.transaction(IDB_STORE, "readwrite");
+		tx.objectStore(IDB_STORE).delete(IDB_KEY);
+		tx.oncomplete = () => { db.close(); resolve(); };
+		tx.onerror = () => { db.close(); reject(tx.error); };
+	});
+}
+
 /** Clear all persisted auth state */
 export function clearAuth() {
 	localStorage.removeItem(LS_USER_ID);
 	localStorage.removeItem(LS_TOKEN);
 	localStorage.removeItem(LS_SERVER_SALT);
+	clearPersistedDek();
 }
 
 /** Update just the token (e.g. after refresh) */

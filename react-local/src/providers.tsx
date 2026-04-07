@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { getDb } from "./lib/db";
 import type { SyncAuth } from "./lib/sync-auth";
-import { getPersistedAuth, clearAuth as clearAuthStorage } from "./lib/sync-auth";
+import { getPersistedAuth, getPersistedDek, persistDek, clearAuth as clearAuthStorage } from "./lib/sync-auth";
 import { runSync, clearSyncState } from "./lib/sync-engine";
 
 export type SyncStatus = "unconfigured" | "locked" | "idle" | "syncing" | "error";
@@ -85,7 +85,10 @@ const SyncContext = createContext<SyncContextValue | null>(null);
 function SyncAuthProvider({ children }: { children: ReactNode }) {
   const db = useDb();
   const [auth, setAuthState] = useState<SyncAuth | null>(null);
-  const setAuth = useCallback((a: SyncAuth | null) => setAuthState(a), []);
+  const setAuth = useCallback((a: SyncAuth | null) => {
+    setAuthState(a);
+    if (a) persistDek(a.dek);
+  }, []);
 
   const [status, setStatus] = useState<SyncStatus>(() => {
     const persisted = getPersistedAuth();
@@ -97,6 +100,18 @@ function SyncAuthProvider({ children }: { children: ReactNode }) {
     return stored ? new Date(stored) : null;
   });
   const syncingRef = useRef(false);
+
+  // Auto-recover DEK from IDB on mount
+  useEffect(() => {
+    if (auth) return; // already unlocked
+    const persisted = getPersistedAuth();
+    if (!persisted) return;
+    getPersistedDek().then((dek) => {
+      if (dek) {
+        setAuthState({ ...persisted, dek });
+      }
+    });
+  }, []); // mount only
 
   // Update status when auth changes
   useEffect(() => {
