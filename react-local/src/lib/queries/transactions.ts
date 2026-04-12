@@ -1,36 +1,44 @@
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import {
+	useQuery,
+	useMutation,
+	useQueryClient,
+	keepPreviousData,
+} from "@tanstack/react-query";
 import { useDb } from "../../providers";
 import { id } from "../id";
 import type { DbHandle } from "../db";
 
 export function useTransactionsQuery(props: {
 	search: string | undefined;
-	cursor?: { left: string | undefined, right: string | undefined }
+	cursor?: { left: string | undefined; right: string | undefined };
 }) {
-	const db = useDb()
+	const db = useDb();
 	let cursor = null;
 	if (props.cursor?.left || props.cursor?.right) {
-		cursor = {}
+		cursor = {};
 		if (props.cursor?.left) {
-			cursor.left = props.cursor.left
+			cursor.left = props.cursor.left;
 		} else if (props.cursor?.right) {
-			cursor.right = props.cursor.right
+			cursor.right = props.cursor.right;
 		}
 	}
 
 	return useQuery({
 		queryKey: ["transactions", props.search, cursor?.left, cursor?.right],
-		queryFn: () => getTransactions(db, { cursor, search: props.search, limit: 50 }),
-		placeholderData: keepPreviousData
+		queryFn: () =>
+			getTransactions(db, { cursor, search: props.search, limit: 50 }),
+		placeholderData: keepPreviousData,
 	});
 }
 
-
-async function getTransactions(db, opts?: {
-	search?: string;
-	limit?: number;
-	cursor?: { left: string } | { right: string };
-}): Promise<TransactionsResult> {
+async function getTransactions(
+	db,
+	opts?: {
+		search?: string;
+		limit?: number;
+		cursor?: { left: string } | { right: string };
+	},
+): Promise<TransactionsResult> {
 	const limit = opts?.limit ?? 50;
 
 	let sql = `
@@ -45,7 +53,7 @@ async function getTransactions(db, opts?: {
 		left join accounts a on t.account_id = a.id`;
 
 	const params: any[] = [];
-	const wheres: string[] = ["t.deleted_at is null"];
+	const wheres: string[] = ["t._sync_is_deleted is 0"];
 
 	if (opts?.search) {
 		wheres.push("(t.counter_party like ? or t.additional like ?)");
@@ -75,7 +83,7 @@ async function getTransactions(db, opts?: {
 	sql += ` order by t.date ${order}, t.id ${order} limit ?`;
 	params.push(limit + 1);
 
-	let rows = await db.query<TransactionRow>(sql, params);
+	const rows = await db.query<TransactionRow>(sql, params);
 
 	const hasMore = rows.length === limit + 1;
 	if (hasMore) rows.pop();
@@ -109,19 +117,31 @@ async function getTransactions(db, opts?: {
 	return { transactions: rows, next_id, prev_id };
 }
 
-async function getTransactionById(db: DbHandle, id: string): Promise<TransactionRow | null> {
-	const rows = await db.query<TransactionRow>(`
-		select
-			t.id, t.date, t.categorize_on, t.amount, t.currency,
-			t.counter_party, t.additional, t.notes,
-			t.category_id, t.account_id,
-			c.name as category_name, c.is_neutral as category_is_neutral,
+async function getTransactionById(
+	db: DbHandle,
+	id: string,
+): Promise<TransactionRow | null> {
+	const rows = await db.query<TransactionRow>(
+		`select
+			t.id,
+			t.date,
+			t.categorize_on,
+			t.amount,
+			t.currency,
+			t.counter_party,
+			t.additional,
+			t.notes,
+			t.category_id,
+			t.account_id,
+			c.name as category_name,
+			c.is_neutral as category_is_neutral,
 			a.name as account_name
 		from transactions t
 		left join categories c on t.category_id = c.id
 		left join accounts a on t.account_id = a.id
-		where t.id = ? and t.deleted_at is null
-	`, [id]);
+		where t.id = ? and t._sync_is_deleted = 0`,
+		[id],
+	);
 	return rows[0] ?? null;
 }
 
@@ -163,7 +183,7 @@ export function useCreateTransactionMutation() {
 	const db = useDb();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: (tx: {
+		mutationFn: async (tx: {
 			date: string;
 			amount: number;
 			currency: string;
@@ -174,10 +194,10 @@ export function useCreateTransactionMutation() {
 			account_id: string;
 		}) => {
 			const now = new Date().toISOString();
-			return db.exec(
+			await db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id)
-				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id, _sync_hlc)
+				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				[
 					id(),
 					now,
@@ -190,7 +210,8 @@ export function useCreateTransactionMutation() {
 					tx.notes ?? null,
 					tx.category_id ?? null,
 					tx.account_id,
-				]
+					db.hlc.generate(),
+				],
 			);
 		},
 		onSuccess: () => {
@@ -204,7 +225,10 @@ export function useUpdateTransactionMutation() {
 	const db = useDb();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: ({ txId, tx }: {
+		mutationFn: ({
+			txId,
+			tx,
+		}: {
 			txId: string;
 			tx: {
 				date: string;
@@ -220,14 +244,31 @@ export function useUpdateTransactionMutation() {
 			const now = new Date().toISOString();
 			return db.exec(
 				`update transactions set
- 				 updated_at = ?, date = ?, amount = ?, currency = ?,
- 				 counter_party = ?, additional = ?, notes = ?, category_id = ?, account_id = ?,
- 				 where id = ?`,
+					updated_at = ?,
+					date = ?,
+					amount = ?,
+					currency = ?,
+					counter_party = ?,
+					additional = ?,
+					notes = ?,
+					category_id = ?,
+					account_id = ?,
+					_sync_hlc = ?,
+					_sync_status = 1
+ 				where id = ?`,
 				[
-					now, tx.date, tx.amount, tx.currency,
-					tx.counter_party, tx.additional ?? null, tx.notes ?? null,
-					tx.category_id ?? null, tx.account_id, txId,
-				]
+					now,
+					tx.date,
+					tx.amount,
+					tx.currency,
+					tx.counter_party,
+					tx.additional ?? null,
+					tx.notes ?? null,
+					tx.category_id ?? null,
+					tx.account_id,
+					db.hlc.generate(),
+					txId,
+				],
 			);
 		},
 		onSuccess: () => {

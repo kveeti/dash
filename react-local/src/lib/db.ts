@@ -1,4 +1,8 @@
-import { sqlite3Worker1Promiser, type Worker1Promiser } from "@sqlite.org/sqlite-wasm";
+import {
+	sqlite3Worker1Promiser,
+	type Worker1Promiser,
+} from "@sqlite.org/sqlite-wasm";
+import type { HLC } from "./hlc";
 
 function makeExec(promiser: Worker1Promiser) {
 	return async function exec(sql: string, vars?: any[]): Promise<any> {
@@ -25,12 +29,16 @@ function makeQuery(promiser: Worker1Promiser) {
 }
 
 export type DbHandle = {
+	hlc: HLC;
 	exec: (sql: string, vars?: any[]) => Promise<any>;
 	query: <T = any>(sql: string, vars?: any[]) => Promise<T[]>;
 	withTx: <T>(fn: () => Promise<T>) => Promise<T>;
 };
 
-export function sqlite(migrations: (db: DbHandle) => Promise<void>) {
+export function sqlite(
+	{ hlc }: { hlc: HLC },
+	migrations: (db: DbHandle) => Promise<void>,
+) {
 	let ready = false;
 	let handle: DbHandle;
 
@@ -49,13 +57,14 @@ export function sqlite(migrations: (db: DbHandle) => Promise<void>) {
 		});
 		console.log(
 			"sqlite db created at",
-			openResponse.result.filename.replace(/^file:(.*?)\?vfs=opfs$/, "$1")
+			openResponse.result.filename.replace(/^file:(.*?)\?vfs=opfs$/, "$1"),
 		);
 
 		const exec = makeExec(promiser);
 		const query = makeQuery(promiser);
 		let txDepth = 0;
 		handle = {
+			hlc,
 			exec,
 			query,
 			withTx: async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -82,6 +91,7 @@ export function sqlite(migrations: (db: DbHandle) => Promise<void>) {
 	})();
 
 	return {
+		hlc: hlc,
 		query: async <T = any>(sql: string, vars?: any[]): Promise<T[]> => {
 			if (!ready) await initPromise;
 			return await handle.query<T>(sql, vars);
@@ -97,72 +107,88 @@ export function sqlite(migrations: (db: DbHandle) => Promise<void>) {
 	};
 }
 
-export function getDb() {
-	return sqlite(async ({ exec, query }) => {
+export function getDb({ hlc }: { hlc: HLC }) {
+	return sqlite({ hlc }, async ({ exec, query }) => {
 		await exec(`create table if not exists version (current integer not null)`);
+
+		// _sync_status
+		// 0 = synced
+		// 1 = pending push
 
 		const migrations = [
 			`create table if not exists categories (
-			id text primary key not null,
-			created_at text not null,
-			updated_at text,
-			name text not null unique,
-			is_neutral integer not null default 0
-		)`,
+				id text primary key not null,
+				created_at text not null,
+				updated_at text,
+				name text not null unique,
+				is_neutral integer not null default 0,
+
+				_sync_is_deleted integer default 0,
+				_sync_hlc text not null,
+				_sync_status integer default 1
+			)`,
 			`create table if not exists accounts (
-			id text primary key not null,
-			created_at text not null,
-			updated_at text,
-			name text not null unique
-		)`,
+				id text primary key not null,
+				name text not null unique,
+				created_at text not null,
+				updated_at text,
+
+				_sync_is_deleted integer default 0,
+				_sync_hlc text not null,
+				_sync_status integer default 1
+			)`,
 			`create table if not exists transactions (
-			id text primary key not null,
-			created_at text not null,
-			updated_at text,
-			date text not null,
-			categorize_on text,
-			amount real not null,
-			currency text not null default 'EUR',
-			counter_party text not null,
-			additional text,
-			notes text,
-			category_id text references categories(id),
-			account_id text not null references accounts(id)
-		)`,
+				id text primary key not null,
+				created_at text not null,
+				updated_at text,
+				date text not null,
+				amount integer not null,
+				currency text not null default 'EUR',
+				counter_party text not null,
+				additional text,
+				notes text,
+				categorize_on text,
+				category_id text,
+				account_id text not null,
+
+				_sync_is_deleted integer default 0,
+				_sync_hlc text not null,
+				_sync_status integer default 1
+			)`,
 			`create index if not exists idx_tx_date on transactions(date desc, id desc)`,
 			`create index if not exists idx_tx_category on transactions(category_id)`,
 			`create index if not exists idx_tx_account on transactions(account_id)`,
 			`create table if not exists transaction_links (
-			transaction_a_id text not null references transactions(id),
-			transaction_b_id text not null references transactions(id),
-			created_at text not null,
-			primary key (transaction_a_id, transaction_b_id)
-		)`
+				transaction_a_id text not null,
+				transaction_b_id text not null,
+				created_at text not null,
+				updated_at text,
+
+				_sync_is_deleted integer default 0,
+				_sync_hlc text not null,
+				_sync_status integer default 1,
+
+				primary key (transaction_a_id, transaction_b_id)
+			)`,
 		];
 
-		const versionRows = await query<{ current: number }>("select current from version limit 1");
+		const versionRows = await query<{ current: number }>(
+			"select current from version limit 1",
+		);
 		const currentVersion = versionRows.length ? versionRows[0].current : 0;
 
 		if (currentVersion >= migrations.length) return;
 
-		try {
-			await exec("begin transaction");
-
-			for (let i = currentVersion; i < migrations.length; i++) {
-				await exec(migrations[i]);
-			}
-
-			if (currentVersion === 0) {
-				await exec("insert into version (current) values (?)", [migrations.length]);
-			} else {
-				await exec("update version set current = ?", [migrations.length]);
-			}
-
-			await exec("commit");
-		} catch (error) {
-			await exec("rollback");
-			throw error;
+		for (let i = currentVersion; i < migrations.length; i++) {
+			await exec(migrations[i]);
 		}
-	})
-}
 
+		if (currentVersion === 0) {
+			await exec("insert into version (current) values (?)", [
+				migrations.length,
+			]);
+		} else {
+			await exec("update version set current = ?", [migrations.length]);
+		}
+	});
+}

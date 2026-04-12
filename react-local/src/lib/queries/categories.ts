@@ -22,7 +22,8 @@ export function useCreateCategoryMutation() {
 	const db = useDb();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: (cat: { name: string; is_neutral: boolean }) => createCategory(db, cat),
+		mutationFn: (cat: { name: string; is_neutral: boolean }) =>
+			createCategory(db, cat),
 		onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
 	});
 }
@@ -31,8 +32,14 @@ export function useUpdateCategoryMutation() {
 	const db = useDb();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: ({ id, ...cat }: { id: string; name: string; is_neutral: boolean }) =>
-			updateCategory(db, id, cat),
+		mutationFn: ({
+			id,
+			...cat
+		}: {
+			id: string;
+			name: string;
+			is_neutral: boolean;
+		}) => updateCategory(db, id, cat),
 		onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
 	});
 }
@@ -51,32 +58,32 @@ async function getCategories(db: DbHandle, search?: string) {
 		return db.query<CategoryWithCount>(
 			`select c.id, c.name, c.is_neutral, count(t.id) as tx_count
 			 from categories c
-			 left join transactions t on c.id = t.category_id and t.deleted_at is null
-			 where c.deleted_at is null and c.name like ?
+			 left join transactions t on c.id = t.category_id and t._sync_is_deleted = 0
+			 where c._sync_is_deleted = 0 and c.name like ?
 			 group by c.id
 			 order by c.name`,
-			[`%${search}%`]
+			[`%${search}%`],
 		);
 	}
 	return db.query<CategoryWithCount>(
 		`select c.id, c.name, c.is_neutral, count(t.id) as tx_count
 		 from categories c
-		 left join transactions t on c.id = t.category_id and t.deleted_at is null
-		 where c.deleted_at is null
+		 left join transactions t on c.id = t.category_id and t._sync_is_deleted = 0
+		 where c._sync_is_deleted = 0
 		 group by c.id
-		 order by c.name`
+		 order by c.name`,
 	);
 }
 
 async function createCategory(
 	db: DbHandle,
-	cat: { name: string; is_neutral: boolean }
+	cat: { name: string; is_neutral: boolean },
 ) {
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
 		await db.exec(
-			"insert into categories (id, created_at, updated_at, name, is_neutral) values (?, ?, ?, ?, ?)",
-			[id(), now, now, cat.name, cat.is_neutral ? 1 : 0]
+			"insert into categories (id, created_at, updated_at, name, is_neutral, _sync_hlc) values (?, ?, ?, ?, ?, ?)",
+			[id(), now, now, cat.name, cat.is_neutral ? 1 : 0, db.hlc.generate()],
 		);
 	});
 }
@@ -84,31 +91,31 @@ async function createCategory(
 async function updateCategory(
 	db: DbHandle,
 	categoryId: string,
-	cat: { name: string; is_neutral: boolean }
+	cat: { name: string; is_neutral: boolean },
 ) {
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
 		await db.exec(
-			"update categories set name = ?, is_neutral = ?, updated_at = ? where id = ?",
-			[cat.name, cat.is_neutral ? 1 : 0, now, categoryId]
+			"update categories set name = ?, is_neutral = ?, updated_at = ?, _sync_hlc = ?, _sync_status = 1 where id = ?",
+			[cat.name, cat.is_neutral ? 1 : 0, now, db.hlc.generate(), categoryId],
 		);
 	});
 }
 
 async function deleteCategory(
 	db: DbHandle,
-	categoryId: string
+	categoryId: string,
 ): Promise<boolean> {
 	return db.withTx(async () => {
 		const rows = await db.query<{ c: number }>(
-			"select count(*) as c from transactions where category_id = ? and deleted_at is null",
-			[categoryId]
+			"select count(*) as c from transactions where category_id = ? and _sync_is_deleted = 0",
+			[categoryId],
 		);
 		if (rows[0].c > 0) return false;
 		const now = new Date().toISOString();
 		await db.exec(
-			"update categories set deleted_at = ?, updated_at = ? where id = ?",
-			[now, now, categoryId]
+			"update categories set _sync_is_deleted = 1, updated_at = ?, _sync_hlc = ? where id = ?",
+			[now, db.hlc.generate(), categoryId],
 		);
 		return true;
 	});
@@ -116,11 +123,11 @@ async function deleteCategory(
 
 export async function getOrCreateCategoryByName(
 	db: DbHandle,
-	name: string
+	name: string,
 ): Promise<string> {
 	return db.withTx(async () => {
 		const rows = await db.query<{ id: string }>(
-			"select id from categories where name = ? and deleted_at is null",
+			"select id from categories where name = ? and _sync_is_deleted = 0",
 			[name],
 		);
 		if (rows.length > 0) return rows[0].id;
@@ -128,8 +135,8 @@ export async function getOrCreateCategoryByName(
 		const newId = id();
 		const now = new Date().toISOString();
 		await db.exec(
-			"insert into categories (id, created_at, updated_at, name, is_neutral) values (?, ?, ?, ?, ?)",
-			[newId, now, now, name, 0]
+			"insert into categories (id, created_at, updated_at, name, is_neutral, hlc) values (?, ?, ?, ?, ?, ?)",
+			[newId, now, now, name, 0, db.hlc.generate()],
 		);
 		return newId;
 	});

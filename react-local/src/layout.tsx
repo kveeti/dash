@@ -2,8 +2,11 @@ import type { ReactNode } from "react";
 import { FastLink } from "./components/link";
 import { CommandPalette } from "./components/command-palette";
 import { useRoute } from "wouter";
+import { useSync } from "./lib/sync";
 
 export function Layout(props: { children: ReactNode }) {
+  useSync()
+
   return (
     <div className="mx-auto flex max-w-[800px]">
       <Nav />

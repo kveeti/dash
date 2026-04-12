@@ -42,14 +42,14 @@ export function SelectedTx({ id, label, onClose, initialOffset, children }: Sele
 	return (
 		<section
 			aria-label={label}
-			className="bg-gray-1 fixed max-h-[85vh] w-[90vw] max-w-[24rem] shadow-lg"
+			className="fixed max-h-[85vh] w-[90vw] max-w-[24rem] shadow-lg"
 			style={{
 				top: `calc(2.3rem + ${offset.y}px)`,
 				left: `calc(100vw - 24rem - 1.2rem + ${offset.x}px)`,
 			}}
 		>
 			<div
-				className="cursor-grab active:cursor-grabbing select-none flex items-center justify-between bg-gray-3 px-3 py-2 border border-gray-a5 rounded-t-sm"
+				className="cursor-grab active:cursor-grabbing select-none flex items-center justify-between bg-gray-3 px-3 py-2 border border-gray-a3 rounded-t-sm"
 				onPointerDown={(e) => {
 					dragStart.current = {
 						mouseX: e.clientX,
@@ -75,7 +75,7 @@ export function SelectedTx({ id, label, onClose, initialOffset, children }: Sele
 					</svg>
 				</button>
 			</div>
-			<div className="border-b border-x border-gray-a5 rounded-b">
+			<div className="border-b border-x border-gray-a4 bg-gray-1">
 				{children}
 			</div>
 		</section>

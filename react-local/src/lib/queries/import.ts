@@ -61,7 +61,10 @@ function parseOpRow(cols: string[]): ParsedTransaction {
 	addField("Saajan tilinumero", cols[6]);
 
 	if (cols[9]?.trim()) {
-		const msg = cols[9].trim().replace(/^Viesti:/, "").trim();
+		const msg = cols[9]
+			.trim()
+			.replace(/^Viesti:/, "")
+			.trim();
 		if (msg) additionalParts.push(`Viesti: ${msg}`);
 	}
 	if (cols[8]?.trim()) {
@@ -125,7 +128,7 @@ export async function importCsv(
 	text: string,
 	format: CsvFormat,
 	accountName: string,
-	currency = "EUR"
+	currency = "EUR",
 ): Promise<ImportResult> {
 	const lines = text.split(/\r?\n/).filter((l) => l.trim());
 	const delimiter = ";";
@@ -153,7 +156,7 @@ export async function importCsv(
 
 	const categoryCache = new Map<string, string>();
 	const uniqueCategories = new Set(
-		parsed.map((p) => p.row.category_name).filter((n): n is string => !!n)
+		parsed.map((p) => p.row.category_name).filter((n): n is string => !!n),
 	);
 	for (const name of uniqueCategories) {
 		categoryCache.set(name, await getOrCreateCategoryByName(db, name));
@@ -164,7 +167,9 @@ export async function importCsv(
 	return db.withTx(async () => {
 		for (let i = 0; i < parsed.length; i += BATCH) {
 			const batch = parsed.slice(i, i + BATCH);
-			const placeholders = batch.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)").join(", ");
+			const placeholders = batch
+				.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+				.join(", ");
 			const values = batch.flatMap(({ row }, idx) => [
 				id(),
 				now,
@@ -176,12 +181,13 @@ export async function importCsv(
 				row.additional ?? null,
 				row.category_name ? categoryCache.get(row.category_name)! : null,
 				accountId,
+				db.hlc.generate(),
 			]);
 			await db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id)
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id, _sync_hlc)
 				 values ${placeholders}`,
-				values
+				values,
 			);
 		}
 		return { imported: parsed.length, skipped, errors };

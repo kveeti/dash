@@ -1,0 +1,19 @@
+{
+  "name": "node-sync",
+  "module": "index.js",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.13",
+    "dotenv": "^17.4.1",
+    "hono": "^4.12.12",
+    "postgres": "^3.4.9",
+    "ulid": "^3.0.2"
+  }
+}

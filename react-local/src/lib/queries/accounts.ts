@@ -26,30 +26,35 @@ export function useCreateAccountMutation() {
 }
 
 export async function getAccounts(db: DbHandle): Promise<Account[]> {
-	return db.query("select id, name from accounts where deleted_at is null order by name");
+	return db.query(
+		"select id, name from accounts where _sync_is_deleted = 0 order by name",
+	);
 }
 
 export async function createAccount(
 	db: DbHandle,
-	name: string
+	name: string,
 ): Promise<string> {
-	return db.withTx(async () => {
+	const newId = await db.withTx(async () => {
 		const newId = id();
 		const now = new Date().toISOString();
 		await db.exec(
-			"insert into accounts (id, created_at, updated_at, name) values (?, ?, ?, ?)",
-			[newId, now, now, name],
+			`insert into accounts (id, created_at, updated_at, name, _sync_hlc)
+			values (?, ?, ?, ?, ?)`,
+			[newId, now, now, name, db.hlc.generate()],
 		);
 		return newId;
 	});
+
+	return newId;
 }
 
 export async function getOrCreateAccountByName(
 	db: DbHandle,
-	name: string
+	name: string,
 ): Promise<string> {
 	const rows = await db.query<{ id: string }>(
-		"select id from accounts where name = ? and deleted_at is null",
+		"select id from accounts where name = ? and _sync_is_deleted = 0",
 		[name],
 	);
 	if (rows.length > 0) return rows[0].id;
