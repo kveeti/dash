@@ -20,7 +20,7 @@ const pages: Item[] = [
 	{ value: "txs", label: "Transactions", href: "/txs" },
 	{ value: "txs-new", label: "Add Transactions", href: "/txs/new" },
 	{ value: "cats", label: "Categories", href: "/cats" },
-	{ value: "sync", label: "Sync", href: "/sync" },
+	{ value: "settings", label: "Settings", href: "/settings" },
 ];
 
 const groupedItems: Group[] = [{ value: "Pages", items: pages }];
@@ -91,9 +91,7 @@ export function CommandPalette() {
 																onClick={() => navigate(item)}
 																className="flex h-8 cursor-default items-center gap-2 px-2 text-sm select-none outline-none data-[highlighted]:bg-gray-a3"
 															>
-																<span className="truncate">
-																	{item.label}
-																</span>
+																<span className="truncate">{item.label}</span>
 																<span className="ml-auto text-xs text-gray-9">
 																	{item.href}
 																</span>

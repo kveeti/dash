@@ -1,9 +1,14 @@
 import { useSearchParams } from "wouter";
 import { useI18n } from "../../providers";
-import { useTransactionQuery, useTransactionsQuery, useUpdateTransactionMutation, type TransactionRow } from "../../lib/queries/transactions";
+import {
+	useTransactionQuery,
+	useTransactionsQuery,
+	useUpdateTransactionMutation,
+	type TransactionRow,
+} from "../../lib/queries/transactions";
 import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useState, type Ref } from "react";
 import { Button } from "../../components/button";
 import { TransactionForm } from "../../components/transaction-form";
 import { AnimatePresence, motion } from "framer-motion";
@@ -19,19 +24,19 @@ export function TransactionsPage() {
 
 	const transactionsQuery = useTransactionsQuery({
 		cursor: { left, right },
-		search: q
+		search: q,
 	});
 
-	const { f } = useI18n()
+	const { f } = useI18n();
 
 	const [selectedIds, setSelectedIds] = useState<Array<string>>([]);
 
 	function selectTx(txId: string) {
-		setSelectedIds(p => [...p, txId])
+		setSelectedIds((p) => [...p, txId]);
 	}
 
 	function deselectTx(txId: string) {
-		setSelectedIds(p => p.filter(id => id !== txId))
+		setSelectedIds((p) => p.filter((id) => id !== txId));
 	}
 
 	let currentDay: string | null = null;
@@ -51,44 +56,73 @@ export function TransactionsPage() {
 						return (
 							<Fragment key={tx.id}>
 								{dayChanged && (
-									<div className="sticky top-10 bg-gray-3 text-xs font-medium py-1.5 px-3 scroll-mt-10"
-										ref={elem => {
-											if (!elem || i !== 0 || !isPaginating) return;
-											elem.scrollIntoView({ block: "start" })
-										}}
-									>{currentDay}</div>
+									<div className="sticky top-10 bg-gray-3 text-xs font-medium py-1.5 px-3 scroll-mt-10">
+										{currentDay}
+									</div>
 								)}
 
-								<TxRow tx={tx} onClick={() => selectTx(tx.id)} />
+								<TxRow
+									tx={tx}
+									onClick={() => selectTx(tx.id)}
+									ref={(elem) => {
+										if (!elem || i !== 0 || !isPaginating) return;
+										elem.scrollIntoView({ block: "start" });
+									}}
+								/>
 							</Fragment>
-						)
+						);
 					})}
 				</ul>
 
-				{!transactionsQuery.data?.transactions?.length && <Empty>{(searchParams.q as string) ? "no results" : "no transactions yet"}</Empty>}
+				{!transactionsQuery.data?.transactions?.length && (
+					<Empty>
+						{(searchParams.q as string) ? "no results" : "no transactions yet"}
+					</Empty>
+				)}
 			</div>
 
 			<div className="fixed bottom-10 right-0 left-0 max-w-[35rem] mx-auto sm:bottom-0">
 				<div className="flex justify-end pb-4">
 					<Pagination
-						prevHref={buildPaginatedHref("left", transactionsQuery.data?.prev_id, "/txs", { q: q ?? undefined })}
-						nextHref={buildPaginatedHref("right", transactionsQuery.data?.next_id, "/txs", { q: q ?? undefined })}
+						prevHref={buildPaginatedHref(
+							"left",
+							transactionsQuery.data?.prev_id,
+							"/txs",
+							{ q: q ?? undefined },
+						)}
+						nextHref={buildPaginatedHref(
+							"right",
+							transactionsQuery.data?.next_id,
+							"/txs",
+							{ q: q ?? undefined },
+						)}
 					/>
 				</div>
 			</div>
 
-			{selectedIds.map((id, index) => <SelectedTxWindow key={id} txId={id} index={index} onClose={() => deselectTx(id)} />)}
+			{selectedIds.map((id, index) => (
+				<SelectedTxWindow
+					key={id}
+					txId={id}
+					index={index}
+					onClose={() => deselectTx(id)}
+				/>
+			))}
 		</>
-	)
+	);
 }
 
-function TxRow(props: { tx: TransactionRow; onClick: () => void }) {
+function TxRow(props: {
+	tx: TransactionRow;
+	onClick: () => void;
+	ref: Ref<HTMLLIElement>;
+}) {
 	const { f } = useI18n();
 
 	const isIncome = props.tx.amount > 0;
 
 	return (
-		<li>
+		<li ref={props.ref} className="scroll-mt-17">
 			<div
 				className="flex items-center justify-between gap-3 hover:bg-gray-a3 px-3 py-2"
 				onClick={() => props.onClick()}
@@ -103,7 +137,9 @@ function TxRow(props: { tx: TransactionRow; onClick: () => void }) {
 					</div>
 				</div>
 				<div>
-					<span className={`shrink-0 text-sm ${isIncome ? "text-green-11" : ""}`}>
+					<span
+						className={`shrink-0 text-sm ${isIncome ? "text-green-11" : ""}`}
+					>
 						{f.amount.format(props.tx.amount)}
 					</span>
 				</div>
@@ -112,15 +148,24 @@ function TxRow(props: { tx: TransactionRow; onClick: () => void }) {
 	);
 }
 
-
-function SelectedTxWindow({ txId, index, onClose }: { txId: string; index: number; onClose: () => void }) {
+function SelectedTxWindow({
+	txId,
+	index,
+	onClose,
+}: {
+	txId: string;
+	index: number;
+	onClose: () => void;
+}) {
 	const { f } = useI18n();
 	const [editing, setEditing] = useState(false);
 	const txQuery = useTransactionQuery(txId);
 	const updateTransaction = useUpdateTransactionMutation();
 
-	if (!txQuery.data) { return }
-	const tx = txQuery.data
+	if (!txQuery.data) {
+		return;
+	}
+	const tx = txQuery.data;
 
 	const isIncome = tx.amount > 0;
 	const stackOffset = { x: 0, y: (index + 1) * 72 };
@@ -137,9 +182,7 @@ function SelectedTxWindow({ txId, index, onClose }: { txId: string; index: numbe
 				<p className={`text-sm ${isIncome ? "text-green-11" : ""}`}>
 					{f.amount.format(tx.amount)}
 				</p>
-				<p className="text-xs">
-					{f.weekdayLongDate.format(new Date(tx.date))}
-				</p>
+				<p className="text-xs">{f.weekdayLongDate.format(new Date(tx.date))}</p>
 			</div>
 
 			<div className="my-3 space-y-2">
@@ -161,7 +204,6 @@ function SelectedTxWindow({ txId, index, onClose }: { txId: string; index: numbe
 							className="overflow-hidden"
 						>
 							<div className="px-3">
-
 								<TransactionForm
 									defaultValues={{
 										date: tx.date,
@@ -178,7 +220,13 @@ function SelectedTxWindow({ txId, index, onClose }: { txId: string; index: numbe
 									}}
 									actions={
 										<>
-											<Button type="button" variant="ghost" onClick={() => setEditing(false)}>cancel</Button>
+											<Button
+												type="button"
+												variant="ghost"
+												onClick={() => setEditing(false)}
+											>
+												cancel
+											</Button>
 											<Button type="submit">save</Button>
 										</>
 									}
@@ -191,4 +239,3 @@ function SelectedTxWindow({ txId, index, onClose }: { txId: string; index: numbe
 		</SelectedTx>
 	);
 }
-

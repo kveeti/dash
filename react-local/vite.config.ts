@@ -61,7 +61,10 @@ export default defineConfig({
 			"Cross-Origin-Embedder-Policy": "require-corp",
 		},
 		proxy: {
-			"/api": "http://localhost:8000",
+			"/api": {
+				target: "http://localhost:8000",
+				changeOrigin: false,
+			},
 		},
 	},
 	preview: {
@@ -71,7 +74,10 @@ export default defineConfig({
 			"Cross-Origin-Embedder-Policy": "require-corp",
 		},
 		proxy: {
-			"/api": "http://localhost:8000",
+			"/api": {
+				target: "http://localhost:8000",
+				changeOrigin: false,
+			},
 		},
 	},
 });

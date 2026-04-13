@@ -1,21 +1,11 @@
-import { ulid } from "ulid";
-import { getHLCGenerator } from "./hlc";
-import {
-	createDekSyncPayloadCodec,
-	decodeBase64,
-	deriveCryptoKeyFromPassphrase,
-} from "./crypt";
-import { useEffect, useRef, useState } from "react";
+import { Dexie, type EntityTable } from "dexie";
+import { useLiveQuery } from "dexie-react-hooks";
+import { createDekSyncPayloadCodec } from "./crypt";
+import { useQuery } from "@tanstack/react-query";
+import { useMe } from "./queries/auth";
 import { useDb } from "../providers";
-import { useQueryClient } from "@tanstack/react-query";
 
-const CLIENT_ID = "client_id";
-const LAST_CURSOR = "cursor";
-
-export function getSync({ db, dek, userId }) {
-	const clientId = getClientId();
-	const hlc = getHLCGenerator(clientId);
-
+export function getSync({ db, dek }) {
 	const codec = createDekSyncPayloadCodec(dek);
 
 	async function getDirty({ cursor }: { cursor: string | undefined }) {
@@ -82,11 +72,16 @@ export function getSync({ db, dek, userId }) {
 		if (hasMore) {
 			dirty.pop();
 		}
-		const newCursor = hasMore ? dirty.at(-1)?.hlc : undefined;
+		const newCursor = hasMore ? dirty.at(-1)?._sync_hlc : undefined;
 		return { entries: dirty, newCursor };
 	}
 
-	async function push() {
+	async function push({
+		setCursor,
+	}: {
+		setCursor: (newCursor: number) => Promise<void>;
+	}) {
+		let newCursorReturn;
 		let pushCursor;
 		while (true) {
 			const { entries: dirty, newCursor: newPushCursor } = await getDirty({
@@ -97,7 +92,7 @@ export function getSync({ db, dek, userId }) {
 				break;
 			}
 
-			const response = await fetch("/api/v1/push?user_id=" + userId, {
+			const response = await fetch("/api/v1/push", {
 				body: JSON.stringify(
 					await Promise.all(
 						dirty.map(async (d) => {
@@ -135,8 +130,8 @@ export function getSync({ db, dek, userId }) {
 
 				updatesByTable[targetTable].ids.push(actualId);
 
-				if (record.hlc > updatesByTable[targetTable].maxHlc) {
-					updatesByTable[targetTable].maxHlc = record.hlc;
+				if (record._sync_hlc > updatesByTable[targetTable].maxHlc) {
+					updatesByTable[targetTable].maxHlc = record._sync_hlc;
 				}
 			}
 
@@ -164,19 +159,28 @@ export function getSync({ db, dek, userId }) {
 				}
 			}
 
-			setCursor(newCursor);
+			await setCursor(newCursor);
+			newCursorReturn = newCursor;
 
-			if (!newPushCursor) break;
 			pushCursor = newPushCursor;
+			if (!newPushCursor) break;
 		}
+
+		return newCursorReturn;
 	}
 
-	async function pull({ lastCursor }: { lastCursor: number | null }) {
+	async function pull({
+		lastCursor,
+		setCursor,
+	}: {
+		lastCursor: number | null;
+		setCursor(newCursor: number): Promise<void>;
+	}) {
 		let cursor = lastCursor;
 
 		while (true) {
 			const response = await fetch(
-				"/api/v1/pull?cursor=" + cursor + ("&user_id=" + userId),
+				"/api/v1/pull?" + (cursor ? "cursor=" + cursor : ""),
 				{
 					method: "GET",
 					credentials: "include",
@@ -193,8 +197,8 @@ export function getSync({ db, dek, userId }) {
 						db.exec(`update transaction_links set _sync_status = 1`),
 					]);
 
-					await push();
-					await pull({ lastCursor: getCursor() });
+					const newestCursor = await push({ setCursor });
+					await pull({ lastCursor: newestCursor, setCursor });
 					break;
 				}
 			}
@@ -229,7 +233,7 @@ export function getSync({ db, dek, userId }) {
 								/* name */ entry.name,
 
 								/* _sync_is_deleted */ e._sync_is_deleted,
-								/* _sync_hlc */ hlc.receive(e._sync_hlc),
+								/* _sync_hlc */ db.hlc.receive(e._sync_hlc),
 							);
 							accountsValues.push("(?, ?, ?, ?, ?, ?, 0)");
 							break;
@@ -243,7 +247,7 @@ export function getSync({ db, dek, userId }) {
 								/* is_neutral */ entry.is_neutral,
 
 								/* _sync_is_deleted */ e._sync_is_deleted,
-								/* _sync_hlc */ hlc.receive(e._sync_hlc),
+								/* _sync_hlc */ db.hlc.receive(e._sync_hlc),
 							);
 							categoriesValues.push("(?, ?, ?, ?, ?, ?, ?, 0)");
 							break;
@@ -264,7 +268,7 @@ export function getSync({ db, dek, userId }) {
 								/* account_id */ entry.account_id,
 
 								/* _sync_is_deleted */ e._sync_is_deleted,
-								/* _sync_hlc */ hlc.receive(e._sync_hlc),
+								/* _sync_hlc */ db.hlc.receive(e._sync_hlc),
 							);
 							transactionsValues.push(
 								"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
@@ -367,7 +371,7 @@ export function getSync({ db, dek, userId }) {
 					);
 				}
 
-				setCursor(highestVersion);
+				await setCursor(highestVersion);
 			} catch (e) {
 				console.error(e);
 			}
@@ -385,88 +389,75 @@ export function getSync({ db, dek, userId }) {
 	};
 }
 
-function getClientId() {
-	const existingId = localStorage.getItem(CLIENT_ID);
-	if (!existingId) {
-		const newId = ulid();
-		localStorage.setItem(CLIENT_ID, newId);
-		return newId;
-	}
+export type UiStorage = {
+	id: string;
+	dek: CryptoKey | null;
+	cursor: number | null;
+	sync_state: "enabled" | "paused" | null;
+};
 
-	return existingId;
-}
+export const idb = new Dexie("money") as Dexie & {
+	uiStorage: EntityTable<UiStorage, "id">;
+};
+idb.version(1).stores({
+	uiStorage: "id, dek, cursor, sync_state",
+});
 
-function getCursor() {
-	return Number(localStorage.getItem(LAST_CURSOR)) || 0;
-}
+export const uiStorageDefaults = {
+	id: "1",
+	dek: null,
+	cursor: null,
+	sync_state: null,
+};
 
-function setCursor(cursor: number) {
-	return localStorage.setItem(LAST_CURSOR, String(cursor ?? 0));
-}
-
-function getUserId() {
-	return localStorage.getItem("user_id");
-}
-
-function setUserId(userId: string) {
-	return localStorage.setItem("user_id", userId);
+async function setCursor(prev: UiStorage | undefined, newCursor: number) {
+	await idb.uiStorage.put({
+		...(prev ?? uiStorageDefaults),
+		cursor: newCursor,
+	});
 }
 
 export function useSync() {
-	const [sync, setSync] = useState(null);
+	const uiStorage = useLiveQuery(async () => {
+		return await idb.uiStorage.where("id").equals(uiStorageDefaults.id).first();
+	});
+
+	const canSync = uiStorage?.sync_state === "enabled" && !!uiStorage?.dek;
+	const me = useMe();
+
 	const db = useDb();
-	const qc = useQueryClient();
-	const ranRef = useRef(false);
 
-	useEffect(() => {
-		(async () => {
-			if (ranRef.current) return;
-
-			ranRef.current = true;
-			const storedUserId = getUserId();
-			const { user_id, salt } = await fetch("/api/v1/handshake", {
-				method: "POST",
-				credentials: "include",
-				...(storedUserId && {
-					body: JSON.stringify({
-						user_id: storedUserId,
-					}),
-				}),
-			}).then((res) => res.json());
-			setUserId(user_id);
-
-			const ev = new EventSource("/api/v1/sub?user_id=" + user_id, {
-				withCredentials: true,
+	const pull = useQuery({
+		enabled: canSync && !!me?.data?.salt,
+		queryKey: ["pull", canSync, me?.data?.salt],
+		queryFn: async () => {
+			const dek = uiStorage!.dek!;
+			const cursor = uiStorage!.cursor;
+			const sync = getSync({ db, dek });
+			await sync.pull({
+				lastCursor: cursor,
+				setCursor: async (newCursor) => {
+					await setCursor(uiStorage, newCursor);
+				},
 			});
-			ev.onopen = () => console.debug("subbed!");
-			ev.onerror = () => console.error("error with sub!");
-			ev.onmessage = async (e) => {
-				console.debug("message!", e);
-				const data = e?.data;
-				if (data === "poke!") {
-					console.debug("Got poked!");
-					await sync.pull({ lastCursor: getCursor() });
-					qc.invalidateQueries();
-				}
-			};
+			return true;
+		},
+	});
 
-			const dek = await deriveCryptoKeyFromPassphrase(
-				"secret1234",
-				decodeBase64(salt),
-			);
-			const sync = getSync({
-				db,
-				dek,
-				userId: user_id,
+	useQuery({
+		enabled: !!pull.data,
+		queryKey: ["push", pull.data],
+		queryFn: async () => {
+			const dek = uiStorage!.dek!;
+			const sync = getSync({ db, dek });
+			await sync.push({
+				setCursor: async (newCursor) => {
+					await setCursor(uiStorage, newCursor);
+				},
 			});
-			setSync(sync);
-			const changes = await sync.pull({ lastCursor: getCursor() || 0 });
-			if (changes) {
-				qc.invalidateQueries();
-			}
-			await sync.push();
-		})();
-	}, []);
+			return true;
+		},
+	});
 
-	return sync;
+	return null;
 }

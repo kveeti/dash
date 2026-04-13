@@ -1,18 +1,36 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import postgres from "postgres";
-
-const isProd = process.env.NODE_ENV === "production";
+import * as client from "openid-client";
+import { addDays, addMinutes } from "date-fns";
+import { ulid } from "ulid";
 
 async function main() {
 	const config = {
-		front_base_url: "http://localhost:3000",
-		port: 8000,
-		db_url: "postgres://postgres:postgres@localhost:5556/postgres",
+		port: process.env.PORT,
+		db_url: process.env.DB_URL,
+		base_url: process.env.BASE_URL,
+		oidc_url: process.env.OIDC_URL,
+		oidc_client_id: process.env.OIDC_CLIENT_ID,
+		oidc_client_secret: process.env.OIDC_CLIENT_SECRET,
+		oidc_redirect_url: process.env.OIDC_REDIRECT_URL,
+		isProd: process.env.NODE_ENV === "production",
 	};
+
+	/** @type {import("openid-client").Configuration | null} */
+	let oidc = null;
+	setTimeout(async () => {
+		console.log("discovering oidc...");
+		oidc = await client.discovery(
+			new URL(config.oidc_url),
+			config.oidc_client_id,
+			config.oidc_client_secret,
+		);
+		console.log("ready to oidc!");
+	}, 0);
 
 	console.log("connecting to db...");
 	const pg = postgres(config.db_url);
@@ -24,7 +42,7 @@ async function main() {
 	const app = new Hono();
 	app.use(
 		cors({
-			origin: config.front_base_url,
+			origin: "*",
 			allowHeaders: ["Content-Type"],
 			allowMethods: ["GET", "POST", "OPTIONS"],
 			credentials: true,
@@ -103,10 +121,9 @@ async function main() {
 	});
 
 	app.get("/api/v1/pull", async (c) => {
-		const { user_id: userId, cursor, limit: reqLimit } = c.req.query();
-		if (!userId) {
-			return c.body("Missing 'user_id'", 400);
-		}
+		const { cursor, limit: reqLimit } = c.req.query();
+		const userId = getCookie(c, "auth");
+		if (!userId) return c.newResponse(undefined, 401);
 
 		const currentMaxCursor = await getServerMaxVersion({ userId });
 		if (cursor > currentMaxCursor) {
@@ -121,7 +138,7 @@ async function main() {
 			select id, _sync_hlc, blob, _sync_is_deleted, _sync_server_version
 			from entries
 			where user_id = ${userId}
-				and _sync_server_version > ${cursor}
+				${cursor ? pg`and _sync_server_version > ${cursor}` : pg``}
 			order by _sync_server_version asc
 			limit ${limit + 1};
 		`;
@@ -147,10 +164,8 @@ async function main() {
 	});
 
 	app.post("/api/v1/push", async (c) => {
-		const { user_id: userId } = c.req.query();
-		if (!userId) {
-			return c.body("Missing 'user_id'", 400);
-		}
+		const userId = getCookie(c, "auth");
+		if (!userId) return c.newResponse(undefined, 401);
 
 		const entries = await c.req.json();
 		if (!entries?.length) {
@@ -177,7 +192,10 @@ async function main() {
 
 		const newCursor = await getServerMaxVersion({ userId });
 
-		poke(userId, BigInt(getCookie(c, "sub_id")));
+		const subIdCookie = getCookie(c, "sub_id");
+		if (subIdCookie) {
+			poke(userId, BigInt(subIdCookie));
+		}
 
 		return c.json({
 			new_cursor: newCursor,
@@ -223,6 +241,112 @@ async function main() {
 		});
 	});
 
+	const authCookieParams = {
+		expires: addMinutes(new Date(), 5),
+		httpOnly: true,
+		sameSite: "Strict",
+		secure: config.oidc_redirect_url.startsWith("https://"),
+	};
+
+	app.get("/api/v1/auth/init", async (c) => {
+		if (!oidc) {
+			throw new Error("/auth/init attempted without OIDC config");
+		}
+
+		const codeVerifier = client.randomPKCECodeVerifier();
+		const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
+
+		setCookie(c, "auth_code_verifier", codeVerifier, authCookieParams);
+
+		let state;
+
+		let parameters = {
+			redirect_uri: config.oidc_redirect_url,
+			scope: "openid",
+			code_challenge: codeChallenge,
+			code_challenge_method: "S256",
+		};
+
+		if (!oidc.serverMetadata().supportsPKCE()) {
+			state = client.randomState();
+			setCookie(c, "auth_state", state, authCookieParams);
+			parameters.state = state;
+		}
+
+		const redirectTo = client.buildAuthorizationUrl(oidc, parameters);
+		return c.redirect(redirectTo, 307);
+	});
+
+	app.get("/api/v1/auth/callback", async (c) => {
+		if (!oidc) {
+			throw new Error("/auth/callback attempted without OIDC config");
+		}
+
+		const codeVerifier = getCookie(c, "auth_code_verifier");
+		if (!codeVerifier) {
+			console.debug("No code verifier");
+			return c.newResponse(undefined, 400);
+		}
+
+		const state = getCookie(c, "auth_state");
+
+		const tokens = await client.authorizationCodeGrant(
+			oidc,
+			new URL(c.req.url),
+			{
+				pkceCodeVerifier: codeVerifier,
+				expectedState: state,
+			},
+		);
+
+		const userInfo = await client.fetchUserInfo(
+			oidc,
+			tokens.access_token,
+			tokens.claims().sub,
+		);
+
+		const [{ id: userId }] = await pg`
+			insert into users (id, external_id, salt)
+			values (${id()}, ${userInfo.sub}, ${encodeBase64(crypto.getRandomValues(new Uint8Array(16)))})
+			on conflict (external_id) do update set
+				id = excluded.id
+			returning id;
+		`;
+
+		setCookie(c, "auth", userId, {
+			...authCookieParams,
+			expires: addDays(new Date(), 30),
+		});
+		deleteCookie(c, "auth_state");
+		deleteCookie(c, "auth_code_verifier");
+		setCookie(c, "sub_id", String(++SUB_ID), {
+			httpOnly: true,
+			sameSite: "Lax",
+		});
+
+		return c.redirect(config.base_url + "/", 307);
+	});
+
+	app.get("/api/v1/auth/@me", async (c) => {
+		const auth = getCookie(c, "auth");
+		if (!auth) return c.newResponse(undefined, 401);
+
+		const [row] = await pg`select salt from users where id = ${auth}`;
+
+		return c.json({
+			salt: row.salt,
+		});
+	});
+
+	app.get("/api/v1/auth/logout", async (c) => {
+		const auth = getCookie(c, "auth");
+		if (!auth) return c.newResponse(undefined, 401);
+
+		deleteCookie(c, "auth");
+
+		return c.redirect(config.base_url + "/settings");
+	});
+
 	app.get("/api", async (c) => {
 		return c.body("Hello, world!");
 	});
@@ -235,7 +359,7 @@ async function main() {
 		(addr) => console.log(`listening at ${addr.port}`),
 	);
 
-	if (isProd) {
+	if (config.isProd) {
 		process.on("SIGINT", () => {
 			server.close();
 			process.exit(0);
@@ -277,6 +401,7 @@ async function migrate(pg) {
 		// -- users --
 		`create table users (
 			id text primary key not null,
+			external_id text not null unique,
 			salt text not null
 		);`,
 		// -- users --
@@ -342,4 +467,8 @@ function encodeBase64(value) {
 		binary += String.fromCharCode(value[i]);
 	}
 	return globalThis.btoa(binary);
+}
+
+function id() {
+	return ulid();
 }

@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes } from "react";
+import { ConditionalSpinner } from "./spinner";
 
 const base =
 	"focus relative text-xs inline-flex shrink-0 items-center justify-center whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-40";
@@ -16,17 +17,28 @@ const sizes = {
 	icon: "size-10",
 };
 
+export function buttonStyles({ variant = "primary", size = "default" } = {}) {
+	return base + " " + variants[variant] + " " + sizes[size];
+}
+
 export function Button({
 	variant = "primary",
 	size = "default",
+	isLoading,
 	className,
+	children,
 	...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
 	variant?: keyof typeof variants;
 	size?: keyof typeof sizes;
+	isLoading?: boolean;
 }) {
-	let cls = base + " " + variants[variant] + " " + sizes[size];
+	let cls = buttonStyles({ variant, size });
 	if (className) cls += " " + className;
 
-	return <button {...props} className={cls} />;
+	return (
+		<button {...props} className={cls} aria-busy={isLoading}>
+			<ConditionalSpinner isLoading={isLoading}>{children}</ConditionalSpinner>
+		</button>
+	);
 }
