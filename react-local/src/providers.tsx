@@ -3,7 +3,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { getDb } from "./lib/db";
 import { getHLCGenerator } from "./lib/hlc";
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient();
 
 export function Providers(props: { children: ReactNode }) {
   return (
@@ -18,10 +18,10 @@ export function Providers(props: { children: ReactNode }) {
 }
 
 const DbContext = createContext<ReturnType<typeof getDb> | null>(null);
-const clientId = "client-1"
+const clientId = "client-1";
 
 function DbProvider(props: { children: ReactNode }) {
-  const db = getDb({ hlc: getHLCGenerator(clientId) });
+  const db = useMemo(() => getDb({ hlc: getHLCGenerator(clientId) }), []);
 
   return (
     <DbContext.Provider value={db}>
@@ -36,8 +36,6 @@ export function useDb() {
   return context;
 }
 
-
-
 const I18NContext = createContext<ReturnType<typeof useI18nValue> | null>(null);
 
 export function useI18n() {
@@ -45,6 +43,7 @@ export function useI18n() {
   if (!context) throw new Error("useI18n must be used within a I18nProvider!");
   return context;
 }
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const value = useI18nValue();
   return <I18NContext.Provider value={value}>{children}</I18NContext.Provider>;
@@ -59,7 +58,6 @@ function useI18nValue() {
     () => new Intl.DateTimeFormat(locale, { timeZone }).resolvedOptions(),
     [locale, timeZone]
   );
-
 
   const amountFormatter = useMemo(
     () =>
@@ -99,7 +97,7 @@ function useI18nValue() {
         month: "numeric",
         day: "numeric",
         year: "numeric",
-        weekday: "short"
+        weekday: "short",
       }),
     [locale]
   );
@@ -109,7 +107,7 @@ function useI18nValue() {
       new Intl.DateTimeFormat(locale, {
         month: "numeric",
         day: "numeric",
-        weekday: "short"
+        weekday: "short",
       }),
     [locale]
   );

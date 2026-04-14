@@ -4,14 +4,123 @@ import { createDekSyncPayloadCodec } from "./crypt";
 import { useQuery } from "@tanstack/react-query";
 import { useMe } from "./queries/auth";
 import { useDb } from "../providers";
+import type { DbHandle } from "./db";
+import { queryKeys } from "./queries/query-keys";
 
-export function getSync({ db, dek }) {
+type DirtyEntry = {
+	id: string;
+	_sync_hlc: string;
+	_sync_is_deleted: number;
+	plain_data: string;
+};
+
+type PullEntry = {
+	id: string;
+	blob: string;
+	_sync_hlc: string;
+	_sync_is_deleted: number;
+};
+
+type PullResponse = {
+	entries: PullEntry[];
+	next_cursor: number | null;
+	highest_version: number;
+};
+
+type PushResponse = {
+	new_cursor: number;
+};
+
+type SyncTableName =
+	| "categories"
+	| "accounts"
+	| "transactions"
+	| "transaction_links";
+
+type TableUpdateBucket = {
+	ids: string[];
+	maxHlc: string;
+};
+
+const DIRTY_BATCH_LIMIT = 1000;
+
+function createEmptyTableBuckets(): Record<SyncTableName, TableUpdateBucket> {
+	return {
+		categories: { ids: [], maxHlc: "" },
+		accounts: { ids: [], maxHlc: "" },
+		transactions: { ids: [], maxHlc: "" },
+		transaction_links: { ids: [], maxHlc: "" },
+	};
+}
+
+function resolveTargetTable(recordId: string): {
+	tableName: SyncTableName;
+	actualId: string;
+} {
+	const [tableNameRaw, actualId] = recordId.split(":");
+	if (tableNameRaw === "category") {
+		return { tableName: "categories", actualId };
+	}
+	return { tableName: `${tableNameRaw}s` as SyncTableName, actualId };
+}
+
+async function markDirtyEntriesSynced(db: DbHandle, dirty: DirtyEntry[]) {
+	const updatesByTable = createEmptyTableBuckets();
+
+	for (const record of dirty) {
+		const { tableName, actualId } = resolveTargetTable(record.id);
+		updatesByTable[tableName].ids.push(actualId);
+
+		if (record._sync_hlc > updatesByTable[tableName].maxHlc) {
+			updatesByTable[tableName].maxHlc = record._sync_hlc;
+		}
+	}
+
+	for (const [tableName, data] of Object.entries(updatesByTable) as Array<
+		[SyncTableName, TableUpdateBucket]
+	>) {
+		if (data.ids.length === 0) continue;
+
+		const placeholders = data.ids.map(() => "?").join(",");
+
+		if (tableName === "transaction_links") {
+			await db.exec(
+				`update transaction_links
+				set _sync_status = 0
+				where transaction_a_id || '_' || transaction_b_id IN (${placeholders}) 
+				and _sync_hlc <= ?`,
+				[...data.ids, data.maxHlc],
+			);
+		} else {
+			await db.exec(
+				`update ${tableName}
+				set _sync_status = 0
+				where id in (${placeholders}) 
+				and _sync_hlc <= ?`,
+				[...data.ids, data.maxHlc],
+			);
+		}
+	}
+}
+
+async function markAllRowsPendingPush(db: DbHandle) {
+	await Promise.all([
+		db.exec(`update categories set _sync_status = 1`),
+		db.exec(`update accounts set _sync_status = 1`),
+		db.exec(`update transactions set _sync_status = 1`),
+		db.exec(`update transaction_links set _sync_status = 1`),
+	]);
+}
+
+export function getSync({ db, dek }: { db: DbHandle; dek: CryptoKey }) {
 	const codec = createDekSyncPayloadCodec(dek);
 
-	async function getDirty({ cursor }: { cursor: string | undefined }) {
-		const limit = 1000;
-
-		const dirty = await db.query(
+	async function getDirty({
+		cursor,
+	}: {
+		cursor: string | undefined;
+	}): Promise<{ entries: DirtyEntry[]; newCursor: string | undefined }> {
+		const dirty = await db.query<DirtyEntry>(
 			`
 			select * from (
 				-- categories
@@ -60,7 +169,7 @@ export function getSync({ db, dek }) {
 			order by priority asc, _sync_hlc asc
 			limit ?;
 		`,
-			cursor ? [cursor, limit + 1] : [limit + 1],
+			cursor ? [cursor, DIRTY_BATCH_LIMIT + 1] : [DIRTY_BATCH_LIMIT + 1],
 		);
 		// order by prio first to retain topology, parents first
 
@@ -68,7 +177,7 @@ export function getSync({ db, dek }) {
 			return { entries: [], newCursor: undefined };
 		}
 
-		const hasMore = dirty.length === limit + 1;
+		const hasMore = dirty.length === DIRTY_BATCH_LIMIT + 1;
 		if (hasMore) {
 			dirty.pop();
 		}
@@ -81,8 +190,8 @@ export function getSync({ db, dek }) {
 	}: {
 		setCursor: (newCursor: number) => Promise<void>;
 	}) {
-		let newCursorReturn;
-		let pushCursor;
+		let newCursorReturn: number | undefined;
+		let pushCursor: string | undefined;
 		while (true) {
 			const { entries: dirty, newCursor: newPushCursor } = await getDirty({
 				cursor: pushCursor,
@@ -114,50 +223,8 @@ export function getSync({ db, dek }) {
 				throw new Error("Server did not accept push");
 			}
 
-			const { new_cursor: newCursor } = await response.json();
-
-			const updatesByTable = {
-				categories: { ids: [], maxHlc: "" },
-				accounts: { ids: [], maxHlc: "" },
-				transactions: { ids: [], maxHlc: "" },
-				transaction_links: { ids: [], maxHlc: "" },
-			};
-
-			for (const record of dirty) {
-				const [tableNameRaw, actualId] = record.id.split(":");
-				const targetTable =
-					tableNameRaw === "category" ? "categories" : tableNameRaw + "s";
-
-				updatesByTable[targetTable].ids.push(actualId);
-
-				if (record._sync_hlc > updatesByTable[targetTable].maxHlc) {
-					updatesByTable[targetTable].maxHlc = record._sync_hlc;
-				}
-			}
-
-			for (const [tableName, data] of Object.entries(updatesByTable)) {
-				if (data.ids.length === 0) continue; // Skip tables that had no updates in this batch
-
-				const placeholders = data.ids.map(() => "?").join(",");
-
-				if (tableName === "transaction_links") {
-					await db.exec(
-						`update transaction_links
-						set _sync_status = 0
-						where transaction_a_id || '_' || transaction_b_id IN (${placeholders}) 
-						and _sync_hlc <= ?`,
-						[...data.ids, data.maxHlc],
-					);
-				} else {
-					await db.exec(
-						`update ${tableName}
-						set _sync_status = 0
-						where id in (${placeholders}) 
-						and _sync_hlc <= ?`,
-						[...data.ids, data.maxHlc],
-					);
-				}
-			}
+			const { new_cursor: newCursor } = (await response.json()) as PushResponse;
+			await markDirtyEntriesSynced(db, dirty);
 
 			await setCursor(newCursor);
 			newCursorReturn = newCursor;
@@ -173,7 +240,7 @@ export function getSync({ db, dek }) {
 		lastCursor,
 		setCursor,
 	}: {
-		lastCursor: number | null;
+		lastCursor: number | undefined;
 		setCursor(newCursor: number): Promise<void>;
 	}) {
 		let cursor = lastCursor;
@@ -190,12 +257,7 @@ export function getSync({ db, dek }) {
 			if (!response.ok && response.status === 409) {
 				const json = await response.json();
 				if (json.error === "cursor_gt_max") {
-					await Promise.all([
-						db.exec(`update categories set _sync_status = 1`),
-						db.exec(`update accounts set _sync_status = 1`),
-						db.exec(`update transactions set _sync_status = 1`),
-						db.exec(`update transaction_links set _sync_status = 1`),
-					]);
+					await markAllRowsPendingPush(db);
 
 					const newestCursor = await push({ setCursor });
 					await pull({ lastCursor: newestCursor, setCursor });
@@ -207,7 +269,7 @@ export function getSync({ db, dek }) {
 				entries,
 				next_cursor: nextCursor,
 				highest_version: highestVersion,
-			} = await response.json();
+			} = (await response.json()) as PullResponse;
 			if (!entries.length) return false;
 
 			const accounts = [];
@@ -408,7 +470,11 @@ export const uiStorageDefaults = {
 	dek: null,
 	cursor: null,
 	sync_state: null,
-};
+} satisfies UiStorage;
+
+async function getUiStorage() {
+	return await idb.uiStorage.where("id").equals(uiStorageDefaults.id).first();
+}
 
 async function setCursor(prev: UiStorage | undefined, newCursor: number) {
 	await idb.uiStorage.put({
@@ -418,9 +484,7 @@ async function setCursor(prev: UiStorage | undefined, newCursor: number) {
 }
 
 export function useSync() {
-	const uiStorage = useLiveQuery(async () => {
-		return await idb.uiStorage.where("id").equals(uiStorageDefaults.id).first();
-	});
+	const uiStorage = useLiveQuery(getUiStorage);
 
 	const canSync = uiStorage?.sync_state === "enabled" && !!uiStorage?.dek;
 	const me = useMe();
@@ -429,16 +493,17 @@ export function useSync() {
 
 	const pull = useQuery({
 		enabled: canSync && !!me?.data?.salt,
-		queryKey: ["pull", canSync, me?.data?.salt],
+		queryKey: queryKeys.syncPull(canSync, me?.data?.salt),
 		queryFn: async () => {
 			const dek = uiStorage!.dek!;
 			const cursor = uiStorage!.cursor;
 			const sync = getSync({ db, dek });
+			const persistCursor = async (newCursor: number) => {
+				await setCursor(uiStorage, newCursor);
+			};
 			await sync.pull({
 				lastCursor: cursor,
-				setCursor: async (newCursor) => {
-					await setCursor(uiStorage, newCursor);
-				},
+				setCursor: persistCursor,
 			});
 			return true;
 		},
@@ -446,14 +511,15 @@ export function useSync() {
 
 	useQuery({
 		enabled: !!pull.data,
-		queryKey: ["push", pull.data],
+		queryKey: queryKeys.syncPush(!!pull.data),
 		queryFn: async () => {
 			const dek = uiStorage!.dek!;
 			const sync = getSync({ db, dek });
+			const persistCursor = async (newCursor: number) => {
+				await setCursor(uiStorage, newCursor);
+			};
 			await sync.push({
-				setCursor: async (newCursor) => {
-					await setCursor(uiStorage, newCursor);
-				},
+				setCursor: persistCursor,
 			});
 			return true;
 		},

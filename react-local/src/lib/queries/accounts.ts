@@ -2,16 +2,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDb } from "../../providers";
 import type { DbHandle } from "../db";
 import { id } from "../id";
+import { queryKeys, queryKeyRoots } from "./query-keys";
 
 export type Account = {
 	id: string;
 	name: string;
 };
 
+const ACCOUNT_SELECT_SQL =
+	"select id, name from accounts where _sync_is_deleted = 0 order by name";
+
 export function useAccountsQuery() {
 	const db = useDb();
 	return useQuery({
-		queryKey: ["accounts"],
+		queryKey: queryKeys.accounts(),
 		queryFn: () => getAccounts(db),
 	});
 }
@@ -21,14 +25,12 @@ export function useCreateAccountMutation() {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (name: string) => createAccount(db, name),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ["accounts"] }),
+		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeyRoots.accounts }),
 	});
 }
 
 export async function getAccounts(db: DbHandle): Promise<Account[]> {
-	return db.query(
-		"select id, name from accounts where _sync_is_deleted = 0 order by name",
-	);
+	return db.query(ACCOUNT_SELECT_SQL);
 }
 
 export async function createAccount(

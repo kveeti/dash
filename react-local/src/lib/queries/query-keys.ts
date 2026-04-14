@@ -1,0 +1,31 @@
+type TransactionCursorKey = {
+	left?: string;
+	right?: string;
+};
+
+export const queryKeyRoots = {
+	auth: ["auth"] as const,
+	accounts: ["accounts"] as const,
+	categories: ["categories"] as const,
+	transactions: ["transactions"] as const,
+	transaction: ["transaction"] as const,
+	sync: ["sync"] as const,
+};
+
+export const queryKeys = {
+	auth: () => queryKeyRoots.auth,
+	accounts: () => queryKeyRoots.accounts,
+	categories: (search?: string) => [...queryKeyRoots.categories, search] as const,
+	transactions: (search: string | undefined, cursor?: TransactionCursorKey) =>
+		[
+			...queryKeyRoots.transactions,
+			search,
+			cursor?.left,
+			cursor?.right,
+		] as const,
+	transaction: (id?: string) => [...queryKeyRoots.transaction, id] as const,
+	syncPull: (canSync: boolean, salt?: string) =>
+		[...queryKeyRoots.sync, "pull", canSync, salt] as const,
+	syncPush: (pullReady: boolean) =>
+		[...queryKeyRoots.sync, "push", pullReady] as const,
+};

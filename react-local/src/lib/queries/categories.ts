@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useDb } from "../../providers";
 import type { DbHandle } from "../db";
 import { id } from "../id";
+import { queryKeys, queryKeyRoots } from "./query-keys";
 
 export type CategoryWithCount = {
 	id: string;
@@ -10,10 +11,24 @@ export type CategoryWithCount = {
 	tx_count: number;
 };
 
+type CategoryInput = {
+	name: string;
+	is_neutral: boolean;
+};
+
+const SELECT_CATEGORIES_SQL = `select c.id, c.name, c.is_neutral, count(t.id) as tx_count
+ from categories c
+ left join transactions t on c.id = t.category_id and t._sync_is_deleted = 0
+ where c._sync_is_deleted = 0`;
+
+function invalidateCategoriesQuery(qc: ReturnType<typeof useQueryClient>) {
+	qc.invalidateQueries({ queryKey: queryKeyRoots.categories });
+}
+
 export function useCategoriesQuery(search?: string) {
 	const db = useDb();
 	return useQuery({
-		queryKey: ["categories", search],
+		queryKey: queryKeys.categories(search),
 		queryFn: () => getCategories(db, search),
 	});
 }
@@ -22,9 +37,8 @@ export function useCreateCategoryMutation() {
 	const db = useDb();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: (cat: { name: string; is_neutral: boolean }) =>
-			createCategory(db, cat),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+		mutationFn: (cat: CategoryInput) => createCategory(db, cat),
+		onSuccess: () => invalidateCategoriesQuery(qc),
 	});
 }
 
@@ -40,7 +54,7 @@ export function useUpdateCategoryMutation() {
 			name: string;
 			is_neutral: boolean;
 		}) => updateCategory(db, id, cat),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+		onSuccess: () => invalidateCategoriesQuery(qc),
 	});
 }
 
@@ -49,36 +63,25 @@ export function useDeleteCategoryMutation() {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (id: string) => deleteCategory(db, id),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }),
+		onSuccess: () => invalidateCategoriesQuery(qc),
 	});
 }
 
 async function getCategories(db: DbHandle, search?: string) {
 	if (search) {
 		return db.query<CategoryWithCount>(
-			`select c.id, c.name, c.is_neutral, count(t.id) as tx_count
-			 from categories c
-			 left join transactions t on c.id = t.category_id and t._sync_is_deleted = 0
-			 where c._sync_is_deleted = 0 and c.name like ?
-			 group by c.id
-			 order by c.name`,
+			`${SELECT_CATEGORIES_SQL} and c.name like ?
+			 group by c.id order by c.name`,
 			[`%${search}%`],
 		);
 	}
 	return db.query<CategoryWithCount>(
-		`select c.id, c.name, c.is_neutral, count(t.id) as tx_count
-		 from categories c
-		 left join transactions t on c.id = t.category_id and t._sync_is_deleted = 0
-		 where c._sync_is_deleted = 0
-		 group by c.id
-		 order by c.name`,
+		`${SELECT_CATEGORIES_SQL}
+		 group by c.id order by c.name`,
 	);
 }
 
-async function createCategory(
-	db: DbHandle,
-	cat: { name: string; is_neutral: boolean },
-) {
+async function createCategory(db: DbHandle, cat: CategoryInput) {
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
 		await db.exec(
@@ -91,7 +94,7 @@ async function createCategory(
 async function updateCategory(
 	db: DbHandle,
 	categoryId: string,
-	cat: { name: string; is_neutral: boolean },
+	cat: CategoryInput,
 ) {
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
