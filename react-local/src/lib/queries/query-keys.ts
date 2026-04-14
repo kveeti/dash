@@ -3,6 +3,12 @@ type TransactionCursorKey = {
 	right?: string;
 };
 
+export type TransactionFilters = {
+	category_id?: string;
+	account_id?: string;
+	uncategorized?: boolean;
+};
+
 export const queryKeyRoots = {
 	auth: ["auth"] as const,
 	accounts: ["accounts"] as const,
@@ -16,10 +22,13 @@ export const queryKeys = {
 	auth: () => queryKeyRoots.auth,
 	accounts: () => queryKeyRoots.accounts,
 	categories: (search?: string) => [...queryKeyRoots.categories, search] as const,
-	transactions: (search: string | undefined, cursor?: TransactionCursorKey) =>
+	transactions: (search: string | undefined, filters?: TransactionFilters, cursor?: TransactionCursorKey) =>
 		[
 			...queryKeyRoots.transactions,
 			search,
+			filters?.category_id,
+			filters?.account_id,
+			filters?.uncategorized,
 			cursor?.left,
 			cursor?.right,
 		] as const,

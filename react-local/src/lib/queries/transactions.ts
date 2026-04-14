@@ -7,7 +7,7 @@ import {
 import { useDb } from "../../providers";
 import { id } from "../id";
 import type { DbHandle } from "../db";
-import { queryKeys, queryKeyRoots } from "./query-keys";
+import { queryKeys, queryKeyRoots, type TransactionFilters } from "./query-keys";
 
 const DEFAULT_TRANSACTIONS_LIMIT = 50;
 
@@ -104,17 +104,19 @@ function invalidateTransactionQueries(qc: ReturnType<typeof useQueryClient>) {
 
 export function useTransactionsQuery(props: {
 	search: string | undefined;
+	filters?: TransactionFilters;
 	cursor?: TransactionCursorInput;
 }) {
 	const db = useDb();
 	const cursor = normalizeCursor(props.cursor);
 
 	return useQuery({
-		queryKey: queryKeys.transactions(props.search, cursor),
+		queryKey: queryKeys.transactions(props.search, props.filters, cursor),
 		queryFn: () =>
 			getTransactions(db, {
 				cursor,
 				search: props.search,
+				filters: props.filters,
 				limit: DEFAULT_TRANSACTIONS_LIMIT,
 			}),
 		placeholderData: keepPreviousData,
@@ -125,6 +127,7 @@ async function getTransactions(
 	db: DbHandle,
 	opts?: {
 		search?: string;
+		filters?: TransactionFilters;
 		limit?: number;
 		cursor?: TransactionCursor;
 	},
@@ -139,6 +142,20 @@ async function getTransactions(
 	if (opts?.search) {
 		wheres.push("(t.counter_party like ? or t.additional like ?)");
 		params.push(`%${opts.search}%`, `%${opts.search}%`);
+	}
+
+	if (opts?.filters?.category_id) {
+		wheres.push("t.category_id = ?");
+		params.push(opts.filters.category_id);
+	}
+
+	if (opts?.filters?.account_id) {
+		wheres.push("t.account_id = ?");
+		params.push(opts.filters.account_id);
+	}
+
+	if (opts?.filters?.uncategorized) {
+		wheres.push("t.category_id is null");
 	}
 
 	let direction: CursorDirection = null;

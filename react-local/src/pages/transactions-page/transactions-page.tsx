@@ -1,4 +1,4 @@
-import { useSearchParams } from "wouter";
+import { useSearchParams, useLocation } from "wouter";
 import { useI18n } from "../../providers";
 import {
 	useTransactionQuery,
@@ -8,32 +8,84 @@ import {
 	type TransactionRow,
 } from "../../lib/queries/transactions";
 import { useCategoriesQuery } from "../../lib/queries/categories";
+import { useAccountsQuery } from "../../lib/queries/accounts";
+import type { TransactionFilters } from "../../lib/queries/query-keys";
 import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
 import { Fragment, useRef, useState, type Ref } from "react";
 import { Button } from "../../components/button";
+import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { TransactionForm } from "../../components/transaction-form";
 import { AnimatePresence, motion } from "framer-motion";
 import { SelectedTx } from "../../components/selected-tx";
 
-export function TransactionsPage() {
+function useFilterParams() {
 	const [searchParams] = useSearchParams();
+	const [, navigate] = useLocation();
 
 	const left = searchParams.get("left");
 	const right = searchParams.get("right");
-	const q = searchParams.get("q");
+	const q = searchParams.get("q") ?? "";
+	const categoryId = searchParams.get("cat") ?? "";
+	const accountId = searchParams.get("acc") ?? "";
+	const uncategorized = searchParams.get("uncat") === "1";
+
+	const filters: TransactionFilters = {};
+	if (categoryId) filters.category_id = categoryId;
+	if (accountId) filters.account_id = accountId;
+	if (uncategorized) filters.uncategorized = true;
+
+	const hasFilters = !!(q || categoryId || accountId || uncategorized);
+
+	function setParams(updates: Record<string, string | undefined>) {
+		const params = new URLSearchParams();
+		const current: Record<string, string> = {
+			...(q && { q }),
+			...(categoryId && { cat: categoryId }),
+			...(accountId && { acc: accountId }),
+			...(uncategorized && { uncat: "1" }),
+		};
+		for (const [k, v] of Object.entries({ ...current, ...updates })) {
+			if (v) params.set(k, v);
+			else params.delete(k);
+		}
+		// reset pagination when filters change
+		params.delete("left");
+		params.delete("right");
+		const qs = params.toString();
+		navigate(qs ? `/txs?${qs}` : "/txs");
+	}
+
+	// all current filter params for pagination href building
+	const filterSearchParams: Record<string, string | undefined> = {
+		q: q || undefined,
+		cat: categoryId || undefined,
+		acc: accountId || undefined,
+		uncat: uncategorized ? "1" : undefined,
+	};
+
+	return { left, right, q, categoryId, accountId, uncategorized, filters, hasFilters, setParams, filterSearchParams };
+}
+
+export function TransactionsPage() {
+	const { left, right, q, categoryId, accountId, uncategorized, filters, hasFilters, setParams, filterSearchParams } = useFilterParams();
 
 	const transactionsQuery = useTransactionsQuery({
 		cursor: { left, right },
-		search: q,
+		search: q || undefined,
+		filters: Object.keys(filters).length > 0 ? filters : undefined,
 	});
 
 	const { f } = useI18n();
 
+	const categories = useCategoriesQuery();
+	const accounts = useAccountsQuery();
+
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 	const [openTxIds, setOpenTxIds] = useState<Array<string>>([]);
 	const scrolledForCursor = useRef<string | null>(null);
+	const [showFilters, setShowFilters] = useState(hasFilters);
 
 	function toggleSelect(txId: string) {
 		setSelectedIds((prev) => {
@@ -57,7 +109,70 @@ export function TransactionsPage() {
 	return (
 		<>
 			<div className="w-full max-w-[35rem] mx-auto pt-14 pb-114">
-				<h1 className="font-medium text-2xl font-cool">transactions</h1>
+				<div className="flex items-center justify-between">
+					<h1 className="font-medium text-2xl font-cool">transactions</h1>
+					<button
+						type="button"
+						className={"text-xs px-2 py-1 hover:bg-gray-a3" + (showFilters || hasFilters ? " text-gray-12" : " text-gray-10")}
+						onClick={() => setShowFilters((v) => !v)}
+					>
+						{hasFilters ? "filters (on)" : "filters"}
+					</button>
+				</div>
+
+				{showFilters && (
+					<div className="mt-3 space-y-2">
+						<Input
+							size="sm"
+							type="text"
+							placeholder="search..."
+							autoComplete="off"
+							value={q}
+							onChange={(e) => setParams({ q: e.currentTarget.value || undefined })}
+						/>
+						<div className="flex gap-2">
+							<Select
+								size="sm"
+								className="flex-1 min-w-0"
+								value={uncategorized ? "__uncat__" : categoryId}
+								onChange={(e) => {
+									const v = e.currentTarget.value;
+									if (v === "__uncat__") {
+										setParams({ cat: undefined, uncat: "1" });
+									} else {
+										setParams({ cat: v || undefined, uncat: undefined });
+									}
+								}}
+							>
+								<option value="">all categories</option>
+								<option value="__uncat__">uncategorized</option>
+								{categories.data?.map((c) => (
+									<option key={c.id} value={c.id}>{c.name}</option>
+								))}
+							</Select>
+							<Select
+								size="sm"
+								className="flex-1 min-w-0"
+								value={accountId}
+								onChange={(e) => setParams({ acc: e.currentTarget.value || undefined })}
+							>
+								<option value="">all accounts</option>
+								{accounts.data?.map((a) => (
+									<option key={a.id} value={a.id}>{a.name}</option>
+								))}
+							</Select>
+						</div>
+						{hasFilters && (
+							<button
+								type="button"
+								className="text-xs text-gray-10 hover:text-gray-12 underline"
+								onClick={() => setParams({ q: undefined, cat: undefined, acc: undefined, uncat: undefined })}
+							>
+								clear all
+							</button>
+						)}
+					</div>
+				)}
 
 				<ul className="mt-4">
 					{transactionsQuery.data?.transactions.map((tx, i) => {
@@ -102,7 +217,7 @@ export function TransactionsPage() {
 
 				{!transactionsQuery.data?.transactions?.length && (
 					<Empty>
-						{(searchParams.q as string) ? "no results" : "no transactions yet"}
+						{hasFilters ? "no results" : "no transactions yet"}
 					</Empty>
 				)}
 			</div>
@@ -121,13 +236,13 @@ export function TransactionsPage() {
 							"left",
 							transactionsQuery.data?.prev_id,
 							"/txs",
-							{ q: q ?? undefined },
+							filterSearchParams,
 						)}
 						nextHref={buildPaginatedHref(
 							"right",
 							transactionsQuery.data?.next_id,
 							"/txs",
-							{ q: q ?? undefined },
+							filterSearchParams,
 						)}
 					/>
 				</div>
