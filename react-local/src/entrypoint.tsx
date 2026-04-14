@@ -4,11 +4,13 @@ import { AddTransactionsPage } from "./pages/add-transactions-page/add-transacti
 import { CategoriesPage } from "./pages/categories-page/categories-page.tsx";
 import { Layout } from "./layout.tsx";
 import { SettingsPage } from "./pages/settings-page/settings-page.tsx";
+import { StatsPage } from "./pages/stats-page/stats-page.tsx";
 
 export function Entrypoint() {
 	return (
 		<Layout>
 			<Switch>
+				<Route path="/stats" component={StatsPage} />
 				<Route path="/txs" component={TransactionsPage} />
 				<Route path="/txs/new" component={AddTransactionsPage} />
 				<Route path="/cats" component={CategoriesPage} />
