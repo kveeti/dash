@@ -1,20 +1,47 @@
-import { useRef, useState, useEffect, type ReactNode } from "react";
+import {
+	useRef,
+	useState,
+	useEffect,
+	useImperativeHandle,
+	type ReactNode,
+	type Ref,
+} from "react";
 import { IconDragHandleDots1 } from "./icons/drag-handle-dots-1";
 
 type DragOffset = { x: number; y: number };
 
+export type SelectedTxHandle = {
+	nudge: () => void;
+};
 
 type SelectedTxProps = {
 	id: string;
 	label: string;
 	onClose: () => void;
 	initialOffset?: DragOffset;
+	ref?: Ref<SelectedTxHandle>;
 	children: ReactNode;
 };
 
-export function SelectedTx({ id, label, onClose, initialOffset, children }: SelectedTxProps) {
-	const [offset, setOffset] = useState<DragOffset>(initialOffset ?? { x: 0, y: 0 });
-	const dragStart = useRef<{ mouseX: number; mouseY: number; offsetX: number; offsetY: number } | null>(null);
+export function SelectedTx({
+	id,
+	label,
+	onClose,
+	initialOffset,
+	ref,
+	children,
+}: SelectedTxProps) {
+	const [offset, setOffset] = useState<DragOffset>(
+		initialOffset ?? { x: 0, y: 0 },
+	);
+	const dragStart = useRef<{
+		mouseX: number;
+		mouseY: number;
+		offsetX: number;
+		offsetY: number;
+	} | null>(null);
+	const sectionRef = useRef<HTMLElement>(null);
+	const nudgeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	useEffect(() => {
 		const handleMove = (e: PointerEvent) => {
@@ -39,8 +66,23 @@ export function SelectedTx({ id, label, onClose, initialOffset, children }: Sele
 		};
 	}, [id, offset]);
 
+	useImperativeHandle(ref, () => ({
+		nudge: () => {
+			const el = sectionRef.current;
+			if (!el) return;
+			if (nudgeTimer.current) clearTimeout(nudgeTimer.current);
+			el.style.transition = "transform 0.1s ease-out";
+			el.style.transform = "scale(1.03)";
+			nudgeTimer.current = setTimeout(() => {
+				el.style.transition = "transform 0.6s ease-in-out";
+				el.style.transform = "scale(1)";
+			}, 105);
+		},
+	}));
+
 	return (
 		<section
+			ref={sectionRef}
 			aria-label={label}
 			className="fixed max-h-[85vh] w-[90vw] max-w-[24rem] shadow-lg z-30"
 			style={{
@@ -69,7 +111,16 @@ export function SelectedTx({ id, label, onClose, initialOffset, children }: Sele
 					className="rounded p-1 hover:bg-gray-a3 text-gray-11 hover:text-gray-12"
 					aria-label="Close"
 				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+					<svg
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="2"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
 						<line x1="18" y1="6" x2="6" y2="18" />
 						<line x1="6" y1="6" x2="18" y2="18" />
 					</svg>

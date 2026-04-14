@@ -15,13 +15,13 @@ import { useAccountsQuery } from "../../lib/queries/accounts";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
 import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
-import { Fragment, useRef, useState, type Ref } from "react";
+import { Fragment, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { TransactionForm } from "../../components/transaction-form";
 import { AnimatePresence, motion } from "framer-motion";
-import { SelectedTx } from "../../components/selected-tx";
+import { SelectedTx, type SelectedTxHandle } from "../../components/selected-tx";
 
 function useFilterParams() {
 	const [searchParams] = useSearchParams();
@@ -82,6 +82,49 @@ function useFilterParams() {
 	};
 }
 
+function useSelection() {
+	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+	function toggle(txId: string) {
+		setSelectedIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(txId)) next.delete(txId);
+			else next.add(txId);
+			return next;
+		});
+	}
+
+	function clear() {
+		setSelectedIds(new Set());
+	}
+
+	return { selectedIds, toggle, clear, isSelecting: selectedIds.size > 0 };
+}
+
+function useOpenTxWindows() {
+	const [openIds, setOpenIds] = useState<Array<string>>([]);
+	const refs = useRef<Map<string, SelectedTxHandle>>(new Map());
+
+	function open(txId: string) {
+		if (openIds.includes(txId)) {
+			refs.current.get(txId)?.nudge();
+			return;
+		}
+		setOpenIds((p) => [...p, txId]);
+	}
+
+	function close(txId: string) {
+		setOpenIds((p) => p.filter((id) => id !== txId));
+	}
+
+	function setRef(id: string, handle: SelectedTxHandle | null) {
+		if (handle) refs.current.set(id, handle);
+		else refs.current.delete(id);
+	}
+
+	return { openIds, open, close, setRef };
+}
+
 export function TransactionsPage() {
 	const {
 		left,
@@ -107,27 +150,10 @@ export function TransactionsPage() {
 	const categories = useCategoriesQuery();
 	const accounts = useAccountsQuery();
 
-	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-	const [openTxIds, setOpenTxIds] = useState<Array<string>>([]);
+	const selection = useSelection();
+	const txWindows = useOpenTxWindows();
 	const scrolledForCursor = useRef<string | null>(null);
 	const [showFilters, setShowFilters] = useState(hasFilters);
-
-	function toggleSelect(txId: string) {
-		setSelectedIds((prev) => {
-			const next = new Set(prev);
-			if (next.has(txId)) next.delete(txId);
-			else next.add(txId);
-			return next;
-		});
-	}
-
-	function openTx(txId: string) {
-		setOpenTxIds((p) => [...p, txId]);
-	}
-
-	function closeTx(txId: string) {
-		setOpenTxIds((p) => p.filter((id) => id !== txId));
-	}
 
 	let currentDay: string | null = null;
 
@@ -170,7 +196,7 @@ export function TransactionsPage() {
 						const dayChanged = day !== currentDay;
 						currentDay = day;
 
-						const isSelected = selectedIds.has(tx.id);
+						const isSelected = selection.selectedIds.has(tx.id);
 
 						return (
 							<Fragment key={tx.id}>
@@ -183,9 +209,9 @@ export function TransactionsPage() {
 								<TxRow
 									tx={tx}
 									selected={isSelected}
-									selecting={selectedIds.size > 0}
-									onSelect={() => toggleSelect(tx.id)}
-									onClick={() => openTx(tx.id)}
+									selecting={selection.isSelecting}
+									onSelect={() => selection.toggle(tx.id)}
+									onClick={() => txWindows.open(tx.id)}
 									ref={(elem) => {
 										const cursorKey = left ?? right;
 										if (
@@ -212,9 +238,9 @@ export function TransactionsPage() {
 			<div
 				className={
 					"fixed right-0 left-0 max-w-[35rem] mx-auto z-40" +
-					(selectedIds.size > 0 && showFilters
+					(selection.isSelecting && showFilters
 						? " bottom-40 sm:bottom-12"
-						: selectedIds.size > 0
+						: selection.isSelecting
 							? " bottom-32 sm:bottom-12"
 							: showFilters
 								? " bottom-40 sm:bottom-0"
@@ -252,19 +278,20 @@ export function TransactionsPage() {
 				setParams={setParams}
 			/>
 
-			{selectedIds.size > 0 && (
+			{selection.isSelecting && (
 				<BulkEditBar
-					selectedIds={selectedIds}
-					onClear={() => setSelectedIds(new Set())}
+					selectedIds={selection.selectedIds}
+					onClear={selection.clear}
 				/>
 			)}
 
-			{openTxIds.map((id, index) => (
+			{txWindows.openIds.map((id, index) => (
 				<SelectedTxWindow
 					key={id}
 					txId={id}
 					index={index}
-					onClose={() => closeTx(id)}
+					onClose={() => txWindows.close(id)}
+					ref={(handle) => txWindows.setRef(id, handle)}
 				/>
 			))}
 		</>
@@ -371,20 +398,27 @@ function SelectedTxWindow({
 	txId,
 	index,
 	onClose,
+	ref: forwardedRef,
 }: {
 	txId: string;
 	index: number;
 	onClose: () => void;
+	ref?: Ref<SelectedTxHandle>;
 }) {
 	const { f } = useI18n();
 	const [editing, setEditing] = useState(false);
 	const [linkInput, setLinkInput] = useState("");
 	const [copied, setCopied] = useState(false);
+	const selectedTxRef = useRef<SelectedTxHandle>(null);
 	const txQuery = useTransactionQuery(txId);
 	const updateTransaction = useUpdateTransactionMutation();
 	const linksQuery = useTransactionLinksQuery(txId);
 	const linkMutation = useLinkTransactionMutation();
 	const unlinkMutation = useUnlinkTransactionMutation();
+
+	useImperativeHandle(forwardedRef, () => ({
+		nudge: () => selectedTxRef.current?.nudge(),
+	}));
 
 	if (!txQuery.data) {
 		return;
@@ -409,6 +443,7 @@ function SelectedTxWindow({
 
 	return (
 		<SelectedTx
+			ref={selectedTxRef}
 			id={txId}
 			label={`Transaction: ${tx.counter_party}, ${f.amount.format(tx.amount)}`}
 			onClose={onClose}
