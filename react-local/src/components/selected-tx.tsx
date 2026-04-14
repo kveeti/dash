@@ -42,7 +42,7 @@ export function SelectedTx({ id, label, onClose, initialOffset, children }: Sele
 	return (
 		<section
 			aria-label={label}
-			className="fixed max-h-[85vh] w-[90vw] max-w-[24rem] shadow-lg"
+			className="fixed max-h-[85vh] w-[90vw] max-w-[24rem] shadow-lg z-30"
 			style={{
 				top: `calc(2.3rem + ${offset.y}px)`,
 				left: `calc(100vw - 24rem - 1.2rem + ${offset.x}px)`,

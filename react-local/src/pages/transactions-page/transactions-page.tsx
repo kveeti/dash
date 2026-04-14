@@ -68,11 +68,33 @@ function useFilterParams() {
 		uncat: uncategorized ? "1" : undefined,
 	};
 
-	return { left, right, q, categoryId, accountId, uncategorized, filters, hasFilters, setParams, filterSearchParams };
+	return {
+		left,
+		right,
+		q,
+		categoryId,
+		accountId,
+		uncategorized,
+		filters,
+		hasFilters,
+		setParams,
+		filterSearchParams,
+	};
 }
 
 export function TransactionsPage() {
-	const { left, right, q, categoryId, accountId, uncategorized, filters, hasFilters, setParams, filterSearchParams } = useFilterParams();
+	const {
+		left,
+		right,
+		q,
+		categoryId,
+		accountId,
+		uncategorized,
+		filters,
+		hasFilters,
+		setParams,
+		filterSearchParams,
+	} = useFilterParams();
 
 	const transactionsQuery = useTransactionsQuery({
 		cursor: { left, right },
@@ -111,12 +133,15 @@ export function TransactionsPage() {
 
 	return (
 		<>
-			<div className="w-full max-w-[35rem] mx-auto pt-14 pb-114">
+			<div className="w-full max-w-[35rem] mx-auto pt-4 sm:pt-14 pb-114">
 				<div className="flex items-center justify-between">
 					<h1 className="font-medium text-2xl font-cool">transactions</h1>
 					<button
 						type="button"
-						className={"text-xs px-2 py-1 hover:bg-gray-a3" + (showFilters || hasFilters ? " text-gray-12" : " text-gray-10")}
+						className={
+							"hidden sm:block text-xs px-2 py-1 hover:bg-gray-a3" +
+							(showFilters || hasFilters ? " text-gray-12" : " text-gray-10")
+						}
 						onClick={() => setShowFilters((v) => !v)}
 					>
 						{hasFilters ? "filters (on)" : "filters"}
@@ -124,56 +149,17 @@ export function TransactionsPage() {
 				</div>
 
 				{showFilters && (
-					<div className="mt-3 space-y-2">
-						<Input
-							size="sm"
-							type="text"
-							placeholder="search..."
-							autoComplete="off"
-							value={q}
-							onChange={(e) => setParams({ q: e.currentTarget.value || undefined })}
+					<div className="hidden sm:block mt-3 space-y-2">
+						<FilterControls
+							q={q}
+							categoryId={categoryId}
+							accountId={accountId}
+							uncategorized={uncategorized}
+							hasFilters={hasFilters}
+							categories={categories.data}
+							accounts={accounts.data}
+							setParams={setParams}
 						/>
-						<div className="flex gap-2">
-							<Select
-								size="sm"
-								className="flex-1 min-w-0"
-								value={uncategorized ? "__uncat__" : categoryId}
-								onChange={(e) => {
-									const v = e.currentTarget.value;
-									if (v === "__uncat__") {
-										setParams({ cat: undefined, uncat: "1" });
-									} else {
-										setParams({ cat: v || undefined, uncat: undefined });
-									}
-								}}
-							>
-								<option value="">all categories</option>
-								<option value="__uncat__">uncategorized</option>
-								{categories.data?.map((c) => (
-									<option key={c.id} value={c.id}>{c.name}</option>
-								))}
-							</Select>
-							<Select
-								size="sm"
-								className="flex-1 min-w-0"
-								value={accountId}
-								onChange={(e) => setParams({ acc: e.currentTarget.value || undefined })}
-							>
-								<option value="">all accounts</option>
-								{accounts.data?.map((a) => (
-									<option key={a.id} value={a.id}>{a.name}</option>
-								))}
-							</Select>
-						</div>
-						{hasFilters && (
-							<button
-								type="button"
-								className="text-xs text-gray-10 hover:text-gray-12 underline"
-								onClick={() => setParams({ q: undefined, cat: undefined, acc: undefined, uncat: undefined })}
-							>
-								clear all
-							</button>
-						)}
 					</div>
 				)}
 
@@ -189,7 +175,7 @@ export function TransactionsPage() {
 						return (
 							<Fragment key={tx.id}>
 								{dayChanged && (
-									<div className="sticky top-10 bg-gray-3 text-xs font-medium py-1.5 px-3 scroll-mt-10">
+									<div className="sticky top-0 sm:top-10 bg-gray-3 text-xs font-medium py-1.5 px-3 scroll-mt-0 sm:scroll-mt-10">
 										{currentDay}
 									</div>
 								)}
@@ -219,18 +205,20 @@ export function TransactionsPage() {
 				</ul>
 
 				{!transactionsQuery.data?.transactions?.length && (
-					<Empty>
-						{hasFilters ? "no results" : "no transactions yet"}
-					</Empty>
+					<Empty>{hasFilters ? "no results" : "no transactions yet"}</Empty>
 				)}
 			</div>
 
 			<div
 				className={
-					"fixed right-0 left-0 max-w-[35rem] mx-auto" +
-					(selectedIds.size > 0
-						? " bottom-22 sm:bottom-12"
-						: " bottom-10 sm:bottom-0")
+					"fixed right-0 left-0 max-w-[35rem] mx-auto z-40" +
+					(selectedIds.size > 0 && showFilters
+						? " bottom-40 sm:bottom-12"
+						: selectedIds.size > 0
+							? " bottom-32 sm:bottom-12"
+							: showFilters
+								? " bottom-40 sm:bottom-0"
+								: " bottom-16 sm:bottom-0")
 				}
 			>
 				<div className="flex justify-end pb-4">
@@ -251,6 +239,19 @@ export function TransactionsPage() {
 				</div>
 			</div>
 
+			<MobileFilterBar
+				showFilters={showFilters}
+				setShowFilters={setShowFilters}
+				hasFilters={hasFilters}
+				q={q}
+				categoryId={categoryId}
+				accountId={accountId}
+				uncategorized={uncategorized}
+				categories={categories.data}
+				accounts={accounts.data}
+				setParams={setParams}
+			/>
+
 			{selectedIds.size > 0 && (
 				<BulkEditBar
 					selectedIds={selectedIds}
@@ -270,6 +271,33 @@ export function TransactionsPage() {
 	);
 }
 
+function useLongPress(callback: () => void, ms = 500) {
+	const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const firedRef = useRef(false);
+
+	function onStart() {
+		firedRef.current = false;
+		timerRef.current = setTimeout(() => {
+			firedRef.current = true;
+			callback();
+		}, ms);
+	}
+
+	function onEnd() {
+		if (timerRef.current) {
+			clearTimeout(timerRef.current);
+			timerRef.current = null;
+		}
+	}
+
+	return {
+		onTouchStart: onStart,
+		onTouchEnd: onEnd,
+		onTouchMove: onEnd,
+		didFire: firedRef,
+	};
+}
+
 function TxRow(props: {
 	tx: TransactionRow;
 	selected: boolean;
@@ -282,14 +310,19 @@ function TxRow(props: {
 
 	const isIncome = props.tx.amount > 0;
 
+	const longPress = useLongPress(() => {
+		props.onSelect();
+	});
+
 	return (
 		<li ref={props.ref} className="scroll-mt-17">
 			<div
 				className={
-					"flex items-center justify-between gap-3 hover:bg-gray-a3 px-3 py-2" +
+					"flex items-center justify-between gap-3 hover:bg-gray-a3 px-3 py-2 select-none" +
 					(props.selected ? " bg-gray-a3" : "")
 				}
 				onClick={() => {
+					if (longPress.didFire.current) return;
 					if (props.selecting) {
 						props.onSelect();
 					} else {
@@ -300,6 +333,9 @@ function TxRow(props: {
 					e.preventDefault();
 					props.onSelect();
 				}}
+				onTouchStart={longPress.onTouchStart}
+				onTouchEnd={longPress.onTouchEnd}
+				onTouchMove={longPress.onTouchMove}
 			>
 				{props.selecting && (
 					<input
@@ -468,7 +504,10 @@ function SelectedTxWindow({
 					{linksQuery.data && linksQuery.data.length > 0 && (
 						<ul className="text-xs space-y-1">
 							{linksQuery.data.map((linked) => (
-								<li key={linked.id} className="flex items-center justify-between gap-2">
+								<li
+									key={linked.id}
+									className="flex items-center justify-between gap-2"
+								>
 									<span className="truncate">
 										{linked.counter_party}{" "}
 										<span className="text-gray-10">
@@ -494,6 +533,148 @@ function SelectedTxWindow({
 	);
 }
 
+function FilterControls({
+	q,
+	categoryId,
+	accountId,
+	uncategorized,
+	hasFilters,
+	categories,
+	accounts,
+	setParams,
+}: {
+	q: string;
+	categoryId: string;
+	accountId: string;
+	uncategorized: boolean;
+	hasFilters: boolean;
+	categories: Array<{ id: string; name: string }> | undefined;
+	accounts: Array<{ id: string; name: string }> | undefined;
+	setParams: (updates: Record<string, string | undefined>) => void;
+}) {
+	return (
+		<div className="space-y-2">
+			<Input
+				size="sm"
+				type="text"
+				placeholder="search..."
+				autoComplete="off"
+				value={q}
+				onChange={(e) => setParams({ q: e.currentTarget.value || undefined })}
+			/>
+			<div className="flex gap-2">
+				<Select
+					size="sm"
+					className="flex-1 min-w-0"
+					value={uncategorized ? "__uncat__" : categoryId}
+					onChange={(e) => {
+						const v = e.currentTarget.value;
+						if (v === "__uncat__") {
+							setParams({ cat: undefined, uncat: "1" });
+						} else {
+							setParams({ cat: v || undefined, uncat: undefined });
+						}
+					}}
+				>
+					<option value="">all categories</option>
+					<option value="__uncat__">uncategorized</option>
+					{categories?.map((c) => (
+						<option key={c.id} value={c.id}>
+							{c.name}
+						</option>
+					))}
+				</Select>
+				<Select
+					size="sm"
+					className="flex-1 min-w-0"
+					value={accountId}
+					onChange={(e) =>
+						setParams({ acc: e.currentTarget.value || undefined })
+					}
+				>
+					<option value="">all accounts</option>
+					{accounts?.map((a) => (
+						<option key={a.id} value={a.id}>
+							{a.name}
+						</option>
+					))}
+				</Select>
+			</div>
+			{hasFilters && (
+				<button
+					type="button"
+					className="text-xs text-gray-10 hover:text-gray-12 underline"
+					onClick={() =>
+						setParams({
+							q: undefined,
+							cat: undefined,
+							acc: undefined,
+							uncat: undefined,
+						})
+					}
+				>
+					clear all
+				</button>
+			)}
+		</div>
+	);
+}
+
+function MobileFilterBar({
+	showFilters,
+	setShowFilters,
+	hasFilters,
+	q,
+	categoryId,
+	accountId,
+	uncategorized,
+	categories,
+	accounts,
+	setParams,
+}: {
+	showFilters: boolean;
+	setShowFilters: (v: boolean) => void;
+	hasFilters: boolean;
+	q: string;
+	categoryId: string;
+	accountId: string;
+	uncategorized: boolean;
+	categories: Array<{ id: string; name: string }> | undefined;
+	accounts: Array<{ id: string; name: string }> | undefined;
+	setParams: (updates: Record<string, string | undefined>) => void;
+}) {
+	return (
+		<div className="fixed bottom-10 left-0 right-0 z-40 sm:hidden">
+			<div className="mx-auto max-w-[35rem] px-3">
+				{showFilters && (
+					<div className="border border-b-0 border-gray-a4 bg-gray-2 px-3 py-3">
+						<FilterControls
+							q={q}
+							categoryId={categoryId}
+							accountId={accountId}
+							uncategorized={uncategorized}
+							hasFilters={hasFilters}
+							categories={categories}
+							accounts={accounts}
+							setParams={setParams}
+						/>
+					</div>
+				)}
+				<button
+					type="button"
+					className={
+						"w-full border border-gray-a4 bg-gray-2 px-3 py-2 text-xs text-left" +
+						(hasFilters ? " text-gray-12" : " text-gray-10")
+					}
+					onClick={() => setShowFilters(!showFilters)}
+				>
+					{hasFilters ? "filters (on)" : "filters"}
+				</button>
+			</div>
+		</div>
+	);
+}
+
 function BulkEditBar({
 	selectedIds,
 	onClear,
@@ -515,7 +696,7 @@ function BulkEditBar({
 	}
 
 	return (
-		<div className="fixed bottom-10 left-0 right-0 sm:bottom-0 z-50">
+		<div className="fixed bottom-20 left-0 right-0 sm:bottom-0 z-30">
 			<div className="mx-auto max-w-[35rem] border border-gray-a4 bg-gray-2 px-4 py-3 shadow-lg flex items-center gap-3">
 				<span className="text-sm shrink-0">{selectedIds.size} selected</span>
 
