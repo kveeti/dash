@@ -335,6 +335,81 @@ export function useUpdateTransactionMutation() {
 	});
 }
 
+export type LinkedTransaction = {
+	id: string;
+	counter_party: string;
+	amount: number;
+	date: string;
+};
+
+export function useTransactionLinksQuery(txId: string | undefined) {
+	const db = useDb();
+	return useQuery({
+		queryKey: queryKeys.transactionLinks(txId),
+		queryFn: () =>
+			db.query<LinkedTransaction>(
+				`select t.id, t.counter_party, t.amount, t.date
+				from transaction_links l
+				join transactions t on t.id = case
+					when l.transaction_a_id = ? then l.transaction_b_id
+					else l.transaction_a_id end
+				where (l.transaction_a_id = ? or l.transaction_b_id = ?)
+					and l._sync_is_deleted = 0
+					and t._sync_is_deleted = 0`,
+				[txId, txId, txId],
+			),
+		enabled: !!txId,
+	});
+}
+
+function invalidateLinksQueries(qc: ReturnType<typeof useQueryClient>) {
+	qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinks });
+}
+
+export function useLinkTransactionMutation() {
+	const db = useDb();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: async ({ aId, bId }: { aId: string; bId: string }) => {
+			const [a, b] = aId < bId ? [aId, bId] : [bId, aId];
+			const now = new Date().toISOString();
+			await db.exec(
+				`insert into transaction_links
+					(transaction_a_id, transaction_b_id, created_at, updated_at, _sync_hlc, _sync_is_deleted, _sync_status)
+				values (?, ?, ?, ?, ?, 0, 1)
+				on conflict (transaction_a_id, transaction_b_id) do update set
+					_sync_is_deleted = 0,
+					updated_at = excluded.updated_at,
+					_sync_hlc = excluded._sync_hlc,
+					_sync_status = 1`,
+				[a, b, now, now, db.hlc.generate()],
+			);
+		},
+		onSuccess: () => invalidateLinksQueries(qc),
+	});
+}
+
+export function useUnlinkTransactionMutation() {
+	const db = useDb();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: async ({ aId, bId }: { aId: string; bId: string }) => {
+			const [a, b] = aId < bId ? [aId, bId] : [bId, aId];
+			const now = new Date().toISOString();
+			await db.exec(
+				`update transaction_links set
+					_sync_is_deleted = 1,
+					updated_at = ?,
+					_sync_hlc = ?,
+					_sync_status = 1
+				where transaction_a_id = ? and transaction_b_id = ?`,
+				[now, db.hlc.generate(), a, b],
+			);
+		},
+		onSuccess: () => invalidateLinksQueries(qc),
+	});
+}
+
 export function useBulkSetCategoryMutation() {
 	const db = useDb();
 	const qc = useQueryClient();

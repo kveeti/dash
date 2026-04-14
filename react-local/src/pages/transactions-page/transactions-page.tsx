@@ -5,6 +5,9 @@ import {
 	useTransactionsQuery,
 	useUpdateTransactionMutation,
 	useBulkSetCategoryMutation,
+	useTransactionLinksQuery,
+	useLinkTransactionMutation,
+	useUnlinkTransactionMutation,
 	type TransactionRow,
 } from "../../lib/queries/transactions";
 import { useCategoriesQuery } from "../../lib/queries/categories";
@@ -339,8 +342,13 @@ function SelectedTxWindow({
 }) {
 	const { f } = useI18n();
 	const [editing, setEditing] = useState(false);
+	const [linkInput, setLinkInput] = useState("");
+	const [copied, setCopied] = useState(false);
 	const txQuery = useTransactionQuery(txId);
 	const updateTransaction = useUpdateTransactionMutation();
+	const linksQuery = useTransactionLinksQuery(txId);
+	const linkMutation = useLinkTransactionMutation();
+	const unlinkMutation = useUnlinkTransactionMutation();
 
 	if (!txQuery.data) {
 		return;
@@ -349,6 +357,19 @@ function SelectedTxWindow({
 
 	const isIncome = tx.amount > 0;
 	const stackOffset = { x: 0, y: (index + 1) * 72 };
+
+	function copyId() {
+		navigator.clipboard.writeText(txId);
+		setCopied(true);
+		setTimeout(() => setCopied(false), 1500);
+	}
+
+	async function handleLink() {
+		const targetId = linkInput.trim();
+		if (!targetId || targetId === txId) return;
+		await linkMutation.mutateAsync({ aId: txId, bId: targetId });
+		setLinkInput("");
+	}
 
 	return (
 		<SelectedTx
@@ -366,13 +387,23 @@ function SelectedTxWindow({
 			</div>
 
 			<div className="my-3 space-y-2">
-				<button
-					type="button"
-					onClick={() => setEditing(!editing)}
-					className="text-sm text-gray-11 hover:text-gray-12 px-3"
-				>
-					{editing ? "hide edit" : "edit"}
-				</button>
+				<div className="flex items-center gap-2 px-3">
+					<button
+						type="button"
+						onClick={() => setEditing(!editing)}
+						className="text-sm text-gray-11 hover:text-gray-12"
+					>
+						{editing ? "hide edit" : "edit"}
+					</button>
+					<span className="text-gray-a4">|</span>
+					<button
+						type="button"
+						onClick={copyId}
+						className="text-sm text-gray-11 hover:text-gray-12"
+					>
+						{copied ? "copied!" : "copy id"}
+					</button>
+				</div>
 
 				<AnimatePresence>
 					{editing && (
@@ -415,6 +446,49 @@ function SelectedTxWindow({
 						</motion.div>
 					)}
 				</AnimatePresence>
+
+				<div className="px-3 space-y-2">
+					<div className="flex gap-1">
+						<input
+							type="text"
+							placeholder="paste tx id to link..."
+							value={linkInput}
+							onChange={(e) => setLinkInput(e.target.value)}
+							className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm flex-1 min-w-0"
+						/>
+						<Button
+							size="sm"
+							onClick={handleLink}
+							disabled={!linkInput.trim() || linkMutation.isPending}
+						>
+							link
+						</Button>
+					</div>
+
+					{linksQuery.data && linksQuery.data.length > 0 && (
+						<ul className="text-xs space-y-1">
+							{linksQuery.data.map((linked) => (
+								<li key={linked.id} className="flex items-center justify-between gap-2">
+									<span className="truncate">
+										{linked.counter_party}{" "}
+										<span className="text-gray-10">
+											{f.amount.format(linked.amount)}
+										</span>
+									</span>
+									<button
+										type="button"
+										className="text-gray-10 hover:text-red-11 shrink-0"
+										onClick={() =>
+											unlinkMutation.mutate({ aId: txId, bId: linked.id })
+										}
+									>
+										unlink
+									</button>
+								</li>
+							))}
+						</ul>
+					)}
+				</div>
 			</div>
 		</SelectedTx>
 	);

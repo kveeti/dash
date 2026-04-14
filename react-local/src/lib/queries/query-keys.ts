@@ -15,6 +15,7 @@ export const queryKeyRoots = {
 	categories: ["categories"] as const,
 	transactions: ["transactions"] as const,
 	transaction: ["transaction"] as const,
+	transactionLinks: ["transaction-links"] as const,
 	sync: ["sync"] as const,
 };
 
@@ -33,6 +34,7 @@ export const queryKeys = {
 			cursor?.right,
 		] as const,
 	transaction: (id?: string) => [...queryKeyRoots.transaction, id] as const,
+	transactionLinks: (id?: string) => [...queryKeyRoots.transactionLinks, id] as const,
 	syncPull: (canSync: boolean, salt?: string) =>
 		[...queryKeyRoots.sync, "pull", canSync, salt] as const,
 	syncPush: (pullReady: boolean) =>
