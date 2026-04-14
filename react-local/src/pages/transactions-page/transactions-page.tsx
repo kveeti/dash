@@ -4,12 +4,15 @@ import {
 	useTransactionQuery,
 	useTransactionsQuery,
 	useUpdateTransactionMutation,
+	useBulkSetCategoryMutation,
 	type TransactionRow,
 } from "../../lib/queries/transactions";
+import { useCategoriesQuery } from "../../lib/queries/categories";
 import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
-import { Fragment, useState, type Ref } from "react";
+import { Fragment, useRef, useState, type Ref } from "react";
 import { Button } from "../../components/button";
+import { Select } from "../../components/select";
 import { TransactionForm } from "../../components/transaction-form";
 import { AnimatePresence, motion } from "framer-motion";
 import { SelectedTx } from "../../components/selected-tx";
@@ -19,7 +22,6 @@ export function TransactionsPage() {
 
 	const left = searchParams.get("left");
 	const right = searchParams.get("right");
-	const isPaginating = !!left || !!right;
 	const q = searchParams.get("q");
 
 	const transactionsQuery = useTransactionsQuery({
@@ -29,14 +31,25 @@ export function TransactionsPage() {
 
 	const { f } = useI18n();
 
-	const [selectedIds, setSelectedIds] = useState<Array<string>>([]);
+	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+	const [openTxIds, setOpenTxIds] = useState<Array<string>>([]);
+	const scrolledForCursor = useRef<string | null>(null);
 
-	function selectTx(txId: string) {
-		setSelectedIds((p) => [...p, txId]);
+	function toggleSelect(txId: string) {
+		setSelectedIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(txId)) next.delete(txId);
+			else next.add(txId);
+			return next;
+		});
 	}
 
-	function deselectTx(txId: string) {
-		setSelectedIds((p) => p.filter((id) => id !== txId));
+	function openTx(txId: string) {
+		setOpenTxIds((p) => [...p, txId]);
+	}
+
+	function closeTx(txId: string) {
+		setOpenTxIds((p) => p.filter((id) => id !== txId));
 	}
 
 	let currentDay: string | null = null;
@@ -53,6 +66,8 @@ export function TransactionsPage() {
 						const dayChanged = day !== currentDay;
 						currentDay = day;
 
+						const isSelected = selectedIds.has(tx.id);
+
 						return (
 							<Fragment key={tx.id}>
 								{dayChanged && (
@@ -63,9 +78,20 @@ export function TransactionsPage() {
 
 								<TxRow
 									tx={tx}
-									onClick={() => selectTx(tx.id)}
+									selected={isSelected}
+									selecting={selectedIds.size > 0}
+									onSelect={() => toggleSelect(tx.id)}
+									onClick={() => openTx(tx.id)}
 									ref={(elem) => {
-										if (!elem || i !== 0 || !isPaginating) return;
+										const cursorKey = left ?? right;
+										if (
+											!elem ||
+											i !== 0 ||
+											!cursorKey ||
+											scrolledForCursor.current === cursorKey
+										)
+											return;
+										scrolledForCursor.current = cursorKey;
 										elem.scrollIntoView({ block: "start" });
 									}}
 								/>
@@ -81,7 +107,14 @@ export function TransactionsPage() {
 				)}
 			</div>
 
-			<div className="fixed bottom-10 right-0 left-0 max-w-[35rem] mx-auto sm:bottom-0">
+			<div
+				className={
+					"fixed right-0 left-0 max-w-[35rem] mx-auto" +
+					(selectedIds.size > 0
+						? " bottom-22 sm:bottom-12"
+						: " bottom-10 sm:bottom-0")
+				}
+			>
 				<div className="flex justify-end pb-4">
 					<Pagination
 						prevHref={buildPaginatedHref(
@@ -100,12 +133,19 @@ export function TransactionsPage() {
 				</div>
 			</div>
 
-			{selectedIds.map((id, index) => (
+			{selectedIds.size > 0 && (
+				<BulkEditBar
+					selectedIds={selectedIds}
+					onClear={() => setSelectedIds(new Set())}
+				/>
+			)}
+
+			{openTxIds.map((id, index) => (
 				<SelectedTxWindow
 					key={id}
 					txId={id}
 					index={index}
-					onClose={() => deselectTx(id)}
+					onClose={() => closeTx(id)}
 				/>
 			))}
 		</>
@@ -114,6 +154,9 @@ export function TransactionsPage() {
 
 function TxRow(props: {
 	tx: TransactionRow;
+	selected: boolean;
+	selecting: boolean;
+	onSelect: () => void;
 	onClick: () => void;
 	ref: Ref<HTMLLIElement>;
 }) {
@@ -124,9 +167,31 @@ function TxRow(props: {
 	return (
 		<li ref={props.ref} className="scroll-mt-17">
 			<div
-				className="flex items-center justify-between gap-3 hover:bg-gray-a3 px-3 py-2"
-				onClick={() => props.onClick()}
+				className={
+					"flex items-center justify-between gap-3 hover:bg-gray-a3 px-3 py-2" +
+					(props.selected ? " bg-gray-a3" : "")
+				}
+				onClick={() => {
+					if (props.selecting) {
+						props.onSelect();
+					} else {
+						props.onClick();
+					}
+				}}
+				onContextMenu={(e) => {
+					e.preventDefault();
+					props.onSelect();
+				}}
 			>
+				{props.selecting && (
+					<input
+						type="checkbox"
+						checked={props.selected}
+						onChange={props.onSelect}
+						onClick={(e) => e.stopPropagation()}
+						className="shrink-0"
+					/>
+				)}
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
 						<span className="truncate">{props.tx.counter_party}</span>
@@ -237,5 +302,60 @@ function SelectedTxWindow({
 				</AnimatePresence>
 			</div>
 		</SelectedTx>
+	);
+}
+
+function BulkEditBar({
+	selectedIds,
+	onClear,
+}: {
+	selectedIds: Set<string>;
+	onClear: () => void;
+}) {
+	const categories = useCategoriesQuery();
+	const bulkSetCategory = useBulkSetCategoryMutation();
+	const [categoryId, setCategoryId] = useState("");
+
+	async function handleApply() {
+		if (!categoryId) return;
+		await bulkSetCategory.mutateAsync({
+			txIds: [...selectedIds],
+			categoryId: categoryId === "__none__" ? null : categoryId,
+		});
+		onClear();
+	}
+
+	return (
+		<div className="fixed bottom-10 left-0 right-0 sm:bottom-0 z-50">
+			<div className="mx-auto max-w-[35rem] border border-gray-a4 bg-gray-2 px-4 py-3 shadow-lg flex items-center gap-3">
+				<span className="text-sm shrink-0">{selectedIds.size} selected</span>
+
+				<Select
+					size="sm"
+					className="flex-1 min-w-0"
+					value={categoryId}
+					onChange={(e) => setCategoryId(e.currentTarget.value)}
+				>
+					<option value="">set category...</option>
+					<option value="__none__">-- no category --</option>
+					{categories.data?.map((c) => (
+						<option key={c.id} value={c.id}>
+							{c.name}
+						</option>
+					))}
+				</Select>
+
+				<Button
+					size="sm"
+					onClick={handleApply}
+					disabled={!categoryId || bulkSetCategory.isPending}
+				>
+					apply
+				</Button>
+				<Button size="sm" variant="ghost" onClick={onClear}>
+					cancel
+				</Button>
+			</div>
+		</div>
 	);
 }

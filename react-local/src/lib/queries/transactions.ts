@@ -317,3 +317,33 @@ export function useUpdateTransactionMutation() {
 		onSuccess: () => invalidateTransactionQueries(qc),
 	});
 }
+
+export function useBulkSetCategoryMutation() {
+	const db = useDb();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: async ({
+			txIds,
+			categoryId,
+		}: {
+			txIds: string[];
+			categoryId: string | null;
+		}) => {
+			await db.withTx(async () => {
+				const now = new Date().toISOString();
+				for (const txId of txIds) {
+					await db.exec(
+						`update transactions set
+							category_id = ?,
+							updated_at = ?,
+							_sync_hlc = ?,
+							_sync_status = 1
+						where id = ?`,
+						[categoryId, now, db.hlc.generate(), txId],
+					);
+				}
+			});
+		},
+		onSuccess: () => invalidateTransactionQueries(qc),
+	});
+}
