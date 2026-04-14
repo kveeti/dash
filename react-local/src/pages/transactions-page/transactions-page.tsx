@@ -15,13 +15,22 @@ import { useAccountsQuery } from "../../lib/queries/accounts";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
 import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
-import { Fragment, useImperativeHandle, useRef, useState, type Ref } from "react";
+import {
+	Fragment,
+	useImperativeHandle,
+	useRef,
+	useState,
+	type Ref,
+} from "react";
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { TransactionForm } from "../../components/transaction-form";
 import { AnimatePresence, motion } from "framer-motion";
-import { SelectedTx, type SelectedTxHandle } from "../../components/selected-tx";
+import {
+	SelectedTx,
+	type SelectedTxHandle,
+} from "../../components/selected-tx";
 
 function useFilterParams() {
 	const [searchParams] = useSearchParams();
@@ -237,7 +246,7 @@ export function TransactionsPage() {
 
 			<div
 				className={
-					"fixed right-0 left-0 max-w-[35rem] mx-auto z-40" +
+					"fixed right-0 left-0 max-w-[35rem] mx-auto z-40 pointer-events-none" +
 					(selection.isSelecting && showFilters
 						? " bottom-40 sm:bottom-12"
 						: selection.isSelecting
