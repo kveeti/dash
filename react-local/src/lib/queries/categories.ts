@@ -138,7 +138,7 @@ export async function getOrCreateCategoryByName(
 		const newId = id();
 		const now = new Date().toISOString();
 		await db.exec(
-			"insert into categories (id, created_at, updated_at, name, is_neutral, hlc) values (?, ?, ?, ?, ?, ?)",
+			"insert into categories (id, created_at, updated_at, name, is_neutral, _sync_hlc) values (?, ?, ?, ?, ?, ?)",
 			[newId, now, now, name, 0, db.hlc.generate()],
 		);
 		return newId;
