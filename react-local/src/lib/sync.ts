@@ -360,7 +360,7 @@ export function getSync({ db, dek }: { db: DbHandle; dek: CryptoKey }) {
 							_sync_status = 0,
 
 							name = excluded.name
-						where excluded.hlc > accounts.hlc;`,
+						where excluded._sync_hlc > accounts._sync_hlc;`,
 						accounts,
 					);
 				}

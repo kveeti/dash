@@ -320,7 +320,7 @@ async function main() {
 			insert into users (id, external_id, salt)
 			values (${id()}, ${userInfo.sub}, ${encodeBase64(crypto.getRandomValues(new Uint8Array(16)))})
 			on conflict (external_id) do update set
-				id = excluded.id
+				external_id = excluded.external_id
 			returning id;
 		`;
 
