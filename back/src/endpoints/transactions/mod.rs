@@ -14,4 +14,6 @@ pub mod import;
 
 pub mod bulk;
 
+pub mod export;
+
 pub const TX_TAG: &str = "tx";

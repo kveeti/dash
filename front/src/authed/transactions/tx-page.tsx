@@ -1,4 +1,4 @@
-import { PlusIcon } from "@radix-ui/react-icons";
+import { DownloadIcon, PlusIcon } from "@radix-ui/react-icons";
 import { UseQueryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { startOfDay } from "date-fns";
 import { Tooltip } from "radix-ui";
@@ -9,6 +9,7 @@ import { useLocation, useSearchParams } from "wouter";
 
 import { api } from "../../api";
 import { paths } from "../../api_types";
+import { API_BASE_URL } from "../../lib/constants";
 import { errorToast } from "../../lib/error-toast";
 import { Button, buttonStyles } from "../../ui/button";
 import * as Dialog from "../../ui/dialog";
@@ -74,9 +75,12 @@ export default function TxPage() {
 				<div className="flex items-center justify-between py-2">
 					{q.isPending && <Spinner />}
 
-					<Button variant="ghost" onClick={() => setSelectingEnabled((p) => !p)}>
-						{selectingEnabled ? "open" : "select"}
-					</Button>
+					<div className="flex gap-1">
+						<Button variant="ghost" onClick={() => setSelectingEnabled((p) => !p)}>
+							{selectingEnabled ? "open" : "select"}
+						</Button>
+						<ExportButton />
+					</div>
 
 					<Pagination
 						className="ml-auto"
@@ -92,9 +96,12 @@ export default function TxPage() {
 				<div className="flex items-center justify-between py-2">
 					{q.isPending && <Spinner />}
 
-					<Button variant="ghost" onClick={() => setSelectingEnabled((p) => !p)}>
-						{selectingEnabled ? "open" : "select"}
-					</Button>
+					<div className="flex gap-1">
+						<Button variant="ghost" onClick={() => setSelectingEnabled((p) => !p)}>
+							{selectingEnabled ? "open" : "select"}
+						</Button>
+						<ExportButton />
+					</div>
 
 					<Pagination
 						className="ml-auto"
@@ -701,6 +708,42 @@ function DeleteTransaction({
 				</div>
 			</Dialog.Content>
 		</Dialog.Root>
+	);
+}
+
+function ExportButton() {
+	const [loading, setLoading] = useState(false);
+
+	async function onClick() {
+		setLoading(true);
+		try {
+			const res = await fetch(`${API_BASE_URL}/v1/transactions/export`, {
+				credentials: "include",
+			});
+			if (!res.ok) throw new Error("export failed");
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = "transactions-export.zip";
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			toast.error("failed to export transactions");
+		} finally {
+			setLoading(false);
+		}
+	}
+
+	return (
+		<Tooltip.Root>
+			<Tooltip.Trigger asChild>
+				<Button variant="ghost" size="icon" onClick={onClick} disabled={loading}>
+					<DownloadIcon />
+				</Button>
+			</Tooltip.Trigger>
+			<TooltipContent>export all transactions</TooltipContent>
+		</Tooltip.Root>
 	);
 }
 

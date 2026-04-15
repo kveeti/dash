@@ -295,6 +295,83 @@ impl Data {
 
         return Ok(tx_map);
     }
+
+    pub async fn export_transactions(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<ExportTx>, sqlx::Error> {
+        query_as(
+            r#"
+            select
+                id, date, categorize_on, amount, currency,
+                counter_party, additional, notes,
+                category_id, account_id
+            from transactions
+            where user_id = $1
+            order by date desc, id desc
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pg_pool)
+        .await
+    }
+
+    pub async fn export_accounts(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<Account>, sqlx::Error> {
+        query_as!(
+            Account,
+            r#"select id, name from accounts where user_id = $1"#,
+            user_id
+        )
+            .fetch_all(&self.pg_pool)
+            .await
+    }
+
+    pub async fn export_categories(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<TxCategory>, sqlx::Error> {
+        query_as(
+            r#"select id, name, is_neutral from transaction_categories where user_id = $1"#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pg_pool)
+        .await
+    }
+
+    pub async fn export_links(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<ExportLink>, sqlx::Error> {
+        query_as(
+            r#"select transaction_a_id, transaction_b_id from transactions_links where user_id = $1"#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pg_pool)
+        .await
+    }
+}
+
+#[derive(Debug, FromRow)]
+pub struct ExportTx {
+    pub id: String,
+    pub date: DateTime<Utc>,
+    pub categorize_on: Option<DateTime<Utc>>,
+    pub amount: f32,
+    pub currency: String,
+    pub counter_party: String,
+    pub additional: Option<String>,
+    pub notes: Option<String>,
+    pub category_id: Option<String>,
+    pub account_id: Option<String>,
+}
+
+#[derive(Debug, FromRow)]
+pub struct ExportLink {
+    pub transaction_a_id: String,
+    pub transaction_b_id: String,
 }
 
 #[derive(Debug, Serialize)]

@@ -102,6 +102,7 @@ async fn main() {
     });
 
     let v1_transactions = Router::new()
+        .route("/export", get(transactions::export::export))
         .route("/stats", get(transactions::stats::get_stats))
         .route("/query", post(transactions::query::query))
         .route("/", post(transactions::create::create))

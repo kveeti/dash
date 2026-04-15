@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select name, data from user_bank_integrations where user_id = $1",
+  "query": "select name, data, created_at from user_bank_integrations where user_id = $1 and name = $2 and deleted_at is null",
   "describe": {
     "columns": [
       {
@@ -12,17 +12,24 @@
         "ordinal": 1,
         "name": "data",
         "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
+        "Text",
         "Text"
       ]
     },
     "nullable": [
       false,
+      false,
       false
     ]
   },
-  "hash": "81c1ea6bf122cbb6fea53ee186bdd117907908acee0afbf58b5cb68027876454"
+  "hash": "2a20e55ad8e6ab0abdf8fa266d270456635fc22e9dfdfd5dc75ace77b9fd297e"
 }

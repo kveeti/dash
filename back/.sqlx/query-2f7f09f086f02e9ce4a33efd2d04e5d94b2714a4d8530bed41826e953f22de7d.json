@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select id from accounts where user_id = $1 and external_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2f7f09f086f02e9ce4a33efd2d04e5d94b2714a4d8530bed41826e953f22de7d"
+}
