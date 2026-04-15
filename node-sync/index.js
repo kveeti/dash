@@ -241,12 +241,23 @@ async function main() {
 		});
 	});
 
-	const authCookieParams = {
-		expires: addMinutes(new Date(), 5),
-		httpOnly: true,
-		sameSite: "Strict",
-		secure: config.oidc_redirect_url.startsWith("https://"),
-	};
+	function getAuthFlowCookieParams() {
+		return {
+			expires: addMinutes(new Date(), 5),
+			httpOnly: true,
+			sameSite: "Lax",
+			secure: config.oidc_redirect_url.startsWith("https://"),
+		};
+	}
+
+	function getAuthSessionCookieParams() {
+		return {
+			expires: addDays(new Date(), 30),
+			httpOnly: true,
+			sameSite: "Lax",
+			secure: config.oidc_redirect_url.startsWith("https://"),
+		};
+	}
 
 	app.get("/api/v1/auth/init", async (c) => {
 		if (!oidc) {
@@ -256,7 +267,7 @@ async function main() {
 		const codeVerifier = client.randomPKCECodeVerifier();
 		const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
 
-		setCookie(c, "auth_code_verifier", codeVerifier, authCookieParams);
+		setCookie(c, "auth_code_verifier", codeVerifier, getAuthFlowCookieParams());
 
 		let state;
 
@@ -269,7 +280,7 @@ async function main() {
 
 		if (!oidc.serverMetadata().supportsPKCE()) {
 			state = client.randomState();
-			setCookie(c, "auth_state", state, authCookieParams);
+			setCookie(c, "auth_state", state, getAuthFlowCookieParams());
 			parameters.state = state;
 		}
 
@@ -313,10 +324,7 @@ async function main() {
 			returning id;
 		`;
 
-		setCookie(c, "auth", userId, {
-			...authCookieParams,
-			expires: addDays(new Date(), 30),
-		});
+		setCookie(c, "auth", userId, getAuthSessionCookieParams());
 		deleteCookie(c, "auth_state");
 		deleteCookie(c, "auth_code_verifier");
 		setCookie(c, "sub_id", String(++SUB_ID), {
