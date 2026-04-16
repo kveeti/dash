@@ -20,7 +20,7 @@ mocks:
 frontdev:
 	@cd react-local && bun run dev
 backdev:
-	@cd node-sync && node --watch index.js
+	@cd sync && cargo watch -x run
 dev: backdev frontdev
 
 frontbuild:

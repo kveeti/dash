@@ -9,12 +9,26 @@ struct EnvironmentVariables {
     database_url: String,
     port: Option<u16>,
     cors_origin: Option<String>,
+    base_url: String,
+    oidc_url: Option<String>,
+    oidc_client_id: Option<String>,
+    oidc_client_secret: Option<String>,
+    oidc_redirect_url: Option<String>,
 }
 
 pub struct Config {
     pub database_url: String,
     pub port: u16,
     pub cors_origin: Option<String>,
+    pub base_url: String,
+    pub oidc: Option<OidcConfig>,
+}
+
+pub struct OidcConfig {
+    pub url: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
 }
 
 impl Config {
@@ -30,10 +44,31 @@ impl Config {
             .try_deserialize()
             .context("invalid environment variables")?;
 
+        let oidc = match (
+            envs.oidc_url,
+            envs.oidc_client_id,
+            envs.oidc_client_secret,
+            envs.oidc_redirect_url,
+        ) {
+            (Some(url), Some(client_id), Some(client_secret), Some(redirect_url))
+                if !url.is_empty() =>
+            {
+                Some(OidcConfig {
+                    url,
+                    client_id,
+                    client_secret,
+                    redirect_url,
+                })
+            }
+            _ => None,
+        };
+
         Ok(Config {
             database_url: envs.database_url,
-            port: envs.port.unwrap_or(8001),
+            port: envs.port.unwrap_or(8000),
             cors_origin: envs.cors_origin,
+            base_url: envs.base_url,
+            oidc,
         })
     }
 }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{Router, http::Method, routing::get};
 use sqlx::{PgPool, migrate};
 use state::AppState;
@@ -6,11 +8,16 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod auth;
+mod bootstrap;
 mod config;
 mod error;
+mod hub;
+mod proto;
 mod state;
+mod ws;
 
-use error::ApiError;
+use hub::Hub;
 
 #[tokio::main]
 async fn main() {
@@ -40,7 +47,15 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
-    let state = AppState { pool };
+    let hub = Arc::new(Hub::new(pool.clone()));
+    let oidc = config.oidc.map(auth::OidcState::new);
+
+    let state = AppState {
+        pool,
+        hub,
+        oidc,
+        base_url: config.base_url,
+    };
 
     let cors = match &config.cors_origin {
         Some(origin) => CorsLayer::new()
@@ -49,6 +64,7 @@ async fn main() {
                     .parse::<hyper::header::HeaderValue>()
                     .expect("invalid cors origin"),
             )
+            .allow_credentials(true)
             .allow_methods([Method::GET, Method::POST])
             .allow_headers(Any),
         None => CorsLayer::new()
@@ -57,8 +73,14 @@ async fn main() {
             .allow_headers(Any),
     };
 
+    let api = Router::new()
+        .merge(auth::routes())
+        .merge(bootstrap::routes())
+        .merge(ws::routes());
+
     let app = Router::new()
         .route("/health", get(health))
+        .nest("/api/v1", api)
         .layer(cors)
         .with_state(state);
 

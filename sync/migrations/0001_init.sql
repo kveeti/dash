@@ -1,0 +1,28 @@
+-- users
+create table users (
+    id text primary key not null,
+    external_id text unique,
+    salt text not null
+);
+
+-- monotonic sequence used as server version cursor
+create sequence server_version;
+
+-- entries: opaque e2e-encrypted blobs, keyed by (user_id, id).
+-- _sync_server_version is assigned by the per-user actor at write time
+-- (not by a trigger), so that assignment order == broadcast order per user.
+create table entries (
+    user_id text not null references users(id) on delete cascade,
+    id text not null,
+    blob bytea not null,
+
+    _sync_is_deleted boolean not null default false,
+    _sync_hlc text not null,
+    _sync_server_version bigint not null,
+    _sync_server_updated_at timestamptz not null default now(),
+
+    primary key (user_id, id)
+);
+
+create index idx_entry_hlc on entries(user_id, _sync_hlc asc);
+create index idx_server_version on entries(user_id, _sync_server_version asc);
