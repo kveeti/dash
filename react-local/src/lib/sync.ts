@@ -4,8 +4,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
 import {
 	createDekSyncPayloadCodec,
-	decodeBase64,
-	encodeBase64,
 	type SyncPayloadCodec,
 } from "./crypt";
 import { useMe } from "./queries/auth";
@@ -31,7 +29,7 @@ type DeltaOp = {
 	id: string;
 	_sync_hlc: string;
 	_sync_is_deleted: boolean;
-	blob: string;
+	blob: string | Uint8Array;
 	server_version: number;
 };
 
@@ -220,10 +218,13 @@ async function applyIncomingOps({
 	let maxVersion: number | undefined;
 	const touchedTypes = new Set<string>();
 
-	await Promise.all(
-		ops.map(async (op) => {
-			const entry = await codec.decode(op.blob);
-			if (!entry) return;
+		await Promise.all(
+			ops.map(async (op) => {
+				const entry =
+					typeof op.blob === "string"
+						? await codec.decode(op.blob)
+						: await codec.decodeBytes(op.blob);
+				if (!entry) return;
 
 			if (maxVersion === undefined || op.server_version > maxVersion) {
 				maxVersion = op.server_version;
@@ -544,7 +545,7 @@ class SyncClient {
 				id: op.id,
 				_sync_hlc: op.syncHlc,
 				_sync_is_deleted: op.syncIsDeleted,
-				blob: encodeBase64(op.blob),
+				blob: op.blob,
 				server_version: op.serverVersion,
 			}));
 
@@ -601,17 +602,17 @@ class SyncClient {
 				db: this.db,
 				cursor,
 			});
-			if (!entries.length) return;
+				if (!entries.length) return;
 
-			const batchId = cryptoRandomId();
-			const ops: WirePushOp[] = await Promise.all(
-				entries.map(async (e) => ({
-					id: e.id,
-					syncHlc: e._sync_hlc,
-					syncIsDeleted: !!e._sync_is_deleted,
-					blob: decodeBase64(await this.codec.encodeJsonString(e.plain_data)),
-				})),
-			);
+				const batchId = cryptoRandomId();
+				const ops: WirePushOp[] = await Promise.all(
+					entries.map(async (e) => ({
+						id: e.id,
+						syncHlc: e._sync_hlc,
+						syncIsDeleted: !!e._sync_is_deleted,
+						blob: await this.codec.encodeJsonBytes(e.plain_data),
+					})),
+				);
 
 			this.pendingBatches.set(batchId, entries);
 			this.ws.send(ClientFrame.encode({ push: { batchId, ops } }).finish());

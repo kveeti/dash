@@ -8,7 +8,6 @@ use axum::{
     routing::get,
 };
 use axum_extra::extract::CookieJar;
-use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use prost::Message as _;
 use tracing::{debug, warn};
@@ -118,7 +117,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: String) {
                         .map(|op| PushOp {
                             id: op.id,
                             hlc: op.sync_hlc,
-                            blob: base64::engine::general_purpose::STANDARD.encode(op.blob),
+                            blob: op.blob,
                             is_deleted: op.sync_is_deleted,
                         })
                         .collect();
@@ -163,18 +162,13 @@ fn encode_server_message(msg: &ServerMessage) -> Vec<u8> {
         } => {
             let mut wire_ops = Vec::with_capacity(ops.len());
             for op in ops {
-                match base64::engine::general_purpose::STANDARD.decode(op.blob.as_bytes()) {
-                    Ok(blob) => wire_ops.push(WireDeltaOp {
-                        id: op.id.clone(),
-                        sync_hlc: op.hlc.clone(),
-                        blob,
-                        sync_is_deleted: op.is_deleted,
-                        server_version: op.server_version,
-                    }),
-                    Err(e) => {
-                        warn!(id = %op.id, "bad stored base64 blob in outbound delta: {:#}", e);
-                    }
-                }
+                wire_ops.push(WireDeltaOp {
+                    id: op.id.clone(),
+                    sync_hlc: op.hlc.clone(),
+                    blob: op.blob.clone(),
+                    sync_is_deleted: op.is_deleted,
+                    server_version: op.server_version,
+                });
             }
 
             server_frame::Body::Delta(WireDelta {

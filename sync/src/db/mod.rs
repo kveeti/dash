@@ -1,4 +1,3 @@
-use base64::Engine;
 use sqlx::{PgPool, Row};
 use tracing::warn;
 use ulid::Ulid;
@@ -143,7 +142,7 @@ impl Db {
             entries.push(DeltaOp {
                 id: row.try_get("id")?,
                 hlc: row.try_get("_sync_hlc")?,
-                blob: base64::engine::general_purpose::STANDARD.encode(&blob),
+                blob,
                 is_deleted: row.try_get("_sync_is_deleted")?,
                 server_version: row.try_get("_sync_server_version")?,
             });
@@ -175,10 +174,6 @@ impl Db {
         let mut applied: Vec<DeltaOp> = Vec::with_capacity(ops.len());
 
         for op in ops {
-            let blob_bytes = base64::engine::general_purpose::STANDARD
-                .decode(op.blob.as_bytes())
-                .map_err(|e| anyhow::anyhow!("bad base64 blob for {}: {}", op.id, e))?;
-
             let row_opt = sqlx::query(
                 r#"
                 insert into entries (
@@ -198,7 +193,7 @@ impl Db {
             )
             .bind(user_id)
             .bind(&op.id)
-            .bind(&blob_bytes)
+            .bind(&op.blob)
             .bind(&op.hlc)
             .bind(op.is_deleted)
             .fetch_optional(&mut *tx)

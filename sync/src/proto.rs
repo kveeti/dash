@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 
-/// Inbound op from a client push. Blob is an opaque base64-encoded
-/// ciphertext — the server never interprets it.
+/// Inbound op from a client push. Blob is an opaque ciphertext — the server
+/// never interprets it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PushOp {
     pub id: String,
     #[serde(rename = "_sync_hlc")]
     pub hlc: String,
-    pub blob: String,
+    #[serde(with = "base64_blob")]
+    pub blob: Vec<u8>,
     #[serde(rename = "_sync_is_deleted", default)]
     pub is_deleted: bool,
 }
@@ -18,7 +19,8 @@ pub struct DeltaOp {
     pub id: String,
     #[serde(rename = "_sync_hlc")]
     pub hlc: String,
-    pub blob: String,
+    #[serde(with = "base64_blob")]
+    pub blob: Vec<u8>,
     #[serde(rename = "_sync_is_deleted")]
     pub is_deleted: bool,
     pub server_version: i64,
@@ -53,4 +55,27 @@ pub struct BootstrapResponse {
     /// whose persisted cursor is greater than this has diverged (e.g. server
     /// DB was wiped) and should re-mark all local rows dirty.
     pub server_max_version: i64,
+}
+
+mod base64_blob {
+    use base64::Engine;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(value);
+        serializer.serialize_str(&encoded)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        base64::engine::general_purpose::STANDARD
+            .decode(value.as_bytes())
+            .map_err(serde::de::Error::custom)
+    }
 }

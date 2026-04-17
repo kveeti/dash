@@ -3,7 +3,9 @@ const IV_BYTES = 12;
 export type SyncPayloadCodec = {
 	encode: (payload: Record<string, unknown>) => Promise<string>;
 	encodeJsonString: (payload: string) => Promise<string>;
+	encodeJsonBytes: (payload: string) => Promise<Uint8Array>;
 	decode: (blob: string) => Promise<Record<string, unknown> | null>;
+	decodeBytes: (blob: Uint8Array) => Promise<Record<string, unknown> | null>;
 };
 
 export function parseJsonObjectBlob(blob: string): Record<string, unknown> | null {
@@ -24,44 +26,58 @@ export function createJsonSyncPayloadCodec(): SyncPayloadCodec {
 		async encodeJsonString(payload) {
 			return payload;
 		},
+		async encodeJsonBytes(payload) {
+			return new TextEncoder().encode(payload);
+		},
 		async encode(payload): Promise<string> {
 			return JSON.stringify(payload);
 		},
 		async decode(blob): Promise<Record<string, unknown> | null> {
 			return parseJsonObjectBlob(blob);
 		},
+		async decodeBytes(blob): Promise<Record<string, unknown> | null> {
+			return parseJsonObjectBlob(new TextDecoder().decode(blob));
+		},
 	};
 }
 
 export function createDekSyncPayloadCodec(dek: CryptoKey): SyncPayloadCodec {
-	async function encodeJsonString(payload: string): Promise<string> {
+	async function encodeJsonBytes(payload: string): Promise<Uint8Array> {
 		const plaintext = new TextEncoder().encode(payload);
 		const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
 		const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, dek, plaintext);
 		const packed = new Uint8Array(IV_BYTES + ciphertext.byteLength);
 		packed.set(iv, 0);
 		packed.set(new Uint8Array(ciphertext), IV_BYTES);
-		return encodeBase64(packed);
+		return packed;
 	};
+	async function decodeBytes(blob: Uint8Array): Promise<Record<string, unknown> | null> {
+		try {
+			if (blob.byteLength <= IV_BYTES) return null;
+			const iv = blob.slice(0, IV_BYTES);
+			const ciphertext = blob.slice(IV_BYTES);
+			const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, dek, ciphertext);
+			return parseJsonObjectBlob(new TextDecoder().decode(plaintext));
+		} catch {
+			return null;
+		}
+	}
 
 	return {
 		async encode(payload): Promise<string> {
-			return encodeJsonString(JSON.stringify(payload));
+			return encodeBase64(await encodeJsonBytes(JSON.stringify(payload)));
 		},
 
-		encodeJsonString,
+		async encodeJsonString(payload): Promise<string> {
+			return encodeBase64(await encodeJsonBytes(payload));
+		},
+
+		encodeJsonBytes,
+
+		decodeBytes,
 
 		async decode(blob): Promise<Record<string, unknown> | null> {
-			try {
-				const packed = decodeBase64(blob);
-				if (packed.byteLength <= IV_BYTES) return null;
-				const iv = packed.slice(0, IV_BYTES);
-				const ciphertext = packed.slice(IV_BYTES);
-				const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, dek, ciphertext);
-				return parseJsonObjectBlob(new TextDecoder().decode(plaintext));
-			} catch {
-				return null;
-			}
+			return decodeBytes(decodeBase64(blob));
 		},
 	};
 }
