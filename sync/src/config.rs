@@ -10,6 +10,7 @@ struct EnvironmentVariables {
     port: Option<u16>,
     cors_origin: Option<String>,
     base_url: String,
+    session_secret: String,
     oidc_url: Option<String>,
     oidc_client_id: Option<String>,
     oidc_client_secret: Option<String>,
@@ -21,6 +22,7 @@ pub struct Config {
     pub port: u16,
     pub cors_origin: Option<String>,
     pub base_url: String,
+    pub session_secret: String,
     pub oidc: Option<OidcConfig>,
 }
 
@@ -68,6 +70,7 @@ impl Config {
             port: envs.port.unwrap_or(8000),
             cors_origin: envs.cors_origin,
             base_url: envs.base_url,
+            session_secret: envs.session_secret,
             oidc,
         })
     }

@@ -26,3 +26,14 @@ create table entries (
 
 create index idx_entry_hlc on entries(user_id, _sync_hlc asc);
 create index idx_server_version on entries(user_id, _sync_server_version asc);
+
+create table sessions (
+    id text not null,
+    user_id text not null references users(id) on delete cascade,
+    expires_at timestamptz not null,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (user_id, id)
+);
+
+create index idx_sessions_expires_at on sessions(expires_at);

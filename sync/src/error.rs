@@ -1,4 +1,7 @@
-use axum::{Json, response::{IntoResponse, Response}};
+use axum::{
+    Json,
+    response::{IntoResponse, Response},
+};
 use hyper::StatusCode;
 use serde_json::json;
 
@@ -6,6 +9,9 @@ use serde_json::json;
 pub enum ApiError {
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
+
+    #[error("unauthorized")]
+    Unauthorized,
 
     #[error("not found: {0}")]
     NotFound(String),
@@ -29,6 +35,7 @@ impl IntoResponse for ApiError {
             }
             ApiError::NotFound(_) => (StatusCode::NOT_FOUND, "not found".to_string()),
             ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, err),
+            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".to_string()),
         };
 
         (status_code, Json(json!({ "error": error_message }))).into_response()

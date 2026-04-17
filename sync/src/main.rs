@@ -55,6 +55,7 @@ async fn main() {
         hub,
         oidc,
         base_url: config.base_url,
+        session_secret: Arc::from(config.session_secret.into_bytes()),
     };
 
     let cors = match &config.cors_origin {

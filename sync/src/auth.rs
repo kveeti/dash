@@ -9,7 +9,8 @@ use axum::{
 };
 use axum_extra::extract::{CookieJar, cookie::Cookie};
 use base64::Engine;
-use hyper::StatusCode;
+use hex::{decode as hex_decode, encode as hex_encode};
+use hmac::{Hmac, Mac};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -23,6 +24,9 @@ use crate::{config::OidcConfig, error::ApiError, state::AppState};
 pub const AUTH_COOKIE: &str = "auth";
 const AUTH_CODE_VERIFIER_COOKIE: &str = "auth_code_verifier";
 const AUTH_STATE_COOKIE: &str = "auth_state";
+const SESSION_TTL_DAYS: i64 = 30;
+
+type HmacSha256 = Hmac<Sha256>;
 
 /// Discovered OIDC endpoints. Populated lazily on first use.
 #[derive(Clone, Debug)]
@@ -114,7 +118,7 @@ fn session_cookie<'a>(name: &'a str, value: String, secure: bool) -> Cookie<'a> 
         .same_site(axum_extra::extract::cookie::SameSite::Lax)
         .secure(secure)
         .path("/")
-        .expires(time::OffsetDateTime::now_utc() + time::Duration::days(30))
+        .expires(time::OffsetDateTime::now_utc() + time::Duration::days(SESSION_TTL_DAYS))
         .build()
 }
 
@@ -141,6 +145,97 @@ fn random_b64(bytes: usize) -> String {
 fn pkce_challenge(verifier: &str) -> String {
     let digest = Sha256::digest(verifier.as_bytes());
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&digest)
+}
+
+fn parse_session_token(token: &str) -> Option<(&str, &str, &str)> {
+    let mut parts = token.split(':');
+    let user_id = parts.next()?;
+    let session_id = parts.next()?;
+    let sig = parts.next()?;
+    if parts.next().is_some() || user_id.is_empty() || session_id.is_empty() || sig.is_empty() {
+        return None;
+    }
+    Some((user_id, session_id, sig))
+}
+
+fn sign_session_payload(payload: &str, secret: &[u8]) -> Result<String, ApiError> {
+    let mut mac = HmacSha256::new_from_slice(secret)
+        .map_err(|e| ApiError::UnexpectedError(anyhow::anyhow!("invalid session secret: {e}")))?;
+    mac.update(payload.as_bytes());
+    Ok(hex_encode(mac.finalize().into_bytes()))
+}
+
+fn verify_session_token(token: &str, secret: &[u8]) -> Result<(String, String), ApiError> {
+    let (user_id, session_id, sig_hex) =
+        parse_session_token(token).ok_or(ApiError::Unauthorized)?;
+    let payload = format!("{user_id}:{session_id}");
+    let sig = hex_decode(sig_hex).map_err(|_| ApiError::Unauthorized)?;
+
+    let mut mac = HmacSha256::new_from_slice(secret)
+        .map_err(|e| ApiError::UnexpectedError(anyhow::anyhow!("invalid session secret: {e}")))?;
+    mac.update(payload.as_bytes());
+    mac.verify_slice(&sig).map_err(|_| ApiError::Unauthorized)?;
+
+    Ok((user_id.to_string(), session_id.to_string()))
+}
+
+fn create_session_token(
+    user_id: &str,
+    session_id: &str,
+    secret: &[u8],
+) -> Result<String, ApiError> {
+    let payload = format!("{user_id}:{session_id}");
+    let sig = sign_session_payload(&payload, secret)?;
+    Ok(format!("{payload}:{sig}"))
+}
+
+async fn insert_session(pool: &PgPool, user_id: &str) -> Result<String, ApiError> {
+    let session_id = Ulid::new().to_string();
+    sqlx::query(
+        r#"
+        insert into sessions (id, user_id, expires_at)
+        values ($1, $2, now() + make_interval(days => $3::int))
+        "#,
+    )
+    .bind(&session_id)
+    .bind(user_id)
+    .bind(SESSION_TTL_DAYS)
+    .execute(pool)
+    .await?;
+    Ok(session_id)
+}
+
+async fn touch_session(pool: &PgPool, user_id: &str, session_id: &str) -> Result<(), ApiError> {
+    let result = sqlx::query(
+        r#"
+        update sessions
+        set expires_at = now() + make_interval(days => $3::int),
+            updated_at = now()
+        where user_id = $1
+          and id = $2
+          and expires_at > now()
+        "#,
+    )
+    .bind(user_id)
+    .bind(session_id)
+    .bind(SESSION_TTL_DAYS)
+    .execute(pool)
+    .await?;
+
+    if result.rows_affected() > 0 {
+        Ok(())
+    } else {
+        Err(ApiError::Unauthorized)
+    }
+}
+
+async fn delete_session(pool: &PgPool, user_id: &str, session_id: &str) -> Result<(), ApiError> {
+    sqlx::query("delete from sessions where user_id = $1 and id = $2")
+        .bind(user_id)
+        .bind(session_id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 async fn init(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
@@ -262,10 +357,12 @@ async fn callback(
         .map_err(ApiError::UnexpectedError)?;
 
     let user_id = upsert_user(&state.pool, &userinfo.sub).await?;
+    let session_id = insert_session(&state.pool, &user_id).await?;
+    let auth_token = create_session_token(&user_id, &session_id, &state.session_secret)?;
 
     let secure = oidc.config.redirect_url.starts_with("https://");
     let jar = jar
-        .add(session_cookie(AUTH_COOKIE, user_id.clone(), secure))
+        .add(session_cookie(AUTH_COOKIE, auth_token, secure))
         .remove(remove_cookie(AUTH_CODE_VERIFIER_COOKIE))
         .remove(remove_cookie(AUTH_STATE_COOKIE));
 
@@ -298,10 +395,7 @@ struct MeResponse {
 }
 
 async fn me(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
-    let user_id = jar.get(AUTH_COOKIE).map(|c| c.value().to_string());
-    let Some(user_id) = user_id else {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
-    };
+    let user_id = require_user_id(&state, &jar).await?;
 
     let row: Option<(String,)> = sqlx::query_as("select salt from users where id = $1")
         .bind(&user_id)
@@ -310,17 +404,25 @@ async fn me(State(state): State<AppState>, jar: CookieJar) -> Result<Response, A
 
     match row {
         Some((salt,)) => Ok(Json(MeResponse { salt }).into_response()),
-        None => Ok(StatusCode::UNAUTHORIZED.into_response()),
+        None => Err(ApiError::Unauthorized),
     }
 }
 
-async fn logout(State(state): State<AppState>, jar: CookieJar) -> Response {
+async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
+    if let Some(raw) = jar.get(AUTH_COOKIE).map(|c| c.value().to_string()) {
+        if let Ok((user_id, session_id)) = verify_session_token(&raw, &state.session_secret) {
+            if let Err(err) = delete_session(&state.pool, &user_id, &session_id).await {
+                warn!("failed to delete session during logout: {err:#}");
+            }
+        }
+    }
+
     let jar = jar.remove(remove_cookie(AUTH_COOKIE));
-    (
+    Ok((
         jar,
         Redirect::temporary(&format!("{}/settings", state.base_url)),
     )
-        .into_response()
+        .into_response())
 }
 
 #[derive(Serialize)]
@@ -332,13 +434,7 @@ struct HandshakeResponse {
 /// POST /handshake — returns {user_id, salt} for the logged-in user so the client
 /// can derive its encryption key. If no auth cookie is present, 401.
 async fn handshake(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
-    let user_id = match jar.get(AUTH_COOKIE).map(|c| c.value().to_string()) {
-        Some(id) => id,
-        None => {
-            warn!("handshake without auth cookie");
-            return Ok(StatusCode::UNAUTHORIZED.into_response());
-        }
-    };
+    let user_id = require_user_id(&state, &jar).await?;
 
     let row: Option<(String,)> = sqlx::query_as("select salt from users where id = $1")
         .bind(&user_id)
@@ -346,13 +442,22 @@ async fn handshake(State(state): State<AppState>, jar: CookieJar) -> Result<Resp
         .await?;
 
     let Some((salt,)) = row else {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
+        return Err(ApiError::Unauthorized);
     };
 
     Ok(Json(HandshakeResponse { user_id, salt }).into_response())
 }
 
-/// Helper used by WS and bootstrap handlers to read the auth cookie.
-pub fn user_id_from_jar(jar: &CookieJar) -> Option<String> {
-    jar.get(AUTH_COOKIE).map(|c| c.value().to_string())
+/// Resolve authenticated user id from cookie, verify token signature,
+/// ensure session is present+unexpired in DB, and apply sliding expiration.
+pub async fn require_user_id(state: &AppState, jar: &CookieJar) -> Result<String, ApiError> {
+    let token = jar
+        .get(AUTH_COOKIE)
+        .map(|c| c.value().to_string())
+        .ok_or(ApiError::Unauthorized)?;
+
+    let (user_id, session_id) = verify_session_token(&token, &state.session_secret)?;
+    touch_session(&state.pool, &user_id, &session_id).await?;
+
+    Ok(user_id)
 }

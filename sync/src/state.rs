@@ -10,4 +10,5 @@ pub struct AppState {
     pub hub: Arc<Hub>,
     pub oidc: Option<OidcState>,
     pub base_url: String,
+    pub session_secret: Arc<[u8]>,
 }

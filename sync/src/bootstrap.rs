@@ -6,12 +6,11 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use base64::Engine;
-use hyper::StatusCode;
 use serde::Deserialize;
 use sqlx::Row;
 
 use crate::{
-    auth::user_id_from_jar,
+    auth::require_user_id,
     error::ApiError,
     proto::{BootstrapResponse, DeltaOp},
     state::AppState,
@@ -35,9 +34,7 @@ async fn bootstrap(
     jar: CookieJar,
     Query(q): Query<BootstrapQuery>,
 ) -> Result<Response, ApiError> {
-    let Some(user_id) = user_id_from_jar(&jar) else {
-        return Ok(StatusCode::UNAUTHORIZED.into_response());
-    };
+    let user_id = require_user_id(&state, &jar).await?;
 
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let cursor = q.cursor.unwrap_or(0);

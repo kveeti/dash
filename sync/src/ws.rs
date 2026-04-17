@@ -9,11 +9,10 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use futures_util::{SinkExt, StreamExt};
-use hyper::StatusCode;
 use tracing::{debug, warn};
 
 use crate::{
-    auth::user_id_from_jar,
+    auth::require_user_id,
     hub::ActorCommand,
     proto::{ClientMessage, ServerMessage},
     state::AppState,
@@ -28,8 +27,9 @@ async fn ws_upgrade(
     jar: CookieJar,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let Some(user_id) = user_id_from_jar(&jar) else {
-        return StatusCode::UNAUTHORIZED.into_response();
+    let user_id = match require_user_id(&state, &jar).await {
+        Ok(user_id) => user_id,
+        Err(err) => return err.into_response(),
     };
     ws.on_upgrade(move |socket| handle_socket(socket, state, user_id))
 }
