@@ -21,6 +21,10 @@ mod ws;
 use db::Db;
 use hub::Hub;
 
+pub mod protocol {
+    include!(concat!(env!("OUT_DIR"), "/protocol.rs"));
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::registry()

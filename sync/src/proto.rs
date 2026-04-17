@@ -24,16 +24,6 @@ pub struct DeltaOp {
     pub server_version: i64,
 }
 
-/// Messages the client sends over the WS.
-#[derive(Debug, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ClientMessage {
-    Push {
-        batch_id: String,
-        ops: Vec<PushOp>,
-    },
-}
-
 /// Messages the server sends over the WS.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

@@ -9,6 +9,8 @@ pkgs.mkShell {
 		rustup
 
 		postgresql_18
+
+		protobuf
 	];
 
 	postgresConf =

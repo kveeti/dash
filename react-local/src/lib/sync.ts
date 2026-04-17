@@ -2,11 +2,21 @@ import { Dexie, type EntityTable } from "dexie";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef } from "react";
-import { createDekSyncPayloadCodec, type SyncPayloadCodec } from "./crypt";
+import {
+	createDekSyncPayloadCodec,
+	decodeBase64,
+	encodeBase64,
+	type SyncPayloadCodec,
+} from "./crypt";
 import { useMe } from "./queries/auth";
 import { useDb } from "../providers";
 import type { DbHandle } from "./db";
 import { queryKeyRoots, queryKeys } from "./queries/query-keys";
+import {
+	ClientFrame,
+	type PushOp as WirePushOp,
+	ServerFrame,
+} from "../gen/sync/protocol";
 
 // -------------------- types --------------------
 
@@ -17,13 +27,6 @@ type DirtyEntry = {
 	plain_data: string;
 };
 
-type PushOp = {
-	id: string;
-	_sync_hlc: string;
-	_sync_is_deleted: boolean;
-	blob: string;
-};
-
 type DeltaOp = {
 	id: string;
 	_sync_hlc: string;
@@ -31,11 +34,6 @@ type DeltaOp = {
 	blob: string;
 	server_version: number;
 };
-
-type ServerMessage =
-	| { type: "ready" }
-	| { type: "delta"; ack_for?: string; ops: DeltaOp[] }
-	| { type: "error"; code: string; message?: string };
 
 type BootstrapResponse = {
 	entries: DeltaOp[];
@@ -59,6 +57,13 @@ type TableUpdateBucket = {
 const DIRTY_BATCH_LIMIT = 1000;
 const BOOTSTRAP_PAGE_LIMIT = 1000;
 const MAX_RECONNECT_DELAY_MS = 30_000;
+
+async function toWsFrameBytes(raw: unknown): Promise<Uint8Array | null> {
+	if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+	if (raw instanceof Uint8Array) return raw;
+	if (raw instanceof Blob) return new Uint8Array(await raw.arrayBuffer());
+	return null;
+}
 
 // -------------------- dirty row helpers --------------------
 
@@ -410,6 +415,7 @@ class SyncClient {
 			this.scheduleReconnect();
 			return;
 		}
+		ws.binaryType = "arraybuffer";
 
 		this.ws = ws;
 
@@ -504,43 +510,58 @@ class SyncClient {
 	// ---------- inbound delta handling ----------
 
 	private async handleMessage(raw: unknown) {
-		if (typeof raw !== "string") return;
-		let msg: ServerMessage;
-		try {
-			msg = JSON.parse(raw);
-		} catch {
-			console.warn("bad server frame:", raw);
+		const bytes = await toWsFrameBytes(raw);
+		if (!bytes) {
+			console.warn("bad server frame type:", raw);
 			return;
 		}
 
-		switch (msg.type) {
-			case "ready":
-				return;
-			case "error":
-				console.warn("server error:", msg.code, msg.message);
-				return;
-			case "delta": {
-				// Apply ops (idempotent).
-				const { maxVersion, touchedTypes } = await applyIncomingOps({
-					db: this.db,
-					codec: this.codec,
-					ops: msg.ops,
-				});
-				if (maxVersion !== undefined) await this.setCursor(maxVersion);
-				if (touchedTypes.size) this.onEntitiesChanged(touchedTypes);
+		let frame: ServerFrame;
+		try {
+			frame = ServerFrame.decode(bytes);
+		} catch (e) {
+			console.warn("bad server frame:", e);
+			return;
+		}
 
-				// If this is an ack for one of our pushes, clear the pending batch.
-				if (msg.ack_for) {
-					const pending = this.pendingBatches.get(msg.ack_for);
-					if (pending) {
-						this.pendingBatches.delete(msg.ack_for);
-						// Mark all rows in the batch clean. If the server
-						// rejected some as stale (equal/older HLC), those
-						// are still effectively settled from our POV.
-						await markDirtyEntriesSynced(this.db, pending);
-					}
-				}
-				return;
+		if (frame.ready) return;
+		if (frame.error) {
+			const message = frame.error.message || undefined;
+			console.warn("server error:", frame.error.code, message);
+			return;
+		}
+		if (!frame.delta) {
+			console.warn("server frame missing body");
+			return;
+		}
+
+		const deltaOps: DeltaOp[] = frame.delta.ops.map((op) => ({
+			id: op.id,
+			_sync_hlc: op.syncHlc,
+			_sync_is_deleted: op.syncIsDeleted,
+			blob: encodeBase64(op.blob),
+			server_version: op.serverVersion,
+		}));
+
+		// Apply ops (idempotent).
+		const { maxVersion, touchedTypes } = await applyIncomingOps({
+			db: this.db,
+			codec: this.codec,
+			ops: deltaOps,
+		});
+		if (maxVersion !== undefined) await this.setCursor(maxVersion);
+		if (touchedTypes.size) this.onEntitiesChanged(touchedTypes);
+
+		// If this is an ack for one of our pushes, clear the pending batch.
+		const ackFor = frame.delta.ackFor || undefined;
+		if (ackFor) {
+			const pending = this.pendingBatches.get(ackFor);
+			if (pending) {
+				this.pendingBatches.delete(ackFor);
+				// Mark all rows in the batch clean. If the server
+				// rejected some as stale (equal/older HLC), those
+				// are still effectively settled from our POV.
+				await markDirtyEntriesSynced(this.db, pending);
 			}
 		}
 	}
@@ -577,19 +598,17 @@ class SyncClient {
 			if (!entries.length) return;
 
 			const batchId = cryptoRandomId();
-			const ops: PushOp[] = await Promise.all(
+			const ops: WirePushOp[] = await Promise.all(
 				entries.map(async (e) => ({
 					id: e.id,
-					_sync_hlc: e._sync_hlc,
-					_sync_is_deleted: !!e._sync_is_deleted,
-					blob: await this.codec.encodeJsonString(e.plain_data),
+					syncHlc: e._sync_hlc,
+					syncIsDeleted: !!e._sync_is_deleted,
+					blob: decodeBase64(await this.codec.encodeJsonString(e.plain_data)),
 				})),
 			);
 
 			this.pendingBatches.set(batchId, entries);
-			this.ws.send(
-				JSON.stringify({ type: "push", batch_id: batchId, ops }),
-			);
+			this.ws.send(ClientFrame.encode({ push: { batchId, ops } }).finish());
 
 			if (!newCursor) return;
 			cursor = newCursor;
