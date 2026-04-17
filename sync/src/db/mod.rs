@@ -1,0 +1,227 @@
+use base64::Engine;
+use sqlx::{PgPool, Row};
+use tracing::warn;
+use ulid::Ulid;
+
+use crate::proto::{DeltaOp, PushOp};
+
+#[derive(Clone)]
+pub struct Db {
+    pool: PgPool,
+}
+
+pub struct BootstrapPage {
+    pub entries: Vec<DeltaOp>,
+    pub next_cursor: Option<i64>,
+    pub server_max_version: i64,
+}
+
+impl Db {
+    pub fn from_pool(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn upsert_user_with_salt(
+        &self,
+        external_id: &str,
+        salt: &str,
+    ) -> Result<String, sqlx::Error> {
+        let new_id = Ulid::new().to_string();
+        let row: (String,) = sqlx::query_as(
+            r#"
+            insert into users (id, external_id, salt)
+            values ($1, $2, $3)
+            on conflict (external_id) do update set
+                external_id = excluded.external_id
+            returning id
+            "#,
+        )
+        .bind(&new_id)
+        .bind(external_id)
+        .bind(salt)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
+    pub async fn get_user_salt(&self, user_id: &str) -> Result<Option<String>, sqlx::Error> {
+        let row: Option<(String,)> = sqlx::query_as("select salt from users where id = $1")
+            .bind(user_id)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row.map(|(salt,)| salt))
+    }
+
+    pub async fn create_session(
+        &self,
+        user_id: &str,
+        ttl_days: i64,
+    ) -> Result<String, sqlx::Error> {
+        let session_id = Ulid::new().to_string();
+        sqlx::query(
+            r#"
+            insert into sessions (id, user_id, expires_at)
+            values ($1, $2, now() + make_interval(days => $3::int))
+            "#,
+        )
+        .bind(&session_id)
+        .bind(user_id)
+        .bind(ttl_days)
+        .execute(&self.pool)
+        .await?;
+        Ok(session_id)
+    }
+
+    pub async fn touch_session(
+        &self,
+        user_id: &str,
+        session_id: &str,
+        ttl_days: i64,
+    ) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query(
+            r#"
+            update sessions
+            set expires_at = now() + make_interval(days => $3::int),
+                updated_at = now()
+            where user_id = $1
+              and id = $2
+              and expires_at > now()
+            "#,
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .bind(ttl_days)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_session(&self, user_id: &str, session_id: &str) -> Result<(), sqlx::Error> {
+        sqlx::query("delete from sessions where user_id = $1 and id = $2")
+            .bind(user_id)
+            .bind(session_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn load_bootstrap_page(
+        &self,
+        user_id: &str,
+        cursor: i64,
+        limit: i64,
+    ) -> Result<BootstrapPage, sqlx::Error> {
+        let server_max_version: i64 = sqlx::query_scalar(
+            "select coalesce(max(_sync_server_version), 0) from entries where user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        let rows = sqlx::query(
+            r#"
+            select id, _sync_hlc, blob, _sync_is_deleted, _sync_server_version
+            from entries
+            where user_id = $1 and _sync_server_version > $2
+            order by _sync_server_version asc
+            limit $3
+            "#,
+        )
+        .bind(user_id)
+        .bind(cursor)
+        .bind(limit + 1)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let has_more = rows.len() as i64 > limit;
+        let take = if has_more { limit as usize } else { rows.len() };
+
+        let mut entries: Vec<DeltaOp> = Vec::with_capacity(take);
+        for row in rows.iter().take(take) {
+            let blob: Vec<u8> = row.try_get("blob")?;
+            entries.push(DeltaOp {
+                id: row.try_get("id")?,
+                hlc: row.try_get("_sync_hlc")?,
+                blob: base64::engine::general_purpose::STANDARD.encode(&blob),
+                is_deleted: row.try_get("_sync_is_deleted")?,
+                server_version: row.try_get("_sync_server_version")?,
+            });
+        }
+
+        let next_cursor = if has_more {
+            entries.last().map(|e| e.server_version)
+        } else {
+            None
+        };
+
+        Ok(BootstrapPage {
+            entries,
+            next_cursor,
+            server_max_version,
+        })
+    }
+
+    pub async fn apply_push_ops(
+        &self,
+        user_id: &str,
+        ops: &[PushOp],
+    ) -> Result<Vec<DeltaOp>, anyhow::Error> {
+        if ops.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut tx = self.pool.begin().await?;
+        let mut applied: Vec<DeltaOp> = Vec::with_capacity(ops.len());
+
+        for op in ops {
+            let blob_bytes = base64::engine::general_purpose::STANDARD
+                .decode(op.blob.as_bytes())
+                .map_err(|e| anyhow::anyhow!("bad base64 blob for {}: {}", op.id, e))?;
+
+            let row_opt = sqlx::query(
+                r#"
+                insert into entries (
+                    user_id, id, blob, _sync_hlc, _sync_is_deleted,
+                    _sync_server_version, _sync_server_updated_at
+                )
+                values ($1, $2, $3, $4, $5, nextval('server_version'), now())
+                on conflict (user_id, id) do update set
+                    blob = excluded.blob,
+                    _sync_hlc = excluded._sync_hlc,
+                    _sync_is_deleted = excluded._sync_is_deleted,
+                    _sync_server_version = excluded._sync_server_version,
+                    _sync_server_updated_at = now()
+                where excluded._sync_hlc > entries._sync_hlc
+                returning _sync_server_version, _sync_hlc, _sync_is_deleted
+                "#,
+            )
+            .bind(user_id)
+            .bind(&op.id)
+            .bind(&blob_bytes)
+            .bind(&op.hlc)
+            .bind(op.is_deleted)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            if let Some(row) = row_opt {
+                let server_version: i64 = row.try_get("_sync_server_version")?;
+                let hlc: String = row.try_get("_sync_hlc")?;
+                let is_deleted: bool = row.try_get("_sync_is_deleted")?;
+                applied.push(DeltaOp {
+                    id: op.id.clone(),
+                    hlc,
+                    blob: op.blob.clone(),
+                    is_deleted,
+                    server_version,
+                });
+            } else {
+                warn!(%user_id, id = %op.id, hlc = %op.hlc, "push ignored (stale hlc)");
+            }
+        }
+
+        tx.commit().await?;
+        applied.sort_by_key(|op| op.server_version);
+        Ok(applied)
+    }
+}

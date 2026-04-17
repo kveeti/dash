@@ -11,12 +11,14 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod auth;
 mod bootstrap;
 mod config;
+mod db;
 mod error;
 mod hub;
 mod proto;
 mod state;
 mod ws;
 
+use db::Db;
 use hub::Hub;
 
 #[tokio::main]
@@ -47,11 +49,12 @@ async fn main() {
         .await
         .expect("failed to run migrations");
 
-    let hub = Arc::new(Hub::new(pool.clone()));
+    let db = Db::from_pool(pool);
+    let hub = Arc::new(Hub::new(db.clone()));
     let oidc = config.oidc.map(auth::OidcState::new);
 
     let state = AppState {
-        pool,
+        db,
         hub,
         oidc,
         base_url: config.base_url,

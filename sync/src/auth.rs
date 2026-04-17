@@ -14,10 +14,8 @@ use hmac::{Hmac, Mac};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
-use ulid::Ulid;
 
 use crate::{config::OidcConfig, error::ApiError, state::AppState};
 
@@ -189,55 +187,6 @@ fn create_session_token(
     Ok(format!("{payload}:{sig}"))
 }
 
-async fn insert_session(pool: &PgPool, user_id: &str) -> Result<String, ApiError> {
-    let session_id = Ulid::new().to_string();
-    sqlx::query(
-        r#"
-        insert into sessions (id, user_id, expires_at)
-        values ($1, $2, now() + make_interval(days => $3::int))
-        "#,
-    )
-    .bind(&session_id)
-    .bind(user_id)
-    .bind(SESSION_TTL_DAYS)
-    .execute(pool)
-    .await?;
-    Ok(session_id)
-}
-
-async fn touch_session(pool: &PgPool, user_id: &str, session_id: &str) -> Result<(), ApiError> {
-    let result = sqlx::query(
-        r#"
-        update sessions
-        set expires_at = now() + make_interval(days => $3::int),
-            updated_at = now()
-        where user_id = $1
-          and id = $2
-          and expires_at > now()
-        "#,
-    )
-    .bind(user_id)
-    .bind(session_id)
-    .bind(SESSION_TTL_DAYS)
-    .execute(pool)
-    .await?;
-
-    if result.rows_affected() > 0 {
-        Ok(())
-    } else {
-        Err(ApiError::Unauthorized)
-    }
-}
-
-async fn delete_session(pool: &PgPool, user_id: &str, session_id: &str) -> Result<(), ApiError> {
-    sqlx::query("delete from sessions where user_id = $1 and id = $2")
-        .bind(user_id)
-        .bind(session_id)
-        .execute(pool)
-        .await?;
-    Ok(())
-}
-
 async fn init(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
     let oidc = state
         .oidc
@@ -356,8 +305,12 @@ async fn callback(
         .context("userinfo bad json")
         .map_err(ApiError::UnexpectedError)?;
 
-    let user_id = upsert_user(&state.pool, &userinfo.sub).await?;
-    let session_id = insert_session(&state.pool, &user_id).await?;
+    let new_salt = random_b64(16);
+    let user_id = state
+        .db
+        .upsert_user_with_salt(&userinfo.sub, &new_salt)
+        .await?;
+    let session_id = state.db.create_session(&user_id, SESSION_TTL_DAYS).await?;
     let auth_token = create_session_token(&user_id, &session_id, &state.session_secret)?;
 
     let secure = oidc.config.redirect_url.starts_with("https://");
@@ -369,26 +322,6 @@ async fn callback(
     Ok((jar, Redirect::temporary(&format!("{}/", state.base_url))).into_response())
 }
 
-async fn upsert_user(pool: &PgPool, external_id: &str) -> Result<String, ApiError> {
-    let new_id = Ulid::new().to_string();
-    let new_salt = random_b64(16);
-    let row: (String,) = sqlx::query_as(
-        r#"
-        insert into users (id, external_id, salt)
-        values ($1, $2, $3)
-        on conflict (external_id) do update set
-            external_id = excluded.external_id
-        returning id
-        "#,
-    )
-    .bind(&new_id)
-    .bind(external_id)
-    .bind(&new_salt)
-    .fetch_one(pool)
-    .await?;
-    Ok(row.0)
-}
-
 #[derive(Serialize)]
 struct MeResponse {
     salt: String,
@@ -396,22 +329,17 @@ struct MeResponse {
 
 async fn me(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
     let user_id = require_user_id(&state, &jar).await?;
-
-    let row: Option<(String,)> = sqlx::query_as("select salt from users where id = $1")
-        .bind(&user_id)
-        .fetch_optional(&state.pool)
-        .await?;
-
-    match row {
-        Some((salt,)) => Ok(Json(MeResponse { salt }).into_response()),
-        None => Err(ApiError::Unauthorized),
-    }
+    let salt = state.db.get_user_salt(&user_id).await?;
+    let Some(salt) = salt else {
+        return Err(ApiError::Unauthorized);
+    };
+    Ok(Json(MeResponse { salt }).into_response())
 }
 
 async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
     if let Some(raw) = jar.get(AUTH_COOKIE).map(|c| c.value().to_string()) {
         if let Ok((user_id, session_id)) = verify_session_token(&raw, &state.session_secret) {
-            if let Err(err) = delete_session(&state.pool, &user_id, &session_id).await {
+            if let Err(err) = state.db.delete_session(&user_id, &session_id).await {
                 warn!("failed to delete session during logout: {err:#}");
             }
         }
@@ -436,12 +364,8 @@ struct HandshakeResponse {
 async fn handshake(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
     let user_id = require_user_id(&state, &jar).await?;
 
-    let row: Option<(String,)> = sqlx::query_as("select salt from users where id = $1")
-        .bind(&user_id)
-        .fetch_optional(&state.pool)
-        .await?;
-
-    let Some((salt,)) = row else {
+    let salt = state.db.get_user_salt(&user_id).await?;
+    let Some(salt) = salt else {
         return Err(ApiError::Unauthorized);
     };
 
@@ -457,7 +381,13 @@ pub async fn require_user_id(state: &AppState, jar: &CookieJar) -> Result<String
         .ok_or(ApiError::Unauthorized)?;
 
     let (user_id, session_id) = verify_session_token(&token, &state.session_secret)?;
-    touch_session(&state.pool, &user_id, &session_id).await?;
+    let touched = state
+        .db
+        .touch_session(&user_id, &session_id, SESSION_TTL_DAYS)
+        .await?;
+    if !touched {
+        return Err(ApiError::Unauthorized);
+    }
 
     Ok(user_id)
 }
