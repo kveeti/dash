@@ -12,6 +12,19 @@ use crate::{
 const INBOX_CAP: usize = 64;
 const BROADCAST_CAP: usize = 256;
 
+#[derive(Clone)]
+pub enum BroadcastTarget {
+    All,
+    AllExceptConnection(String),
+    OnlyConnection(String),
+}
+
+#[derive(Clone)]
+pub struct BroadcastEvent {
+    pub target: BroadcastTarget,
+    pub message: Arc<ServerMessage>,
+}
+
 /// The hub holds one actor per active user. Actors are spawned lazily on first
 /// subscribe/push and live forever in the current impl; GC on last-unsubscribe
 /// can be added later.
@@ -23,11 +36,15 @@ pub struct Hub {
 #[derive(Clone)]
 pub struct UserHandle {
     pub inbox: mpsc::Sender<ActorCommand>,
-    pub broadcast: broadcast::Sender<Arc<ServerMessage>>,
+    pub broadcast: broadcast::Sender<BroadcastEvent>,
 }
 
 pub enum ActorCommand {
-    Push { batch_id: String, ops: Vec<PushOp> },
+    Push {
+        source_connection_id: String,
+        batch_id: String,
+        ops: Vec<PushOp>,
+    },
 }
 
 impl Hub {
@@ -44,7 +61,7 @@ impl Hub {
         }
 
         let (inbox_tx, inbox_rx) = mpsc::channel::<ActorCommand>(INBOX_CAP);
-        let (bcast_tx, _) = broadcast::channel::<Arc<ServerMessage>>(BROADCAST_CAP);
+        let (bcast_tx, _) = broadcast::channel::<BroadcastEvent>(BROADCAST_CAP);
 
         let handle = UserHandle {
             inbox: inbox_tx,
@@ -70,22 +87,42 @@ async fn run_actor(
     user_id: String,
     db: Db,
     mut inbox: mpsc::Receiver<ActorCommand>,
-    bcast: broadcast::Sender<Arc<ServerMessage>>,
+    bcast: broadcast::Sender<BroadcastEvent>,
 ) {
     while let Some(cmd) = inbox.recv().await {
         match cmd {
-            ActorCommand::Push { batch_id, ops } => {
+            ActorCommand::Push {
+                source_connection_id,
+                batch_id,
+                ops,
+            } => {
                 match db.apply_push_ops(&user_id, &ops).await {
                     Ok(applied) => {
-                        // Always broadcast the ack (possibly with empty ops) so
-                        // the originator can clear its pending state.
-                        let msg = Arc::new(ServerMessage::Delta {
+                        // Always ack the originator (possibly with empty ops)
+                        // so it can clear pending state and advance cursor.
+                        let ack_max_version = applied.last().map(|op| op.server_version);
+                        let ack_msg = Arc::new(ServerMessage::Delta {
                             ack_for: Some(batch_id),
-                            ops: applied,
+                            ack_max_version,
+                            ops: Vec::new(),
                         });
-                        // send() errors only when there are no subscribers,
-                        // which is fine.
-                        let _ = bcast.send(msg);
+                        let _ = bcast.send(BroadcastEvent {
+                            target: BroadcastTarget::OnlyConnection(source_connection_id.clone()),
+                            message: ack_msg,
+                        });
+
+                        // Broadcast applied delta rows to all other sockets.
+                        if !applied.is_empty() {
+                            let delta_msg = Arc::new(ServerMessage::Delta {
+                                ack_for: None,
+                                ack_max_version: None,
+                                ops: applied,
+                            });
+                            let _ = bcast.send(BroadcastEvent {
+                                target: BroadcastTarget::AllExceptConnection(source_connection_id),
+                                message: delta_msg,
+                            });
+                        }
                     }
                     Err(err) => {
                         error!(%user_id, "apply_push failed: {:#}", err);
@@ -93,7 +130,10 @@ async fn run_actor(
                             code: "push_failed".into(),
                             message: Some(format!("{err:#}")),
                         });
-                        let _ = bcast.send(msg);
+                        let _ = bcast.send(BroadcastEvent {
+                            target: BroadcastTarget::All,
+                            message: msg,
+                        });
                     }
                 }
             }

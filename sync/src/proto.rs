@@ -32,6 +32,8 @@ pub enum ServerMessage {
     Delta {
         #[serde(skip_serializing_if = "Option::is_none")]
         ack_for: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        ack_max_version: Option<i64>,
         ops: Vec<DeltaOp>,
     },
     Error {

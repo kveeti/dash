@@ -35,6 +35,7 @@ export interface Ready {
 export interface Delta {
   ackFor: string;
   ops: DeltaOp[];
+  ackMaxVersion?: number | undefined;
 }
 
 export interface Error {
@@ -428,7 +429,7 @@ export const Ready: MessageFns<Ready> = {
 };
 
 function createBaseDelta(): Delta {
-  return { ackFor: "", ops: [] };
+  return { ackFor: "", ops: [], ackMaxVersion: undefined };
 }
 
 export const Delta: MessageFns<Delta> = {
@@ -438,6 +439,9 @@ export const Delta: MessageFns<Delta> = {
     }
     for (const v of message.ops) {
       DeltaOp.encode(v!, writer.uint32(18).fork()).join();
+    }
+    if (message.ackMaxVersion !== undefined) {
+      writer.uint32(24).int64(message.ackMaxVersion);
     }
     return writer;
   },
@@ -465,6 +469,14 @@ export const Delta: MessageFns<Delta> = {
           message.ops.push(DeltaOp.decode(reader, reader.uint32()));
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.ackMaxVersion = longToNumber(reader.int64());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -482,6 +494,11 @@ export const Delta: MessageFns<Delta> = {
         ? globalThis.String(object.ack_for)
         : "",
       ops: globalThis.Array.isArray(object?.ops) ? object.ops.map((e: any) => DeltaOp.fromJSON(e)) : [],
+      ackMaxVersion: isSet(object.ackMaxVersion)
+        ? globalThis.Number(object.ackMaxVersion)
+        : isSet(object.ack_max_version)
+        ? globalThis.Number(object.ack_max_version)
+        : undefined,
     };
   },
 
@@ -493,6 +510,9 @@ export const Delta: MessageFns<Delta> = {
     if (message.ops?.length) {
       obj.ops = message.ops.map((e) => DeltaOp.toJSON(e));
     }
+    if (message.ackMaxVersion !== undefined) {
+      obj.ackMaxVersion = Math.round(message.ackMaxVersion);
+    }
     return obj;
   },
 
@@ -503,6 +523,7 @@ export const Delta: MessageFns<Delta> = {
     const message = createBaseDelta();
     message.ackFor = object.ackFor ?? "";
     message.ops = object.ops?.map((e) => DeltaOp.fromPartial(e)) || [];
+    message.ackMaxVersion = object.ackMaxVersion ?? undefined;
     return message;
   },
 };

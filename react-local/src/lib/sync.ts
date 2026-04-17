@@ -535,22 +535,28 @@ class SyncClient {
 			return;
 		}
 
-		const deltaOps: DeltaOp[] = frame.delta.ops.map((op) => ({
-			id: op.id,
-			_sync_hlc: op.syncHlc,
-			_sync_is_deleted: op.syncIsDeleted,
-			blob: encodeBase64(op.blob),
-			server_version: op.serverVersion,
-		}));
+		if (frame.delta.ackMaxVersion != null) {
+			await this.setCursor(frame.delta.ackMaxVersion);
+		}
 
-		// Apply ops (idempotent).
-		const { maxVersion, touchedTypes } = await applyIncomingOps({
-			db: this.db,
-			codec: this.codec,
-			ops: deltaOps,
-		});
-		if (maxVersion !== undefined) await this.setCursor(maxVersion);
-		if (touchedTypes.size) this.onEntitiesChanged(touchedTypes);
+		if (frame.delta.ops.length > 0) {
+			const deltaOps: DeltaOp[] = frame.delta.ops.map((op) => ({
+				id: op.id,
+				_sync_hlc: op.syncHlc,
+				_sync_is_deleted: op.syncIsDeleted,
+				blob: encodeBase64(op.blob),
+				server_version: op.serverVersion,
+			}));
+
+			// Apply ops (idempotent).
+			const { maxVersion, touchedTypes } = await applyIncomingOps({
+				db: this.db,
+				codec: this.codec,
+				ops: deltaOps,
+			});
+			if (maxVersion !== undefined) await this.setCursor(maxVersion);
+			if (touchedTypes.size) this.onEntitiesChanged(touchedTypes);
+		}
 
 		// If this is an ack for one of our pushes, clear the pending batch.
 		const ackFor = frame.delta.ackFor || undefined;

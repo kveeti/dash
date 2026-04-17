@@ -27,6 +27,7 @@ message Ready {}
 message Delta {
   string ack_for = 1;
   repeated DeltaOp ops = 2;
+  optional int64 ack_max_version = 3;
 }
 
 message Error {

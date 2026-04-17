@@ -12,10 +12,11 @@ use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use prost::Message as _;
 use tracing::{debug, warn};
+use ulid::Ulid;
 
 use crate::{
     auth::require_user_id,
-    hub::ActorCommand,
+    hub::{ActorCommand, BroadcastTarget},
     proto::{PushOp, ServerMessage},
     protocol::{
         ClientFrame, Delta as WireDelta, DeltaOp as WireDeltaOp, Error as WireError,
@@ -44,6 +45,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: String) {
     let handle = state.hub.get_or_spawn(&user_id);
     let mut bcast_rx = handle.broadcast.subscribe();
     let inbox_tx = handle.inbox;
+    let connection_id = Ulid::new().to_string();
 
     let (mut sender, mut receiver) = socket.split();
 
@@ -55,11 +57,15 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: String) {
 
     // Forward broadcast → socket.
     let user_id_for_send = user_id.clone();
+    let connection_id_for_send = connection_id.clone();
     let mut send_task = tokio::spawn(async move {
         loop {
             match bcast_rx.recv().await {
-                Ok(msg) => {
-                    let binary = encode_server_message(&msg);
+                Ok(event) => {
+                    if !should_deliver_to_connection(&event.target, &connection_id_for_send) {
+                        continue;
+                    }
+                    let binary = encode_server_message(&event.message);
                     if sender.send(Message::Binary(binary.into())).await.is_err() {
                         break;
                     }
@@ -78,6 +84,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: String) {
 
     // Read client → dispatch to actor.
     let user_id_for_recv = user_id;
+    let connection_id_for_recv = connection_id;
     let mut recv_task = tokio::spawn(async move {
         while let Some(next) = receiver.next().await {
             let msg = match next {
@@ -118,6 +125,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: String) {
 
                     if inbox_tx
                         .send(ActorCommand::Push {
+                            source_connection_id: connection_id_for_recv.clone(),
                             batch_id: push.batch_id,
                             ops,
                         })
@@ -148,7 +156,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, user_id: String) {
 fn encode_server_message(msg: &ServerMessage) -> Vec<u8> {
     let body = match msg {
         ServerMessage::Ready => server_frame::Body::Ready(WireReady {}),
-        ServerMessage::Delta { ack_for, ops } => {
+        ServerMessage::Delta {
+            ack_for,
+            ack_max_version,
+            ops,
+        } => {
             let mut wire_ops = Vec::with_capacity(ops.len());
             for op in ops {
                 match base64::engine::general_purpose::STANDARD.decode(op.blob.as_bytes()) {
@@ -168,6 +180,7 @@ fn encode_server_message(msg: &ServerMessage) -> Vec<u8> {
             server_frame::Body::Delta(WireDelta {
                 ack_for: ack_for.clone().unwrap_or_default(),
                 ops: wire_ops,
+                ack_max_version: *ack_max_version,
             })
         }
         ServerMessage::Error { code, message } => server_frame::Body::Error(WireError {
@@ -177,4 +190,12 @@ fn encode_server_message(msg: &ServerMessage) -> Vec<u8> {
     };
 
     ServerFrame { body: Some(body) }.encode_to_vec()
+}
+
+fn should_deliver_to_connection(target: &BroadcastTarget, connection_id: &str) -> bool {
+    match target {
+        BroadcastTarget::All => true,
+        BroadcastTarget::AllExceptConnection(excluded) => excluded != connection_id,
+        BroadcastTarget::OnlyConnection(target) => target == connection_id,
+    }
 }
