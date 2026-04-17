@@ -67,9 +67,6 @@ export function createDekSyncPayloadCodec(dek: CryptoKey): SyncPayloadCodec {
 }
 
 export function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
-	if (!value.trim()) {
-		throw new Error('base64 payload must be non-empty');
-	}
 	if (typeof globalThis.atob === 'function') {
 		const binary = globalThis.atob(value);
 		const out = new Uint8Array(binary.length);

@@ -132,6 +132,12 @@ fn random_b64url(bytes: usize) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&buf)
 }
 
+fn random_b64(bytes: usize) -> String {
+    let mut buf = vec![0u8; bytes];
+    rand::thread_rng().fill_bytes(&mut buf);
+    base64::engine::general_purpose::STANDARD.encode(&buf)
+}
+
 fn pkce_challenge(verifier: &str) -> String {
     let digest = Sha256::digest(verifier.as_bytes());
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&digest)
@@ -268,7 +274,7 @@ async fn callback(
 
 async fn upsert_user(pool: &PgPool, external_id: &str) -> Result<String, ApiError> {
     let new_id = Ulid::new().to_string();
-    let new_salt = random_b64url(16);
+    let new_salt = random_b64(16);
     let row: (String,) = sqlx::query_as(
         r#"
         insert into users (id, external_id, salt)
