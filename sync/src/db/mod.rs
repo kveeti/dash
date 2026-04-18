@@ -1,5 +1,4 @@
 use sqlx::{PgPool, Row};
-use tracing::warn;
 use ulid::Ulid;
 
 use crate::proto::{DeltaOp, PushOp};
@@ -7,6 +6,11 @@ use crate::proto::{DeltaOp, PushOp};
 #[derive(Clone)]
 pub struct Db {
     pool: PgPool,
+}
+
+pub struct PushResult {
+    pub applied: Vec<DeltaOp>,
+    pub not_applied_ids: Vec<String>,
 }
 
 pub struct BootstrapPage {
@@ -120,7 +124,7 @@ impl Db {
 
         let rows = sqlx::query(
             r#"
-            select id, _sync_hlc, blob, _sync_is_deleted, _sync_server_version
+            select id, blob, _sync_is_deleted, _sync_edited_at, _sync_server_version
             from entries
             where user_id = $1 and _sync_server_version > $2
             order by _sync_server_version asc
@@ -141,9 +145,9 @@ impl Db {
             let blob: Vec<u8> = row.try_get("blob")?;
             entries.push(DeltaOp {
                 id: row.try_get("id")?,
-                hlc: row.try_get("_sync_hlc")?,
                 blob,
                 is_deleted: row.try_get("_sync_is_deleted")?,
+                edited_at: row.try_get("_sync_edited_at")?,
                 server_version: row.try_get("_sync_server_version")?,
             });
         }
@@ -165,58 +169,65 @@ impl Db {
         &self,
         user_id: &str,
         ops: &[PushOp],
-    ) -> Result<Vec<DeltaOp>, anyhow::Error> {
+    ) -> Result<PushResult, anyhow::Error> {
         if ops.is_empty() {
-            return Ok(Vec::new());
+            return Ok(PushResult {
+                applied: Vec::new(),
+                not_applied_ids: Vec::new(),
+            });
         }
 
         let mut tx = self.pool.begin().await?;
         let mut applied: Vec<DeltaOp> = Vec::with_capacity(ops.len());
+        let mut not_applied_ids: Vec<String> = Vec::new();
 
         for op in ops {
-            let row_opt = sqlx::query(
+            let row = sqlx::query(
                 r#"
                 insert into entries (
-                    user_id, id, blob, _sync_hlc, _sync_is_deleted,
+                    user_id, id, blob, _sync_is_deleted, _sync_edited_at,
                     _sync_server_version, _sync_server_updated_at
                 )
                 values ($1, $2, $3, $4, $5, nextval('server_version'), now())
                 on conflict (user_id, id) do update set
                     blob = excluded.blob,
-                    _sync_hlc = excluded._sync_hlc,
                     _sync_is_deleted = excluded._sync_is_deleted,
-                    _sync_server_version = excluded._sync_server_version,
+                    _sync_edited_at = excluded._sync_edited_at,
+                    _sync_server_version = nextval('server_version'),
                     _sync_server_updated_at = now()
-                where excluded._sync_hlc > entries._sync_hlc
-                returning _sync_server_version, _sync_hlc, _sync_is_deleted
+                where excluded._sync_edited_at >= entries._sync_edited_at
+                returning _sync_server_version, _sync_is_deleted, _sync_edited_at
                 "#,
             )
             .bind(user_id)
             .bind(&op.id)
             .bind(&op.blob)
-            .bind(&op.hlc)
             .bind(op.is_deleted)
+            .bind(op.edited_at)
             .fetch_optional(&mut *tx)
             .await?;
 
-            if let Some(row) = row_opt {
+            if let Some(row) = row {
                 let server_version: i64 = row.try_get("_sync_server_version")?;
-                let hlc: String = row.try_get("_sync_hlc")?;
                 let is_deleted: bool = row.try_get("_sync_is_deleted")?;
+                let edited_at: i64 = row.try_get("_sync_edited_at")?;
                 applied.push(DeltaOp {
                     id: op.id.clone(),
-                    hlc,
                     blob: op.blob.clone(),
                     is_deleted,
+                    edited_at,
                     server_version,
                 });
             } else {
-                warn!(%user_id, id = %op.id, hlc = %op.hlc, "push ignored (stale hlc)");
+                not_applied_ids.push(op.id.clone());
             }
         }
 
         tx.commit().await?;
         applied.sort_by_key(|op| op.server_version);
-        Ok(applied)
+        Ok(PushResult {
+            applied,
+            not_applied_ids,
+        })
     }
 }

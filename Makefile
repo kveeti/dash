@@ -58,6 +58,3 @@ e2e:
 	bash -c 'for i in {1..30}; do curl -s http://localhost:8000/api/health && break || (sleep 1 && echo "Waiting for server..."); done'
 	cd front && bunx playwright test --ui
 	pkill -f backend
-
-protofront:
-	mkdir -p ./react-local/src/gen && protoc --plugin=./react-local/node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=./react-local/src/gen ./sync/protocol.proto

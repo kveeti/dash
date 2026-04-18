@@ -16,14 +16,10 @@ mod error;
 mod hub;
 mod proto;
 mod state;
-mod ws;
+mod sync_api;
 
 use db::Db;
 use hub::Hub;
-
-pub mod protocol {
-    include!(concat!(env!("OUT_DIR"), "/protocol.rs"));
-}
 
 #[tokio::main]
 async fn main() {
@@ -54,7 +50,7 @@ async fn main() {
         .expect("failed to run migrations");
 
     let db = Db::from_pool(pool);
-    let hub = Arc::new(Hub::new(db.clone()));
+    let hub = Arc::new(Hub::new());
     let oidc = config.oidc.map(auth::OidcState::new);
 
     let state = AppState {
@@ -84,7 +80,7 @@ async fn main() {
     let api = Router::new()
         .merge(auth::routes())
         .merge(bootstrap::routes())
-        .merge(ws::routes());
+        .merge(sync_api::routes());
 
     let app = Router::new()
         .route("/health", get(health))

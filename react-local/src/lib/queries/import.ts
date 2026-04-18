@@ -245,6 +245,7 @@ export async function importCsv(
 			const placeholders = batch
 				.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 				.join(", ");
+			const editedAt = Date.now();
 			const values = batch.flatMap(({ row }) => [
 				id(),
 				now,
@@ -256,11 +257,11 @@ export async function importCsv(
 				row.additional ?? null,
 				row.category_name ? categoryCache.get(row.category_name)! : null,
 				accountId,
-				db.hlc.generate(),
+				editedAt,
 			]);
 			await db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id, _sync_hlc)
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id, _sync_edited_at)
 				 values ${placeholders}`,
 				values,
 			);
@@ -339,9 +340,9 @@ export async function importLegacyCsvBundle(
 
 			const newId = existingAccountIds.has(oldId) ? id() : oldId;
 			await db.exec(
-				`insert into accounts (id, created_at, updated_at, name, _sync_hlc)
+				`insert into accounts (id, created_at, updated_at, name, _sync_edited_at)
 				values (?, ?, ?, ?, ?)`,
-				[newId, now, now, name, db.hlc.generate()],
+				[newId, now, now, name, Date.now()],
 			);
 			accountIdMap.set(oldId, newId);
 			existingAccountNames.set(name, newId);
@@ -382,9 +383,9 @@ export async function importLegacyCsvBundle(
 
 			const newId = existingCategoryIds.has(oldId) ? id() : oldId;
 			await db.exec(
-				`insert into categories (id, created_at, updated_at, name, is_neutral, _sync_hlc)
+				`insert into categories (id, created_at, updated_at, name, is_neutral, _sync_edited_at)
 				values (?, ?, ?, ?, ?, ?)`,
-				[newId, now, now, name, isNeutral, db.hlc.generate()],
+				[newId, now, now, name, isNeutral, Date.now()],
 			);
 			categoryIdMap.set(oldId, newId);
 			existingCategoryNames.set(name, newId);
@@ -435,7 +436,7 @@ export async function importLegacyCsvBundle(
 				const newTxId = existingTransactionIds.has(txId) ? id() : txId;
 				await db.exec(
 					`insert into transactions
-					(id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, categorize_on, category_id, account_id, _sync_hlc)
+					(id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, categorize_on, category_id, account_id, _sync_edited_at)
 					values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					[
 						newTxId,
@@ -450,7 +451,7 @@ export async function importLegacyCsvBundle(
 						categorizeOn,
 						mappedCategoryId,
 						mappedAccountId,
-						db.hlc.generate(),
+						Date.now(),
 					],
 				);
 				transactionIdMap.set(txId, newTxId);
@@ -495,14 +496,14 @@ export async function importLegacyCsvBundle(
 
 			await db.exec(
 				`insert into transaction_links
-					(transaction_a_id, transaction_b_id, created_at, updated_at, _sync_hlc, _sync_is_deleted, _sync_status)
-				values (?, ?, ?, ?, ?, 0, 1)
+					(transaction_a_id, transaction_b_id, created_at, updated_at, _sync_is_deleted, _sync_status, _sync_edited_at)
+				values (?, ?, ?, ?, 0, 1, ?)
 				on conflict (transaction_a_id, transaction_b_id) do update set
 					_sync_is_deleted = 0,
 					updated_at = excluded.updated_at,
-					_sync_hlc = excluded._sync_hlc,
-					_sync_status = 1`,
-				[a, b, now, now, db.hlc.generate()],
+					_sync_status = 1,
+					_sync_edited_at = excluded._sync_edited_at`,
+				[a, b, now, now, Date.now()],
 			);
 			linksImported++;
 		}

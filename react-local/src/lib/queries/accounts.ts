@@ -41,9 +41,9 @@ export async function createAccount(
 		const newId = id();
 		const now = new Date().toISOString();
 		await db.exec(
-			`insert into accounts (id, created_at, updated_at, name, _sync_hlc)
+			`insert into accounts (id, created_at, updated_at, name, _sync_edited_at)
 			values (?, ?, ?, ?, ?)`,
-			[newId, now, now, name, db.hlc.generate()],
+			[newId, now, now, name, Date.now()],
 		);
 		return newId;
 	});

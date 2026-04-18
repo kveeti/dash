@@ -17,14 +17,13 @@ create table entries (
     blob bytea not null,
 
     _sync_is_deleted boolean not null default false,
-    _sync_hlc text not null,
+    _sync_edited_at bigint not null default 0,
     _sync_server_version bigint not null,
     _sync_server_updated_at timestamptz not null default now(),
 
     primary key (user_id, id)
 );
 
-create index idx_entry_hlc on entries(user_id, _sync_hlc asc);
 create index idx_server_version on entries(user_id, _sync_server_version asc);
 
 create table sessions (
