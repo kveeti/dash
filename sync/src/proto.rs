@@ -5,44 +5,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct PushOp {
     pub id: String,
-    #[serde(rename = "_sync_hlc")]
-    pub hlc: String,
     #[serde(with = "base64_blob")]
     pub blob: Vec<u8>,
     #[serde(rename = "_sync_is_deleted", default)]
     pub is_deleted: bool,
+    #[serde(rename = "_sync_edited_at", default)]
+    pub edited_at: i64,
 }
 
 /// Outbound op included in a delta / bootstrap page.
 #[derive(Debug, Clone, Serialize)]
 pub struct DeltaOp {
     pub id: String,
-    #[serde(rename = "_sync_hlc")]
-    pub hlc: String,
     #[serde(with = "base64_blob")]
     pub blob: Vec<u8>,
     #[serde(rename = "_sync_is_deleted")]
     pub is_deleted: bool,
+    #[serde(rename = "_sync_edited_at")]
+    pub edited_at: i64,
     pub server_version: i64,
-}
-
-/// Messages the server sends over the WS.
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ServerMessage {
-    Ready,
-    Delta {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        ack_for: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        ack_max_version: Option<i64>,
-        ops: Vec<DeltaOp>,
-    },
-    Error {
-        code: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        message: Option<String>,
-    },
 }
 
 /// GET /bootstrap response shape.

@@ -10,27 +10,33 @@ import { useMe } from "./queries/auth";
 import { useDb } from "../providers";
 import type { DbHandle } from "./db";
 import { queryKeyRoots, queryKeys } from "./queries/query-keys";
-import {
-	ClientFrame,
-	type PushOp as WirePushOp,
-	ServerFrame,
-} from "../gen/sync/protocol";
 
 // -------------------- types --------------------
 
 type DirtyEntry = {
 	id: string;
-	_sync_hlc: string;
 	_sync_is_deleted: number;
+	_sync_edited_at: number;
 	plain_data: string;
 };
 
 type DeltaOp = {
 	id: string;
-	_sync_hlc: string;
 	_sync_is_deleted: boolean;
-	blob: string | Uint8Array;
+	_sync_edited_at: number;
+	blob: string;
 	server_version: number;
+};
+
+type PushOp = {
+	id: string;
+	_sync_is_deleted: boolean;
+	_sync_edited_at: number;
+	blob: string;
+};
+
+type DeltaEvent = {
+	ops: DeltaOp[];
 };
 
 type BootstrapResponse = {
@@ -45,34 +51,12 @@ type SyncTableName =
 	| "transactions"
 	| "transaction_links";
 
-type TableUpdateBucket = {
-	ids: string[];
-	maxHlc: string;
-};
-
 // -------------------- constants --------------------
 
 const DIRTY_BATCH_LIMIT = 1000;
 const BOOTSTRAP_PAGE_LIMIT = 1000;
-const MAX_RECONNECT_DELAY_MS = 30_000;
-
-async function toWsFrameBytes(raw: unknown): Promise<Uint8Array | null> {
-	if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
-	if (raw instanceof Uint8Array) return raw;
-	if (raw instanceof Blob) return new Uint8Array(await raw.arrayBuffer());
-	return null;
-}
 
 // -------------------- dirty row helpers --------------------
-
-function createEmptyTableBuckets(): Record<SyncTableName, TableUpdateBucket> {
-	return {
-		categories: { ids: [], maxHlc: "" },
-		accounts: { ids: [], maxHlc: "" },
-		transactions: { ids: [], maxHlc: "" },
-		transaction_links: { ids: [], maxHlc: "" },
-	};
-}
 
 function resolveTargetTable(recordId: string): {
 	tableName: SyncTableName;
@@ -86,58 +70,51 @@ function resolveTargetTable(recordId: string): {
 }
 
 async function markDirtyEntriesSynced(db: DbHandle, dirty: DirtyEntry[]) {
-	const updatesByTable = createEmptyTableBuckets();
+	const byTable: Record<SyncTableName, string[]> = {
+		categories: [],
+		accounts: [],
+		transactions: [],
+		transaction_links: [],
+	};
 
 	for (const record of dirty) {
 		const { tableName, actualId } = resolveTargetTable(record.id);
-		updatesByTable[tableName].ids.push(actualId);
-
-		if (record._sync_hlc > updatesByTable[tableName].maxHlc) {
-			updatesByTable[tableName].maxHlc = record._sync_hlc;
-		}
+		byTable[tableName].push(actualId);
 	}
 
-	for (const [tableName, data] of Object.entries(updatesByTable) as Array<
-		[SyncTableName, TableUpdateBucket]
+	for (const [tableName, ids] of Object.entries(byTable) as Array<
+		[SyncTableName, string[]]
 	>) {
-		if (data.ids.length === 0) continue;
+		if (ids.length === 0) continue;
 
-		const placeholders = data.ids.map(() => "?").join(",");
+		const placeholders = ids.map(() => "?").join(",");
 
 		if (tableName === "transaction_links") {
 			await db.exec(
 				`update transaction_links
 				set _sync_status = 0
-				where transaction_a_id || '_' || transaction_b_id IN (${placeholders})
-				and _sync_hlc <= ?`,
-				[...data.ids, data.maxHlc],
+				where transaction_a_id || '_' || transaction_b_id IN (${placeholders})`,
+				ids,
 			);
 		} else {
 			await db.exec(
 				`update ${tableName}
 				set _sync_status = 0
-				where id in (${placeholders})
-				and _sync_hlc <= ?`,
-				[...data.ids, data.maxHlc],
+				where id in (${placeholders})`,
+				ids,
 			);
 		}
 	}
 }
 
-async function getDirty({
-	db,
-	cursor,
-}: {
-	db: DbHandle;
-	cursor: string | undefined;
-}): Promise<{ entries: DirtyEntry[]; newCursor: string | undefined }> {
-	const dirty = await db.query<DirtyEntry>(
+async function getDirty(db: DbHandle): Promise<DirtyEntry[]> {
+	return db.query<DirtyEntry>(
 		`
 		select * from (
 			select
 				'category:' || id as id,
-				_sync_hlc,
 				_sync_is_deleted,
+				_sync_edited_at,
 				json_object('created_at', created_at, 'updated_at', updated_at, 'name', name, 'is_neutral', is_neutral) as plain_data,
 				1 as priority
 			from categories where _sync_status = 1
@@ -146,8 +123,8 @@ async function getDirty({
 
 			select
 				'account:' || id as id,
-				_sync_hlc,
 				_sync_is_deleted,
+				_sync_edited_at,
 				json_object('created_at', created_at, 'updated_at', updated_at, 'name', name) as plain_data,
 				1 as priority
 			from accounts where _sync_status = 1
@@ -156,8 +133,8 @@ async function getDirty({
 
 			select
 				'transaction:' || id as id,
-				_sync_hlc,
 				_sync_is_deleted,
+				_sync_edited_at,
 				json_object('created_at', created_at, 'updated_at', updated_at, 'date', date, 'amount', amount, 'currency', currency, 'counter_party', counter_party, 'additional', additional, 'notes', notes, 'categorize_on', categorize_on, 'category_id', category_id, 'account_id', account_id) as plain_data,
 				2 as priority
 			from transactions where _sync_status = 1
@@ -166,33 +143,27 @@ async function getDirty({
 
 			select
 				'transaction_link:' || transaction_a_id || '_' || transaction_b_id as id,
-				_sync_hlc,
 				_sync_is_deleted,
+				_sync_edited_at,
 				json_object('transaction_a_id', transaction_a_id, 'transaction_b_id', transaction_b_id, 'created_at', created_at) as plain_data,
 				3 as priority
 			from transaction_links where _sync_status = 1
 		)
-		${cursor ? `where _sync_hlc > ?` : ``}
-		order by priority asc, _sync_hlc asc
+		-- Preserve dependency order across entity types so referenced rows
+		-- (e.g. categories/accounts) land before transactions and links.
+		order by priority asc
 		limit ?;
 	`,
-		cursor
-			? [cursor, DIRTY_BATCH_LIMIT + 1]
-			: [DIRTY_BATCH_LIMIT + 1],
+		[DIRTY_BATCH_LIMIT],
 	);
-
-	if (!dirty.length) return { entries: [], newCursor: undefined };
-
-	const hasMore = dirty.length === DIRTY_BATCH_LIMIT + 1;
-	if (hasMore) dirty.pop();
-	const newCursor = hasMore ? dirty.at(-1)?._sync_hlc : undefined;
-	return { entries: dirty, newCursor };
 }
 
 // -------------------- applying incoming deltas --------------------
 
 /**
- * Upsert incoming deltas into SQLite. Idempotent — uses HLC conflict check.
+ * Upsert incoming deltas into SQLite.
+ * Only overwrites a row if the incoming _sync_edited_at >= local _sync_edited_at,
+ * so the last user edit wins regardless of push ordering.
  * Returns the max server_version applied so the cursor can be advanced.
  */
 async function applyIncomingOps({
@@ -215,93 +186,113 @@ async function applyIncomingOps({
 	const transactions: any[] = [];
 	const transactionsValues: string[] = [];
 
+	const transactionLinks: any[] = [];
+	const transactionLinksValues: string[] = [];
+
 	let maxVersion: number | undefined;
 	const touchedTypes = new Set<string>();
 
-		await Promise.all(
-			ops.map(async (op) => {
-				const entry =
-					typeof op.blob === "string"
-						? await codec.decode(op.blob)
-						: await codec.decodeBytes(op.blob);
-				if (!entry) return;
-
-			if (maxVersion === undefined || op.server_version > maxVersion) {
-				maxVersion = op.server_version;
-			}
-
-			const [type, id] = op.id.split(":");
-			touchedTypes.add(type);
-			switch (type) {
-				case "account":
-					accounts.push(
-						/* id */ id,
-						/* created_at */ entry.created_at,
-						/* updated_at */ entry.updated_at,
-						/* name */ entry.name,
-
-						/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
-						/* _sync_hlc */ db.hlc.receive(op._sync_hlc),
-					);
-					accountsValues.push("(?, ?, ?, ?, ?, ?, 0)");
-					break;
-
-				case "category":
-					categories.push(
-						/* id */ id,
-						/* created_at */ entry.created_at,
-						/* updated_at */ entry.updated_at,
-						/* name */ entry.name,
-						/* is_neutral */ entry.is_neutral,
-
-						/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
-						/* _sync_hlc */ db.hlc.receive(op._sync_hlc),
-					);
-					categoriesValues.push("(?, ?, ?, ?, ?, ?, ?, 0)");
-					break;
-
-				case "transaction":
-					transactions.push(
-						/* id */ id,
-						/* created_at */ entry.created_at,
-						/* updated_at */ entry.updated_at,
-						/* date */ entry.date,
-						/* amount */ entry.amount,
-						/* currency */ entry.currency,
-						/* counter_party */ entry.counter_party,
-						/* additional */ entry.additional,
-						/* notes */ entry.notes,
-						/* categorize_on */ entry.categorize_on,
-						/* category_id */ entry.category_id,
-						/* account_id */ entry.account_id,
-
-						/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
-						/* _sync_hlc */ db.hlc.receive(op._sync_hlc),
-					);
-					transactionsValues.push(
-						"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
-					);
-					break;
-
-				// transaction_links upsert is intentionally not handled here yet —
-				// the prior pull code also skipped it.
-			}
+	const decodedOps = await Promise.all(
+		ops.map(async (op) => {
+			const entry = await codec.decode(op.blob);
+			if (!entry) return null;
+			return { op, entry };
 		}),
 	);
 
+	for (const item of decodedOps) {
+		if (!item) continue;
+		const { op, entry } = item;
+
+		if (maxVersion === undefined || op.server_version > maxVersion) {
+			maxVersion = op.server_version;
+		}
+
+		const [type, id] = op.id.split(":");
+		touchedTypes.add(type);
+		switch (type) {
+			case "account":
+				accounts.push(
+					/* id */ id,
+					/* created_at */ entry.created_at,
+					/* updated_at */ entry.updated_at,
+					/* name */ entry.name,
+					/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
+					/* _sync_edited_at */ op._sync_edited_at,
+				);
+				accountsValues.push("(?, ?, ?, ?, ?, ?, 0)");
+				break;
+
+			case "category":
+				categories.push(
+					/* id */ id,
+					/* created_at */ entry.created_at,
+					/* updated_at */ entry.updated_at,
+					/* name */ entry.name,
+					/* is_neutral */ entry.is_neutral,
+					/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
+					/* _sync_edited_at */ op._sync_edited_at,
+				);
+				categoriesValues.push("(?, ?, ?, ?, ?, ?, ?, 0)");
+				break;
+
+			case "transaction":
+				transactions.push(
+					/* id */ id,
+					/* created_at */ entry.created_at,
+					/* updated_at */ entry.updated_at,
+					/* date */ entry.date,
+					/* amount */ entry.amount,
+					/* currency */ entry.currency,
+					/* counter_party */ entry.counter_party,
+					/* additional */ entry.additional,
+					/* notes */ entry.notes,
+					/* categorize_on */ entry.categorize_on,
+					/* category_id */ entry.category_id,
+					/* account_id */ entry.account_id,
+					/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
+					/* _sync_edited_at */ op._sync_edited_at,
+				);
+				transactionsValues.push(
+					"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+				);
+				break;
+
+			case "transaction_link": {
+				touchedTypes.add("transaction");
+				const [transactionAId, transactionBId] = id.split("_");
+				if (!transactionAId || !transactionBId) break;
+				transactionLinks.push(
+					/* transaction_a_id */ transactionAId,
+					/* transaction_b_id */ transactionBId,
+					/* created_at */ entry.created_at,
+					/* updated_at */ entry.updated_at ?? null,
+					/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
+					/* _sync_edited_at */ op._sync_edited_at,
+				);
+				transactionLinksValues.push("(?, ?, ?, ?, ?, ?, 0)");
+				break;
+			}
+		}
+	}
+
+	// Upsert each table. Skip rows that are locally dirty — those will be
+	// pushed to the server and the server's version will arrive later.
 	if (accounts.length) {
 		await db.exec(
 			`insert into accounts (
 				id, created_at, updated_at, name,
-				_sync_is_deleted, _sync_hlc, _sync_status
+				_sync_is_deleted, _sync_edited_at, _sync_status
 			)
 			values ${accountsValues.join(",")}
 			on conflict(id) do update set
-				_sync_hlc = excluded._sync_hlc,
+				created_at = excluded.created_at,
+				updated_at = excluded.updated_at,
 				_sync_is_deleted = excluded._sync_is_deleted,
+				_sync_edited_at = excluded._sync_edited_at,
 				_sync_status = 0,
 				name = excluded.name
-			where excluded._sync_hlc > accounts._sync_hlc;`,
+			where excluded._sync_edited_at >= accounts._sync_edited_at;`,
 			accounts,
 		);
 	}
@@ -310,16 +301,18 @@ async function applyIncomingOps({
 		await db.exec(
 			`insert into categories (
 				id, created_at, updated_at, name, is_neutral,
-				_sync_is_deleted, _sync_hlc, _sync_status
+				_sync_is_deleted, _sync_edited_at, _sync_status
 			)
 			values ${categoriesValues.join(",")}
 			on conflict(id) do update set
-				_sync_hlc = excluded._sync_hlc,
+				created_at = excluded.created_at,
+				updated_at = excluded.updated_at,
 				_sync_is_deleted = excluded._sync_is_deleted,
+				_sync_edited_at = excluded._sync_edited_at,
 				_sync_status = 0,
 				name = excluded.name,
 				is_neutral = excluded.is_neutral
-			where excluded._sync_hlc > categories._sync_hlc;`,
+			where excluded._sync_edited_at >= categories._sync_edited_at;`,
 			categories,
 		);
 	}
@@ -330,12 +323,14 @@ async function applyIncomingOps({
 				id, created_at, updated_at, date, amount, currency,
 				counter_party, additional, notes, categorize_on,
 				category_id, account_id,
-				_sync_is_deleted, _sync_hlc, _sync_status
+				_sync_is_deleted, _sync_edited_at, _sync_status
 			)
 			values ${transactionsValues.join(",")}
 			on conflict(id) do update set
-				_sync_hlc = excluded._sync_hlc,
+				created_at = excluded.created_at,
+				updated_at = excluded.updated_at,
 				_sync_is_deleted = excluded._sync_is_deleted,
+				_sync_edited_at = excluded._sync_edited_at,
 				_sync_status = 0,
 				date = excluded.date,
 				amount = excluded.amount,
@@ -346,8 +341,26 @@ async function applyIncomingOps({
 				categorize_on = excluded.categorize_on,
 				category_id = excluded.category_id,
 				account_id = excluded.account_id
-			where excluded._sync_hlc > transactions._sync_hlc;`,
+			where excluded._sync_edited_at >= transactions._sync_edited_at;`,
 			transactions,
+		);
+	}
+
+	if (transactionLinks.length) {
+		await db.exec(
+			`insert into transaction_links (
+				transaction_a_id, transaction_b_id, created_at, updated_at,
+				_sync_is_deleted, _sync_edited_at, _sync_status
+			)
+			values ${transactionLinksValues.join(",")}
+			on conflict(transaction_a_id, transaction_b_id) do update set
+				_sync_is_deleted = excluded._sync_is_deleted,
+				_sync_edited_at = excluded._sync_edited_at,
+				_sync_status = 0,
+				created_at = excluded.created_at,
+				updated_at = excluded.updated_at
+			where excluded._sync_edited_at >= transaction_links._sync_edited_at;`,
+			transactionLinks,
 		);
 	}
 
@@ -357,14 +370,14 @@ async function applyIncomingOps({
 // -------------------- SyncClient --------------------
 
 class SyncClient {
-	private ws: WebSocket | null = null;
+	private events: EventSource | null = null;
 	private running = false;
-	private reconnectAttempt = 0;
-	private reconnectTimer: number | null = null;
-	private pendingBatches = new Map<string, DirtyEntry[]>();
+	private bootstrapInFlight = false;
 	private pushInFlight = false;
 	private pushScheduledDuringInFlight = false;
 	private codec: SyncPayloadCodec;
+	/** Deltas that arrived while bootstrap was running, replayed after it finishes. */
+	private deltaQueue: DeltaEvent[] | null = null;
 
 	constructor(
 		private readonly db: DbHandle,
@@ -385,45 +398,31 @@ class SyncClient {
 
 	stop() {
 		this.running = false;
-		if (this.reconnectTimer != null) {
-			window.clearTimeout(this.reconnectTimer);
-			this.reconnectTimer = null;
-		}
-		const ws = this.ws;
-		this.ws = null;
-		if (ws) ws.close();
-		this.pendingBatches.clear();
+		const events = this.events;
+		this.events = null;
+		if (events) events.close();
 	}
 
 	/** Called by the React layer on mutation — push any dirty rows. */
 	requestPush() {
-		void this.pushDirtyLoop();
+		void this.pushDirtyLoop().catch((e) => console.error("push loop failed:", e));
 	}
 
 	// ---------- connection ----------
 
 	private connect() {
 		if (!this.running) return;
-
-		const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-		const url = `${proto}//${window.location.host}/api/v1/ws`;
-
-		let ws: WebSocket;
+		let events: EventSource;
 		try {
-			ws = new WebSocket(url);
+			events = new EventSource("/api/v1/events", { withCredentials: true });
 		} catch (e) {
-			console.warn("ws construct failed:", e);
-			this.scheduleReconnect();
+			console.warn("sse construct failed:", e);
+			window.setTimeout(() => this.connect(), 1000);
 			return;
 		}
-		ws.binaryType = "arraybuffer";
+		this.events = events;
 
-		this.ws = ws;
-
-		ws.onopen = () => {
-			this.reconnectAttempt = 0;
-			// Bootstrap historical data (paginated) and push any dirty rows.
-			// Both run concurrently; upsert-by-HLC makes overlap harmless.
+		events.onopen = () => {
 			this.runBootstrap().catch((e) =>
 				console.error("bootstrap failed:", e),
 			);
@@ -432,145 +431,136 @@ class SyncClient {
 			);
 		};
 
-		ws.onmessage = (e) => {
-			this.handleMessage(e.data).catch((err) =>
+		events.addEventListener("delta", (e) => {
+			const msg = e as MessageEvent<unknown>;
+			this.handleDeltaEvent(msg.data).catch((err) =>
 				console.error("handle msg:", err),
 			);
-		};
+		});
 
-		ws.onclose = () => {
-			if (this.ws === ws) this.ws = null;
-			this.scheduleReconnect();
+		events.onerror = () => {
+			// Browser EventSource reconnects automatically.
 		};
-
-		ws.onerror = () => {
-			// onclose will fire; no-op here.
-		};
-	}
-
-	private scheduleReconnect() {
-		if (!this.running) return;
-		if (this.reconnectTimer != null) return;
-		const delay = Math.min(
-			500 * 2 ** this.reconnectAttempt,
-			MAX_RECONNECT_DELAY_MS,
-		);
-		this.reconnectAttempt++;
-		this.reconnectTimer = window.setTimeout(() => {
-			this.reconnectTimer = null;
-			this.connect();
-		}, delay);
 	}
 
 	// ---------- bootstrap ----------
 
 	private async runBootstrap() {
-		while (this.running) {
-			const cursor = await this.getCursor();
-			const params = new URLSearchParams();
-			if (cursor != null) params.set("cursor", String(cursor));
-			params.set("limit", String(BOOTSTRAP_PAGE_LIMIT));
+		if (this.bootstrapInFlight) return;
+		this.bootstrapInFlight = true;
+		// Queue live deltas while bootstrap is running so they don't race with
+		// cursor advancement. They'll be replayed once bootstrap finishes.
+		this.deltaQueue = [];
 
-			const res = await fetch(`/api/v1/bootstrap?${params}`, {
-				method: "GET",
-				credentials: "include",
-			});
-			if (!res.ok) {
-				throw new Error(`bootstrap ${res.status}`);
+		const touchedAcrossBootstrap = new Set<string>();
+		let succeeded = false;
+		try {
+			let cursor = await this.getCursor();
+			while (this.running) {
+				const params = new URLSearchParams();
+				if (cursor != null) params.set("cursor", String(cursor));
+				params.set("limit", String(BOOTSTRAP_PAGE_LIMIT));
+
+				const res = await fetch(`/api/v1/bootstrap?${params}`, {
+					method: "GET",
+					credentials: "include",
+				});
+				if (!res.ok) {
+					throw new Error(`bootstrap ${res.status}`);
+				}
+				const { entries, next_cursor, server_max_version } =
+					(await res.json()) as BootstrapResponse;
+
+				// Server-was-reset detection: if our cursor is ahead of the server's
+				// max, our local data is authoritative. Reset cursor to the server's
+				// view and mark all rows dirty so the push loop re-uploads them.
+				if (cursor != null && cursor > server_max_version) {
+					console.warn(
+						`sync: cursor ${cursor} > server max ${server_max_version}, re-pushing all rows`,
+					);
+					await markAllRowsPendingPush(this.db);
+					await this.resetCursorFn(server_max_version);
+					this.requestPush();
+					succeeded = true;
+					return;
+				}
+
+				if (!entries.length) {
+					succeeded = true;
+					return;
+				}
+
+				const { maxVersion, touchedTypes } = await applyIncomingOps({
+					db: this.db,
+					codec: this.codec,
+					ops: entries,
+				});
+				if (maxVersion !== undefined) await this.setCursor(maxVersion);
+				for (const type of touchedTypes) touchedAcrossBootstrap.add(type);
+
+				if (next_cursor == null) {
+					succeeded = true;
+					return;
+				}
+				cursor = next_cursor;
 			}
-			const { entries, next_cursor, server_max_version } =
-				(await res.json()) as BootstrapResponse;
+			succeeded = true;
+		} finally {
+			this.bootstrapInFlight = false;
 
-			// Server-was-reset detection: if our cursor is ahead of the server's
-			// max, our local data is authoritative. Reset cursor to the server's
-			// view and mark all rows dirty so the push loop re-uploads them.
-			if (cursor != null && cursor > server_max_version) {
-				console.warn(
-					`sync: cursor ${cursor} > server max ${server_max_version}, re-pushing all rows`,
-				);
-				await markAllRowsPendingPush(this.db);
-				await this.resetCursorFn(server_max_version);
-				this.requestPush();
-				return;
+			// Drain queued deltas that arrived during bootstrap.
+			const queued = this.deltaQueue;
+			this.deltaQueue = null;
+			if (queued) {
+				for (const msg of queued) {
+					const { maxVersion, touchedTypes } = await applyIncomingOps({
+						db: this.db,
+						codec: this.codec,
+						ops: msg.ops,
+					});
+					if (maxVersion !== undefined) await this.setCursor(maxVersion);
+					for (const type of touchedTypes)
+						touchedAcrossBootstrap.add(type);
+				}
 			}
 
-			if (!entries.length) return;
-
-			const { maxVersion, touchedTypes } = await applyIncomingOps({
-				db: this.db,
-				codec: this.codec,
-				ops: entries,
-			});
-			if (maxVersion !== undefined) await this.setCursor(maxVersion);
-			if (touchedTypes.size) this.onEntitiesChanged(touchedTypes);
-
-			if (next_cursor == null) return;
+			if (succeeded && touchedAcrossBootstrap.size) {
+				this.onEntitiesChanged(touchedAcrossBootstrap);
+			}
 		}
 	}
 
 	// ---------- inbound delta handling ----------
 
-	private async handleMessage(raw: unknown) {
-		const bytes = await toWsFrameBytes(raw);
-		if (!bytes) {
-			console.warn("bad server frame type:", raw);
+	private async handleDeltaEvent(raw: unknown) {
+		if (typeof raw !== "string") {
+			console.warn("bad delta frame type:", raw);
 			return;
 		}
 
-		let frame: ServerFrame;
+		let msg: DeltaEvent;
 		try {
-			frame = ServerFrame.decode(bytes);
+			msg = JSON.parse(raw);
 		} catch (e) {
-			console.warn("bad server frame:", e);
+			console.warn("bad delta frame:", e);
+			return;
+		}
+		if (!msg.ops.length) return;
+
+		// If bootstrap is running, queue the delta to avoid cursor races.
+		if (this.deltaQueue) {
+			this.deltaQueue.push(msg);
 			return;
 		}
 
-		if (frame.ready) return;
-		if (frame.error) {
-			const message = frame.error.message || undefined;
-			console.warn("server error:", frame.error.code, message);
-			return;
-		}
-		if (!frame.delta) {
-			console.warn("server frame missing body");
-			return;
-		}
-
-		if (frame.delta.ackMaxVersion != null) {
-			await this.setCursor(frame.delta.ackMaxVersion);
-		}
-
-		if (frame.delta.ops.length > 0) {
-			const deltaOps: DeltaOp[] = frame.delta.ops.map((op) => ({
-				id: op.id,
-				_sync_hlc: op.syncHlc,
-				_sync_is_deleted: op.syncIsDeleted,
-				blob: op.blob,
-				server_version: op.serverVersion,
-			}));
-
-			// Apply ops (idempotent).
-			const { maxVersion, touchedTypes } = await applyIncomingOps({
-				db: this.db,
-				codec: this.codec,
-				ops: deltaOps,
-			});
-			if (maxVersion !== undefined) await this.setCursor(maxVersion);
-			if (touchedTypes.size) this.onEntitiesChanged(touchedTypes);
-		}
-
-		// If this is an ack for one of our pushes, clear the pending batch.
-		const ackFor = frame.delta.ackFor || undefined;
-		if (ackFor) {
-			const pending = this.pendingBatches.get(ackFor);
-			if (pending) {
-				this.pendingBatches.delete(ackFor);
-				// Mark all rows in the batch clean. If the server
-				// rejected some as stale (equal/older HLC), those
-				// are still effectively settled from our POV.
-				await markDirtyEntriesSynced(this.db, pending);
-			}
-		}
+		// Apply ops (idempotent).
+		const { maxVersion, touchedTypes } = await applyIncomingOps({
+			db: this.db,
+			codec: this.codec,
+			ops: msg.ops,
+		});
+		if (maxVersion !== undefined) await this.setCursor(maxVersion);
+		if (touchedTypes.size) this.onEntitiesChanged(touchedTypes);
 	}
 
 	// ---------- pushing dirty rows ----------
@@ -594,40 +584,45 @@ class SyncClient {
 	}
 
 	private async pushOnePass() {
-		if (this.ws?.readyState !== WebSocket.OPEN) return;
+		while (this.running) {
+			const entries = await getDirty(this.db);
+			if (!entries.length) return;
 
-		let cursor: string | undefined;
-		while (this.running && this.ws?.readyState === WebSocket.OPEN) {
-			const { entries, newCursor } = await getDirty({
-				db: this.db,
-				cursor,
+			const ops: PushOp[] = await Promise.all(
+				entries.map(async (e) => ({
+					id: e.id,
+					_sync_is_deleted: !!e._sync_is_deleted,
+					_sync_edited_at: e._sync_edited_at,
+					blob: await this.codec.encodeJsonString(e.plain_data),
+				})),
+			);
+
+			const res = await fetch("/api/v1/push", {
+				method: "POST",
+				credentials: "include",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ ops }),
 			});
-				if (!entries.length) return;
+			if (!res.ok) {
+				throw new Error(`push ${res.status}`);
+			}
+			const ack = (await res.json()) as {
+				ack_max_version?: number;
+				not_applied_ids?: string[];
+			};
+			if (ack.ack_max_version != null) {
+				await this.setCursor(ack.ack_max_version);
+			}
 
-				const batchId = cryptoRandomId();
-				const ops: WirePushOp[] = await Promise.all(
-					entries.map(async (e) => ({
-						id: e.id,
-						syncHlc: e._sync_hlc,
-						syncIsDeleted: !!e._sync_is_deleted,
-						blob: await this.codec.encodeJsonBytes(e.plain_data),
-					})),
-				);
-
-			this.pendingBatches.set(batchId, entries);
-			this.ws.send(ClientFrame.encode({ push: { batchId, ops } }).finish());
-
-			if (!newCursor) return;
-			cursor = newCursor;
+			const notApplied = new Set(ack.not_applied_ids ?? []);
+			const appliedEntries = entries.filter((entry) => !notApplied.has(entry.id));
+			if (!appliedEntries.length) {
+				// No forward progress for this batch; avoid tight retry loops on stale rows.
+				return;
+			}
+			await markDirtyEntriesSynced(this.db, appliedEntries);
 		}
 	}
-}
-
-function cryptoRandomId(): string {
-	if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-		return crypto.randomUUID();
-	}
-	return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 // -------------------- idb persistence --------------------
@@ -713,7 +708,7 @@ export function useSync() {
 				qc.invalidateQueries({ queryKey: queryKeyRoots.accounts });
 			if (types.has("category"))
 				qc.invalidateQueries({ queryKey: queryKeyRoots.categories });
-			if (types.has("transaction")) {
+			if (types.has("transaction") || types.has("transaction_link")) {
 				qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
 				qc.invalidateQueries({ queryKey: queryKeyRoots.transaction });
 			}

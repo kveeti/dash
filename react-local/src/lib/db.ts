@@ -2,8 +2,6 @@ import {
 	sqlite3Worker1Promiser,
 	type Worker1Promiser,
 } from "@sqlite.org/sqlite-wasm";
-import type { HLC } from "./hlc";
-
 function makeExec(promiser: Worker1Promiser) {
 	return async function exec(sql: string, vars?: any[]): Promise<any> {
 		const result = await promiser("exec", { sql, bind: vars });
@@ -29,14 +27,12 @@ function makeQuery(promiser: Worker1Promiser) {
 }
 
 export type DbHandle = {
-	hlc: HLC;
 	exec: (sql: string, vars?: any[]) => Promise<any>;
 	query: <T = any>(sql: string, vars?: any[]) => Promise<T[]>;
 	withTx: <T>(fn: () => Promise<T>) => Promise<T>;
 };
 
 export function sqlite(
-	{ hlc }: { hlc: HLC },
 	migrations: (db: DbHandle) => Promise<void>,
 ) {
 	let ready = false;
@@ -64,7 +60,6 @@ export function sqlite(
 		const query = makeQuery(promiser);
 		let txDepth = 0;
 		handle = {
-			hlc,
 			exec,
 			query,
 			withTx: async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -91,7 +86,6 @@ export function sqlite(
 	})();
 
 	return {
-		hlc: hlc,
 		query: async <T = any>(sql: string, vars?: any[]): Promise<T[]> => {
 			if (!ready) await initPromise;
 			return await handle.query<T>(sql, vars);
@@ -107,8 +101,8 @@ export function sqlite(
 	};
 }
 
-export function getDb({ hlc }: { hlc: HLC }) {
-	return sqlite({ hlc }, async ({ exec, query }) => {
+export function getDb() {
+	return sqlite(async ({ exec, query }) => {
 		await exec(`create table if not exists version (current integer not null)`);
 
 		// _sync_status
@@ -123,8 +117,8 @@ export function getDb({ hlc }: { hlc: HLC }) {
 				name text not null unique,
 				is_neutral integer not null default 0,
 
+				_sync_edited_at integer not null default 0,
 				_sync_is_deleted integer default 0,
-				_sync_hlc text not null,
 				_sync_status integer default 1
 			)`,
 			`create table if not exists accounts (
@@ -133,8 +127,8 @@ export function getDb({ hlc }: { hlc: HLC }) {
 				created_at text not null,
 				updated_at text,
 
+				_sync_edited_at integer not null default 0,
 				_sync_is_deleted integer default 0,
-				_sync_hlc text not null,
 				_sync_status integer default 1
 			)`,
 			`create table if not exists transactions (
@@ -151,8 +145,8 @@ export function getDb({ hlc }: { hlc: HLC }) {
 				category_id text,
 				account_id text not null,
 
+				_sync_edited_at integer not null default 0,
 				_sync_is_deleted integer default 0,
-				_sync_hlc text not null,
 				_sync_status integer default 1
 			)`,
 			`create index if not exists idx_tx_date on transactions(date desc, id desc)`,
@@ -164,8 +158,8 @@ export function getDb({ hlc }: { hlc: HLC }) {
 				created_at text not null,
 				updated_at text,
 
+				_sync_edited_at integer not null default 0,
 				_sync_is_deleted integer default 0,
-				_sync_hlc text not null,
 				_sync_status integer default 1,
 
 				primary key (transaction_a_id, transaction_b_id)

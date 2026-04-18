@@ -268,7 +268,7 @@ export function useCreateTransactionMutation() {
 			const now = new Date().toISOString();
 			await db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id, _sync_hlc)
+				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id, _sync_edited_at)
 				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				[
 					id(),
@@ -282,7 +282,7 @@ export function useCreateTransactionMutation() {
 					tx.notes ?? null,
 					tx.category_id ?? null,
 					tx.account_id,
-					db.hlc.generate(),
+					Date.now(),
 				],
 			);
 		},
@@ -313,8 +313,8 @@ export function useUpdateTransactionMutation() {
 					notes = ?,
 					category_id = ?,
 					account_id = ?,
-					_sync_hlc = ?,
-					_sync_status = 1
+					_sync_status = 1,
+					_sync_edited_at = ?
  				where id = ?`,
 				[
 					now,
@@ -326,7 +326,7 @@ export function useUpdateTransactionMutation() {
 					tx.notes ?? null,
 					tx.category_id ?? null,
 					tx.account_id,
-					db.hlc.generate(),
+					Date.now(),
 					txId,
 				],
 			);
@@ -375,14 +375,14 @@ export function useLinkTransactionMutation() {
 			const now = new Date().toISOString();
 			await db.exec(
 				`insert into transaction_links
-					(transaction_a_id, transaction_b_id, created_at, updated_at, _sync_hlc, _sync_is_deleted, _sync_status)
-				values (?, ?, ?, ?, ?, 0, 1)
+					(transaction_a_id, transaction_b_id, created_at, updated_at, _sync_is_deleted, _sync_status, _sync_edited_at)
+				values (?, ?, ?, ?, 0, 1, ?)
 				on conflict (transaction_a_id, transaction_b_id) do update set
 					_sync_is_deleted = 0,
 					updated_at = excluded.updated_at,
-					_sync_hlc = excluded._sync_hlc,
-					_sync_status = 1`,
-				[a, b, now, now, db.hlc.generate()],
+					_sync_status = 1,
+					_sync_edited_at = excluded._sync_edited_at`,
+				[a, b, now, now, Date.now()],
 			);
 		},
 		onSuccess: () => invalidateLinksQueries(qc),
@@ -400,10 +400,10 @@ export function useUnlinkTransactionMutation() {
 				`update transaction_links set
 					_sync_is_deleted = 1,
 					updated_at = ?,
-					_sync_hlc = ?,
-					_sync_status = 1
+					_sync_status = 1,
+					_sync_edited_at = ?
 				where transaction_a_id = ? and transaction_b_id = ?`,
-				[now, db.hlc.generate(), a, b],
+				[now, Date.now(), a, b],
 			);
 		},
 		onSuccess: () => invalidateLinksQueries(qc),
@@ -428,10 +428,10 @@ export function useBulkSetCategoryMutation() {
 						`update transactions set
 							category_id = ?,
 							updated_at = ?,
-							_sync_hlc = ?,
-							_sync_status = 1
+							_sync_status = 1,
+							_sync_edited_at = ?
 						where id = ?`,
-						[categoryId, now, db.hlc.generate(), txId],
+						[categoryId, now, Date.now(), txId],
 					);
 				}
 			});

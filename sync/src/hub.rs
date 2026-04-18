@@ -1,142 +1,76 @@
 use std::sync::Arc;
 
-use dashmap::DashMap;
-use tokio::sync::{broadcast, mpsc};
-use tracing::error;
+use dashmap::{DashMap, DashSet};
+use tokio::sync::broadcast;
 
-use crate::{
-    db::Db,
-    proto::{PushOp, ServerMessage},
-};
+use crate::proto::DeltaOp;
 
-const INBOX_CAP: usize = 64;
 const BROADCAST_CAP: usize = 256;
 
 #[derive(Clone)]
-pub enum BroadcastTarget {
-    All,
-    AllExceptConnection(String),
-    OnlyConnection(String),
+pub struct RealtimeEvent {
+    pub source_client_id: Option<String>,
+    pub ops: Vec<DeltaOp>,
 }
 
-#[derive(Clone)]
-pub struct BroadcastEvent {
-    pub target: BroadcastTarget,
-    pub message: Arc<ServerMessage>,
-}
-
-/// The hub holds one actor per active user. Actors are spawned lazily on first
-/// subscribe/push and live forever in the current impl; GC on last-unsubscribe
-/// can be added later.
+/// One broadcast channel per user for realtime delta fanout.
 pub struct Hub {
-    db: Db,
-    users: DashMap<String, UserHandle>,
+    users: DashMap<String, Arc<UserHandle>>,
 }
 
-#[derive(Clone)]
 pub struct UserHandle {
-    pub inbox: mpsc::Sender<ActorCommand>,
-    pub broadcast: broadcast::Sender<BroadcastEvent>,
-}
-
-pub enum ActorCommand {
-    Push {
-        source_connection_id: String,
-        batch_id: String,
-        ops: Vec<PushOp>,
-    },
+    pub broadcast: broadcast::Sender<RealtimeEvent>,
+    connected_clients: DashSet<String>,
 }
 
 impl Hub {
-    pub fn new(db: Db) -> Self {
+    pub fn new() -> Self {
         Self {
-            db,
             users: DashMap::new(),
         }
     }
 
-    pub fn get_or_spawn(&self, user_id: &str) -> UserHandle {
+    pub fn get_or_spawn(&self, user_id: &str) -> Arc<UserHandle> {
         if let Some(existing) = self.users.get(user_id) {
             return existing.clone();
         }
 
-        let (inbox_tx, inbox_rx) = mpsc::channel::<ActorCommand>(INBOX_CAP);
-        let (bcast_tx, _) = broadcast::channel::<BroadcastEvent>(BROADCAST_CAP);
+        let (bcast_tx, _) = broadcast::channel::<RealtimeEvent>(BROADCAST_CAP);
 
-        let handle = UserHandle {
-            inbox: inbox_tx,
+        let handle = Arc::new(UserHandle {
             broadcast: bcast_tx.clone(),
-        };
-
-        let user_id_owned = user_id.to_string();
-        let db = self.db.clone();
-        let bcast_for_actor = bcast_tx;
-        tokio::spawn(async move {
-            run_actor(user_id_owned, db, inbox_rx, bcast_for_actor).await;
+            connected_clients: DashSet::new(),
         });
 
-        // Note: small race where two callers may both spawn; entry() resolves it.
+        // Small race where two callers may both create; entry() resolves it.
         self.users
             .entry(user_id.to_string())
-            .or_insert(handle)
+            .or_insert_with(|| handle.clone())
             .clone()
     }
-}
 
-async fn run_actor(
-    user_id: String,
-    db: Db,
-    mut inbox: mpsc::Receiver<ActorCommand>,
-    bcast: broadcast::Sender<BroadcastEvent>,
-) {
-    while let Some(cmd) = inbox.recv().await {
-        match cmd {
-            ActorCommand::Push {
-                source_connection_id,
-                batch_id,
-                ops,
-            } => {
-                match db.apply_push_ops(&user_id, &ops).await {
-                    Ok(applied) => {
-                        // Always ack the originator (possibly with empty ops)
-                        // so it can clear pending state and advance cursor.
-                        let ack_max_version = applied.last().map(|op| op.server_version);
-                        let ack_msg = Arc::new(ServerMessage::Delta {
-                            ack_for: Some(batch_id),
-                            ack_max_version,
-                            ops: Vec::new(),
-                        });
-                        let _ = bcast.send(BroadcastEvent {
-                            target: BroadcastTarget::OnlyConnection(source_connection_id.clone()),
-                            message: ack_msg,
-                        });
+    pub fn register_client(&self, user_id: &str, client_id: &str) -> broadcast::Receiver<RealtimeEvent> {
+        let handle = self.get_or_spawn(user_id);
+        handle.connected_clients.insert(client_id.to_string());
+        handle.broadcast.subscribe()
+    }
 
-                        // Broadcast applied delta rows to all other sockets.
-                        if !applied.is_empty() {
-                            let delta_msg = Arc::new(ServerMessage::Delta {
-                                ack_for: None,
-                                ack_max_version: None,
-                                ops: applied,
-                            });
-                            let _ = bcast.send(BroadcastEvent {
-                                target: BroadcastTarget::AllExceptConnection(source_connection_id),
-                                message: delta_msg,
-                            });
-                        }
-                    }
-                    Err(err) => {
-                        error!(%user_id, "apply_push failed: {:#}", err);
-                        let msg = Arc::new(ServerMessage::Error {
-                            code: "push_failed".into(),
-                            message: Some(format!("{err:#}")),
-                        });
-                        let _ = bcast.send(BroadcastEvent {
-                            target: BroadcastTarget::All,
-                            message: msg,
-                        });
-                    }
-                }
-            }
+    pub fn unregister_client(&self, user_id: &str, client_id: &str) {
+        let Some(handle) = self.users.get(user_id).map(|h| h.clone()) else {
+            return;
+        };
+        handle.connected_clients.remove(client_id);
+    }
+
+    pub fn publish_delta(&self, user_id: &str, source_client_id: String, ops: Vec<DeltaOp>) {
+        if ops.is_empty() {
+            return;
         }
+
+        let handle = self.get_or_spawn(user_id);
+        let _ = handle.broadcast.send(RealtimeEvent {
+            ops,
+            source_client_id: Some(source_client_id),
+        });
     }
 }

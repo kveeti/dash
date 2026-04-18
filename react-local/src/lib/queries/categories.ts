@@ -85,8 +85,8 @@ async function createCategory(db: DbHandle, cat: CategoryInput) {
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
 		await db.exec(
-			"insert into categories (id, created_at, updated_at, name, is_neutral, _sync_hlc) values (?, ?, ?, ?, ?, ?)",
-			[id(), now, now, cat.name, cat.is_neutral ? 1 : 0, db.hlc.generate()],
+			"insert into categories (id, created_at, updated_at, name, is_neutral, _sync_edited_at) values (?, ?, ?, ?, ?, ?)",
+			[id(), now, now, cat.name, cat.is_neutral ? 1 : 0, Date.now()],
 		);
 	});
 }
@@ -99,8 +99,8 @@ async function updateCategory(
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
 		await db.exec(
-			"update categories set name = ?, is_neutral = ?, updated_at = ?, _sync_hlc = ?, _sync_status = 1 where id = ?",
-			[cat.name, cat.is_neutral ? 1 : 0, now, db.hlc.generate(), categoryId],
+			"update categories set name = ?, is_neutral = ?, updated_at = ?, _sync_status = 1, _sync_edited_at = ? where id = ?",
+			[cat.name, cat.is_neutral ? 1 : 0, now, Date.now(), categoryId],
 		);
 	});
 }
@@ -117,8 +117,8 @@ async function deleteCategory(
 		if (rows[0].c > 0) return false;
 		const now = new Date().toISOString();
 		await db.exec(
-			"update categories set _sync_is_deleted = 1, updated_at = ?, _sync_hlc = ? where id = ?",
-			[now, db.hlc.generate(), categoryId],
+			"update categories set _sync_is_deleted = 1, updated_at = ?, _sync_status = 1, _sync_edited_at = ? where id = ?",
+			[now, Date.now(), categoryId],
 		);
 		return true;
 	});
@@ -138,8 +138,8 @@ export async function getOrCreateCategoryByName(
 		const newId = id();
 		const now = new Date().toISOString();
 		await db.exec(
-			"insert into categories (id, created_at, updated_at, name, is_neutral, _sync_hlc) values (?, ?, ?, ?, ?, ?)",
-			[newId, now, now, name, 0, db.hlc.generate()],
+			"insert into categories (id, created_at, updated_at, name, is_neutral, _sync_edited_at) values (?, ?, ?, ?, ?, ?)",
+			[newId, now, now, name, 0, Date.now()],
 		);
 		return newId;
 	});

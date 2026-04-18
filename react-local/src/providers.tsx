@@ -5,7 +5,6 @@ import {
 } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { getDb } from "./lib/db";
-import { getHLCGenerator } from "./lib/hlc";
 import { queryKeyRoots } from "./lib/queries/query-keys";
 
 const queryClient = new QueryClient({
@@ -32,10 +31,9 @@ export function Providers(props: { children: ReactNode }) {
 }
 
 const DbContext = createContext<ReturnType<typeof getDb> | null>(null);
-const clientId = "client-1";
 
 function DbProvider(props: { children: ReactNode }) {
-	const db = useMemo(() => getDb({ hlc: getHLCGenerator(clientId) }), []);
+	const db = useMemo(() => getDb(), []);
 
 	return <DbContext.Provider value={db}>{props.children}</DbContext.Provider>;
 }
