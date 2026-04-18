@@ -116,7 +116,7 @@ impl Db {
         limit: i64,
     ) -> Result<BootstrapPage, sqlx::Error> {
         let server_max_version: i64 = sqlx::query_scalar(
-            "select coalesce(max(_sync_server_version), 0) from entries where user_id = $1",
+            "select coalesce((select _sync_server_version from users where id = $1), 0)",
         )
         .bind(user_id)
         .fetch_one(&self.pool)
@@ -180,20 +180,26 @@ impl Db {
         let mut tx = self.pool.begin().await?;
         let mut applied: Vec<DeltaOp> = Vec::with_capacity(ops.len());
         let mut not_applied_ids: Vec<String> = Vec::new();
+        let mut current_server_version: i64 =
+            sqlx::query_scalar("select _sync_server_version from users where id = $1 for update")
+                .bind(user_id)
+                .fetch_one(&mut *tx)
+                .await?;
 
         for op in ops {
+            let next_server_version = current_server_version + 1;
             let row = sqlx::query(
                 r#"
                 insert into entries (
                     user_id, id, blob, _sync_is_deleted, _sync_edited_at,
                     _sync_server_version, _sync_server_updated_at
                 )
-                values ($1, $2, $3, $4, $5, nextval('server_version'), now())
+                values ($1, $2, $3, $4, $5, $6, now())
                 on conflict (user_id, id) do update set
                     blob = excluded.blob,
                     _sync_is_deleted = excluded._sync_is_deleted,
                     _sync_edited_at = excluded._sync_edited_at,
-                    _sync_server_version = nextval('server_version'),
+                    _sync_server_version = $6,
                     _sync_server_updated_at = now()
                 where excluded._sync_edited_at >= entries._sync_edited_at
                 returning _sync_server_version, _sync_is_deleted, _sync_edited_at
@@ -204,6 +210,7 @@ impl Db {
             .bind(&op.blob)
             .bind(op.is_deleted)
             .bind(op.edited_at)
+            .bind(next_server_version)
             .fetch_optional(&mut *tx)
             .await?;
 
@@ -218,10 +225,17 @@ impl Db {
                     edited_at,
                     server_version,
                 });
+                current_server_version = server_version;
             } else {
                 not_applied_ids.push(op.id.clone());
             }
         }
+
+        sqlx::query("update users set _sync_server_version = $2 where id = $1")
+            .bind(user_id)
+            .bind(current_server_version)
+            .execute(&mut *tx)
+            .await?;
 
         tx.commit().await?;
         applied.sort_by_key(|op| op.server_version);
