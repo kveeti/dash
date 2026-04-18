@@ -2,14 +2,12 @@
 create table users (
     id text primary key not null,
     external_id text unique,
-    salt text not null
+    salt text not null,
+    _sync_server_version bigint not null default 0
 );
 
--- monotonic sequence used as server version cursor
-create sequence server_version;
-
 -- entries: opaque e2e-encrypted blobs, keyed by (user_id, id).
--- _sync_server_version is assigned by the per-user actor at write time
+-- _sync_server_version is assigned from users._sync_server_version at write time
 -- (not by a trigger), so that assignment order == broadcast order per user.
 create table entries (
     user_id text not null references users(id) on delete cascade,
