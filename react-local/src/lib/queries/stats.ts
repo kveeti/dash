@@ -15,6 +15,29 @@ export type StatRow = {
 	unconverted_count: number;
 };
 
+export type YearStatRow = {
+	year: string;
+	bucket: string;
+	currency: string;
+	amount: number;
+	tx_count: number;
+	unconverted_count: number;
+};
+
+export type MonthStatRow = {
+	period: string;
+	bucket: string;
+	currency: string;
+	amount: number;
+	tx_count: number;
+	unconverted_count: number;
+};
+
+export type TransactionYearRow = {
+	year: string;
+	tx_count: number;
+};
+
 type MissingRateCurrency = {
 	currency: string;
 	count: number;
@@ -341,6 +364,82 @@ order by period, bucket, amount desc`;
 	return input.db.query<StatRow>(sql, params);
 }
 
+async function getYearStats(input: {
+	db: DbHandle;
+	from: string;
+	to: string;
+	sourceCurrency?: string;
+	reportingCurrency: string;
+	maxStalenessDays: number;
+	mode: ConversionMode;
+}): Promise<YearStatRow[]> {
+	const anchorCurrency = FX_ANCHOR_CURRENCY;
+	const convertedParams = buildConvertedParams({
+		from: input.from,
+		to: input.to,
+		sourceCurrency: input.sourceCurrency,
+		reportingCurrency: input.reportingCurrency,
+		maxStalenessDays: input.maxStalenessDays,
+		mode: input.mode,
+		anchorCurrency,
+	});
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
+	const sql = `${cteSql}
+select
+	substr(period, 1, 4) as year,
+	bucket,
+	? as currency,
+	sum(case when converted_signed_amount is null then 0 else abs(converted_signed_amount) end) as amount,
+	count(*) as tx_count,
+	sum(case when converted_signed_amount is null then 1 else 0 end) as unconverted_count
+from converted
+group by year, bucket
+order by year desc, bucket`;
+
+	const params = [...convertedParams.params];
+	params.push(normalizeCurrency(input.reportingCurrency));
+
+	return input.db.query<YearStatRow>(sql, params);
+}
+
+async function getMonthStats(input: {
+	db: DbHandle;
+	from: string;
+	to: string;
+	sourceCurrency?: string;
+	reportingCurrency: string;
+	maxStalenessDays: number;
+	mode: ConversionMode;
+}): Promise<MonthStatRow[]> {
+	const anchorCurrency = FX_ANCHOR_CURRENCY;
+	const convertedParams = buildConvertedParams({
+		from: input.from,
+		to: input.to,
+		sourceCurrency: input.sourceCurrency,
+		reportingCurrency: input.reportingCurrency,
+		maxStalenessDays: input.maxStalenessDays,
+		mode: input.mode,
+		anchorCurrency,
+	});
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
+	const sql = `${cteSql}
+select
+	period,
+	bucket,
+	? as currency,
+	sum(case when converted_signed_amount is null then 0 else abs(converted_signed_amount) end) as amount,
+	count(*) as tx_count,
+	sum(case when converted_signed_amount is null then 1 else 0 end) as unconverted_count
+from converted
+group by period, bucket
+order by period desc, bucket`;
+
+	const params = [...convertedParams.params];
+	params.push(normalizeCurrency(input.reportingCurrency));
+
+	return input.db.query<MonthStatRow>(sql, params);
+}
+
 async function getConvertedStatsSummary(input: {
 	db: DbHandle;
 	from: string;
@@ -521,6 +620,16 @@ async function getConvertedStatTransactions(input: {
 	return input.db.query<ConvertedStatTransactionRow>(sql, params);
 }
 
+async function getTransactionYears(db: DbHandle): Promise<TransactionYearRow[]> {
+	return db.query<TransactionYearRow>(`select
+		substr(coalesce(categorize_on, date), 1, 4) as year,
+		count(*) as tx_count
+	from transactions
+	where _sync_is_deleted = 0
+	group by year
+	order by year desc`);
+}
+
 export function useStatsQuery(input: {
 	from: string;
 	to: string;
@@ -528,6 +637,7 @@ export function useStatsQuery(input: {
 	reportingCurrency?: string;
 	maxStalenessDays?: number;
 	mode?: ConversionMode;
+	enabled?: boolean;
 }) {
 	const db = useDb();
 	const reportingCurrency = input.reportingCurrency
@@ -547,9 +657,99 @@ export function useStatsQuery(input: {
 			maxStalenessDays,
 			mode,
 		],
-		enabled: !!reportingCurrency,
+		enabled: !!reportingCurrency && (input.enabled ?? true),
 		queryFn: () =>
 			getStats({
+				db,
+				from: input.from,
+				to: input.to,
+				sourceCurrency: input.sourceCurrency,
+				reportingCurrency: reportingCurrency!,
+				maxStalenessDays,
+				mode,
+			}),
+	});
+}
+
+export function useTransactionYearsQuery() {
+	const db = useDb();
+	return useQuery({
+		queryKey: ["stats", "transaction-years"],
+		queryFn: () => getTransactionYears(db),
+	});
+}
+
+export function useYearStatsQuery(input: {
+	from: string;
+	to: string;
+	sourceCurrency?: string;
+	reportingCurrency?: string;
+	maxStalenessDays?: number;
+	mode?: ConversionMode;
+	enabled?: boolean;
+}) {
+	const db = useDb();
+	const reportingCurrency = input.reportingCurrency
+		? normalizeCurrency(input.reportingCurrency)
+		: undefined;
+	const mode: ConversionMode = input.mode === "lenient" ? "lenient" : "strict";
+	const maxStalenessDays = Math.max(0, Math.trunc(input.maxStalenessDays ?? 7));
+
+	return useQuery({
+		queryKey: [
+			"stats",
+			"converted-by-year",
+			input.from,
+			input.to,
+			input.sourceCurrency ?? "",
+			reportingCurrency ?? "",
+			maxStalenessDays,
+			mode,
+		],
+		enabled: !!reportingCurrency && (input.enabled ?? true),
+		queryFn: () =>
+			getYearStats({
+				db,
+				from: input.from,
+				to: input.to,
+				sourceCurrency: input.sourceCurrency,
+				reportingCurrency: reportingCurrency!,
+				maxStalenessDays,
+				mode,
+			}),
+	});
+}
+
+export function useMonthStatsQuery(input: {
+	from: string;
+	to: string;
+	sourceCurrency?: string;
+	reportingCurrency?: string;
+	maxStalenessDays?: number;
+	mode?: ConversionMode;
+	enabled?: boolean;
+}) {
+	const db = useDb();
+	const reportingCurrency = input.reportingCurrency
+		? normalizeCurrency(input.reportingCurrency)
+		: undefined;
+	const mode: ConversionMode = input.mode === "lenient" ? "lenient" : "strict";
+	const maxStalenessDays = Math.max(0, Math.trunc(input.maxStalenessDays ?? 7));
+
+	return useQuery({
+		queryKey: [
+			"stats",
+			"converted-by-month-total",
+			input.from,
+			input.to,
+			input.sourceCurrency ?? "",
+			reportingCurrency ?? "",
+			maxStalenessDays,
+			mode,
+		],
+		enabled: !!reportingCurrency && (input.enabled ?? true),
+		queryFn: () =>
+			getMonthStats({
 				db,
 				from: input.from,
 				to: input.to,
@@ -568,6 +768,7 @@ export function useConvertedStatsSummaryQuery(input: {
 	reportingCurrency?: string;
 	maxStalenessDays?: number;
 	mode?: ConversionMode;
+	enabled?: boolean;
 }) {
 	const db = useDb();
 	const reportingCurrency = input.reportingCurrency
@@ -587,7 +788,7 @@ export function useConvertedStatsSummaryQuery(input: {
 			maxStalenessDays,
 			mode,
 		],
-		enabled: !!reportingCurrency,
+		enabled: !!reportingCurrency && (input.enabled ?? true),
 		queryFn: () =>
 			getConvertedStatsSummary({
 				db,
