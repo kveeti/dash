@@ -14,13 +14,10 @@ backinit:
 	@cargo install cargo-watch
 init: backinit frontinit
 
-mocks:
-	@cd mock_integrations && bun --watch --no-clear-screen src/index.ts
-
 frontdev:
-	@cd react-local && bun run dev
+	@cd front && bun run dev
 backdev:
-	@cd sync && cargo watch -x run
+	@cd back && cargo watch -x run
 dev: backdev frontdev
 
 frontbuild:
@@ -30,9 +27,9 @@ backbuild:
 build: backbuild frontbuild
 
 frontpre:
-	@cd react-local && bun run build && bun run preview
+	@cd front && bun run build && bun run preview
 backpre:
-	@cd sync && cargo run --release
+	@cd back && cargo run --release
 pre: backpre frontpre
 
 db:
@@ -41,20 +38,6 @@ db:
 dbreset:
 	cd back && cargo sqlx migrate run
 
-up:
-	@docker compose up -d
-
-trace:
-	@docker compose --profile trace up -d
-
-down:
-	@docker compose --profile trace down -v -t 1
-
 an:
 	@cd front && BUNDLE_ANALYZE=true bun run build && open dist/report-web.html
 
-e2e:
-	@cd back && cargo run &
-	bash -c 'for i in {1..30}; do curl -s http://localhost:8000/api/health && break || (sleep 1 && echo "Waiting for server..."); done'
-	cd front && bunx playwright test --ui
-	pkill -f backend
