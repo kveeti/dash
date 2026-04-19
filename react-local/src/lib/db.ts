@@ -164,6 +164,7 @@ export function getDb(): DbClient {
 				_sync_is_deleted integer default 0,
 				_sync_status integer default 1
 			)`,
+
 			`create table if not exists accounts (
 				id text primary key not null,
 				name text not null unique,
@@ -175,6 +176,7 @@ export function getDb(): DbClient {
 				_sync_is_deleted integer default 0,
 				_sync_status integer default 1
 			)`,
+
 			`create table if not exists transactions (
 				id text primary key not null,
 				created_at text not null,
@@ -193,15 +195,31 @@ export function getDb(): DbClient {
 				_sync_is_deleted integer default 0,
 				_sync_status integer default 1
 			)`,
-			`create index if not exists idx_tx_date on transactions(date desc, id desc)`,
+
 			`create index if not exists idx_tx_effective_date
 				on transactions(coalesce(categorize_on, date) desc, id desc)
 				where _sync_is_deleted = 0`,
+
 			`create index if not exists idx_tx_currency_effective_date
 				on transactions(currency, coalesce(categorize_on, date) desc)
 				where _sync_is_deleted = 0`,
-			`create index if not exists idx_tx_category on transactions(category_id)`,
-			`create index if not exists idx_tx_account on transactions(account_id)`,
+
+			`create index if not exists idx_tx_date_active
+				on transactions(date desc, id desc)
+				where _sync_is_deleted = 0`,
+
+			`create index if not exists idx_tx_category_date_active
+				on transactions(category_id, date desc, id desc)
+				where _sync_is_deleted = 0`,
+
+			`create index if not exists idx_tx_account_date_active
+				on transactions(account_id, date desc, id desc)
+				where _sync_is_deleted = 0`,
+
+			`create index if not exists idx_tx_currency_date_active
+				on transactions(currency, date desc, id desc)
+				where _sync_is_deleted = 0`,
+
 			`create table if not exists transaction_links (
 				transaction_a_id text not null,
 				transaction_b_id text not null,
@@ -214,12 +232,15 @@ export function getDb(): DbClient {
 
 				primary key (transaction_a_id, transaction_b_id)
 			)`,
+
 			`create index if not exists idx_tx_links_a_active
 				on transaction_links(transaction_a_id)
 				where _sync_is_deleted = 0`,
+
 			`create index if not exists idx_tx_links_b_active
 				on transaction_links(transaction_b_id)
 				where _sync_is_deleted = 0`,
+
 			`create table if not exists app_settings (
 				id integer primary key not null check (id = 1),
 				reporting_currency text not null default 'EUR',
@@ -227,6 +248,7 @@ export function getDb(): DbClient {
 				conversion_mode text not null default 'strict',
 				updated_at text not null
 			)`,
+
 			`insert into app_settings (
 				id, reporting_currency, max_staleness_days, conversion_mode, updated_at
 			)
@@ -234,12 +256,14 @@ export function getDb(): DbClient {
 				1, 'EUR', 7, 'strict', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 			)
 			on conflict(id) do nothing`,
+
 			`create table if not exists fx_rates (
 				rate_date text not null,
 				currency text not null,
 				rate_to_anchor real not null,
 				primary key (currency, rate_date)
 			)`,
+
 			`create index if not exists idx_fx_rates_currency_date_desc
 				on fx_rates(currency, rate_date desc)`,
 		];

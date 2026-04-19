@@ -81,7 +81,7 @@ txs AS (
   LEFT JOIN categories c ON c.id = t.category_id
   WHERE t._sync_is_deleted = 0
     AND t.id IN (SELECT id FROM relevant_ids)
-    AND (? IS NULL OR upper(t.currency) = upper(?))
+    AND (? IS NULL OR t.currency = ?)
 ),
 pairs AS (
   SELECT
@@ -95,7 +95,7 @@ pairs AS (
                    THEN l.transaction_b_id
                    ELSE l.transaction_a_id END
   WHERE p.amount > 0 AND n.amount < 0 AND p.is_neutral = 0
-    AND upper(p.currency) = upper(n.currency)
+    AND p.currency = n.currency
     AND l._sync_is_deleted = 0
 ),
 allocations AS (
@@ -162,11 +162,11 @@ tx_rates AS (
     p.original_currency,
     p.eff_date,
     CASE
-      WHEN p.original_currency = upper(?) THEN 1.0
+      WHEN p.original_currency = ? THEN 1.0
       ELSE (
         SELECT r.rate_to_anchor
         FROM fx_rates r
-        WHERE upper(r.currency) = p.original_currency
+        WHERE r.currency = p.original_currency
           AND r.rate_date <= p.eff_date
           ${strictTxRateFloor}
         ORDER BY r.rate_date DESC
@@ -183,11 +183,11 @@ reporting_rates AS (
   SELECT
     d.eff_date,
     CASE
-      WHEN upper(?) = upper(?) THEN 1.0
+      WHEN ? = ? THEN 1.0
       ELSE (
         SELECT r.rate_to_anchor
         FROM fx_rates r
-        WHERE upper(r.currency) = upper(?)
+        WHERE r.currency = ?
           AND r.rate_date <= d.eff_date
           ${strictReportingRateFloor}
         ORDER BY r.rate_date DESC
@@ -220,7 +220,7 @@ converted AS (
     n.original_signed_amount,
     n.original_amount,
     CASE
-      WHEN n.original_currency = upper(?) THEN n.original_signed_amount
+      WHEN n.original_currency = ? THEN n.original_signed_amount
       WHEN n.tx_rate_to_anchor IS NULL OR n.reporting_rate_to_anchor IS NULL OR n.reporting_rate_to_anchor = 0 THEN NULL
       ELSE n.original_signed_amount * n.tx_rate_to_anchor / n.reporting_rate_to_anchor
     END AS converted_signed_amount
@@ -240,6 +240,8 @@ function buildConvertedParams(input: {
 	const sourceCurrency = input.sourceCurrency?.trim()
 		? normalizeCurrency(input.sourceCurrency)
 		: null;
+	const reportingCurrency = normalizeCurrency(input.reportingCurrency);
+	const anchorCurrency = normalizeCurrency(input.anchorCurrency);
 
 	const base: Array<string | number | null> = [
 		input.from,
@@ -248,7 +250,7 @@ function buildConvertedParams(input: {
 		sourceCurrency,
 		input.from,
 		input.to,
-		input.anchorCurrency,
+		anchorCurrency,
 	];
 
 	if (input.mode === "strict") {
@@ -256,16 +258,16 @@ function buildConvertedParams(input: {
 	}
 
 	base.push(
-		input.reportingCurrency,
-		input.anchorCurrency,
-		input.reportingCurrency,
+		reportingCurrency,
+		anchorCurrency,
+		reportingCurrency,
 	);
 
 	if (input.mode === "strict") {
 		base.push(Math.max(0, input.maxStalenessDays));
 	}
 
-	base.push(input.reportingCurrency);
+	base.push(reportingCurrency);
 	return base;
 }
 
@@ -285,7 +287,7 @@ select
 	period,
 	bucket,
 	cat_name,
-	upper(?) as currency,
+	? as currency,
 	sum(case when converted_signed_amount is null then 0 else abs(converted_signed_amount) end) as amount,
 	sum(original_amount) as original_amount,
 	count(*) as tx_count,
@@ -303,7 +305,7 @@ order by period, bucket, amount desc`;
 		mode: input.mode,
 		anchorCurrency,
 	});
-	params.push(input.reportingCurrency);
+	params.push(normalizeCurrency(input.reportingCurrency));
 
 	return input.db.query<StatRow>(sql, params);
 }
@@ -322,8 +324,8 @@ async function getConvertedStatsSummary(input: {
 
 	const summarySql = `${cteSql}
 select
-	upper(?) as reporting_currency,
-	upper(?) as anchor_currency,
+	? as reporting_currency,
+	? as anchor_currency,
 	? as mode,
 	? as max_staleness_days,
 	count(*) as total_count,
@@ -343,8 +345,8 @@ from converted`;
 		anchorCurrency,
 	});
 	summaryParams.push(
-		input.reportingCurrency,
-		anchorCurrency,
+		normalizeCurrency(input.reportingCurrency),
+		normalizeCurrency(anchorCurrency),
 		input.mode,
 		Math.max(0, input.maxStalenessDays),
 	);
@@ -436,7 +438,7 @@ select
 	original_currency,
 	original_signed_amount,
 	original_amount,
-	upper(?) as currency,
+	? as currency,
 	converted_signed_amount,
 	case
 		when converted_signed_amount is null then null
@@ -454,7 +456,7 @@ order by eff_date desc, id desc`;
 		mode: input.mode,
 		anchorCurrency,
 	});
-	params.push(input.reportingCurrency);
+	params.push(normalizeCurrency(input.reportingCurrency));
 
 	return input.db.query<ConvertedStatTransactionRow>(sql, params);
 }

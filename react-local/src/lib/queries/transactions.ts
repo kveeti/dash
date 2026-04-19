@@ -12,19 +12,13 @@ import { FX_ANCHOR_CURRENCY } from "./settings";
 
 const DEFAULT_TRANSACTIONS_LIMIT = 50;
 
-const TRANSACTION_WITH_RELATIONS_SELECT_SQL = `select
+const TRANSACTION_LIST_BASE_SELECT_SQL = `select
 	t.id,
 	t.date,
-	t.categorize_on,
 	t.amount,
 	t.currency,
 	t.counter_party,
-	t.additional,
-	t.notes,
-	t.category_id,
-	t.account_id,
 	c.name as category_name,
-	c.is_neutral as category_is_neutral,
 	a.name as account_name,
 	t.amount as original_amount,
 	upper(t.currency) as original_currency,
@@ -36,6 +30,43 @@ from transactions t
 left join categories c on t.category_id = c.id
 left join accounts a on t.account_id = a.id
 cross join app_settings s`;
+
+const TRANSACTION_DETAIL_BASE_SELECT_SQL = `select
+	t.id,
+	t.date,
+	t.amount,
+	t.currency,
+	t.counter_party,
+	t.additional,
+	t.notes,
+	t.category_id,
+	t.account_id,
+	t.amount as original_amount,
+	upper(t.currency) as original_currency,
+	coalesce(t.categorize_on, t.date) as eff_date,
+	upper(s.reporting_currency) as reporting_currency,
+	s.max_staleness_days as max_staleness_days,
+	s.conversion_mode as conversion_mode
+from transactions t
+cross join app_settings s`;
+
+const TRANSACTION_LIST_ROW_SELECT_SQL = `	b.id,
+	b.date,
+	b.amount,
+	b.currency,
+	b.counter_party,
+	b.category_name,
+	b.account_name`;
+
+const TRANSACTION_DETAIL_ROW_SELECT_SQL = `	b.id,
+	b.date,
+	b.amount,
+	b.currency,
+	b.counter_party,
+	b.additional,
+	b.notes,
+	b.category_id,
+	b.account_id`;
 
 type TransactionCursor = { left: string } | { right: string };
 type TransactionCursorInput = {
@@ -131,7 +162,15 @@ export function useTransactionsQuery(props: {
 	});
 }
 
-function buildConvertedRowsSql(baseSql: string, order: "asc" | "desc") {
+function buildConvertedRowsSql({
+	baseSql,
+	order,
+	rowSelectSql,
+}: {
+	baseSql: string;
+	order: "asc" | "desc";
+	rowSelectSql: string;
+}) {
 	return `with
 base_rows as (
 	${baseSql}
@@ -157,7 +196,7 @@ tx_rates as (
 			else (
 				select r.rate_to_anchor
 				from fx_rates r
-				where upper(r.currency) = p.original_currency
+				where r.currency = p.original_currency
 					and r.rate_date <= p.eff_date
 					and (
 						p.conversion_mode <> 'strict'
@@ -177,18 +216,18 @@ distinct_dates as (
 		max_staleness_days
 	from base_rows
 ),
-reporting_rates as (
+	reporting_rates as (
 	select
 		d.eff_date,
 		d.reporting_currency,
 		d.conversion_mode,
 		d.max_staleness_days,
 		case
-			when d.reporting_currency = upper(?) then 1.0
+			when d.reporting_currency = ? then 1.0
 			else (
 				select r.rate_to_anchor
 				from fx_rates r
-				where upper(r.currency) = d.reporting_currency
+				where r.currency = d.reporting_currency
 					and r.rate_date <= d.eff_date
 					and (
 						d.conversion_mode <> 'strict'
@@ -201,21 +240,7 @@ reporting_rates as (
 	from distinct_dates d
 )
 select
-	b.id,
-	b.date,
-	b.categorize_on,
-	b.amount,
-	b.currency,
-	b.counter_party,
-	b.additional,
-	b.notes,
-	b.category_id,
-	b.account_id,
-	b.category_name,
-	b.category_is_neutral,
-	b.account_name,
-	b.original_amount,
-	b.original_currency,
+${rowSelectSql},
 	b.reporting_currency as converted_currency,
 	case
 		when b.original_currency = b.reporting_currency then b.original_amount
@@ -250,10 +275,10 @@ async function getTransactions(
 ): Promise<TransactionsResult> {
 	const limit = opts?.limit ?? DEFAULT_TRANSACTIONS_LIMIT;
 
-	let baseSql = TRANSACTION_WITH_RELATIONS_SELECT_SQL;
+	let baseSql = TRANSACTION_LIST_BASE_SELECT_SQL;
 
 	const params: Array<string | number> = [];
-	const wheres: string[] = ["t._sync_is_deleted is 0"];
+	const wheres: string[] = ["t._sync_is_deleted = 0"];
 
 	if (opts?.search) {
 		wheres.push("(t.counter_party like ? or t.additional like ?)");
@@ -271,8 +296,8 @@ async function getTransactions(
 	}
 
 	if (opts?.filters?.currency) {
-		wheres.push("upper(t.currency) = upper(?)");
-		params.push(opts.filters.currency);
+		wheres.push("t.currency = ?");
+		params.push(opts.filters.currency.toUpperCase());
 	}
 
 	if (opts?.filters?.uncategorized) {
@@ -303,7 +328,11 @@ async function getTransactions(
 	const order = direction === "left" ? "asc" : "desc";
 	baseSql += ` order by t.date ${order}, t.id ${order} limit ?`;
 	params.push(limit + 1);
-	const sql = buildConvertedRowsSql(baseSql, order);
+	const sql = buildConvertedRowsSql({
+		baseSql,
+		order,
+		rowSelectSql: TRANSACTION_LIST_ROW_SELECT_SQL,
+	});
 	params.push(FX_ANCHOR_CURRENCY);
 
 	const rows = await db.query<TransactionRow>(sql, params);
@@ -324,12 +353,16 @@ async function getTransactions(
 async function getTransactionById(
 	db: DbHandle,
 	id: string,
-): Promise<TransactionRow | null> {
-	const baseSql = `${TRANSACTION_WITH_RELATIONS_SELECT_SQL}
+): Promise<TransactionDetails | null> {
+	const baseSql = `${TRANSACTION_DETAIL_BASE_SELECT_SQL}
 	where t.id = ? and t._sync_is_deleted = 0
 	limit 1`;
-	const sql = buildConvertedRowsSql(baseSql, "desc");
-	const rows = await db.query<TransactionRow>(
+	const sql = buildConvertedRowsSql({
+		baseSql,
+		order: "desc",
+		rowSelectSql: TRANSACTION_DETAIL_ROW_SELECT_SQL,
+	});
+	const rows = await db.query<TransactionDetails>(
 		sql,
 		[id, FX_ANCHOR_CURRENCY],
 	);
@@ -351,27 +384,29 @@ export type TransactionsResult = {
 	prev_id: string | null;
 };
 
-export type Transaction = {
-	id: string;
-	date: string;
-	categorize_on: string | null;
+type TransactionWithConvertedAmount = {
 	amount: number;
 	currency: string;
+	converted_amount: number | null;
+	converted_currency: string;
+};
+
+export type TransactionRow = TransactionWithConvertedAmount & {
+	id: string;
+	date: string;
+	counter_party: string;
+	category_name: string | null;
+	account_name: string;
+};
+
+export type TransactionDetails = TransactionWithConvertedAmount & {
+	id: string;
+	date: string;
 	counter_party: string;
 	additional: string | null;
 	notes: string | null;
 	category_id: string | null;
 	account_id: string;
-};
-
-export type TransactionRow = Transaction & {
-	category_name: string | null;
-	category_is_neutral: number | null;
-	account_name: string;
-	original_amount: number;
-	original_currency: string;
-	converted_amount: number | null;
-	converted_currency: string;
 };
 
 export function useCreateTransactionMutation() {
@@ -454,9 +489,6 @@ export type LinkedTransaction = {
 	counter_party: string;
 	amount: number;
 	currency: string;
-	date: string;
-	original_amount: number;
-	original_currency: string;
 	converted_amount: number | null;
 	converted_currency: string;
 };
@@ -511,7 +543,7 @@ export function useTransactionLinksQuery(txId: string | undefined) {
 							else (
 								select r.rate_to_anchor
 								from fx_rates r
-								where upper(r.currency) = p.original_currency
+								where r.currency = p.original_currency
 									and r.rate_date <= p.eff_date
 									and (
 										p.conversion_mode <> 'strict'
@@ -538,11 +570,11 @@ export function useTransactionLinksQuery(txId: string | undefined) {
 						d.conversion_mode,
 						d.max_staleness_days,
 						case
-							when d.reporting_currency = upper(?) then 1.0
+							when d.reporting_currency = ? then 1.0
 							else (
 								select r.rate_to_anchor
 								from fx_rates r
-								where upper(r.currency) = d.reporting_currency
+								where r.currency = d.reporting_currency
 									and r.rate_date <= d.eff_date
 									and (
 										d.conversion_mode <> 'strict'
@@ -559,9 +591,6 @@ export function useTransactionLinksQuery(txId: string | undefined) {
 					l.counter_party,
 					l.amount,
 					l.currency,
-					l.date,
-					l.original_amount,
-					l.original_currency,
 					l.reporting_currency as converted_currency,
 					case
 						when l.original_currency = l.reporting_currency then l.original_amount
@@ -664,19 +693,19 @@ export function useBulkSetCategoryMutation() {
 			txIds: string[];
 			categoryId: string | null;
 		}) => {
+			if (txIds.length === 0) return;
 			await db.withTx(async () => {
 				const now = new Date().toISOString();
-				for (const txId of txIds) {
-					await db.exec(
-						`update transactions set
-							category_id = ?,
-							updated_at = ?,
-							_sync_status = 1,
-							_sync_edited_at = ?
-						where id = ?`,
-						[categoryId, now, Date.now(), txId],
-					);
-				}
+				const placeholders = txIds.map(() => "?").join(", ");
+				await db.exec(
+					`update transactions set
+						category_id = ?,
+						updated_at = ?,
+						_sync_status = 1,
+						_sync_edited_at = ?
+					where id in (${placeholders})`,
+					[categoryId, now, Date.now(), ...txIds],
+				);
 			});
 		},
 		onSuccess: () => invalidateTransactionQueries(qc),
