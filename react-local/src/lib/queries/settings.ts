@@ -27,6 +27,14 @@ export type FxCsvImportResult = {
 	errors: string[];
 };
 
+function invalidateConversionDependentQueries(
+	qc: ReturnType<typeof useQueryClient>,
+) {
+	qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
+	qc.invalidateQueries({ queryKey: queryKeyRoots.transaction });
+	qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinks });
+}
+
 function normalizeConversionMode(value: string | null | undefined): ConversionMode {
 	return value === "lenient" ? "lenient" : "strict";
 }
@@ -275,8 +283,10 @@ export function useUpdateReportingCurrencyMutation() {
 				[normalizeCurrency(currency), now],
 			);
 		},
-		onSuccess: () =>
-			qc.invalidateQueries({ queryKey: queryKeyRoots.settings }),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: queryKeyRoots.settings });
+			invalidateConversionDependentQueries(qc);
+		},
 	});
 }
 
@@ -302,8 +312,10 @@ export function useUpdateConversionPolicyMutation() {
 				],
 			);
 		},
-		onSuccess: () =>
-			qc.invalidateQueries({ queryKey: queryKeyRoots.settings }),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: queryKeyRoots.settings });
+			invalidateConversionDependentQueries(qc);
+		},
 	});
 }
 
@@ -355,6 +367,7 @@ export function useUpsertFxRateMutation() {
 		},
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeyRoots.fxRates });
+			invalidateConversionDependentQueries(qc);
 		},
 	});
 }
@@ -369,6 +382,7 @@ export function useImportFxRatesCsvMutation() {
 		}) => importFxRatesCsv({ db, ...input }),
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeyRoots.fxRates });
+			invalidateConversionDependentQueries(qc);
 		},
 	});
 }
