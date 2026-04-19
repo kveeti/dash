@@ -194,6 +194,12 @@ export function getDb(): DbClient {
 				_sync_status integer default 1
 			)`,
 			`create index if not exists idx_tx_date on transactions(date desc, id desc)`,
+			`create index if not exists idx_tx_effective_date
+				on transactions(coalesce(categorize_on, date) desc, id desc)
+				where _sync_is_deleted = 0`,
+			`create index if not exists idx_tx_currency_effective_date
+				on transactions(currency, coalesce(categorize_on, date) desc)
+				where _sync_is_deleted = 0`,
 			`create index if not exists idx_tx_category on transactions(category_id)`,
 			`create index if not exists idx_tx_account on transactions(account_id)`,
 			`create table if not exists transaction_links (
@@ -208,6 +214,12 @@ export function getDb(): DbClient {
 
 				primary key (transaction_a_id, transaction_b_id)
 			)`,
+			`create index if not exists idx_tx_links_a_active
+				on transaction_links(transaction_a_id)
+				where _sync_is_deleted = 0`,
+			`create index if not exists idx_tx_links_b_active
+				on transaction_links(transaction_b_id)
+				where _sync_is_deleted = 0`,
 			`create table if not exists app_settings (
 				id integer primary key not null check (id = 1),
 				reporting_currency text not null default 'EUR',
@@ -228,6 +240,8 @@ export function getDb(): DbClient {
 				rate_to_anchor real not null,
 				primary key (currency, rate_date)
 			)`,
+			`create index if not exists idx_fx_rates_currency_date_desc
+				on fx_rates(currency, rate_date desc)`,
 		];
 
 		const versionRows = await query<{ current: number }>(
