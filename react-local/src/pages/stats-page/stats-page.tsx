@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
 	useConvertedStatTransactionsQuery,
-	useConvertedStatsSummaryQuery,
-	useStatsQuery,
 	type ConvertedStatTransactionRow,
 	type ConvertedStatsSummary,
 	type StatRow,
 } from "../../lib/queries/stats";
 import { useI18n } from "../../providers";
-import { useAppSettingsQuery } from "../../lib/queries/settings";
+import { FX_ANCHOR_CURRENCY, useAppSettingsQuery } from "../../lib/queries/settings";
 
 function getDefaultRange(): [string, string] {
 	const now = new Date();
@@ -28,26 +26,106 @@ type MonthSummary = {
 	unconvertedCount: number;
 };
 
+function buildStatRows(
+	transactions: ConvertedStatTransactionRow[],
+	reportingCurrency: string,
+): StatRow[] {
+	const map = new Map<string, StatRow>();
+
+	for (const tx of transactions) {
+		const key = `${tx.period}__${tx.bucket}__${tx.cat_name}`;
+		const existing = map.get(key) ?? {
+			period: tx.period,
+			bucket: tx.bucket,
+			cat_name: tx.cat_name,
+			currency: reportingCurrency,
+			amount: 0,
+			original_amount: 0,
+			tx_count: 0,
+			unconverted_count: 0,
+		};
+
+		existing.tx_count += 1;
+		existing.original_amount += tx.original_amount;
+		if (tx.converted_amount == null) {
+			existing.unconverted_count += 1;
+		} else {
+			existing.amount += tx.converted_amount;
+		}
+
+		map.set(key, existing);
+	}
+
+	return [...map.values()].sort(
+		(a, b) =>
+			b.period.localeCompare(a.period) ||
+			a.bucket.localeCompare(b.bucket) ||
+			b.amount - a.amount,
+	);
+}
+
+function buildSummary(
+	transactions: ConvertedStatTransactionRow[],
+	reportingCurrency: string,
+	mode: "strict" | "lenient",
+	maxStalenessDays: number,
+): ConvertedStatsSummary {
+	const totalCount = transactions.length;
+	let convertedCount = 0;
+	let totalSourceAmount = 0;
+	let convertedSourceAmount = 0;
+	let convertedTotal = 0;
+	const missing = new Map<string, { count: number; amount: number }>();
+
+	for (const tx of transactions) {
+		totalSourceAmount += tx.original_amount;
+		if (tx.converted_amount == null) {
+			const current = missing.get(tx.original_currency) ?? { count: 0, amount: 0 };
+			current.count += 1;
+			current.amount += tx.original_amount;
+			missing.set(tx.original_currency, current);
+			continue;
+		}
+
+		convertedCount += 1;
+		convertedSourceAmount += tx.original_amount;
+		convertedTotal += tx.converted_amount;
+	}
+
+	return {
+		reporting_currency: reportingCurrency,
+		anchor_currency: FX_ANCHOR_CURRENCY,
+		mode,
+		max_staleness_days: maxStalenessDays,
+		total_count: totalCount,
+		converted_count: convertedCount,
+		total_source_amount: totalSourceAmount,
+		converted_source_amount: convertedSourceAmount,
+		unconverted_source_amount: totalSourceAmount - convertedSourceAmount,
+		converted_total: convertedTotal,
+		coverage_count_ratio: totalCount > 0 ? convertedCount / totalCount : 1,
+		coverage_amount_ratio:
+			totalSourceAmount > 0 ? convertedSourceAmount / totalSourceAmount : 1,
+		missing_by_currency: [...missing.entries()]
+			.map(([currency, value]) => ({
+				currency,
+				count: value.count,
+				amount: value.amount,
+			}))
+			.sort((a, b) => b.amount - a.amount),
+	};
+}
+
 export function StatsPage() {
 	const [defaults] = useState(getDefaultRange);
 	const [from, setFrom] = useState(defaults[0]);
 	const [to, setTo] = useState(defaults[1]);
 	const settings = useAppSettingsQuery();
 
-	const query = useStatsQuery({
-		from,
-		to,
-		reportingCurrency: settings.data?.reporting_currency,
-		maxStalenessDays: settings.data?.max_staleness_days,
-		mode: settings.data?.conversion_mode,
-	});
-	const convertedSummary = useConvertedStatsSummaryQuery({
-		from,
-		to,
-		reportingCurrency: settings.data?.reporting_currency,
-		maxStalenessDays: settings.data?.max_staleness_days,
-		mode: settings.data?.conversion_mode,
-	});
+	const reportingCurrency = settings.data?.reporting_currency ?? "EUR";
+	const mode = settings.data?.conversion_mode ?? "strict";
+	const maxStalenessDays = settings.data?.max_staleness_days ?? 7;
+
 	const convertedTransactions = useConvertedStatTransactionsQuery({
 		from,
 		to,
@@ -56,10 +134,15 @@ export function StatsPage() {
 		mode: settings.data?.conversion_mode,
 	});
 
-	const reportingCurrency =
-		convertedSummary.data?.reporting_currency ||
-		settings.data?.reporting_currency ||
-		"EUR";
+	const transactions = convertedTransactions.data ?? [];
+	const rows = useMemo(
+		() => buildStatRows(transactions, reportingCurrency),
+		[transactions, reportingCurrency],
+	);
+	const summary = useMemo(
+		() => buildSummary(transactions, reportingCurrency, mode, maxStalenessDays),
+		[transactions, reportingCurrency, mode, maxStalenessDays],
+	);
 
 	return (
 		<div className="w-full mx-auto max-w-[1080px] mt-14 px-4">
@@ -80,47 +163,40 @@ export function StatsPage() {
 				/>
 			</div>
 
-			{query.isLoading && <p className="text-sm text-gray-10">loading...</p>}
-			{query.isError && (
+			{(settings.isLoading || convertedTransactions.isLoading) && (
+				<p className="text-sm text-gray-10">loading...</p>
+			)}
+			{convertedTransactions.isError && (
 				<pre className="text-sm text-red-11 whitespace-pre-wrap">
-					{String(query.error)}
+					{String(convertedTransactions.error)}
 				</pre>
 			)}
 
-			{query.data && (
-				<DesktopMonthExplorer
-					rows={query.data}
-					transactions={convertedTransactions.data ?? []}
-					reportingCurrency={reportingCurrency}
-				/>
-			)}
+			<DesktopMonthExplorer
+				rows={rows}
+				transactions={transactions}
+				reportingCurrency={reportingCurrency}
+			/>
 
-			{convertedSummary.data && (
-				<ConvertedSummaryCard
-					className="mt-4"
-					summary={convertedSummary.data}
-				/>
-			)}
+			<ConvertedSummaryCard className="mt-4" summary={summary} />
 		</div>
 	);
 }
 
 function ConvertedSummaryCard({
 	summary,
-	className
+	className,
 }: {
 	summary: ConvertedStatsSummary;
-	className?: string
+	className?: string;
 }) {
 	const { f } = useI18n();
-	if (!summary) return null;
-
 	const coverageCount = (summary.coverage_count_ratio * 100).toFixed(1);
 	const coverageAmount = (summary.coverage_amount_ratio * 100).toFixed(1);
 	const isPartial = summary.converted_count < summary.total_count;
 
 	return (
-		<div className={"border border-gray-a4 p-3 text-xs space-y-1 " + className}>
+		<div className={"border border-gray-a4 p-3 text-xs space-y-1 " + (className ?? "")}>
 			<p className="text-gray-10">
 				reporting currency: <span className="text-gray-12">{summary.reporting_currency}</span>
 				{" "}({summary.mode}, stale limit {summary.max_staleness_days}d)
@@ -344,7 +420,7 @@ function BucketSection({
 											key={tx.id}
 											className="flex items-center justify-between pl-2 text-[11px]"
 										>
-											<span className="text-gray-10">{tx.eff_date}</span>
+											<span className="text-gray-10">{tx.counter_party}</span>
 											<span className="text-right">
 												{convertedAmount == null ? (
 													<span className="text-orange-11">

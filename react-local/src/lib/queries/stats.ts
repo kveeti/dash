@@ -43,6 +43,7 @@ export type ConvertedStatTransactionRow = {
 	period: string;
 	bucket: string;
 	cat_name: string;
+	counter_party: string;
 	original_currency: string;
 	original_signed_amount: number;
 	original_amount: number;
@@ -73,6 +74,7 @@ txs AS (
     coalesce(t.categorize_on, t.date) AS eff_date,
     t.amount,
     t.currency,
+    t.counter_party,
     coalesce(c.name, '__uncategorized__') AS cat_name,
     coalesce(c.is_neutral, 0) AS is_neutral
   FROM transactions t
@@ -116,15 +118,19 @@ adjustments AS (
 ),
 adjusted AS (
   SELECT
-    t.id, t.eff_date, t.currency, t.cat_name, t.is_neutral,
+    t.id, t.eff_date, t.currency, t.cat_name, t.is_neutral, t.counter_party,
     t.amount + coalesce((SELECT sum(adj) FROM adjustments a WHERE a.id = t.id), 0) AS amount
   FROM txs t
 )`;
 
 function buildConvertedCteSql(mode: ConversionMode) {
-	const strictRateFloor =
+	const strictTxRateFloor =
 		mode === "strict"
-			? "and r.rate_date >= date(n.eff_date, '-' || ? || ' days')"
+			? "and r.rate_date >= date(p.eff_date, '-' || ? || ' days')"
+			: "";
+	const strictReportingRateFloor =
+		mode === "strict"
+			? "and r.rate_date >= date(d.eff_date, '-' || ? || ' days')"
 			: "";
 
 	return `${STATS_BASE_CTE},
@@ -135,6 +141,7 @@ normalized AS (
     strftime('%Y-%m', eff_date) AS period,
     upper(currency) AS original_currency,
     cat_name,
+    counter_party,
     CASE
       WHEN is_neutral = 1 THEN 'n'
       WHEN amount > 0     THEN 'i'
@@ -146,34 +153,60 @@ normalized AS (
   WHERE amount <> 0
     AND eff_date BETWEEN ? AND ?
 ),
-with_rates AS (
+distinct_pairs AS (
+  SELECT DISTINCT original_currency, eff_date
+  FROM normalized
+),
+tx_rates AS (
   SELECT
-    n.*,
+    p.original_currency,
+    p.eff_date,
     CASE
-      WHEN n.original_currency = upper(?) THEN 1.0
+      WHEN p.original_currency = upper(?) THEN 1.0
       ELSE (
         SELECT r.rate_to_anchor
         FROM fx_rates r
-        WHERE upper(r.currency) = n.original_currency
-          AND r.rate_date <= n.eff_date
-          ${strictRateFloor}
+        WHERE upper(r.currency) = p.original_currency
+          AND r.rate_date <= p.eff_date
+          ${strictTxRateFloor}
         ORDER BY r.rate_date DESC
         LIMIT 1
       )
-    END AS tx_rate_to_anchor,
+    END AS tx_rate_to_anchor
+  FROM distinct_pairs p
+),
+distinct_dates AS (
+  SELECT DISTINCT eff_date
+  FROM normalized
+),
+reporting_rates AS (
+  SELECT
+    d.eff_date,
     CASE
       WHEN upper(?) = upper(?) THEN 1.0
       ELSE (
         SELECT r.rate_to_anchor
         FROM fx_rates r
         WHERE upper(r.currency) = upper(?)
-          AND r.rate_date <= n.eff_date
-          ${strictRateFloor}
+          AND r.rate_date <= d.eff_date
+          ${strictReportingRateFloor}
         ORDER BY r.rate_date DESC
         LIMIT 1
       )
     END AS reporting_rate_to_anchor
+  FROM distinct_dates d
+),
+with_rates AS (
+  SELECT
+    n.*,
+    tx.tx_rate_to_anchor,
+    rr.reporting_rate_to_anchor
   FROM normalized n
+  LEFT JOIN tx_rates tx
+    ON tx.original_currency = n.original_currency
+   AND tx.eff_date = n.eff_date
+  LEFT JOIN reporting_rates rr
+    ON rr.eff_date = n.eff_date
 ),
 converted AS (
   SELECT
@@ -182,6 +215,7 @@ converted AS (
     n.period,
     n.bucket,
     n.cat_name,
+    n.counter_party,
     n.original_currency,
     n.original_signed_amount,
     n.original_amount,
@@ -398,6 +432,7 @@ select
 	period,
 	bucket,
 	cat_name,
+	counter_party,
 	original_currency,
 	original_signed_amount,
 	original_amount,
