@@ -3,11 +3,14 @@ import { useLocation } from "wouter";
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import { Dialog } from "@base-ui/react/dialog";
 import { ScrollArea } from "@base-ui/react/scroll-area";
+import { useDb } from "../providers";
+import { deleteSqliteOpfsFiles } from "../lib/db";
 
 interface Item {
 	value: string;
 	label: string;
-	href: string;
+	href?: string;
+	onSelect: () => void;
 }
 
 interface Group {
@@ -15,19 +18,67 @@ interface Group {
 	items: Item[];
 }
 
-const pages: Item[] = [
-	{ value: "stats", label: "Stats", href: "/stats" },
-	{ value: "txs", label: "Transactions", href: "/txs" },
-	{ value: "txs-new", label: "Add Transactions", href: "/txs/new" },
-	{ value: "cats", label: "Categories", href: "/cats" },
-	{ value: "settings", label: "Settings", href: "/settings" },
-];
-
-const groupedItems: Group[] = [{ value: "Pages", items: pages }];
-
 export function CommandPalette() {
 	const [open, setOpen] = useState(false);
 	const [, setLocation] = useLocation();
+	const db = useDb();
+
+	const pages: Item[] = [
+		{
+			value: "stats", label: "Stats", href: "/stats", onSelect: () => {
+				setLocation("/stats");
+			}
+		},
+		{
+			value: "txs", label: "Transactions", href: "/txs", onSelect: () => {
+				setLocation("/txs");
+			}
+		},
+		{
+			value: "txs-new", label: "Add Transactions", href: "/txs/new", onSelect: () => {
+				setLocation("/txs/new");
+			}
+		},
+		{
+			value: "cats", label: "Categories", href: "/cats", onSelect: () => {
+				setLocation("/cats");
+			}
+		},
+		{
+			value: "settings", label: "Settings", href: "/settings", onSelect: () => {
+				setLocation("/settings");
+			}
+		},
+	];
+
+	const groupedItems: Group[] = [
+		{ value: "Pages", items: pages },
+		{
+			value: "Maintenance",
+			items: [
+				{
+					value: "delete-opfs-sqlite-files",
+					label: "Delete SQLite files from OPFS",
+					onSelect: async () => {
+						const confirmed = window.confirm(
+							"This deletes local SQLite files in OPFS (db4/db3/db2/db + sidecar files) and reloads the app. Continue?",
+						);
+						if (!confirmed) return;
+
+						try {
+							await db.close();
+							await deleteSqliteOpfsFiles();
+							window.location.reload();
+						} catch (err) {
+							window.alert(
+								`Failed to delete SQLite files from OPFS: ${err instanceof Error ? err.message : String(err)}`,
+							);
+						}
+					},
+				},
+			],
+		},
+	];
 
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
@@ -39,11 +90,6 @@ export function CommandPalette() {
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, []);
-
-	function navigate(item: Item) {
-		setLocation(item.href);
-		setOpen(false);
-	}
 
 	return (
 		<Dialog.Root open={open} onOpenChange={setOpen}>
@@ -88,12 +134,15 @@ export function CommandPalette() {
 															<Autocomplete.Item
 																key={item.value}
 																value={item}
-																onClick={() => navigate(item)}
+																onClick={() => {
+																	item.onSelect();
+																	setOpen(false);
+																}}
 																className="flex h-8 cursor-default items-center gap-2 px-2 text-sm select-none outline-none data-[highlighted]:bg-gray-a3"
 															>
 																<span className="truncate">{item.label}</span>
 																<span className="ml-auto text-xs text-gray-9">
-																	{item.href}
+																	{item.href ?? ""}
 																</span>
 															</Autocomplete.Item>
 														)}
