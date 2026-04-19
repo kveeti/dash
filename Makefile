@@ -30,9 +30,9 @@ backbuild:
 build: backbuild frontbuild
 
 frontpre:
-	@cd front && bun run build && bun run preview
+	@cd react-local && bun run build && bun run preview
 backpre:
-	@cd back && cargo run --release
+	@cd sync && cargo run --release
 pre: backpre frontpre
 
 db:
