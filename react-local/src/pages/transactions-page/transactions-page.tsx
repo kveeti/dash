@@ -11,7 +11,7 @@ import {
 	useTransactionCurrenciesQuery,
 	type TransactionRow,
 } from "../../lib/queries/transactions";
-import { useCategoriesQuery } from "../../lib/queries/categories";
+import { useCategoryOptionsQuery } from "../../lib/queries/categories";
 import { useAccountsQuery } from "../../lib/queries/accounts";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
 import { Empty } from "../../components/empty";
@@ -191,7 +191,7 @@ export function TransactionsPage() {
 
 	const { f } = useI18n();
 
-	const categories = useCategoriesQuery();
+	const categories = useCategoryOptionsQuery();
 	const accounts = useAccountsQuery();
 	const currencies = useTransactionCurrenciesQuery();
 
@@ -812,7 +812,7 @@ function BulkEditBar({
 	selectedIds: Set<string>;
 	onClear: () => void;
 }) {
-	const categories = useCategoriesQuery();
+	const categories = useCategoryOptionsQuery();
 	const bulkSetCategory = useBulkSetCategoryMutation();
 	const [categoryId, setCategoryId] = useState("");
 

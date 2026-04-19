@@ -4,7 +4,7 @@ import { Input } from "./input";
 import { Select } from "./select";
 import { Textarea } from "./textarea";
 import { useAccountsQuery, useCreateAccountMutation } from "../lib/queries/accounts";
-import { useCategoriesQuery } from "../lib/queries/categories";
+import { useCategoryOptionsQuery } from "../lib/queries/categories";
 import {
 	COMMON_CURRENCIES,
 	DEFAULT_CURRENCY,
@@ -42,7 +42,7 @@ export function TransactionForm({
 	onSubmit: (values: TxFormValues) => Promise<void>;
 	actions: ReactNode;
 }) {
-	const categories = useCategoriesQuery();
+	const categories = useCategoryOptionsQuery();
 	const accounts = useAccountsQuery();
 	const createAccount = useCreateAccountMutation();
 

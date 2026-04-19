@@ -11,6 +11,11 @@ export type CategoryWithCount = {
 	tx_count: number;
 };
 
+export type CategoryOption = {
+	id: string;
+	name: string;
+};
+
 type CategoryInput = {
 	name: string;
 	is_neutral: boolean;
@@ -20,6 +25,10 @@ const SELECT_CATEGORIES_SQL = `select c.id, c.name, c.is_neutral, count(t.id) as
  from categories c
  left join transactions t on c.id = t.category_id and t._sync_is_deleted = 0
  where c._sync_is_deleted = 0`;
+const SELECT_CATEGORY_OPTIONS_SQL = `select id, name
+ from categories
+ where _sync_is_deleted = 0
+ order by name`;
 
 function invalidateCategoriesQuery(qc: ReturnType<typeof useQueryClient>) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.categories });
@@ -30,6 +39,14 @@ export function useCategoriesQuery(search?: string) {
 	return useQuery({
 		queryKey: queryKeys.categories(search),
 		queryFn: () => getCategories(db, search),
+	});
+}
+
+export function useCategoryOptionsQuery() {
+	const db = useDb();
+	return useQuery({
+		queryKey: [...queryKeyRoots.categories, "options"],
+		queryFn: () => getCategoryOptions(db),
 	});
 }
 
@@ -79,6 +96,10 @@ async function getCategories(db: DbHandle, search?: string) {
 		`${SELECT_CATEGORIES_SQL}
 		 group by c.id order by c.name`,
 	);
+}
+
+async function getCategoryOptions(db: DbHandle): Promise<CategoryOption[]> {
+	return db.query<CategoryOption>(SELECT_CATEGORY_OPTIONS_SQL);
 }
 
 async function createCategory(db: DbHandle, cat: CategoryInput) {
