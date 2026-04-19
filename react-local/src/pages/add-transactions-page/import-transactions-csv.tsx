@@ -11,6 +11,11 @@ import {
 	importLegacyCsvBundle,
 } from "../../lib/queries/import";
 import { useDb } from "../../providers";
+import {
+	COMMON_CURRENCIES,
+	DEFAULT_CURRENCY,
+	normalizeCurrency,
+} from "../../lib/currency";
 
 type LegacyFileKey = "transactionsCsv" | "accountsCsv" | "categoriesCsv" | "linksCsv";
 type LegacyFileValue = { text: string; name: string } | null;
@@ -38,6 +43,7 @@ export function ImportTransactionsCSV() {
 
 	const [showNewAccount, setShowNewAccount] = useState(false);
 	const newAccountRef = useRef<HTMLInputElement>(null);
+	const [newAccountCurrency, setNewAccountCurrency] = useState(DEFAULT_CURRENCY);
 
 	const accounts = useAccountsQuery();
 	const createAccount = useCreateAccountMutation();
@@ -45,7 +51,10 @@ export function ImportTransactionsCSV() {
 	async function handleNewAccount() {
 		const name = newAccountRef.current?.value.trim();
 		if (!name) return;
-		await createAccount.mutateAsync(name);
+		await createAccount.mutateAsync({
+			name,
+			currency: normalizeCurrency(newAccountCurrency),
+		});
 		setShowNewAccount(false);
 		if (newAccountRef.current) newAccountRef.current.value = "";
 	}
@@ -134,7 +143,10 @@ export function ImportTransactionsCSV() {
 		setResult(null);
 
 		try {
-			const res = await importCsv(db, fileText, selectedFormat, account.name);
+			const res = await importCsv(db, fileText, selectedFormat, {
+				id: account.id,
+				currency: account.currency,
+			});
 			setResult(res);
 			qc.invalidateQueries({ queryKey: ["transactions"] });
 			qc.invalidateQueries({ queryKey: ["categories"] });
@@ -156,7 +168,7 @@ export function ImportTransactionsCSV() {
 					value={format}
 					onChange={(e) => setFormat(e.currentTarget.value as CsvFormat)}
 				>
-					<option value="generic">generic (date;amount;counterparty;additional;category)</option>
+					<option value="generic">generic (date;amount;counterparty;additional;category;currency?)</option>
 					<option value="op">OP bank statement</option>
 					<option value="legacy_bundle">legacy export (transactions+accounts+categories+links)</option>
 				</Select>
@@ -213,6 +225,24 @@ export function ImportTransactionsCSV() {
 										className="focus border-gray-6 bg-gray-1 h-10 flex-1 border px-3"
 										placeholder="name"
 									/>
+									<Select
+										value={newAccountCurrency}
+										onChange={(e) =>
+											setNewAccountCurrency(
+												normalizeCurrency(
+													e.currentTarget.value,
+													newAccountCurrency,
+												),
+											)
+										}
+										className="w-24"
+									>
+										{COMMON_CURRENCIES.map((code) => (
+											<option key={code} value={code}>
+												{code}
+											</option>
+										))}
+									</Select>
 									<Button size="sm" type="button" onClick={handleNewAccount}>
 										add
 									</Button>
@@ -221,7 +251,7 @@ export function ImportTransactionsCSV() {
 								<Select name="account_id" className="w-full" required>
 									<option value="">select...</option>
 									{accounts.data?.map((a) => (
-										<option key={a.id} value={a.id}>{a.name}</option>
+										<option key={a.id} value={a.id}>{`${a.name} (${a.currency})`}</option>
 									))}
 								</Select>
 							)}

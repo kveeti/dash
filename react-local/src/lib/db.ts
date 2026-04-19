@@ -32,11 +32,41 @@ export type DbHandle = {
 	withTx: <T>(fn: () => Promise<T>) => Promise<T>;
 };
 
+export type DbClient = DbHandle & {
+	close: () => Promise<void>;
+};
+
+const SQLITE_DB_FILE = "db4";
+const SQLITE_OPFS_DB_BASENAMES = [SQLITE_DB_FILE, "db3", "db2", "db"] as const;
+
+function isSqliteDbRelatedFile(name: string) {
+	return SQLITE_OPFS_DB_BASENAMES.some(
+		(base) => name === base || name.startsWith(`${base}-`),
+	);
+}
+
+export async function deleteSqliteOpfsFiles(): Promise<string[]> {
+	const root = await navigator.storage.getDirectory();
+	const removed: string[] = [];
+
+	for await (const [name, handle] of root.entries()) {
+		if (handle.kind !== "file") continue;
+		if (!isSqliteDbRelatedFile(name)) continue;
+		await root.removeEntry(name);
+		removed.push(name);
+	}
+
+	removed.sort();
+	return removed;
+}
+
 export function sqlite(
 	migrations: (db: DbHandle) => Promise<void>,
 ) {
 	let ready = false;
 	let handle: DbHandle;
+	let promiserRef: Worker1Promiser | null = null;
+	let closed = false;
 
 	const initPromise = (async () => {
 		console.log("sqlite initializing...");
@@ -44,12 +74,13 @@ export function sqlite(
 		const promiser = await new Promise<Worker1Promiser>((resolve) => {
 			sqlite3Worker1Promiser({ onready: resolve });
 		});
+		promiserRef = promiser;
 
 		const configResponse = await promiser("config-get", {});
 		console.log("sqlite version", configResponse.result.version.libVersion);
 
 		const openResponse = await promiser("open", {
-			filename: "file:db2?vfs=opfs",
+			filename: `file:${SQLITE_DB_FILE}?vfs=opfs`,
 		});
 		console.log(
 			"sqlite db created at",
@@ -87,21 +118,33 @@ export function sqlite(
 
 	return {
 		query: async <T = any>(sql: string, vars?: any[]): Promise<T[]> => {
+			if (closed) throw new Error("sqlite connection is closed");
 			if (!ready) await initPromise;
 			return await handle.query<T>(sql, vars);
 		},
 		exec: async (sql: string, vars?: any[]) => {
+			if (closed) throw new Error("sqlite connection is closed");
 			if (!ready) await initPromise;
 			return await handle.exec(sql, vars);
 		},
 		withTx: async <T>(fn: () => Promise<T>): Promise<T> => {
+			if (closed) throw new Error("sqlite connection is closed");
 			if (!ready) await initPromise;
 			return await handle.withTx(fn);
 		},
-	};
+		close: async () => {
+			if (closed) return;
+			if (!ready) await initPromise;
+			if (promiserRef) {
+				await promiserRef("close", {});
+			}
+			closed = true;
+			ready = false;
+		},
+	} satisfies DbClient;
 }
 
-export function getDb() {
+export function getDb(): DbClient {
 	return sqlite(async ({ exec, query }) => {
 		await exec(`create table if not exists version (current integer not null)`);
 
@@ -124,6 +167,7 @@ export function getDb() {
 			`create table if not exists accounts (
 				id text primary key not null,
 				name text not null unique,
+				currency text not null default 'EUR',
 				created_at text not null,
 				updated_at text,
 
@@ -163,6 +207,26 @@ export function getDb() {
 				_sync_status integer default 1,
 
 				primary key (transaction_a_id, transaction_b_id)
+			)`,
+			`create table if not exists app_settings (
+				id integer primary key not null check (id = 1),
+				reporting_currency text not null default 'EUR',
+				max_staleness_days integer not null default 7,
+				conversion_mode text not null default 'strict',
+				updated_at text not null
+			)`,
+			`insert into app_settings (
+				id, reporting_currency, max_staleness_days, conversion_mode, updated_at
+			)
+			values (
+				1, 'EUR', 7, 'strict', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+			)
+			on conflict(id) do nothing`,
+			`create table if not exists fx_rates (
+				rate_date text not null,
+				currency text not null,
+				rate_to_anchor real not null,
+				primary key (currency, rate_date)
 			)`,
 		];
 

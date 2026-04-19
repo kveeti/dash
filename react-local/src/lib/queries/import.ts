@@ -1,8 +1,8 @@
 import type { DbHandle } from "../db";
 import Papa from "papaparse";
 import { id } from "../id";
-import { getOrCreateAccountByName } from "./accounts";
 import { getOrCreateCategoryByName } from "./categories";
+import { parseCurrency } from "../currency";
 
 export type CsvFormat = "generic" | "op" | "legacy_bundle";
 
@@ -25,6 +25,7 @@ export type LegacyBundleTexts = {
 type ParsedTransaction = {
 	date: string;
 	amount: number;
+	currency?: string;
 	counter_party: string;
 	additional?: string;
 	category_name?: string;
@@ -43,6 +44,7 @@ function parseGenericRow(cols: string[]): ParsedTransaction {
 	return {
 		date: parsed.toISOString(),
 		amount,
+		currency: cols[5]?.trim() || undefined,
 		counter_party,
 		additional: cols[3]?.trim() || undefined,
 		category_name: cols[4]?.trim() || undefined,
@@ -203,13 +205,12 @@ export async function importCsv(
 	db: DbHandle,
 	text: string,
 	format: CsvFormat,
-	accountName: string,
-	currency = "EUR",
+	account: { id: string; currency: string },
 ): Promise<ImportResult> {
 	const parsedCsv = parseCsvRows(text, format === "op" ? ";" : undefined);
 	const parse = format === "op" ? parseOpRow : parseGenericRow;
-
-	const accountId = await getOrCreateAccountByName(db, accountName);
+	const accountId = account.id;
+	const defaultCurrency = parseCurrency(account.currency);
 
 	let skipped = parsedCsv.errors.length;
 	const errors: string[] = [...parsedCsv.errors];
@@ -252,7 +253,7 @@ export async function importCsv(
 				now,
 				row.date,
 				row.amount,
-				currency,
+				parseCurrency(row.currency, defaultCurrency),
 				row.counter_party,
 				row.additional ?? null,
 				row.category_name ? categoryCache.get(row.category_name)! : null,
@@ -339,10 +340,11 @@ export async function importLegacyCsvBundle(
 			}
 
 			const newId = existingAccountIds.has(oldId) ? id() : oldId;
+			const currency = parseCurrency(record.currency, "EUR");
 			await db.exec(
-				`insert into accounts (id, created_at, updated_at, name, _sync_edited_at)
-				values (?, ?, ?, ?, ?)`,
-				[newId, now, now, name, Date.now()],
+				`insert into accounts (id, created_at, updated_at, name, currency, _sync_edited_at)
+				values (?, ?, ?, ?, ?, ?)`,
+				[newId, now, now, name, currency, Date.now()],
 			);
 			accountIdMap.set(oldId, newId);
 			existingAccountNames.set(name, newId);
@@ -431,7 +433,7 @@ export async function importLegacyCsvBundle(
 				const amount = parseAmount(record.amount ?? "");
 				const counterParty = record.counter_party?.trim();
 				if (!counterParty) throw new Error("missing counter_party");
-				const currency = record.currency?.trim() || "EUR";
+				const currency = parseCurrency(record.currency, "EUR");
 
 				const newTxId = existingTransactionIds.has(txId) ? id() : txId;
 				await db.exec(
