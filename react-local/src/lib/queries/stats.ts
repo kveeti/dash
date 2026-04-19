@@ -39,20 +39,20 @@ export type ConvertedStatsSummary = {
 
 export type ConvertedStatTransactionRow = {
 	id: string;
-	eff_date: string;
-	period: string;
 	bucket: string;
 	cat_name: string;
 	counter_party: string;
 	original_currency: string;
-	original_signed_amount: number;
 	original_amount: number;
-	currency: string;
-	converted_signed_amount: number | null;
 	converted_amount: number | null;
 };
 
-const STATS_BASE_CTE = `WITH
+function buildStatsBaseCteSql(includeSourceCurrencyFilter: boolean) {
+	const sourceCurrencyPredicate = includeSourceCurrencyFilter
+		? "    AND t.currency = ?\n"
+		: "";
+
+	return `WITH
 in_window AS (
   SELECT id FROM transactions
   WHERE _sync_is_deleted = 0
@@ -61,11 +61,16 @@ in_window AS (
 relevant_ids AS (
   SELECT id FROM in_window
   UNION
-  SELECT CASE WHEN l.transaction_a_id = w.id
-              THEN l.transaction_b_id
-              ELSE l.transaction_a_id END
-  FROM transaction_links l
-  JOIN in_window w ON w.id IN (l.transaction_a_id, l.transaction_b_id)
+  SELECT l.transaction_b_id
+  FROM in_window w
+  JOIN transaction_links l
+    ON l.transaction_a_id = w.id
+  WHERE l._sync_is_deleted = 0
+  UNION
+  SELECT l.transaction_a_id
+  FROM in_window w
+  JOIN transaction_links l
+    ON l.transaction_b_id = w.id
   WHERE l._sync_is_deleted = 0
 ),
 txs AS (
@@ -81,19 +86,28 @@ txs AS (
   LEFT JOIN categories c ON c.id = t.category_id
   WHERE t._sync_is_deleted = 0
     AND t.id IN (SELECT id FROM relevant_ids)
-    AND (? IS NULL OR t.currency = ?)
-),
+${sourceCurrencyPredicate}),
 pairs AS (
   SELECT
     p.id AS pos_id, p.amount AS pos_amount, p.eff_date AS pos_date,
     n.id AS neg_id, n.amount AS neg_amount
   FROM txs p
   JOIN transaction_links l
-    ON p.id IN (l.transaction_a_id, l.transaction_b_id)
+    ON l.transaction_a_id = p.id
   JOIN txs n
-    ON n.id = CASE WHEN l.transaction_a_id = p.id
-                   THEN l.transaction_b_id
-                   ELSE l.transaction_a_id END
+    ON n.id = l.transaction_b_id
+  WHERE p.amount > 0 AND n.amount < 0 AND p.is_neutral = 0
+    AND p.currency = n.currency
+    AND l._sync_is_deleted = 0
+  UNION ALL
+  SELECT
+    p.id AS pos_id, p.amount AS pos_amount, p.eff_date AS pos_date,
+    n.id AS neg_id, n.amount AS neg_amount
+  FROM txs p
+  JOIN transaction_links l
+    ON l.transaction_b_id = p.id
+  JOIN txs n
+    ON n.id = l.transaction_a_id
   WHERE p.amount > 0 AND n.amount < 0 AND p.is_neutral = 0
     AND p.currency = n.currency
     AND l._sync_is_deleted = 0
@@ -111,19 +125,27 @@ allocations AS (
     )) AS consumed
   FROM pairs
 ),
-adjustments AS (
+adjustments_raw AS (
   SELECT pos_id AS id, -sum(consumed) AS adj FROM allocations GROUP BY pos_id
   UNION ALL
   SELECT neg_id AS id,  sum(consumed) AS adj FROM allocations GROUP BY neg_id
 ),
+adjustments AS (
+  SELECT id, sum(adj) AS adj
+  FROM adjustments_raw
+  GROUP BY id
+),
 adjusted AS (
   SELECT
     t.id, t.eff_date, t.currency, t.cat_name, t.is_neutral, t.counter_party,
-    t.amount + coalesce((SELECT sum(adj) FROM adjustments a WHERE a.id = t.id), 0) AS amount
+    t.amount + coalesce(a.adj, 0) AS amount
   FROM txs t
+  LEFT JOIN adjustments a
+    ON a.id = t.id
 )`;
+}
 
-function buildConvertedCteSql(mode: ConversionMode) {
+function buildConvertedCteSql(mode: ConversionMode, includeSourceCurrencyFilter: boolean) {
 	const strictTxRateFloor =
 		mode === "strict"
 			? "and r.rate_date >= date(p.eff_date, '-' || ? || ' days')"
@@ -133,7 +155,7 @@ function buildConvertedCteSql(mode: ConversionMode) {
 			? "and r.rate_date >= date(d.eff_date, '-' || ? || ' days')"
 			: "";
 
-	return `${STATS_BASE_CTE},
+	return `${buildStatsBaseCteSql(includeSourceCurrencyFilter)},
 normalized AS (
   SELECT
     id,
@@ -243,15 +265,20 @@ function buildConvertedParams(input: {
 	const reportingCurrency = normalizeCurrency(input.reportingCurrency);
 	const anchorCurrency = normalizeCurrency(input.anchorCurrency);
 
-	const base: Array<string | number | null> = [
+	const base: Array<string | number> = [
 		input.from,
 		input.to,
-		sourceCurrency,
-		sourceCurrency,
+	];
+
+	if (sourceCurrency) {
+		base.push(sourceCurrency);
+	}
+
+	base.push(
 		input.from,
 		input.to,
 		anchorCurrency,
-	];
+	);
 
 	if (input.mode === "strict") {
 		base.push(Math.max(0, input.maxStalenessDays));
@@ -268,7 +295,10 @@ function buildConvertedParams(input: {
 	}
 
 	base.push(reportingCurrency);
-	return base;
+	return {
+		params: base,
+		includeSourceCurrencyFilter: !!sourceCurrency,
+	};
 }
 
 async function getStats(input: {
@@ -281,7 +311,16 @@ async function getStats(input: {
 	mode: ConversionMode;
 }): Promise<StatRow[]> {
 	const anchorCurrency = FX_ANCHOR_CURRENCY;
-	const cteSql = buildConvertedCteSql(input.mode);
+	const convertedParams = buildConvertedParams({
+		from: input.from,
+		to: input.to,
+		sourceCurrency: input.sourceCurrency,
+		reportingCurrency: input.reportingCurrency,
+		maxStalenessDays: input.maxStalenessDays,
+		mode: input.mode,
+		anchorCurrency,
+	});
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
 	const sql = `${cteSql}
 select
 	period,
@@ -296,15 +335,7 @@ from converted
 group by period, bucket, cat_name
 order by period, bucket, amount desc`;
 
-	const params = buildConvertedParams({
-		from: input.from,
-		to: input.to,
-		sourceCurrency: input.sourceCurrency,
-		reportingCurrency: input.reportingCurrency,
-		maxStalenessDays: input.maxStalenessDays,
-		mode: input.mode,
-		anchorCurrency,
-	});
+	const params = [...convertedParams.params];
 	params.push(normalizeCurrency(input.reportingCurrency));
 
 	return input.db.query<StatRow>(sql, params);
@@ -320,7 +351,16 @@ async function getConvertedStatsSummary(input: {
 	mode: ConversionMode;
 }): Promise<ConvertedStatsSummary> {
 	const anchorCurrency = FX_ANCHOR_CURRENCY;
-	const cteSql = buildConvertedCteSql(input.mode);
+	const convertedParams = buildConvertedParams({
+		from: input.from,
+		to: input.to,
+		sourceCurrency: input.sourceCurrency,
+		reportingCurrency: input.reportingCurrency,
+		maxStalenessDays: input.maxStalenessDays,
+		mode: input.mode,
+		anchorCurrency,
+	});
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
 
 	const summarySql = `${cteSql}
 select
@@ -335,15 +375,7 @@ select
 	sum(case when converted_signed_amount is not null then abs(converted_signed_amount) else 0 end) as converted_total
 from converted`;
 
-	const summaryParams = buildConvertedParams({
-		from: input.from,
-		to: input.to,
-		sourceCurrency: input.sourceCurrency,
-		reportingCurrency: input.reportingCurrency,
-		maxStalenessDays: input.maxStalenessDays,
-		mode: input.mode,
-		anchorCurrency,
-	});
+	const summaryParams = [...convertedParams.params];
 	summaryParams.push(
 		normalizeCurrency(input.reportingCurrency),
 		normalizeCurrency(anchorCurrency),
@@ -377,15 +409,7 @@ from converted
 where converted_signed_amount is null
 group by original_currency
 order by amount desc`;
-	const missingParams = buildConvertedParams({
-		from: input.from,
-		to: input.to,
-		sourceCurrency: input.sourceCurrency,
-		reportingCurrency: input.reportingCurrency,
-		maxStalenessDays: input.maxStalenessDays,
-		mode: input.mode,
-		anchorCurrency,
-	});
+	const missingParams = [...convertedParams.params];
 	const missingByCurrency = await input.db.query<MissingRateCurrency>(missingSql, missingParams);
 
 	const totalCount = Number(summary.total_count || 0);
@@ -424,30 +448,10 @@ async function getConvertedStatTransactions(input: {
 	reportingCurrency: string;
 	maxStalenessDays: number;
 	mode: ConversionMode;
+	perCategoryLimit?: number;
 }): Promise<ConvertedStatTransactionRow[]> {
 	const anchorCurrency = FX_ANCHOR_CURRENCY;
-	const cteSql = buildConvertedCteSql(input.mode);
-	const sql = `${cteSql}
-select
-	id,
-	eff_date,
-	period,
-	bucket,
-	cat_name,
-	counter_party,
-	original_currency,
-	original_signed_amount,
-	original_amount,
-	? as currency,
-	converted_signed_amount,
-	case
-		when converted_signed_amount is null then null
-		else abs(converted_signed_amount)
-	end as converted_amount
-from converted
-order by eff_date desc, id desc`;
-
-	const params = buildConvertedParams({
+	const convertedParams = buildConvertedParams({
 		from: input.from,
 		to: input.to,
 		sourceCurrency: input.sourceCurrency,
@@ -456,7 +460,63 @@ order by eff_date desc, id desc`;
 		mode: input.mode,
 		anchorCurrency,
 	});
-	params.push(normalizeCurrency(input.reportingCurrency));
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
+	const perCategoryLimit = input.perCategoryLimit
+		? Math.max(1, Math.trunc(input.perCategoryLimit))
+		: null;
+
+	const sql = perCategoryLimit == null
+		? `${cteSql}
+	select
+		id,
+		bucket,
+		cat_name,
+		counter_party,
+		original_currency,
+		original_amount,
+		case
+			when converted_signed_amount is null then null
+			else abs(converted_signed_amount)
+		end as converted_amount
+	from converted
+	order by eff_date desc, id desc`
+		: `${cteSql}
+	, ranked AS (
+		select
+			id,
+			eff_date,
+			period,
+			bucket,
+			cat_name,
+			counter_party,
+			original_currency,
+			original_amount,
+			case
+				when converted_signed_amount is null then null
+				else abs(converted_signed_amount)
+			end as converted_amount,
+			row_number() over (
+				partition by period, bucket, cat_name
+				order by eff_date desc, id desc
+			) as preview_rank
+		from converted
+	)
+	select
+		id,
+		bucket,
+		cat_name,
+		counter_party,
+		original_currency,
+		original_amount,
+		converted_amount
+	from ranked
+	where preview_rank <= ?
+	order by eff_date desc, id desc`;
+
+	const params = [...convertedParams.params];
+	if (perCategoryLimit != null) {
+		params.push(perCategoryLimit);
+	}
 
 	return input.db.query<ConvertedStatTransactionRow>(sql, params);
 }
@@ -548,6 +608,8 @@ export function useConvertedStatTransactionsQuery(input: {
 	reportingCurrency?: string;
 	maxStalenessDays?: number;
 	mode?: ConversionMode;
+	enabled?: boolean;
+	perCategoryLimit?: number;
 }) {
 	const db = useDb();
 	const reportingCurrency = input.reportingCurrency
@@ -555,6 +617,10 @@ export function useConvertedStatTransactionsQuery(input: {
 		: undefined;
 	const mode: ConversionMode = input.mode === "lenient" ? "lenient" : "strict";
 	const maxStalenessDays = Math.max(0, Math.trunc(input.maxStalenessDays ?? 7));
+	const perCategoryLimit =
+		input.perCategoryLimit == null
+			? undefined
+			: Math.max(1, Math.trunc(input.perCategoryLimit));
 
 	return useQuery({
 		queryKey: [
@@ -566,8 +632,9 @@ export function useConvertedStatTransactionsQuery(input: {
 			reportingCurrency ?? "",
 			maxStalenessDays,
 			mode,
+			perCategoryLimit ?? "",
 		],
-		enabled: !!reportingCurrency,
+		enabled: !!reportingCurrency && (input.enabled ?? true),
 		queryFn: () =>
 			getConvertedStatTransactions({
 				db,
@@ -577,6 +644,7 @@ export function useConvertedStatTransactionsQuery(input: {
 				reportingCurrency: reportingCurrency!,
 				maxStalenessDays,
 				mode,
+				perCategoryLimit,
 			}),
 	});
 }

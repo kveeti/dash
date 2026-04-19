@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
 	useConvertedStatTransactionsQuery,
+	useConvertedStatsSummaryQuery,
+	useStatsQuery,
 	type ConvertedStatTransactionRow,
 	type ConvertedStatsSummary,
 	type StatRow,
 } from "../../lib/queries/stats";
 import { useI18n } from "../../providers";
-import { FX_ANCHOR_CURRENCY, useAppSettingsQuery } from "../../lib/queries/settings";
+import { useAppSettingsQuery } from "../../lib/queries/settings";
 
 function getDefaultRange(): [string, string] {
 	const now = new Date();
@@ -14,6 +16,15 @@ function getDefaultRange(): [string, string] {
 	const m = now.getMonth();
 	const from = new Date(y, m - 5, 1).toISOString().slice(0, 10);
 	const to = new Date(y, m + 1, 0).toISOString().slice(0, 10);
+	return [from, to];
+}
+
+function getMonthBounds(period: string): [string, string] {
+	const [yearStr, monthStr] = period.split("-");
+	const year = Number(yearStr);
+	const month = Number(monthStr);
+	const from = `${period}-01`;
+	const to = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 	return [from, to];
 }
 
@@ -26,96 +37,6 @@ type MonthSummary = {
 	unconvertedCount: number;
 };
 
-function buildStatRows(
-	transactions: ConvertedStatTransactionRow[],
-	reportingCurrency: string,
-): StatRow[] {
-	const map = new Map<string, StatRow>();
-
-	for (const tx of transactions) {
-		const key = `${tx.period}__${tx.bucket}__${tx.cat_name}`;
-		const existing = map.get(key) ?? {
-			period: tx.period,
-			bucket: tx.bucket,
-			cat_name: tx.cat_name,
-			currency: reportingCurrency,
-			amount: 0,
-			original_amount: 0,
-			tx_count: 0,
-			unconverted_count: 0,
-		};
-
-		existing.tx_count += 1;
-		existing.original_amount += tx.original_amount;
-		if (tx.converted_amount == null) {
-			existing.unconverted_count += 1;
-		} else {
-			existing.amount += tx.converted_amount;
-		}
-
-		map.set(key, existing);
-	}
-
-	return [...map.values()].sort(
-		(a, b) =>
-			b.period.localeCompare(a.period) ||
-			a.bucket.localeCompare(b.bucket) ||
-			b.amount - a.amount,
-	);
-}
-
-function buildSummary(
-	transactions: ConvertedStatTransactionRow[],
-	reportingCurrency: string,
-	mode: "strict" | "lenient",
-	maxStalenessDays: number,
-): ConvertedStatsSummary {
-	const totalCount = transactions.length;
-	let convertedCount = 0;
-	let totalSourceAmount = 0;
-	let convertedSourceAmount = 0;
-	let convertedTotal = 0;
-	const missing = new Map<string, { count: number; amount: number }>();
-
-	for (const tx of transactions) {
-		totalSourceAmount += tx.original_amount;
-		if (tx.converted_amount == null) {
-			const current = missing.get(tx.original_currency) ?? { count: 0, amount: 0 };
-			current.count += 1;
-			current.amount += tx.original_amount;
-			missing.set(tx.original_currency, current);
-			continue;
-		}
-
-		convertedCount += 1;
-		convertedSourceAmount += tx.original_amount;
-		convertedTotal += tx.converted_amount;
-	}
-
-	return {
-		reporting_currency: reportingCurrency,
-		anchor_currency: FX_ANCHOR_CURRENCY,
-		mode,
-		max_staleness_days: maxStalenessDays,
-		total_count: totalCount,
-		converted_count: convertedCount,
-		total_source_amount: totalSourceAmount,
-		converted_source_amount: convertedSourceAmount,
-		unconverted_source_amount: totalSourceAmount - convertedSourceAmount,
-		converted_total: convertedTotal,
-		coverage_count_ratio: totalCount > 0 ? convertedCount / totalCount : 1,
-		coverage_amount_ratio:
-			totalSourceAmount > 0 ? convertedSourceAmount / totalSourceAmount : 1,
-		missing_by_currency: [...missing.entries()]
-			.map(([currency, value]) => ({
-				currency,
-				count: value.count,
-				amount: value.amount,
-			}))
-			.sort((a, b) => b.amount - a.amount),
-	};
-}
-
 export function StatsPage() {
 	const [defaults] = useState(getDefaultRange);
 	const [from, setFrom] = useState(defaults[0]);
@@ -126,7 +47,7 @@ export function StatsPage() {
 	const mode = settings.data?.conversion_mode ?? "strict";
 	const maxStalenessDays = settings.data?.max_staleness_days ?? 7;
 
-	const convertedTransactions = useConvertedStatTransactionsQuery({
+	const stats = useStatsQuery({
 		from,
 		to,
 		reportingCurrency: settings.data?.reporting_currency,
@@ -134,15 +55,15 @@ export function StatsPage() {
 		mode: settings.data?.conversion_mode,
 	});
 
-	const transactions = convertedTransactions.data ?? [];
-	const rows = useMemo(
-		() => buildStatRows(transactions, reportingCurrency),
-		[transactions, reportingCurrency],
-	);
-	const summary = useMemo(
-		() => buildSummary(transactions, reportingCurrency, mode, maxStalenessDays),
-		[transactions, reportingCurrency, mode, maxStalenessDays],
-	);
+	const summaryQuery = useConvertedStatsSummaryQuery({
+		from,
+		to,
+		reportingCurrency: settings.data?.reporting_currency,
+		maxStalenessDays: settings.data?.max_staleness_days,
+		mode: settings.data?.conversion_mode,
+	});
+
+	const rows = stats.data ?? [];
 
 	return (
 		<div className="w-full mx-auto max-w-[1080px] mt-14 px-4">
@@ -163,22 +84,27 @@ export function StatsPage() {
 				/>
 			</div>
 
-			{(settings.isLoading || convertedTransactions.isLoading) && (
+			{(settings.isLoading || stats.isLoading || summaryQuery.isLoading) && (
 				<p className="text-sm text-gray-10">loading...</p>
 			)}
-			{convertedTransactions.isError && (
-				<pre className="text-sm text-red-11 whitespace-pre-wrap">
-					{String(convertedTransactions.error)}
-				</pre>
+			{stats.isError && (
+				<pre className="text-sm text-red-11 whitespace-pre-wrap">{String(stats.error)}</pre>
+			)}
+			{summaryQuery.isError && (
+				<pre className="text-sm text-red-11 whitespace-pre-wrap">{String(summaryQuery.error)}</pre>
 			)}
 
 			<DesktopMonthExplorer
 				rows={rows}
-				transactions={transactions}
 				reportingCurrency={reportingCurrency}
+				queryReportingCurrency={settings.data?.reporting_currency}
+				mode={mode}
+				maxStalenessDays={maxStalenessDays}
 			/>
 
-			<ConvertedSummaryCard className="mt-4" summary={summary} />
+			{summaryQuery.data && (
+				<ConvertedSummaryCard className="mt-4" summary={summaryQuery.data} />
+			)}
 		</div>
 	);
 }
@@ -224,12 +150,16 @@ function ConvertedSummaryCard({
 
 function DesktopMonthExplorer({
 	rows,
-	transactions,
 	reportingCurrency,
+	queryReportingCurrency,
+	mode,
+	maxStalenessDays,
 }: {
 	rows: StatRow[];
-	transactions: ConvertedStatTransactionRow[];
 	reportingCurrency: string;
+	queryReportingCurrency?: string;
+	mode: "strict" | "lenient";
+	maxStalenessDays: number;
 }) {
 	const { f } = useI18n();
 	const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
@@ -267,6 +197,10 @@ function DesktopMonthExplorer({
 		}
 	}, [months, selectedPeriod]);
 
+	const selectedRange = useMemo(
+		() => (selectedPeriod ? getMonthBounds(selectedPeriod) : null),
+		[selectedPeriod],
+	);
 	const detailRows = useMemo(
 		() =>
 			rows
@@ -274,10 +208,17 @@ function DesktopMonthExplorer({
 				.sort((a, b) => a.bucket.localeCompare(b.bucket) || b.amount - a.amount),
 		[rows, selectedPeriod],
 	);
-	const detailTransactions = useMemo(
-		() => transactions.filter((row) => row.period === selectedPeriod),
-		[transactions, selectedPeriod],
-	);
+
+	const detailTransactionsQuery = useConvertedStatTransactionsQuery({
+		from: selectedRange?.[0] ?? "",
+		to: selectedRange?.[1] ?? "",
+		reportingCurrency: queryReportingCurrency,
+		maxStalenessDays,
+		mode,
+		perCategoryLimit: 12,
+		enabled: !!selectedRange && !!queryReportingCurrency,
+	});
+	const detailTransactions = detailTransactionsQuery.data ?? [];
 
 	if (rows.length === 0) {
 		return <p className="text-sm text-gray-10">no data for this range</p>;
@@ -330,6 +271,14 @@ function DesktopMonthExplorer({
 						{selectedPeriod ? `details ${selectedPeriod}` : "details"}
 					</div>
 					<div className="p-3 space-y-4">
+						{detailTransactionsQuery.isLoading && (
+							<p className="text-xs text-gray-10">loading details...</p>
+						)}
+						{detailTransactionsQuery.isError && (
+							<pre className="text-xs text-red-11 whitespace-pre-wrap">
+								{String(detailTransactionsQuery.error)}
+							</pre>
+						)}
 						<BucketSection
 							label="income"
 							bucket="i"
@@ -411,7 +360,7 @@ function BucketSection({
 								.slice(0, 12)
 								.map((tx) => {
 									const convertedAmount = tx.converted_amount;
-									const originalAmount = Math.abs(tx.original_signed_amount);
+									const originalAmount = tx.original_amount;
 									const isConverted =
 										convertedAmount != null &&
 										tx.original_currency !== reportingCurrency;
