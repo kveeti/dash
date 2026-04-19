@@ -140,6 +140,34 @@ function useOpenTxWindows() {
 	return { openIds, open, close, setRef };
 }
 
+function resolveAmountDisplay(
+	tx: {
+		amount: number;
+		currency: string;
+		converted_amount: number | null;
+		converted_currency: string;
+	},
+) {
+	if (tx.converted_amount == null) {
+		return {
+			amount: tx.amount,
+			currency: tx.currency,
+			original: null as { amount: number; currency: string } | null,
+		};
+	}
+
+	const convertedCurrency = tx.converted_currency;
+	const wasConverted = tx.currency !== convertedCurrency;
+
+	return {
+		amount: tx.converted_amount,
+		currency: convertedCurrency,
+		original: wasConverted
+			? { amount: tx.amount, currency: tx.currency }
+			: null,
+	};
+}
+
 export function TransactionsPage() {
 	const {
 		left,
@@ -306,17 +334,17 @@ export function TransactionsPage() {
 				/>
 			)}
 
-			{txWindows.openIds.map((id, index) => (
-				<SelectedTxWindow
-					key={id}
-					txId={id}
-					index={index}
-					onClose={() => txWindows.close(id)}
-					ref={(handle) => txWindows.setRef(id, handle)}
-				/>
+				{txWindows.openIds.map((id, index) => (
+					<SelectedTxWindow
+						key={id}
+						txId={id}
+						index={index}
+						onClose={() => txWindows.close(id)}
+						ref={(handle) => txWindows.setRef(id, handle)}
+					/>
 			))}
-		</>
-	);
+			</>
+		);
 }
 
 function useLongPress(callback: () => void, ms = 500) {
@@ -355,8 +383,8 @@ function TxRow(props: {
 	ref: Ref<HTMLLIElement>;
 }) {
 	const { f } = useI18n();
-
-	const isIncome = props.tx.amount > 0;
+	const amountDisplay = resolveAmountDisplay(props.tx);
+	const isIncome = amountDisplay.amount > 0;
 
 	const longPress = useLongPress(() => {
 		props.onSelect();
@@ -407,8 +435,13 @@ function TxRow(props: {
 					<span
 						className={`shrink-0 text-sm ${isIncome ? "text-green-11" : ""}`}
 					>
-						{f.amount(props.tx.amount, props.tx.currency)}
+						{f.amount(amountDisplay.amount, amountDisplay.currency)}
 					</span>
+					{amountDisplay.original && (
+						<div className="text-[11px] text-gray-11 leading-tight text-right">
+							({f.amount(amountDisplay.original.amount, amountDisplay.original.currency)})
+						</div>
+					)}
 				</div>
 			</div>
 		</li>
@@ -445,8 +478,9 @@ function SelectedTxWindow({
 		return;
 	}
 	const tx = txQuery.data;
+	const txAmountDisplay = resolveAmountDisplay(tx);
 
-	const isIncome = tx.amount > 0;
+	const isIncome = txAmountDisplay.amount > 0;
 	const stackOffset = { x: 0, y: (index + 1) * 72 };
 
 	function copyId() {
@@ -466,15 +500,20 @@ function SelectedTxWindow({
 		<SelectedTx
 			ref={selectedTxRef}
 			id={txId}
-			label={`Transaction: ${tx.counter_party}, ${f.amount(tx.amount, tx.currency)}`}
+			label={`Transaction: ${tx.counter_party}, ${f.amount(txAmountDisplay.amount, txAmountDisplay.currency)}`}
 			onClose={onClose}
 			initialOffset={stackOffset}
 		>
 			<div className="space-y-1 px-3 pt-3">
 				<h2 className="font-medium">{tx.counter_party}</h2>
 				<p className={`text-sm ${isIncome ? "text-green-11" : ""}`}>
-					{f.amount(tx.amount, tx.currency)}
+					{f.amount(txAmountDisplay.amount, txAmountDisplay.currency)}
 				</p>
+				{txAmountDisplay.original && (
+					<p className="text-xs text-gray-11">
+						({f.amount(txAmountDisplay.original.amount, txAmountDisplay.original.currency)})
+					</p>
+				)}
 				<p className="text-xs">{f.weekdayLongDate.format(new Date(tx.date))}</p>
 			</div>
 
@@ -558,36 +597,44 @@ function SelectedTxWindow({
 						</Button>
 					</div>
 
-					{linksQuery.data && linksQuery.data.length > 0 && (
-						<ul className="text-xs space-y-1">
-							{linksQuery.data.map((linked) => (
-								<li
-									key={linked.id}
-									className="flex items-center justify-between gap-2"
-								>
-									<span className="truncate">
-										{linked.counter_party}{" "}
-										<span className="text-gray-10">
-											{f.amount(linked.amount, linked.currency)}
-										</span>
-									</span>
-									<button
-										type="button"
-										className="text-gray-10 hover:text-red-11 shrink-0"
-										onClick={() =>
-											unlinkMutation.mutate({ aId: txId, bId: linked.id })
-										}
-									>
-										unlink
-									</button>
-								</li>
-							))}
-						</ul>
-					)}
+						{linksQuery.data && linksQuery.data.length > 0 && (
+							<ul className="text-xs space-y-1">
+								{linksQuery.data.map((linked) => {
+									const linkedAmountDisplay = resolveAmountDisplay(linked);
+									return (
+										<li
+											key={linked.id}
+											className="flex items-start justify-between gap-2"
+										>
+											<span className="truncate">{linked.counter_party}</span>
+											<div className="text-right shrink-0">
+												<span className="text-gray-10">
+													{f.amount(linkedAmountDisplay.amount, linkedAmountDisplay.currency)}
+												</span>
+												{linkedAmountDisplay.original && (
+													<div className="text-gray-9 leading-tight">
+														({f.amount(linkedAmountDisplay.original.amount, linkedAmountDisplay.original.currency)})
+													</div>
+												)}
+											</div>
+											<button
+												type="button"
+												className="text-gray-10 hover:text-red-11 shrink-0"
+												onClick={() =>
+													unlinkMutation.mutate({ aId: txId, bId: linked.id })
+												}
+											>
+												unlink
+											</button>
+										</li>
+									);
+								})}
+							</ul>
+						)}
+					</div>
 				</div>
-			</div>
-		</SelectedTx>
-	);
+			</SelectedTx>
+		);
 }
 
 function FilterControls({

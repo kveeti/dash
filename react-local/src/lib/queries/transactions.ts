@@ -8,6 +8,7 @@ import { useDb } from "../../providers";
 import { id } from "../id";
 import type { DbHandle } from "../db";
 import { queryKeys, queryKeyRoots, type TransactionFilters } from "./query-keys";
+import { FX_ANCHOR_CURRENCY } from "./settings";
 
 const DEFAULT_TRANSACTIONS_LIMIT = 50;
 
@@ -24,10 +25,17 @@ const TRANSACTION_WITH_RELATIONS_SELECT_SQL = `select
 	t.account_id,
 	c.name as category_name,
 	c.is_neutral as category_is_neutral,
-	a.name as account_name
+	a.name as account_name,
+	t.amount as original_amount,
+	upper(t.currency) as original_currency,
+	coalesce(t.categorize_on, t.date) as eff_date,
+	upper(s.reporting_currency) as reporting_currency,
+	s.max_staleness_days as max_staleness_days,
+	s.conversion_mode as conversion_mode
 from transactions t
 left join categories c on t.category_id = c.id
-left join accounts a on t.account_id = a.id`;
+left join accounts a on t.account_id = a.id
+cross join app_settings s`;
 
 type TransactionCursor = { left: string } | { right: string };
 type TransactionCursorInput = {
@@ -123,6 +131,114 @@ export function useTransactionsQuery(props: {
 	});
 }
 
+function buildConvertedRowsSql(baseSql: string, order: "asc" | "desc") {
+	return `with
+base_rows as (
+	${baseSql}
+),
+distinct_pairs as (
+	select distinct
+		original_currency,
+		eff_date,
+		reporting_currency,
+		conversion_mode,
+		max_staleness_days
+	from base_rows
+),
+tx_rates as (
+	select
+		p.original_currency,
+		p.eff_date,
+		p.reporting_currency,
+		p.conversion_mode,
+		p.max_staleness_days,
+		case
+			when p.original_currency = p.reporting_currency then 1.0
+			else (
+				select r.rate_to_anchor
+				from fx_rates r
+				where upper(r.currency) = p.original_currency
+					and r.rate_date <= p.eff_date
+					and (
+						p.conversion_mode <> 'strict'
+						or r.rate_date >= date(p.eff_date, '-' || p.max_staleness_days || ' days')
+					)
+				order by r.rate_date desc
+				limit 1
+			)
+		end as tx_rate_to_anchor
+	from distinct_pairs p
+),
+distinct_dates as (
+	select distinct
+		eff_date,
+		reporting_currency,
+		conversion_mode,
+		max_staleness_days
+	from base_rows
+),
+reporting_rates as (
+	select
+		d.eff_date,
+		d.reporting_currency,
+		d.conversion_mode,
+		d.max_staleness_days,
+		case
+			when d.reporting_currency = upper(?) then 1.0
+			else (
+				select r.rate_to_anchor
+				from fx_rates r
+				where upper(r.currency) = d.reporting_currency
+					and r.rate_date <= d.eff_date
+					and (
+						d.conversion_mode <> 'strict'
+						or r.rate_date >= date(d.eff_date, '-' || d.max_staleness_days || ' days')
+					)
+				order by r.rate_date desc
+				limit 1
+			)
+		end as reporting_rate_to_anchor
+	from distinct_dates d
+)
+select
+	b.id,
+	b.date,
+	b.categorize_on,
+	b.amount,
+	b.currency,
+	b.counter_party,
+	b.additional,
+	b.notes,
+	b.category_id,
+	b.account_id,
+	b.category_name,
+	b.category_is_neutral,
+	b.account_name,
+	b.original_amount,
+	b.original_currency,
+	b.reporting_currency as converted_currency,
+	case
+		when b.original_currency = b.reporting_currency then b.original_amount
+		when tx.tx_rate_to_anchor is null
+			or rr.reporting_rate_to_anchor is null
+			or rr.reporting_rate_to_anchor = 0 then null
+		else b.original_amount * tx.tx_rate_to_anchor / rr.reporting_rate_to_anchor
+	end as converted_amount
+from base_rows b
+left join tx_rates tx
+	on tx.original_currency = b.original_currency
+	and tx.eff_date = b.eff_date
+	and tx.reporting_currency = b.reporting_currency
+	and tx.conversion_mode = b.conversion_mode
+	and tx.max_staleness_days = b.max_staleness_days
+left join reporting_rates rr
+	on rr.eff_date = b.eff_date
+	and rr.reporting_currency = b.reporting_currency
+	and rr.conversion_mode = b.conversion_mode
+	and rr.max_staleness_days = b.max_staleness_days
+order by b.date ${order}, b.id ${order}`;
+}
+
 async function getTransactions(
 	db: DbHandle,
 	opts?: {
@@ -134,7 +250,7 @@ async function getTransactions(
 ): Promise<TransactionsResult> {
 	const limit = opts?.limit ?? DEFAULT_TRANSACTIONS_LIMIT;
 
-	let sql = TRANSACTION_WITH_RELATIONS_SELECT_SQL;
+	let baseSql = TRANSACTION_WITH_RELATIONS_SELECT_SQL;
 
 	const params: Array<string | number> = [];
 	const wheres: string[] = ["t._sync_is_deleted is 0"];
@@ -155,7 +271,7 @@ async function getTransactions(
 	}
 
 	if (opts?.filters?.currency) {
-		wheres.push("t.currency = ?");
+		wheres.push("upper(t.currency) = upper(?)");
 		params.push(opts.filters.currency);
 	}
 
@@ -182,11 +298,13 @@ async function getTransactions(
 		}
 	}
 
-	sql += " where " + wheres.join(" and ");
+	baseSql += " where " + wheres.join(" and ");
 
 	const order = direction === "left" ? "asc" : "desc";
-	sql += ` order by t.date ${order}, t.id ${order} limit ?`;
+	baseSql += ` order by t.date ${order}, t.id ${order} limit ?`;
 	params.push(limit + 1);
+	const sql = buildConvertedRowsSql(baseSql, order);
+	params.push(FX_ANCHOR_CURRENCY);
 
 	const rows = await db.query<TransactionRow>(sql, params);
 
@@ -207,26 +325,13 @@ async function getTransactionById(
 	db: DbHandle,
 	id: string,
 ): Promise<TransactionRow | null> {
+	const baseSql = `${TRANSACTION_WITH_RELATIONS_SELECT_SQL}
+	where t.id = ? and t._sync_is_deleted = 0
+	limit 1`;
+	const sql = buildConvertedRowsSql(baseSql, "desc");
 	const rows = await db.query<TransactionRow>(
-		`select
-			t.id,
-			t.date,
-			t.categorize_on,
-			t.amount,
-			t.currency,
-			t.counter_party,
-			t.additional,
-			t.notes,
-			t.category_id,
-			t.account_id,
-			c.name as category_name,
-			c.is_neutral as category_is_neutral,
-			a.name as account_name
-		from transactions t
-		left join categories c on t.category_id = c.id
-		left join accounts a on t.account_id = a.id
-		where t.id = ? and t._sync_is_deleted = 0`,
-		[id],
+		sql,
+		[id, FX_ANCHOR_CURRENCY],
 	);
 	return rows[0] ?? null;
 }
@@ -263,6 +368,10 @@ export type TransactionRow = Transaction & {
 	category_name: string | null;
 	category_is_neutral: number | null;
 	account_name: string;
+	original_amount: number;
+	original_currency: string;
+	converted_amount: number | null;
+	converted_currency: string;
 };
 
 export function useCreateTransactionMutation() {
@@ -346,6 +455,10 @@ export type LinkedTransaction = {
 	amount: number;
 	currency: string;
 	date: string;
+	original_amount: number;
+	original_currency: string;
+	converted_amount: number | null;
+	converted_currency: string;
 };
 
 export function useTransactionLinksQuery(txId: string | undefined) {
@@ -354,15 +467,123 @@ export function useTransactionLinksQuery(txId: string | undefined) {
 		queryKey: queryKeys.transactionLinks(txId),
 		queryFn: () =>
 			db.query<LinkedTransaction>(
-				`select t.id, t.counter_party, t.amount, t.currency, t.date
-				from transaction_links l
-				join transactions t on t.id = case
-					when l.transaction_a_id = ? then l.transaction_b_id
-					else l.transaction_a_id end
-				where (l.transaction_a_id = ? or l.transaction_b_id = ?)
-					and l._sync_is_deleted = 0
-					and t._sync_is_deleted = 0`,
-				[txId, txId, txId],
+				`with
+				linked_rows as (
+					select
+						t.id,
+						t.counter_party,
+						t.amount,
+						t.currency,
+						t.date,
+						t.amount as original_amount,
+						upper(t.currency) as original_currency,
+						coalesce(t.categorize_on, t.date) as eff_date,
+						upper(s.reporting_currency) as reporting_currency,
+						s.max_staleness_days as max_staleness_days,
+						s.conversion_mode as conversion_mode
+					from transaction_links l
+					join transactions t on t.id = case
+						when l.transaction_a_id = ? then l.transaction_b_id
+						else l.transaction_a_id end
+					cross join app_settings s
+					where (l.transaction_a_id = ? or l.transaction_b_id = ?)
+						and l._sync_is_deleted = 0
+						and t._sync_is_deleted = 0
+				),
+				distinct_pairs as (
+					select distinct
+						original_currency,
+						eff_date,
+						reporting_currency,
+						conversion_mode,
+						max_staleness_days
+					from linked_rows
+				),
+				tx_rates as (
+					select
+						p.original_currency,
+						p.eff_date,
+						p.reporting_currency,
+						p.conversion_mode,
+						p.max_staleness_days,
+						case
+							when p.original_currency = p.reporting_currency then 1.0
+							else (
+								select r.rate_to_anchor
+								from fx_rates r
+								where upper(r.currency) = p.original_currency
+									and r.rate_date <= p.eff_date
+									and (
+										p.conversion_mode <> 'strict'
+										or r.rate_date >= date(p.eff_date, '-' || p.max_staleness_days || ' days')
+									)
+								order by r.rate_date desc
+								limit 1
+							)
+						end as tx_rate_to_anchor
+					from distinct_pairs p
+				),
+				distinct_dates as (
+					select distinct
+						eff_date,
+						reporting_currency,
+						conversion_mode,
+						max_staleness_days
+					from linked_rows
+				),
+				reporting_rates as (
+					select
+						d.eff_date,
+						d.reporting_currency,
+						d.conversion_mode,
+						d.max_staleness_days,
+						case
+							when d.reporting_currency = upper(?) then 1.0
+							else (
+								select r.rate_to_anchor
+								from fx_rates r
+								where upper(r.currency) = d.reporting_currency
+									and r.rate_date <= d.eff_date
+									and (
+										d.conversion_mode <> 'strict'
+										or r.rate_date >= date(d.eff_date, '-' || d.max_staleness_days || ' days')
+									)
+								order by r.rate_date desc
+								limit 1
+							)
+						end as reporting_rate_to_anchor
+					from distinct_dates d
+				)
+				select
+					l.id,
+					l.counter_party,
+					l.amount,
+					l.currency,
+					l.date,
+					l.original_amount,
+					l.original_currency,
+					l.reporting_currency as converted_currency,
+					case
+						when l.original_currency = l.reporting_currency then l.original_amount
+						when tx.tx_rate_to_anchor is null
+							or rr.reporting_rate_to_anchor is null
+							or rr.reporting_rate_to_anchor = 0 then null
+						else l.original_amount * tx.tx_rate_to_anchor / rr.reporting_rate_to_anchor
+					end as converted_amount
+				from linked_rows l
+				left join tx_rates tx
+					on tx.original_currency = l.original_currency
+					and tx.eff_date = l.eff_date
+					and tx.reporting_currency = l.reporting_currency
+					and tx.conversion_mode = l.conversion_mode
+					and tx.max_staleness_days = l.max_staleness_days
+				left join reporting_rates rr
+					on rr.eff_date = l.eff_date
+					and rr.reporting_currency = l.reporting_currency
+					and rr.conversion_mode = l.conversion_mode
+					and rr.max_staleness_days = l.max_staleness_days
+				order by l.date desc, l.id desc`,
+				[txId, txId, txId, FX_ANCHOR_CURRENCY],
 			),
 		enabled: !!txId,
 	});
