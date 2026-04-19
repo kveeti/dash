@@ -8,7 +8,7 @@ export function Layout(props: { children: ReactNode }) {
   useSync()
 
   return (
-    <div className="mx-auto flex max-w-[800px]">
+    <div className="mx-auto flex ">
       <Nav />
       <CommandPalette />
 
