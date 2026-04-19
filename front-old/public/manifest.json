@@ -1,7 +1,0 @@
-{
-	"short_name": "dash",
-	"name": "dash",
-	"display": "standalone",
-	"start_url": ".",
-	"icons": []
-}

@@ -1,6 +1,5 @@
 {
-	"short_name": "dash",
-	"name": "dash",
+	"name": "Money",
 	"display": "standalone",
 	"start_url": ".",
 	"icons": []

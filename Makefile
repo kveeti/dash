@@ -14,14 +14,11 @@ backinit:
 	@cargo install cargo-watch
 init: backinit frontinit
 
-mocks:
-	@cd mock_integrations && bun --watch --no-clear-screen src/index.ts
-
 frontdev:
 	@cd front && bun run dev
 backdev:
-	@cd back && cargo watch -x 'run --bin backend'
-dev: backdev frontdev mocks
+	@cd back && cargo watch -x run
+dev: backdev frontdev
 
 frontbuild:
 	@cd front && bun run build
@@ -41,20 +38,6 @@ db:
 dbreset:
 	cd back && cargo sqlx migrate run
 
-up:
-	@docker compose up -d
-
-trace:
-	@docker compose --profile trace up -d
-
-down:
-	@docker compose --profile trace down -v -t 1
-
 an:
 	@cd front && BUNDLE_ANALYZE=true bun run build && open dist/report-web.html
 
-e2e:
-	@cd back && cargo run &
-	bash -c 'for i in {1..30}; do curl -s http://localhost:8000/api/health && break || (sleep 1 && echo "Waiting for server..."); done'
-	cd front && bunx playwright test --ui
-	pkill -f backend

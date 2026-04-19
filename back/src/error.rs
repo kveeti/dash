@@ -1,11 +1,8 @@
-use std::collections::HashMap;
-
 use axum::{
     Json,
     response::{IntoResponse, Response},
 };
 use hyper::StatusCode;
-use serde::Serialize;
 use serde_json::json;
 
 #[derive(Debug, thiserror::Error)]
@@ -13,59 +10,40 @@ pub enum ApiError {
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 
-    #[error("no access: {0}")]
-    NoAccess(String),
-
-    #[error("no auth: {0}")]
-    NoAuth(String),
+    #[error("unauthorized")]
+    Unauthorized,
 
     #[error("not found: {0}")]
     NotFound(String),
 
     #[error("bad request: {0}")]
     BadRequest(String),
-
-    #[error("bad request (details): {0}")]
-    BadRequestDetails(String, ErrorDetails),
 }
-
-#[derive(Debug, Serialize)]
-pub struct ErrorDetails(pub HashMap<String, String>);
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let (status_code, error_message, details) = match self {
+        let (status_code, error_message) = match self {
             ApiError::UnexpectedError(ref err) => {
                 tracing::error!("unexpected error: {err:#}");
 
                 #[cfg(debug_assertions)]
-                let error_message = Some(format!("{err:#}"));
+                let msg = format!("{err:#}");
                 #[cfg(not(debug_assertions))]
-                let error_message = Some("unexpected error".to_string());
+                let msg = "unexpected error".to_string();
 
-                (StatusCode::INTERNAL_SERVER_ERROR, error_message, None)
+                (StatusCode::INTERNAL_SERVER_ERROR, msg)
             }
-            ApiError::NoAuth(_) => (StatusCode::UNAUTHORIZED, None, None),
-            ApiError::NoAccess(details) => (StatusCode::FORBIDDEN, Some(details), None),
-            ApiError::NotFound(_) => (StatusCode::NOT_FOUND, None, None),
-            ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, Some(err.to_string()), None),
-            ApiError::BadRequestDetails(err, details) => (
-                StatusCode::BAD_REQUEST,
-                Some(err.to_string()),
-                Some(details),
-            ),
+            ApiError::NotFound(_) => (StatusCode::NOT_FOUND, "not found".to_string()),
+            ApiError::BadRequest(err) => (StatusCode::BAD_REQUEST, err),
+            ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized".to_string()),
         };
 
-        return (
-            status_code,
-            Json(json!({ "error": error_message, "details": details })),
-        )
-            .into_response();
+        (status_code, Json(json!({ "error": error_message }))).into_response()
     }
 }
 
 impl From<sqlx::Error> for ApiError {
     fn from(err: sqlx::Error) -> Self {
-        return ApiError::UnexpectedError(anyhow::anyhow!(err));
+        ApiError::UnexpectedError(anyhow::anyhow!(err))
     }
 }

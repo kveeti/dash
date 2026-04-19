@@ -3,13 +3,51 @@
 
 @font-face {
 	font-family: jbmono;
-	src: url("../public/fonts/jbmono.ttf") format("truetype-variations");
-	font-weight: 100, 900;
+	src: url("/fonts/jbmono.woff2") format("woff2");
+	font-display: swap;
+}
+
+/* Provide adjusted "web-safe" font as fallback */
+@font-face {
+	font-family: jbmonofb;
+	src: local(Courier New);
+	size-adjust: 100%;
+	ascent-override: 98%;
+	descent-override: 33%;
+	line-gap-override: normal;
+}
+
+@font-face {
+	font-family: crimsonprovar;
+	src: url("/fonts/crimson_pro_var.woff2") format("woff2");
+	font-optical-sizing: auto;
+	font-style: normal;
+	font-weight: 200, 900;
+	font-display: swap;
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+		U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Provide adjusted "web-safe" font as fallback */
+@font-face {
+	font-family: crimsonprovarfb;
+	src: local(Georgia);
+	size-adjust: 89%;
+	ascent-override: 102%;
+	descent-override: 23%;
+	line-gap-override: normal;
+}
+
+@font-face {
+	font-family: geist;
+	src: url("/fonts/geist_var.ttf") format("truetype");
+	font-weight: 100 900;
 	font-display: swap;
 }
 
 body {
-	@apply bg-gray-1 text-gray-12 font-default text-sm;
+	@apply bg-gray-1 text-gray-12 text-sm font-normal;
 }
 
 /* hide scrollbar */
@@ -87,6 +125,19 @@ html {
 	--green-11: hsla(132, 50%, 33%, 1);
 	--green-12: hsla(131, 30%, 18%, 1);
 
+	--green-a1: hsla(120, 100%, 38%, 0.02);
+	--green-a2: hsla(120, 100%, 30%, 0.04);
+	--green-a3: hsla(120, 100%, 30%, 0.09);
+	--green-a4: hsla(123, 100%, 31%, 0.15);
+	--green-a5: hsla(122, 100%, 29%, 0.21);
+	--green-a6: hsla(124, 100%, 28%, 0.3);
+	--green-a7: hsla(126, 99%, 27%, 0.42);
+	--green-a8: hsla(131, 100%, 28%, 0.6);
+	--green-a9: hsla(131, 100%, 26%, 0.73);
+	--green-a10: hsla(131, 100%, 24%, 0.76);
+	--green-a11: hsla(132, 100%, 20%, 0.84);
+	--green-a12: hsla(131, 100%, 6%, 0.87);
+
 	--gray-1: #fcfcfc;
 	--gray-2: #f9f9f9;
 	--gray-3: #f0f0f0;
@@ -152,6 +203,19 @@ html {
 		--green-10: hsla(151, 55%, 45%, 1);
 		--green-11: hsla(151, 65%, 54%, 1);
 		--green-12: hsla(144, 70%, 82%, 1);
+
+		--green-a1: hsla(125, 100%, 44%, 0.02);
+		--green-a2: hsla(130, 91%, 67%, 0.04);
+		--green-a3: hsla(132, 99%, 72%, 0.11);
+		--green-a4: hsla(135, 100%, 67%, 0.17);
+		--green-a5: hsla(134, 100%, 70%, 0.23);
+		--green-a6: hsla(133, 100%, 72%, 0.29);
+		--green-a7: hsla(132, 97%, 73%, 0.36);
+		--green-a8: hsla(131, 97%, 73%, 0.44);
+		--green-a9: hsla(131, 100%, 70%, 0.63);
+		--green-a10: hsla(131, 100%, 72%, 0.68);
+		--green-a11: hsla(131, 100%, 77%, 0.8);
+		--green-a12: hsla(120, 100%, 90%, 0.94);
 
 		--gray-1: #111111;
 		--gray-2: #191919;

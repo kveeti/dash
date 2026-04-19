@@ -6,10 +6,10 @@ pkgs.mkShell {
 		nodejs_24
 		bun
 
-		rustup
+			rustup
 
-		postgresql_18
-	];
+			postgresql_18
+		];
 
 	postgresConf =
 		pkgs.writeText "postgresql.conf" ''
@@ -50,4 +50,3 @@ pkgs.mkShell {
 		alias pg="psql -U postgres -d postgres"
 	'';
 }
-

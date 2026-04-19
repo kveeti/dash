@@ -11,7 +11,13 @@
 @theme {
 	--color-*: initial;
 	--spacing: 0.25rem;
-	--font-default: "JetBrainsMono Nerd Font", "JetBrainsMono", jbmono, monospace;
+	--font-*: initial;
+
+	--font-normal: geist, "Geist", monospace;
+	--font-mono: jbmono, "JetBrains Mono", "JetBrains Mono Nerd Font", jbmonofb, monospace;
+	--font-cool: crimsonprovar, "Crimson Pro", crimsonprovarfb, serif;
+
+	--color-white: #ffffff;
 
 	--color-gray-1: var(--gray-1);
 	--color-gray-2: var(--gray-2);
@@ -90,4 +96,17 @@
 	--color-green-10: var(--green-10);
 	--color-green-11: var(--green-11);
 	--color-green-12: var(--green-12);
+
+	--color-green-a1: var(--green-a1);
+	--color-green-a2: var(--green-a2);
+	--color-green-a3: var(--green-a3);
+	--color-green-a4: var(--green-a4);
+	--color-green-a5: var(--green-a5);
+	--color-green-a6: var(--green-a6);
+	--color-green-a7: var(--green-a7);
+	--color-green-a8: var(--green-a8);
+	--color-green-a9: var(--green-a9);
+	--color-green-a10: var(--green-a10);
+	--color-green-a11: var(--green-a11);
+	--color-green-a12: var(--green-a12);
 }

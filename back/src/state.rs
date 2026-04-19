@@ -2,10 +2,13 @@ use std::sync::Arc;
 
 use axum::extract::FromRef;
 
-use crate::{config::Config, data::Data};
+use crate::{auth::OidcState, db::Db, hub::Hub};
 
 #[derive(Clone, FromRef)]
 pub struct AppState {
-    pub data: Data,
-    pub config: Arc<Config>,
+    pub db: Db,
+    pub hub: Arc<Hub>,
+    pub oidc: Option<OidcState>,
+    pub base_url: String,
+    pub session_secret: Arc<[u8]>,
 }
