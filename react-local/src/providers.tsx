@@ -6,6 +6,7 @@ import {
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { getDb } from "./lib/db";
 import { queryKeyRoots } from "./lib/queries/query-keys";
+import { normalizeCurrency } from "./lib/currency";
 
 const queryClient = new QueryClient({
 	mutationCache: new MutationCache({
@@ -67,18 +68,17 @@ function useI18nValue() {
 		[locale, timeZone],
 	);
 
-	const amountFormatter = useMemo(
-		() =>
-			new Intl.NumberFormat(locale, {
-				signDisplay: "auto",
-				minimumFractionDigits: 2,
-				maximumFractionDigits: 2,
-				currencyDisplay: "symbol",
-				style: "currency",
-				currency: "EUR",
-			}),
-		[locale],
-	);
+	const formatAmount = (amount: number, currency: string) => {
+		const currencyCode = normalizeCurrency(currency);
+		return new Intl.NumberFormat(locale, {
+			signDisplay: "auto",
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2,
+			currencyDisplay: "symbol",
+			style: "currency",
+			currency: currencyCode,
+		}).format(amount);
+	};
 
 	const shortDateFormatter = useMemo(
 		() =>
@@ -131,7 +131,7 @@ function useI18nValue() {
 
 	return {
 		f: {
-			amount: amountFormatter,
+			amount: formatAmount,
 			shortDate: shortDateFormatter,
 			longDate: longDateFormatter,
 			weekdayLongDate: weekdayLongDateFormatter,

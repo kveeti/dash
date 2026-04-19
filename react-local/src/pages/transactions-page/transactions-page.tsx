@@ -8,6 +8,7 @@ import {
 	useTransactionLinksQuery,
 	useLinkTransactionMutation,
 	useUnlinkTransactionMutation,
+	useTransactionCurrenciesQuery,
 	type TransactionRow,
 } from "../../lib/queries/transactions";
 import { useCategoriesQuery } from "../../lib/queries/categories";
@@ -41,14 +42,16 @@ function useFilterParams() {
 	const q = searchParams.get("q") ?? "";
 	const categoryId = searchParams.get("cat") ?? "";
 	const accountId = searchParams.get("acc") ?? "";
+	const currency = searchParams.get("cur") ?? "";
 	const uncategorized = searchParams.get("uncat") === "1";
 
 	const filters: TransactionFilters = {};
 	if (categoryId) filters.category_id = categoryId;
 	if (accountId) filters.account_id = accountId;
+	if (currency) filters.currency = currency;
 	if (uncategorized) filters.uncategorized = true;
 
-	const hasFilters = !!(q || categoryId || accountId || uncategorized);
+	const hasFilters = !!(q || categoryId || accountId || currency || uncategorized);
 
 	function setParams(updates: Record<string, string | undefined>) {
 		const params = new URLSearchParams();
@@ -56,6 +59,7 @@ function useFilterParams() {
 			...(q && { q }),
 			...(categoryId && { cat: categoryId }),
 			...(accountId && { acc: accountId }),
+			...(currency && { cur: currency }),
 			...(uncategorized && { uncat: "1" }),
 		};
 		for (const [k, v] of Object.entries({ ...current, ...updates })) {
@@ -74,6 +78,7 @@ function useFilterParams() {
 		q: q || undefined,
 		cat: categoryId || undefined,
 		acc: accountId || undefined,
+		cur: currency || undefined,
 		uncat: uncategorized ? "1" : undefined,
 	};
 
@@ -83,6 +88,7 @@ function useFilterParams() {
 		q,
 		categoryId,
 		accountId,
+		currency,
 		uncategorized,
 		filters,
 		hasFilters,
@@ -141,6 +147,7 @@ export function TransactionsPage() {
 		q,
 		categoryId,
 		accountId,
+		currency,
 		uncategorized,
 		filters,
 		hasFilters,
@@ -158,6 +165,7 @@ export function TransactionsPage() {
 
 	const categories = useCategoriesQuery();
 	const accounts = useAccountsQuery();
+	const currencies = useTransactionCurrenciesQuery();
 
 	const selection = useSelection();
 	const txWindows = useOpenTxWindows();
@@ -189,10 +197,12 @@ export function TransactionsPage() {
 							q={q}
 							categoryId={categoryId}
 							accountId={accountId}
+							currency={currency}
 							uncategorized={uncategorized}
 							hasFilters={hasFilters}
 							categories={categories.data}
 							accounts={accounts.data}
+							currencies={currencies.data}
 							setParams={setParams}
 						/>
 					</div>
@@ -281,9 +291,11 @@ export function TransactionsPage() {
 				q={q}
 				categoryId={categoryId}
 				accountId={accountId}
+				currency={currency}
 				uncategorized={uncategorized}
 				categories={categories.data}
 				accounts={accounts.data}
+				currencies={currencies.data}
 				setParams={setParams}
 			/>
 
@@ -395,7 +407,7 @@ function TxRow(props: {
 					<span
 						className={`shrink-0 text-sm ${isIncome ? "text-green-11" : ""}`}
 					>
-						{f.amount.format(props.tx.amount)}
+						{f.amount(props.tx.amount, props.tx.currency)}
 					</span>
 				</div>
 			</div>
@@ -454,14 +466,14 @@ function SelectedTxWindow({
 		<SelectedTx
 			ref={selectedTxRef}
 			id={txId}
-			label={`Transaction: ${tx.counter_party}, ${f.amount.format(tx.amount)}`}
+			label={`Transaction: ${tx.counter_party}, ${f.amount(tx.amount, tx.currency)}`}
 			onClose={onClose}
 			initialOffset={stackOffset}
 		>
 			<div className="space-y-1 px-3 pt-3">
 				<h2 className="font-medium">{tx.counter_party}</h2>
 				<p className={`text-sm ${isIncome ? "text-green-11" : ""}`}>
-					{f.amount.format(tx.amount)}
+					{f.amount(tx.amount, tx.currency)}
 				</p>
 				<p className="text-xs">{f.weekdayLongDate.format(new Date(tx.date))}</p>
 			</div>
@@ -499,6 +511,7 @@ function SelectedTxWindow({
 									defaultValues={{
 										date: tx.date,
 										amount: tx.amount,
+										currency: tx.currency,
 										counter_party: tx.counter_party,
 										additional: tx.additional ?? undefined,
 										notes: tx.notes ?? undefined,
@@ -555,7 +568,7 @@ function SelectedTxWindow({
 									<span className="truncate">
 										{linked.counter_party}{" "}
 										<span className="text-gray-10">
-											{f.amount.format(linked.amount)}
+											{f.amount(linked.amount, linked.currency)}
 										</span>
 									</span>
 									<button
@@ -581,19 +594,23 @@ function FilterControls({
 	q,
 	categoryId,
 	accountId,
+	currency,
 	uncategorized,
 	hasFilters,
 	categories,
 	accounts,
+	currencies,
 	setParams,
 }: {
 	q: string;
 	categoryId: string;
 	accountId: string;
+	currency: string;
 	uncategorized: boolean;
 	hasFilters: boolean;
 	categories: Array<{ id: string; name: string }> | undefined;
-	accounts: Array<{ id: string; name: string }> | undefined;
+	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
+	currencies: string[] | undefined;
 	setParams: (updates: Record<string, string | undefined>) => void;
 }) {
 	return (
@@ -639,7 +656,22 @@ function FilterControls({
 					<option value="">all accounts</option>
 					{accounts?.map((a) => (
 						<option key={a.id} value={a.id}>
-							{a.name}
+							{`${a.name} (${a.currency})`}
+						</option>
+					))}
+				</Select>
+				<Select
+					size="sm"
+					className="flex-1 min-w-0"
+					value={currency}
+					onChange={(e) =>
+						setParams({ cur: e.currentTarget.value || undefined })
+					}
+				>
+					<option value="">all currencies</option>
+					{currencies?.map((currencyCode) => (
+						<option key={currencyCode} value={currencyCode}>
+							{currencyCode}
 						</option>
 					))}
 				</Select>
@@ -653,6 +685,7 @@ function FilterControls({
 							q: undefined,
 							cat: undefined,
 							acc: undefined,
+							cur: undefined,
 							uncat: undefined,
 						})
 					}
@@ -671,9 +704,11 @@ function MobileFilterBar({
 	q,
 	categoryId,
 	accountId,
+	currency,
 	uncategorized,
 	categories,
 	accounts,
+	currencies,
 	setParams,
 }: {
 	showFilters: boolean;
@@ -682,9 +717,11 @@ function MobileFilterBar({
 	q: string;
 	categoryId: string;
 	accountId: string;
+	currency: string;
 	uncategorized: boolean;
 	categories: Array<{ id: string; name: string }> | undefined;
-	accounts: Array<{ id: string; name: string }> | undefined;
+	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
+	currencies: string[] | undefined;
 	setParams: (updates: Record<string, string | undefined>) => void;
 }) {
 	return (
@@ -696,10 +733,12 @@ function MobileFilterBar({
 							q={q}
 							categoryId={categoryId}
 							accountId={accountId}
+							currency={currency}
 							uncategorized={uncategorized}
 							hasFilters={hasFilters}
 							categories={categories}
 							accounts={accounts}
+							currencies={currencies}
 							setParams={setParams}
 						/>
 					</div>

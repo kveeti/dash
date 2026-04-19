@@ -154,6 +154,11 @@ async function getTransactions(
 		params.push(opts.filters.account_id);
 	}
 
+	if (opts?.filters?.currency) {
+		wheres.push("t.currency = ?");
+		params.push(opts.filters.currency);
+	}
+
 	if (opts?.filters?.uncategorized) {
 		wheres.push("t.category_id is null");
 	}
@@ -339,6 +344,7 @@ export type LinkedTransaction = {
 	id: string;
 	counter_party: string;
 	amount: number;
+	currency: string;
 	date: string;
 };
 
@@ -348,7 +354,7 @@ export function useTransactionLinksQuery(txId: string | undefined) {
 		queryKey: queryKeys.transactionLinks(txId),
 		queryFn: () =>
 			db.query<LinkedTransaction>(
-				`select t.id, t.counter_party, t.amount, t.date
+				`select t.id, t.counter_party, t.amount, t.currency, t.date
 				from transaction_links l
 				join transactions t on t.id = case
 					when l.transaction_a_id = ? then l.transaction_b_id
@@ -359,6 +365,22 @@ export function useTransactionLinksQuery(txId: string | undefined) {
 				[txId, txId, txId],
 			),
 		enabled: !!txId,
+	});
+}
+
+export function useTransactionCurrenciesQuery() {
+	const db = useDb();
+	return useQuery({
+		queryKey: [...queryKeyRoots.transactions, "currencies"],
+		queryFn: async () =>
+			db
+				.query<{ currency: string }>(
+					`select distinct currency
+					from transactions
+					where _sync_is_deleted = 0
+					order by currency asc`,
+				)
+				.then((rows) => rows.map((row) => row.currency)),
 	});
 }
 

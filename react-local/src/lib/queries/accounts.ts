@@ -3,14 +3,16 @@ import { useDb } from "../../providers";
 import type { DbHandle } from "../db";
 import { id } from "../id";
 import { queryKeys, queryKeyRoots } from "./query-keys";
+import { normalizeCurrency } from "../currency";
 
 export type Account = {
 	id: string;
 	name: string;
+	currency: string;
 };
 
 const ACCOUNT_SELECT_SQL =
-	"select id, name from accounts where _sync_is_deleted = 0 order by name";
+	"select id, name, currency from accounts where _sync_is_deleted = 0 order by name";
 
 export function useAccountsQuery() {
 	const db = useDb();
@@ -24,7 +26,8 @@ export function useCreateAccountMutation() {
 	const db = useDb();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: (name: string) => createAccount(db, name),
+		mutationFn: (account: { name: string; currency: string }) =>
+			createAccount(db, account),
 		onSuccess: () => qc.invalidateQueries({ queryKey: queryKeyRoots.accounts }),
 	});
 }
@@ -35,15 +38,22 @@ export async function getAccounts(db: DbHandle): Promise<Account[]> {
 
 export async function createAccount(
 	db: DbHandle,
-	name: string,
+	account: { name: string; currency: string },
 ): Promise<string> {
 	const newId = await db.withTx(async () => {
 		const newId = id();
 		const now = new Date().toISOString();
 		await db.exec(
-			`insert into accounts (id, created_at, updated_at, name, _sync_edited_at)
-			values (?, ?, ?, ?, ?)`,
-			[newId, now, now, name, Date.now()],
+			`insert into accounts (id, created_at, updated_at, name, currency, _sync_edited_at)
+			values (?, ?, ?, ?, ?, ?)`,
+			[
+				newId,
+				now,
+				now,
+				account.name,
+				normalizeCurrency(account.currency),
+				Date.now(),
+			],
 		);
 		return newId;
 	});
@@ -54,11 +64,12 @@ export async function createAccount(
 export async function getOrCreateAccountByName(
 	db: DbHandle,
 	name: string,
+	currency = "EUR",
 ): Promise<string> {
 	const rows = await db.query<{ id: string }>(
 		"select id from accounts where name = ? and _sync_is_deleted = 0",
 		[name],
 	);
 	if (rows.length > 0) return rows[0].id;
-	return createAccount(db, name);
+	return createAccount(db, { name, currency });
 }

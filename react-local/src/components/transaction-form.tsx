@@ -1,10 +1,15 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "./button";
 import { Input } from "./input";
 import { Select } from "./select";
 import { Textarea } from "./textarea";
 import { useAccountsQuery, useCreateAccountMutation } from "../lib/queries/accounts";
 import { useCategoriesQuery } from "../lib/queries/categories";
+import {
+	COMMON_CURRENCIES,
+	DEFAULT_CURRENCY,
+	normalizeCurrency,
+} from "../lib/currency";
 
 export type TxFormValues = {
 	date: string;
@@ -20,6 +25,7 @@ export type TxFormValues = {
 export type TxFormDefaults = {
 	date?: string;
 	amount?: number;
+	currency?: string;
 	counter_party?: string;
 	additional?: string;
 	notes?: string;
@@ -42,11 +48,36 @@ export function TransactionForm({
 
 	const [showNewAccount, setShowNewAccount] = useState(false);
 	const newAccountRef = useRef<HTMLInputElement>(null);
+	const [selectedAccountId, setSelectedAccountId] = useState(
+		defaultValues?.account_id ?? "",
+	);
+	const [currency, setCurrency] = useState(
+		normalizeCurrency(defaultValues?.currency, DEFAULT_CURRENCY),
+	);
+	const currencyOptions = useMemo(() => {
+		const options = [...COMMON_CURRENCIES];
+		if (!options.includes(currency as (typeof COMMON_CURRENCIES)[number])) {
+			options.unshift(currency);
+		}
+		return options;
+	}, [currency]);
+
+	function setCurrencyFromAccount(accountId: string) {
+		const account = accounts.data?.find((row) => row.id === accountId);
+		if (!account) return;
+		setCurrency(normalizeCurrency(account.currency));
+	}
 
 	async function handleNewAccount() {
 		const name = newAccountRef.current?.value.trim();
 		if (!name) return;
-		await createAccount.mutateAsync(name);
+		const accountCurrency = normalizeCurrency(currency);
+		const newId = await createAccount.mutateAsync({
+			name,
+			currency: accountCurrency,
+		});
+		setSelectedAccountId(newId);
+		setCurrency(accountCurrency);
 		setShowNewAccount(false);
 		if (newAccountRef.current) newAccountRef.current.value = "";
 	}
@@ -55,7 +86,7 @@ export function TransactionForm({
 		e.preventDefault();
 		const data = new FormData(e.currentTarget);
 
-		const accountId = data.get("account_id") as string;
+		const accountId = (data.get("account_id") as string) || selectedAccountId;
 		if (!accountId) {
 			alert("select an account");
 			return;
@@ -67,7 +98,7 @@ export function TransactionForm({
 			counter_party: data.get("counter_party") as string,
 			additional: (data.get("additional") as string) || undefined,
 			notes: (data.get("notes") as string) || undefined,
-			currency: "EUR",
+			currency: normalizeCurrency(data.get("currency") as string, currency),
 			category_id: (data.get("category_id") as string) || undefined,
 			account_id: accountId,
 		});
@@ -100,14 +131,31 @@ export function TransactionForm({
 				/>
 			</div>
 
-			<Input
-				label="date"
-				name="date"
-				type="datetime-local"
-				className="w-full"
-				defaultValue={defaultDate}
-				required
-			/>
+			<div className="grid grid-cols-2 gap-3">
+				<Input
+					label="date"
+					name="date"
+					type="datetime-local"
+					className="w-full"
+					defaultValue={defaultDate}
+					required
+				/>
+				<Select
+					label="currency"
+					name="currency"
+					className="w-full"
+					value={currency}
+					onChange={(e) => {
+						setCurrency(normalizeCurrency(e.currentTarget.value, currency));
+					}}
+				>
+					{currencyOptions.map((code) => (
+						<option key={code} value={code}>
+							{code}
+						</option>
+					))}
+				</Select>
+			</div>
 
 			<div className="grid grid-cols-2 gap-3">
 				<Select label="category" name="category_id" className="w-full" defaultValue={defaultValues?.category_id ?? ""}>
@@ -140,10 +188,20 @@ export function TransactionForm({
 							</Button>
 						</div>
 					) : (
-						<Select name="account_id" className="w-full" required defaultValue={defaultValues?.account_id ?? ""}>
+						<Select
+							name="account_id"
+							className="w-full"
+							required
+							value={selectedAccountId}
+							onChange={(e) => {
+								const accountId = e.currentTarget.value;
+								setSelectedAccountId(accountId);
+								setCurrencyFromAccount(accountId);
+							}}
+						>
 							<option value="">select...</option>
 							{accounts.data?.map((a) => (
-								<option key={a.id} value={a.id}>{a.name}</option>
+								<option key={a.id} value={a.id}>{`${a.name} (${a.currency})`}</option>
 							))}
 						</Select>
 					)}

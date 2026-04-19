@@ -6,6 +6,7 @@ type TransactionCursorKey = {
 export type TransactionFilters = {
 	category_id?: string;
 	account_id?: string;
+	currency?: string;
 	uncategorized?: boolean;
 };
 
@@ -16,6 +17,8 @@ export const queryKeyRoots = {
 	transactions: ["transactions"] as const,
 	transaction: ["transaction"] as const,
 	transactionLinks: ["transaction-links"] as const,
+	settings: ["settings"] as const,
+	fxRates: ["fx-rates"] as const,
 	sync: ["sync"] as const,
 };
 
@@ -29,12 +32,15 @@ export const queryKeys = {
 			search,
 			filters?.category_id,
 			filters?.account_id,
+			filters?.currency,
 			filters?.uncategorized,
 			cursor?.left,
 			cursor?.right,
 		] as const,
 	transaction: (id?: string) => [...queryKeyRoots.transaction, id] as const,
 	transactionLinks: (id?: string) => [...queryKeyRoots.transactionLinks, id] as const,
+	settings: () => queryKeyRoots.settings,
+	fxRates: () => [...queryKeyRoots.fxRates] as const,
 	syncPull: (canSync: boolean, salt?: string) =>
 		[...queryKeyRoots.sync, "pull", canSync, salt] as const,
 	syncPush: (pullReady: boolean) =>
