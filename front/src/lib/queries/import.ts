@@ -4,7 +4,7 @@ import { id } from "../id";
 import { getOrCreateCategoryByName } from "./categories";
 import { parseCurrency } from "../currency";
 
-export type CsvFormat = "generic" | "op" | "legacy_bundle";
+export type CsvFormat = "generic" | "op" | "nordea" | "legacy_bundle";
 
 export type ImportResult = {
 	imported: number;
@@ -93,6 +93,43 @@ function parseOpRow(cols: string[]): ParsedTransaction {
 	return {
 		date: date.toISOString(),
 		amount,
+		counter_party,
+		additional: additionalParts.join(", ") || undefined,
+	};
+}
+
+function parseNordeaDate(raw: string): Date {
+	const trimmed = raw.trim();
+	const match = trimmed.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+	if (!match) throw new Error(`invalid date: ${raw}`);
+	const [, year, month, day] = match;
+	const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+	if (isNaN(date.getTime())) throw new Error(`invalid date: ${raw}`);
+	return date;
+}
+
+function parseNordeaRow(cols: string[]): ParsedTransaction {
+	const dateStr = cols[0]?.trim();
+	if (!dateStr) throw new Error("missing date");
+	const date = parseNordeaDate(dateStr);
+
+	const amount = parseAmount(cols[1] ?? "");
+	const counter_party = cols[5]?.trim();
+	if (!counter_party) throw new Error("missing counter_party");
+
+	const additionalParts: string[] = [];
+	const addField = (label: string, value: string | undefined) => {
+		const trimmed = value?.trim();
+		if (trimmed) additionalParts.push(`${label}: ${trimmed}`);
+	};
+
+	addField("Viesti", cols[6]);
+	addField("Viitenumero", cols[7]);
+
+	return {
+		date: date.toISOString(),
+		amount,
+		currency: cols[9]?.trim() || undefined,
 		counter_party,
 		additional: additionalParts.join(", ") || undefined,
 	};
@@ -207,8 +244,16 @@ export async function importCsv(
 	format: CsvFormat,
 	account: { id: string; currency: string },
 ): Promise<ImportResult> {
-	const parsedCsv = parseCsvRows(text, format === "op" ? ";" : undefined);
-	const parse = format === "op" ? parseOpRow : parseGenericRow;
+	const parsedCsv = parseCsvRows(
+		text,
+		format === "op" || format === "nordea" ? ";" : undefined,
+	);
+	const parse =
+		format === "op"
+			? parseOpRow
+			: format === "nordea"
+				? parseNordeaRow
+				: parseGenericRow;
 	const accountId = account.id;
 	const defaultCurrency = parseCurrency(account.currency);
 
