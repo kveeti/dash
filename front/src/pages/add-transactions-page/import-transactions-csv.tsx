@@ -171,6 +171,7 @@ export function ImportTransactionsCSV() {
 					<option value="generic">generic (date;amount;counterparty;additional;category;currency?)</option>
 					<option value="op">OP bank statement</option>
 					<option value="nordea">Nordea bank statement</option>
+					<option value="revolut">Revolut export</option>
 					<option value="legacy_bundle">legacy export (transactions+accounts+categories+links)</option>
 				</Select>
 

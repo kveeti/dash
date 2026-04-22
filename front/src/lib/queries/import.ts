@@ -4,7 +4,12 @@ import { id } from "../id";
 import { getOrCreateCategoryByName } from "./categories";
 import { parseCurrency } from "../currency";
 
-export type CsvFormat = "generic" | "op" | "nordea" | "legacy_bundle";
+export type CsvFormat =
+	| "generic"
+	| "op"
+	| "nordea"
+	| "revolut"
+	| "legacy_bundle";
 
 export type ImportResult = {
 	imported: number;
@@ -135,6 +140,31 @@ function parseNordeaRow(cols: string[]): ParsedTransaction {
 	};
 }
 
+function parseRevolutRow(cols: string[]): ParsedTransaction | null {
+	const state = cols[8]?.trim().toUpperCase();
+	if (state !== "COMPLETED") return null;
+
+	const dateStr = cols[2]?.trim();
+	if (!dateStr) throw new Error("missing date");
+	const date = new Date(dateStr);
+	if (isNaN(date.getTime())) throw new Error(`invalid date: ${dateStr}`);
+
+	const counter_party = cols[4]?.trim();
+	if (!counter_party) throw new Error("missing counter_party");
+
+	const amount = parseAmount(cols[5] ?? "");
+	const feeRaw = cols[6]?.trim() ?? "";
+	const fee = feeRaw ? parseAmount(feeRaw) : 0;
+
+	return {
+		date: date.toISOString(),
+		amount: amount + fee,
+		currency: cols[7]?.trim() || undefined,
+		counter_party,
+		additional: fee !== 0 ? `Fee: ${fee}` : undefined,
+	};
+}
+
 type ParsedCsvTable = {
 	headers: string[];
 	rows: Array<{ lineNum: number; record: Record<string, string> }>;
@@ -248,11 +278,15 @@ export async function importCsv(
 		text,
 		format === "op" || format === "nordea" ? ";" : undefined,
 	);
-	const parse =
+	const parse:
+		| ((cols: string[]) => ParsedTransaction)
+		| ((cols: string[]) => ParsedTransaction | null) =
 		format === "op"
 			? parseOpRow
 			: format === "nordea"
 				? parseNordeaRow
+				: format === "revolut"
+					? parseRevolutRow
 				: parseGenericRow;
 	const accountId = account.id;
 	const defaultCurrency = parseCurrency(account.currency);
@@ -264,7 +298,12 @@ export async function importCsv(
 	for (let i = 0; i < parsedCsv.rows.length; i++) {
 		const cols = parsedCsv.rows[i];
 		try {
-			parsed.push({ row: parse(cols), lineNum: i + 1 });
+			const row = parse(cols);
+			if (!row) {
+				skipped++;
+				continue;
+			}
+			parsed.push({ row, lineNum: i + 1 });
 		} catch (e: unknown) {
 			if (i === 0) {
 				skipped++;
