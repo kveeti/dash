@@ -49,7 +49,11 @@ impl Hub {
             .clone()
     }
 
-    pub fn register_client(&self, user_id: &str, client_id: &str) -> broadcast::Receiver<RealtimeEvent> {
+    pub fn register_client(
+        &self,
+        user_id: &str,
+        client_id: &str,
+    ) -> broadcast::Receiver<RealtimeEvent> {
         let handle = self.get_or_spawn(user_id);
         handle.connected_clients.insert(client_id.to_string());
         handle.broadcast.subscribe()

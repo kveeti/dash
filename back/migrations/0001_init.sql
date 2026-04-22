@@ -2,7 +2,7 @@
 create table users (
     id text primary key not null,
     external_id text unique,
-    salt text not null,
+    auth_public_key text not null,
     _sync_server_version bigint not null default 0
 );
 

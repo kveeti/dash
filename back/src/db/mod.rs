@@ -24,15 +24,15 @@ impl Db {
         Self { pool }
     }
 
-    pub async fn upsert_user_with_salt(
+    pub async fn upsert_user_with_auth_public_key(
         &self,
         external_id: &str,
-        salt: &str,
+        auth_public_key: &str,
     ) -> Result<String, sqlx::Error> {
         let new_id = Ulid::new().to_string();
         let row: (String,) = sqlx::query_as(
             r#"
-            insert into users (id, external_id, salt)
+            insert into users (id, external_id, auth_public_key)
             values ($1, $2, $3)
             on conflict (external_id) do update set
                 external_id = excluded.external_id
@@ -41,18 +41,36 @@ impl Db {
         )
         .bind(&new_id)
         .bind(external_id)
-        .bind(salt)
+        .bind(auth_public_key)
         .fetch_one(&self.pool)
         .await?;
         Ok(row.0)
     }
 
-    pub async fn get_user_salt(&self, user_id: &str) -> Result<Option<String>, sqlx::Error> {
-        let row: Option<(String,)> = sqlx::query_as("select salt from users where id = $1")
+    pub async fn get_user_by_external_id(
+        &self,
+        external_id: &str,
+    ) -> Result<Option<(String, String)>, sqlx::Error> {
+        let row: Option<(String, String)> =
+            sqlx::query_as(
+                "select id, auth_public_key from users where external_id = $1 limit 1",
+            )
+                .bind(external_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row)
+    }
+
+    pub async fn get_user_auth_public_key(
+        &self,
+        user_id: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        let row: Option<(String,)> =
+            sqlx::query_as("select auth_public_key from users where id = $1")
             .bind(user_id)
             .fetch_optional(&self.pool)
             .await?;
-        Ok(row.map(|(salt,)| salt))
+        Ok(row.map(|(auth_public_key,)| auth_public_key))
     }
 
     pub async fn create_session(
@@ -107,6 +125,25 @@ impl Db {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    pub async fn resolve_session_user_id(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<String>, sqlx::Error> {
+        let row: Option<(String,)> = sqlx::query_as(
+            r#"
+            select user_id
+            from sessions
+            where id = $1
+              and expires_at > now()
+            limit 1
+            "#,
+        )
+        .bind(session_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(|(user_id,)| user_id))
     }
 
     pub async fn load_bootstrap_page(

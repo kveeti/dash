@@ -108,38 +108,44 @@ async fn events(State(state): State<AppState>, jar: CookieJar) -> Result<Respons
     };
 
     let user_id_for_stream = user_id;
-    let realtime_stream = stream::unfold((bcast_rx, registration), move |(mut rx, registration)| {
-        let user_id_for_stream = user_id_for_stream.clone();
-        let client_id = client_id.clone();
-        async move {
-            loop {
-                match rx.recv().await {
-                    Ok(msg) => {
-                        if msg.source_client_id.as_deref() == Some(client_id.as_str()) {
-                            continue;
-                        }
-
-                        let payload = match serde_json::to_string(&DeltaEvent { ops: msg.ops }) {
-                            Ok(payload) => payload,
-                            Err(err) => {
-                                warn!("serialize sse frame failed: {:#}", err);
+    let realtime_stream = stream::unfold(
+        (bcast_rx, registration),
+        move |(mut rx, registration)| {
+            let user_id_for_stream = user_id_for_stream.clone();
+            let client_id = client_id.clone();
+            async move {
+                loop {
+                    match rx.recv().await {
+                        Ok(msg) => {
+                            if msg.source_client_id.as_deref() == Some(client_id.as_str()) {
                                 continue;
                             }
-                        };
-                        return Some((
-                            Ok::<Event, Infallible>(Event::default().event("delta").data(payload)),
-                            (rx, registration),
-                        ));
+
+                            let payload = match serde_json::to_string(&DeltaEvent { ops: msg.ops })
+                            {
+                                Ok(payload) => payload,
+                                Err(err) => {
+                                    warn!("serialize sse frame failed: {:#}", err);
+                                    continue;
+                                }
+                            };
+                            return Some((
+                                Ok::<Event, Infallible>(
+                                    Event::default().event("delta").data(payload),
+                                ),
+                                (rx, registration),
+                            ));
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                            warn!(user_id = %user_id_for_stream, "sse broadcast lagged by {n}, closing stream");
+                            return None;
+                        }
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        warn!(user_id = %user_id_for_stream, "sse broadcast lagged by {n}, closing stream");
-                        return None;
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
                 }
             }
-        }
-    });
+        },
+    );
 
     let ready_payload = serde_json::to_string(&ReadyEvent {})
         .map_err(|err| ApiError::UnexpectedError(anyhow::anyhow!(err)))?;

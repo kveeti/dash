@@ -5,12 +5,13 @@ import { useCallback, useEffect, useRef } from "react";
 import {
 	createDekSyncPayloadCodec,
 	type SyncPayloadCodec,
+	unwrapSeedFromStorage,
 } from "./crypt";
-import { useMe } from "./queries/auth";
 import { useDb } from "../providers";
 import type { DbHandle } from "./db";
 import { queryKeyRoots, queryKeys } from "./queries/query-keys";
 import { normalizeCurrency } from "./currency";
+import { loginWithSeed } from "./queries/auth";
 
 // -------------------- types --------------------
 
@@ -633,6 +634,8 @@ class SyncClient {
 export type UiStorage = {
 	id: string;
 	dek: CryptoKey | null;
+	local_wrap_key: CryptoKey | null;
+	wrapped_dek_seed: string | null;
 	cursor: number | null;
 	sync_state: "enabled" | "paused" | null;
 };
@@ -647,6 +650,8 @@ idb.version(1).stores({
 export const uiStorageDefaults = {
 	id: "1",
 	dek: null,
+	local_wrap_key: null,
+	wrapped_dek_seed: null,
 	cursor: null,
 	sync_state: null,
 } satisfies UiStorage;
@@ -694,7 +699,6 @@ export function useSync() {
 	const uiStorage = useLiveQuery(getUiStorage);
 	const canSync =
 		uiStorage?.sync_state === "enabled" && !!uiStorage?.dek;
-	const me = useMe();
 	const db = useDb();
 	const qc = useQueryClient();
 
@@ -721,12 +725,14 @@ export function useSync() {
 	const onEntitiesChangedRef = useRef(onEntitiesChanged);
 	onEntitiesChangedRef.current = onEntitiesChanged;
 
-	const enabled = canSync && !!me.data?.salt;
+	const enabled = canSync;
 
 	// Lifecycle: spawn the client when enabled, stop when not.
 	// We intentionally key the effect on `enabled` only — not on the dek
 	// reference — so live-query ticks don't churn the connection.
 	useEffect(() => {
+		let cancelled = false;
+
 		if (!enabled) {
 			clientRef.current?.stop();
 			clientRef.current = null;
@@ -738,20 +744,37 @@ export function useSync() {
 
 		if (clientRef.current) return;
 
-		const client = new SyncClient(
-			db,
-			dek,
-			readCursor,
-			persistCursor,
-			resetCursor,
-			(types) => onEntitiesChangedRef.current(types),
-		);
-		clientRef.current = client;
-		client.start();
+		(async () => {
+			try {
+				const currentStorage = await getUiStorage();
+				if (currentStorage?.local_wrap_key && currentStorage?.wrapped_dek_seed) {
+					const seed = await unwrapSeedFromStorage(
+						currentStorage.wrapped_dek_seed,
+						currentStorage.local_wrap_key,
+					);
+					await loginWithSeed(seed);
+				}
+
+				if (cancelled) return;
+				const client = new SyncClient(
+					db,
+					dek,
+					readCursor,
+					persistCursor,
+					resetCursor,
+					(types) => onEntitiesChangedRef.current(types),
+				);
+				clientRef.current = client;
+				client.start();
+			} catch (error) {
+				console.error("sync auth failed:", error);
+			}
+		})();
 
 		return () => {
-			client.stop();
-			if (clientRef.current === client) clientRef.current = null;
+			cancelled = true;
+			clientRef.current?.stop();
+			clientRef.current = null;
 		};
 	}, [enabled, db]);
 

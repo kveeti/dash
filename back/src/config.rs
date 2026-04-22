@@ -10,11 +10,7 @@ struct EnvironmentVariables {
     port: Option<u16>,
     cors_origin: Option<String>,
     base_url: String,
-    session_secret: String,
-    oidc_url: Option<String>,
-    oidc_client_id: Option<String>,
-    oidc_client_secret: Option<String>,
-    oidc_redirect_url: Option<String>,
+    session_ttl_days: Option<i64>,
 }
 
 pub struct Config {
@@ -22,15 +18,7 @@ pub struct Config {
     pub port: u16,
     pub cors_origin: Option<String>,
     pub base_url: String,
-    pub session_secret: String,
-    pub oidc: Option<OidcConfig>,
-}
-
-pub struct OidcConfig {
-    pub url: String,
-    pub client_id: String,
-    pub client_secret: String,
-    pub redirect_url: String,
+    pub session_ttl_days: i64,
 }
 
 impl Config {
@@ -46,32 +34,25 @@ impl Config {
             .try_deserialize()
             .context("invalid environment variables")?;
 
-        let oidc = match (
-            envs.oidc_url,
-            envs.oidc_client_id,
-            envs.oidc_client_secret,
-            envs.oidc_redirect_url,
-        ) {
-            (Some(url), Some(client_id), Some(client_secret), Some(redirect_url))
-                if !url.is_empty() =>
-            {
-                Some(OidcConfig {
-                    url,
-                    client_id,
-                    client_secret,
-                    redirect_url,
-                })
-            }
-            _ => None,
-        };
+        const DEFAULT_SESSION_TTL_DAYS: i64 = 7;
+        const MIN_SESSION_TTL_DAYS: i64 = 1;
+        const MAX_SESSION_TTL_DAYS: i64 = 30;
+        let raw_session_ttl_days = envs.session_ttl_days.unwrap_or(DEFAULT_SESSION_TTL_DAYS);
+        let session_ttl_days =
+            raw_session_ttl_days.clamp(MIN_SESSION_TTL_DAYS, MAX_SESSION_TTL_DAYS);
+        if raw_session_ttl_days != session_ttl_days {
+            warn!(
+                "SESSION_TTL_DAYS {} out of range [{}..={}], clamped to {}",
+                raw_session_ttl_days, MIN_SESSION_TTL_DAYS, MAX_SESSION_TTL_DAYS, session_ttl_days
+            );
+        }
 
         Ok(Config {
             database_url: envs.database_url,
             port: envs.port.unwrap_or(8000),
             cors_origin: envs.cors_origin,
             base_url: envs.base_url,
-            session_secret: envs.session_secret,
-            oidc,
+            session_ttl_days,
         })
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use axum::{Router, http::Method, routing::get};
+use dashmap::DashMap;
 use sqlx::{PgPool, migrate};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
@@ -9,6 +10,7 @@ use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod auth;
+mod auth_api;
 mod bootstrap;
 mod config;
 mod db;
@@ -51,14 +53,13 @@ async fn main() {
 
     let db = Db::from_pool(pool);
     let hub = Arc::new(Hub::new());
-    let oidc = config.oidc.map(auth::OidcState::new);
 
     let state = AppState {
         db,
         hub,
-        oidc,
         base_url: config.base_url,
-        session_secret: Arc::from(config.session_secret.into_bytes()),
+        session_ttl_days: config.session_ttl_days,
+        auth_challenges: Arc::new(DashMap::new()),
     };
 
     let cors = match &config.cors_origin {
@@ -78,7 +79,7 @@ async fn main() {
     };
 
     let api = Router::new()
-        .merge(auth::routes())
+        .merge(auth_api::routes())
         .merge(bootstrap::routes())
         .merge(sync_api::routes());
 
