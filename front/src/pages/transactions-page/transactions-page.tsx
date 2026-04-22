@@ -557,6 +557,7 @@ function SelectedTxWindow({
 										category_id: tx.category_id ?? undefined,
 										account_id: tx.account_id,
 									}}
+									isSubmitting={updateTransaction.isPending}
 									onSubmit={async (values) => {
 										await updateTransaction.mutateAsync({ txId, tx: values });
 										setEditing(false);
@@ -566,11 +567,18 @@ function SelectedTxWindow({
 											<Button
 												type="button"
 												variant="ghost"
+												disabled={updateTransaction.isPending}
 												onClick={() => setEditing(false)}
 											>
 												cancel
 											</Button>
-											<Button type="submit">save</Button>
+											<Button
+												type="submit"
+												isLoading={updateTransaction.isPending}
+												disabled={updateTransaction.isPending}
+											>
+												save
+											</Button>
 										</>
 									}
 								/>

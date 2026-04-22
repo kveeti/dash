@@ -7,10 +7,20 @@ export function NewTransactionForm() {
 
 	return (
 		<TransactionForm
+			isSubmitting={createTransaction.isPending}
 			onSubmit={async (values) => {
 				await createTransaction.mutateAsync(values);
 			}}
-			actions={<Button type="submit" className="px-6">add</Button>}
+			actions={(
+				<Button
+					type="submit"
+					className="px-6"
+					isLoading={createTransaction.isPending}
+					disabled={createTransaction.isPending}
+				>
+					add
+				</Button>
+			)}
 		/>
 	);
 }

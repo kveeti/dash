@@ -13,8 +13,6 @@ import { queryKeyRoots, queryKeys } from "./queries/query-keys";
 import { normalizeCurrency } from "./currency";
 import { loginWithSeed } from "./queries/auth";
 
-// -------------------- types --------------------
-
 type DirtyEntry = {
 	id: string;
 	_sync_is_deleted: number;
@@ -53,12 +51,8 @@ type SyncTableName =
 	| "transactions"
 	| "transaction_links";
 
-// -------------------- constants --------------------
-
 const DIRTY_BATCH_LIMIT = 1000;
 const BOOTSTRAP_PAGE_LIMIT = 1000;
-
-// -------------------- dirty row helpers --------------------
 
 function resolveTargetTable(recordId: string): {
 	tableName: SyncTableName;
@@ -159,8 +153,6 @@ async function getDirty(db: DbHandle): Promise<DirtyEntry[]> {
 		[DIRTY_BATCH_LIMIT],
 	);
 }
-
-// -------------------- applying incoming deltas --------------------
 
 /**
  * Upsert incoming deltas into SQLite.
@@ -371,8 +363,6 @@ async function applyIncomingOps({
 	return { maxVersion, touchedTypes };
 }
 
-// -------------------- SyncClient --------------------
-
 class SyncClient {
 	private events: EventSource | null = null;
 	private running = false;
@@ -412,8 +402,6 @@ class SyncClient {
 		void this.pushDirtyLoop().catch((e) => console.error("push loop failed:", e));
 	}
 
-	// ---------- connection ----------
-
 	private connect() {
 		if (!this.running) return;
 		let events: EventSource;
@@ -446,8 +434,6 @@ class SyncClient {
 			// Browser EventSource reconnects automatically.
 		};
 	}
-
-	// ---------- bootstrap ----------
 
 	private async runBootstrap() {
 		if (this.bootstrapInFlight) return;
@@ -534,8 +520,6 @@ class SyncClient {
 		}
 	}
 
-	// ---------- inbound delta handling ----------
-
 	private async handleDeltaEvent(raw: unknown) {
 		if (typeof raw !== "string") {
 			console.warn("bad delta frame type:", raw);
@@ -566,8 +550,6 @@ class SyncClient {
 		if (maxVersion !== undefined) await this.setCursor(maxVersion);
 		if (touchedTypes.size) this.onEntitiesChanged(touchedTypes);
 	}
-
-	// ---------- pushing dirty rows ----------
 
 	private async pushDirtyLoop() {
 		// Re-entrant guard: if already pushing, schedule another pass for when
@@ -629,8 +611,6 @@ class SyncClient {
 	}
 }
 
-// -------------------- idb persistence --------------------
-
 export type UiStorage = {
 	id: string;
 	dek: CryptoKey | null;
@@ -670,7 +650,6 @@ async function persistCursor(newCursor: number) {
 	});
 }
 
-/** Unconditional set — used only for the server-was-reset recovery path. */
 async function resetCursor(newCursor: number) {
 	const prev = await getUiStorage();
 	await idb.uiStorage.put({
@@ -703,9 +682,6 @@ export function useSync() {
 	const qc = useQueryClient();
 
 	const clientRef = useRef<SyncClient | null>(null);
-	// Keep the dek on a ref so its (unstable) reference doesn't retrigger
-	// the lifecycle effect. Each read of uiStorage from dexie hands back a
-	// fresh CryptoKey reference even though the underlying key is the same.
 	const dekRef = useRef<CryptoKey | null>(uiStorage?.dek ?? null);
 	dekRef.current = uiStorage?.dek ?? null;
 
@@ -727,9 +703,6 @@ export function useSync() {
 
 	const enabled = canSync;
 
-	// Lifecycle: spawn the client when enabled, stop when not.
-	// We intentionally key the effect on `enabled` only — not on the dek
-	// reference — so live-query ticks don't churn the connection.
 	useEffect(() => {
 		let cancelled = false;
 

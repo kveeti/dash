@@ -1,9 +1,8 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
-import { Button } from "./button";
+import { useMemo, useState, type ReactNode } from "react";
 import { Input } from "./input";
 import { Select } from "./select";
 import { Textarea } from "./textarea";
-import { useAccountsQuery, useCreateAccountMutation } from "../lib/queries/accounts";
+import { AccountSelectCreate } from "./account-select-create";
 import { useCategoryOptionsQuery } from "../lib/queries/categories";
 import {
 	COMMON_CURRENCIES,
@@ -36,18 +35,15 @@ export type TxFormDefaults = {
 export function TransactionForm({
 	defaultValues,
 	onSubmit,
+	isSubmitting = false,
 	actions,
 }: {
 	defaultValues?: TxFormDefaults;
 	onSubmit: (values: TxFormValues) => Promise<void>;
+	isSubmitting?: boolean;
 	actions: ReactNode;
 }) {
 	const categories = useCategoryOptionsQuery();
-	const accounts = useAccountsQuery();
-	const createAccount = useCreateAccountMutation();
-
-	const [showNewAccount, setShowNewAccount] = useState(false);
-	const newAccountRef = useRef<HTMLInputElement>(null);
 	const [selectedAccountId, setSelectedAccountId] = useState(
 		defaultValues?.account_id ?? "",
 	);
@@ -61,26 +57,6 @@ export function TransactionForm({
 		}
 		return options;
 	}, [currency]);
-
-	function setCurrencyFromAccount(accountId: string) {
-		const account = accounts.data?.find((row) => row.id === accountId);
-		if (!account) return;
-		setCurrency(normalizeCurrency(account.currency));
-	}
-
-	async function handleNewAccount() {
-		const name = newAccountRef.current?.value.trim();
-		if (!name) return;
-		const accountCurrency = normalizeCurrency(currency);
-		const newId = await createAccount.mutateAsync({
-			name,
-			currency: accountCurrency,
-		});
-		setSelectedAccountId(newId);
-		setCurrency(accountCurrency);
-		setShowNewAccount(false);
-		if (newAccountRef.current) newAccountRef.current.value = "";
-	}
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -164,48 +140,18 @@ export function TransactionForm({
 						<option key={c.id} value={c.id}>{c.name}</option>
 					))}
 				</Select>
-				<div>
-					<div className="mb-1 flex items-center justify-between">
-						<label className="text-gray-11 text-xs">account</label>
-						<button
-							type="button"
-							className="text-gray-11 text-xs underline"
-							onClick={() => setShowNewAccount((v) => !v)}
-						>
-							{showNewAccount ? "cancel" : "+ new"}
-						</button>
-					</div>
-					{showNewAccount ? (
-						<div className="flex gap-1">
-							<input
-								ref={newAccountRef}
-								type="text"
-								className="focus border-gray-6 bg-gray-1 h-10 flex-1 border px-3"
-								placeholder="name"
-							/>
-							<Button size="sm" type="button" onClick={handleNewAccount}>
-								add
-							</Button>
-						</div>
-					) : (
-						<Select
-							name="account_id"
-							className="w-full"
-							required
-							value={selectedAccountId}
-							onChange={(e) => {
-								const accountId = e.currentTarget.value;
-								setSelectedAccountId(accountId);
-								setCurrencyFromAccount(accountId);
-							}}
-						>
-							<option value="">select...</option>
-							{accounts.data?.map((a) => (
-								<option key={a.id} value={a.id}>{`${a.name} (${a.currency})`}</option>
-							))}
-						</Select>
-					)}
-				</div>
+				<AccountSelectCreate
+					name="account_id"
+					value={selectedAccountId}
+					onChange={setSelectedAccountId}
+					disabled={isSubmitting}
+					createCurrencyMode="fixed"
+					fixedCreateCurrency={currency}
+					onAccountResolved={(account) => {
+						if (!account) return;
+						setCurrency(normalizeCurrency(account.currency));
+					}}
+				/>
 			</div>
 
 			<Textarea label="additional" name="additional" className="w-full" rows={2} defaultValue={defaultValues?.additional} />

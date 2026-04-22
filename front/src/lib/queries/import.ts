@@ -1,6 +1,9 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { DbHandle } from "../db";
 import Papa from "papaparse";
 import { id } from "../id";
+import { useDb } from "../../providers";
+import { queryKeyRoots } from "./query-keys";
 import { getOrCreateCategoryByName } from "./categories";
 import { parseCurrency } from "../currency";
 
@@ -26,6 +29,42 @@ export type LegacyBundleTexts = {
 	categoriesCsv: string;
 	linksCsv: string;
 };
+
+function invalidateImportQueries(qc: ReturnType<typeof useQueryClient>) {
+	qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
+	qc.invalidateQueries({ queryKey: queryKeyRoots.categories });
+	qc.invalidateQueries({ queryKey: queryKeyRoots.accounts });
+}
+
+export function useImportCsvMutation() {
+	const db = useDb();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (input: {
+			text: string;
+			format: CsvFormat;
+			account: {
+				id: string;
+				currency: string;
+			};
+		}) => importCsv(db, input.text, input.format, input.account),
+		onSuccess: () => {
+			invalidateImportQueries(qc);
+		},
+	});
+}
+
+export function useImportLegacyCsvBundleMutation() {
+	const db = useDb();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (files: LegacyBundleTexts) => importLegacyCsvBundle(db, files),
+		onSuccess: () => {
+			invalidateImportQueries(qc);
+			qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinks });
+		},
+	});
+}
 
 type ParsedTransaction = {
 	date: string;

@@ -88,9 +88,8 @@ function CreateCategoryForm() {
 }
 
 function CategoryRow({ category }: { category: CategoryWithCount }) {
-	const [editing, setEditing] = useState<"checkbox" | "input" | false>(false);
+	const [editing, setEditing] = useState<"checkbox" | "input" | boolean>(false);
 	const updateCategory = useUpdateCategoryMutation();
-	const deleteCategory = useDeleteCategoryMutation();
 
 	async function handleSave(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -103,7 +102,6 @@ function CategoryRow({ category }: { category: CategoryWithCount }) {
 		await updateCategory.mutateAsync({ id: category.id, name, is_neutral: data.has("is_neutral") });
 		setEditing(false);
 	}
-
 
 	return (
 		<li className="border-gray-a3 border-b py-2">

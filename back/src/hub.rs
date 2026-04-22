@@ -42,7 +42,6 @@ impl Hub {
             connected_clients: DashSet::new(),
         });
 
-        // Small race where two callers may both create; entry() resolves it.
         self.users
             .entry(user_id.to_string())
             .or_insert_with(|| handle.clone())

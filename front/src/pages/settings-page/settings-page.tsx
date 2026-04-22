@@ -1,5 +1,6 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
@@ -20,7 +21,6 @@ import {
 	useUpdateConversionPolicyMutation,
 	useUpdateReportingCurrencyMutation,
 	useUpsertFxRateMutation,
-	type ConversionMode,
 	type FxCsvImportResult,
 	FX_ANCHOR_CURRENCY,
 } from "../../lib/queries/settings";
@@ -173,7 +173,31 @@ function EnableSyncingForm({
 function BackupKeySection({ uiStorage }: { uiStorage: UiStorage | undefined }) {
 	const [words, setWords] = useState<string>("");
 	const [importError, setImportError] = useState<string | null>(null);
-	const [busy, setBusy] = useState(false);
+	const exportWords = useMutation({
+		mutationFn: async () => {
+			if (!uiStorage?.local_wrap_key || !uiStorage?.wrapped_dek_seed) {
+				throw new Error("No backup key available on this device yet.");
+			}
+			const seed = await unwrapSeedFromStorage(
+				uiStorage.wrapped_dek_seed,
+				uiStorage.local_wrap_key,
+			);
+			return encodeDekSeedAsWords(seed);
+		},
+	});
+	const importWords = useMutation({
+		mutationFn: async (inputWords: string) => {
+			if (uiStorage?.dek) {
+				const ok = window.confirm(
+					"Replace current sync key on this device with imported words?",
+				);
+				if (!ok) return;
+			}
+			const seed = await decodeDekSeedFromWords(inputWords);
+			await saveSeedAsSyncKey(uiStorage, seed);
+		},
+	});
+	const isBusy = exportWords.isPending || importWords.isPending;
 
 	return (
 		<div className="space-y-2 border border-gray-a4 p-3">
@@ -188,23 +212,14 @@ function BackupKeySection({ uiStorage }: { uiStorage: UiStorage | undefined }) {
 			<div className="flex gap-2">
 				<Button
 					variant="outline"
-					disabled={busy}
+					isLoading={exportWords.isPending}
+					disabled={isBusy}
 					onClick={async () => {
 						setImportError(null);
-						setBusy(true);
 						try {
-							if (!uiStorage?.local_wrap_key || !uiStorage?.wrapped_dek_seed) {
-								throw new Error("No backup key available on this device yet.");
-							}
-							const seed = await unwrapSeedFromStorage(
-								uiStorage.wrapped_dek_seed,
-								uiStorage.local_wrap_key,
-							);
-							setWords(await encodeDekSeedAsWords(seed));
+							setWords(await exportWords.mutateAsync());
 						} catch (error) {
 							setImportError((error as Error).message);
-						} finally {
-							setBusy(false);
 						}
 					}}
 				>
@@ -213,7 +228,7 @@ function BackupKeySection({ uiStorage }: { uiStorage: UiStorage | undefined }) {
 				{words ? (
 					<Button
 						variant="outline"
-						disabled={busy}
+						disabled={isBusy}
 						onClick={async () => {
 							try {
 								await navigator.clipboard.writeText(words);
@@ -239,31 +254,30 @@ function BackupKeySection({ uiStorage }: { uiStorage: UiStorage | undefined }) {
 				className="space-y-2"
 				onSubmit={async (event) => {
 					event.preventDefault();
+					const data = new FormData(event.currentTarget);
+					const wordsToImport = String(data.get("words") ?? "").trim();
+					if (!wordsToImport) return;
 					setImportError(null);
-					setBusy(true);
 					try {
-						if (uiStorage?.dek) {
-							const ok = window.confirm(
-								"Replace current sync key on this device with imported words?",
-							);
-							if (!ok) return;
-						}
-						const seed = await decodeDekSeedFromWords(words);
-						await saveSeedAsSyncKey(uiStorage, seed);
+						await importWords.mutateAsync(wordsToImport);
 					} catch (error) {
 						setImportError((error as Error).message);
-					} finally {
-						setBusy(false);
 					}
 				}}
 			>
 				<Input
 					label="Import words"
+					name="words"
 					value={words}
 					onChange={(event) => setWords(event.currentTarget.value)}
 					placeholder="24 words separated by spaces"
 				/>
-				<Button disabled={busy || !words.trim()}>Import words</Button>
+				<Button
+					isLoading={importWords.isPending}
+					disabled={isBusy || !words.trim()}
+				>
+					Import words
+				</Button>
 			</form>
 
 			{importError ? <p className="text-xs text-red-11">{importError}</p> : null}
@@ -277,18 +291,6 @@ function CurrencySection() {
 	const updateConversionPolicy = useUpdateConversionPolicyMutation();
 	const upsertFxRate = useUpsertFxRateMutation();
 	const importFxRatesCsv = useImportFxRatesCsvMutation();
-	const [reportingCurrency, setReportingCurrency] = useState("");
-	const [conversionMode, setConversionMode] = useState<ConversionMode | "">("");
-	const [maxStalenessDays, setMaxStalenessDays] = useState("");
-
-	const currentReportingCurrency =
-		reportingCurrency ||
-		settings.data?.reporting_currency ||
-		COMMON_CURRENCIES[0];
-	const currentConversionMode: ConversionMode =
-		conversionMode || settings.data?.conversion_mode || "strict";
-	const currentMaxStalenessDays =
-		maxStalenessDays || String(settings.data?.max_staleness_days ?? 7);
 	const fxRates = useFxRatesQuery();
 
 	if (settings.isLoading) {
@@ -302,6 +304,9 @@ function CurrencySection() {
 		);
 	}
 
+	const appSettings = settings.data;
+	if (!appSettings) return null;
+
 	return (
 		<div className="space-y-4">
 			<h2 className="text-2xl font-cool">Currency</h2>
@@ -311,19 +316,23 @@ function CurrencySection() {
 			</p>
 
 			<form
+				key={`reporting_${appSettings.updated_at}_${appSettings.reporting_currency}`}
 				className="space-y-2"
 				onSubmit={async (event) => {
 					event.preventDefault();
-					await updateReportingCurrency.mutateAsync(currentReportingCurrency);
-					setReportingCurrency("");
+					const data = new FormData(event.currentTarget);
+					const nextReportingCurrency = normalizeCurrency(
+						String(data.get("reporting_currency") ?? ""),
+						appSettings.reporting_currency,
+					);
+					if (nextReportingCurrency === appSettings.reporting_currency) return;
+					await updateReportingCurrency.mutateAsync(nextReportingCurrency);
 				}}
 			>
 				<Select
 					label="Reporting currency"
-					value={currentReportingCurrency}
-					onChange={(e) =>
-						setReportingCurrency(normalizeCurrency(e.currentTarget.value))
-					}
+					name="reporting_currency"
+					defaultValue={appSettings.reporting_currency}
 				>
 					{COMMON_CURRENCIES.map((currencyCode) => (
 						<option key={currencyCode} value={currencyCode}>
@@ -333,57 +342,59 @@ function CurrencySection() {
 				</Select>
 				<Button
 					type="submit"
-					disabled={
-						updateReportingCurrency.isPending ||
-						currentReportingCurrency === settings.data?.reporting_currency
-					}
+					isLoading={updateReportingCurrency.isPending}
+					disabled={updateReportingCurrency.isPending}
 				>
 					save reporting currency
 				</Button>
 			</form>
 
 			<form
+				key={`conversion_${appSettings.updated_at}_${appSettings.conversion_mode}_${appSettings.max_staleness_days}`}
 				className="space-y-2 border border-gray-a4 p-3"
 				onSubmit={async (event) => {
 					event.preventDefault();
+					const data = new FormData(event.currentTarget);
+					const conversionMode = String(data.get("conversion_mode"));
+					const maxStalenessDays = Number(data.get("max_staleness_days"));
+					if (!Number.isFinite(maxStalenessDays)) return;
+					if (
+						conversionMode === appSettings.conversion_mode &&
+						Math.trunc(maxStalenessDays) === appSettings.max_staleness_days
+					) {
+						return;
+					}
 					await updateConversionPolicy.mutateAsync({
-						maxStalenessDays: Number(currentMaxStalenessDays),
-						conversionMode: currentConversionMode,
+						maxStalenessDays,
+						conversionMode:
+							conversionMode === "lenient" ? "lenient" : "strict",
 					});
-					setConversionMode("");
-					setMaxStalenessDays("");
 				}}
 			>
 				<p className="text-xs text-gray-10">Conversion fallback policy</p>
 				<div className="grid grid-cols-2 gap-2">
 					<Select
 						label="Mode"
-						value={currentConversionMode}
-						onChange={(e) =>
-							setConversionMode(e.currentTarget.value as ConversionMode)
-						}
+						name="conversion_mode"
+						defaultValue={appSettings.conversion_mode}
 					>
 						<option value="strict">strict</option>
 						<option value="lenient">lenient</option>
 					</Select>
 					<Input
 						label="Max stale days"
+						name="max_staleness_days"
 						type="number"
 						min="0"
 						step="1"
-						value={currentMaxStalenessDays}
-						onChange={(e) => setMaxStalenessDays(e.currentTarget.value)}
+						defaultValue={String(appSettings.max_staleness_days)}
 						required
 					/>
 				</div>
 				<Button
 					type="submit"
-					disabled={
-						updateConversionPolicy.isPending ||
-						(currentConversionMode === settings.data?.conversion_mode &&
-							Number(currentMaxStalenessDays) ===
-							(settings.data?.max_staleness_days ?? 7))
-					}
+					isLoading={updateConversionPolicy.isPending}
+					disabled={updateConversionPolicy.isPending}
 				>
 					save conversion policy
 				</Button>
@@ -476,8 +487,8 @@ function AddFxRateForm({
 				placeholder={`rate to ${FX_ANCHOR_CURRENCY}`}
 				required
 			/>
-			<Button type="submit" disabled={pending}>
-				{pending ? "saving..." : "save FX rate"}
+			<Button type="submit" isLoading={pending} disabled={pending}>
+				save FX rate
 			</Button>
 		</form>
 	);
@@ -495,7 +506,6 @@ function ImportFxRatesCsvForm({
 	}) => Promise<FxCsvImportResult>;
 	pending: boolean;
 }) {
-	const [againstCurrency, setAgainstCurrency] = useState(defaultAgainstCurrency);
 	const [fileText, setFileText] = useState<string | null>(null);
 	const [fileName, setFileName] = useState("");
 	const [result, setResult] = useState<FxCsvImportResult | null>(null);
@@ -518,10 +528,15 @@ function ImportFxRatesCsvForm({
 			onSubmit={async (event) => {
 				event.preventDefault();
 				if (!fileText) return;
+				const data = new FormData(event.currentTarget);
+				const againstCurrency = normalizeCurrency(
+					String(data.get("against_currency") ?? defaultAgainstCurrency),
+					defaultAgainstCurrency,
+				);
 				try {
 					const imported = await onImport({
 						text: fileText,
-						againstCurrency: normalizeCurrency(againstCurrency),
+						againstCurrency,
 					});
 					setResult(imported);
 				} catch (error) {
@@ -542,10 +557,8 @@ function ImportFxRatesCsvForm({
 			<div className="grid grid-cols-2 gap-2">
 				<Select
 					label="Against currency"
-					value={againstCurrency}
-					onChange={(e) =>
-						setAgainstCurrency(normalizeCurrency(e.currentTarget.value))
-					}
+					name="against_currency"
+					defaultValue={defaultAgainstCurrency}
 				>
 					{COMMON_CURRENCIES.map((currencyCode) => (
 						<option key={currencyCode} value={currencyCode}>
@@ -559,8 +572,8 @@ function ImportFxRatesCsvForm({
 				<Input type="file" accept=".csv,.txt" className="w-full p-2" onChange={handleFile} />
 				{fileName && <p className="text-xs text-gray-10 mt-1">{fileName}</p>}
 			</div>
-			<Button type="submit" disabled={pending || !fileText}>
-				{pending ? "importing..." : "import fx rates csv"}
+			<Button type="submit" isLoading={pending} disabled={pending || !fileText}>
+				import fx rates csv
 			</Button>
 			{result && (
 				<div className="text-xs space-y-1">

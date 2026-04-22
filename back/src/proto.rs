@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Inbound op from a client push. Blob is an opaque ciphertext — the server
-/// never interprets it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct PushOp {
     pub id: String,
@@ -13,7 +11,6 @@ pub struct PushOp {
     pub edited_at: i64,
 }
 
-/// Outbound op included in a delta / bootstrap page.
 #[derive(Debug, Clone, Serialize)]
 pub struct DeltaOp {
     pub id: String,
@@ -26,7 +23,6 @@ pub struct DeltaOp {
     pub server_version: i64,
 }
 
-/// GET /bootstrap response shape.
 #[derive(Debug, Serialize)]
 pub struct BootstrapResponse {
     pub entries: Vec<DeltaOp>,
