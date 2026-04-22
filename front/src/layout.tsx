@@ -1,5 +1,8 @@
+import { HamburgerMenuIcon } from "@radix-ui/react-icons";
 import type { ReactNode } from "react";
-import { FastLink } from "./components/link";
+import { Button } from "./components/button";
+import * as Dropdown from "./components/dropdown";
+import { FastLink, SlowLink } from "./components/link";
 import { CommandPalette } from "./components/command-palette";
 import { useRoute } from "wouter";
 import { useSync } from "./lib/sync";
@@ -26,7 +29,7 @@ export function Nav() {
         " me-(--removed-body-scroll-bar-size)"
       }
     >
-      <ul className="mx-auto flex w-full max-w-[800px] justify-between text-xs">
+      <ul className="mx-auto flex w-full max-w-[800px] justify-between">
         <div className="flex">
           <li>
             <NavLink href="/stats">stats</NavLink>
@@ -41,6 +44,7 @@ export function Nav() {
             <NavLink href="/cats">cats</NavLink>
           </li>
         </div>
+        <Hamburger />
       </ul>
     </nav>
   );
@@ -67,3 +71,19 @@ function NavLink({ href, children }: { href: string; children: ReactNode }) {
   );
 }
 
+function Hamburger() {
+  return (
+    <Dropdown.Root>
+      <Dropdown.Trigger asChild>
+        <Button size="icon" variant="ghost" className="-outline-offset-2">
+          <HamburgerMenuIcon />
+        </Button>
+      </Dropdown.Trigger>
+      <Dropdown.Content>
+        <Dropdown.Item asChild>
+          <SlowLink href="/settings">settings</SlowLink>
+        </Dropdown.Item>
+      </Dropdown.Content>
+    </Dropdown.Root>
+  );
+}

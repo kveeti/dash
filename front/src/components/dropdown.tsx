@@ -10,7 +10,7 @@ export function Content(props: ComponentProps<typeof _Dropdown.Content>) {
 			<_Dropdown.Content
 				{...props}
 				className={
-					"bg-gray-1 border-gray-5 min-w-[10rem] border p-1" +
+					"bg-gray-1 border-gray-5 min-w-[10rem] border p-1 z-80 shadow-xs" +
 					(props.className ? " " + props.className : "")
 				}
 			/>
