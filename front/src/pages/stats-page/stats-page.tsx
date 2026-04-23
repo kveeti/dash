@@ -175,8 +175,13 @@ export function StatsPage() {
 								});
 							}}
 							onCompareChange={(value) => setStatsParams({ compare: value })}
-							onCustomFromChange={(value) => setStatsParams({ from: value })}
-							onCustomToChange={(value) => setStatsParams({ to: value })}
+							onCustomRangeChange={(from, to) =>
+								setStatsParams({
+									period: "custom",
+									from,
+									to,
+								})
+							}
 						/>
 					</TabsPanel>
 			</TabsRoot>

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useI18n } from "../../providers";
+import { DateRangePickerInput } from "../../components/date-picker";
 import {
 	type MonthStatRow,
 	type StatRow,
@@ -304,8 +305,7 @@ export function StatsOverviewPanel({
 	customTo,
 	onPeriodChange,
 	onCompareChange,
-	onCustomFromChange,
-	onCustomToChange,
+	onCustomRangeChange,
 }: {
 	reportingCurrency: string;
 	queryReportingCurrency?: string;
@@ -317,8 +317,7 @@ export function StatsOverviewPanel({
 	customTo: string;
 	onPeriodChange: (value: StatsPeriodValue) => void;
 	onCompareChange: (value: StatsCompareValue) => void;
-	onCustomFromChange: (value: string) => void;
-	onCustomToChange: (value: string) => void;
+	onCustomRangeChange: (from: string, to: string) => void;
 }) {
 	const { f } = useI18n();
 	const nowUtc = useMemo(() => new Date(), []);
@@ -496,11 +495,11 @@ export function StatsOverviewPanel({
 	const compareSummary = compareSummaryQuery.data;
 	const currentMissingFxRatio = currentSummary?.total_count
 		? (currentSummary.total_count - currentSummary.converted_count) /
-			currentSummary.total_count
+		currentSummary.total_count
 		: 0;
 	const compareMissingFxRatio = compareSummary?.total_count
 		? (compareSummary.total_count - compareSummary.converted_count) /
-			compareSummary.total_count
+		compareSummary.total_count
 		: 0;
 	const currentCoverageAmountRatio = currentSummary?.coverage_amount_ratio ?? 1;
 	const compareCoverageAmountRatio = compareSummary?.coverage_amount_ratio ?? 1;
@@ -536,7 +535,6 @@ export function StatsOverviewPanel({
 							["last-month", "last month"],
 							["this-year", "this year"],
 							["last-year", "last year"],
-							["custom", "custom"],
 						] as const).map(([value, label]) => {
 							const isActive = value === period;
 							return (
@@ -558,24 +556,14 @@ export function StatsOverviewPanel({
 					</div>
 				</div>
 
-				{period === "custom" && (
-					<div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-						<label className="text-gray-10">from</label>
-						<input
-							type="date"
-							value={customRange.from}
-							onChange={(event) => onCustomFromChange(event.target.value)}
-							className="border border-gray-a4 bg-gray-1 px-2 py-1 text-xs"
-						/>
-						<label className="text-gray-10">to</label>
-						<input
-							type="date"
-							value={customRange.to}
-							onChange={(event) => onCustomToChange(event.target.value)}
-							className="border border-gray-a4 bg-gray-1 px-2 py-1 text-xs"
-						/>
-					</div>
-				)}
+				<div className="text-xs font-mono w-max">
+					<DateRangePickerInput
+						size="sm"
+						value={baseRange}
+						showWeekNumbers
+						onChange={(nextRange) => onCustomRangeChange(nextRange.from, nextRange.to)}
+					/>
+				</div>
 
 				<div>
 					<div className="mb-1 text-xs text-gray-10 font-mono">compare to</div>
@@ -604,14 +592,12 @@ export function StatsOverviewPanel({
 						})}
 					</div>
 				</div>
-			</div>
 
-			<div className="border border-gray-a4 p-3 text-xs font-mono text-gray-10">
-				<div>{baseLabel}: {baseRange.from} to {baseRange.to}</div>
 				{comparisonEnabled && compareRange && (
-					<div className="mt-1">{compareLabel}: {compareRange.from} to {compareRange.to}</div>
+					<div className="mt-1 text-gray-a12">{f.longDate.format(new Date(compareRange.from))} to {f.longDate.format(new Date(compareRange.to))}</div>
 				)}
 			</div>
+
 
 			{isLoading && <p className="text-xs text-gray-10">loading stats 2...</p>}
 			{currentMonthStatsQuery.isError && (

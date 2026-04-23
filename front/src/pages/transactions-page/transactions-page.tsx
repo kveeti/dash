@@ -18,6 +18,7 @@ import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
 import {
 	Fragment,
+	useMemo,
 	useImperativeHandle,
 	useRef,
 	useState,
@@ -26,6 +27,8 @@ import {
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
+import { CategoryCombobox } from "../../components/category-combobox";
+import { PopupCombobox } from "../../components/popup-combobox";
 import { TransactionForm } from "../../components/transaction-form";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -679,42 +682,35 @@ function FilterControls({
 				onChange={(e) => setParams({ q: e.currentTarget.value || undefined })}
 			/>
 			<div className="flex gap-2">
-				<Select
+				<CategoryCombobox
 					size="sm"
 					className="flex-1 min-w-0"
 					value={uncategorized ? "__uncat__" : categoryId}
-					onChange={(e) => {
-						const v = e.currentTarget.value;
-						if (v === "__uncat__") {
+					onChange={(nextValue) => {
+						if (nextValue === "__uncat__") {
 							setParams({ cat: undefined, uncat: "1" });
-						} else {
-							setParams({ cat: v || undefined, uncat: undefined });
+							return;
 						}
+						setParams({ cat: nextValue || undefined, uncat: undefined });
 					}}
-				>
-					<option value="">all categories</option>
-					<option value="__uncat__">uncategorized</option>
-					{categories?.map((c) => (
-						<option key={c.id} value={c.id}>
-							{c.name}
-						</option>
-					))}
-				</Select>
-				<Select
-					size="sm"
-					className="flex-1 min-w-0"
+					placeholder="all categories"
+					items={[
+						{ id: "", value: "", label: "all categories" },
+						{ id: "__uncat__", value: "__uncat__", label: "uncategorized" },
+						...(categories?.map((category) => ({
+							id: category.id,
+							value: category.id,
+							label: category.name,
+						})) ?? []),
+					]}
+				/>
+				<AccountFilterCombobox
 					value={accountId}
-					onChange={(e) =>
-						setParams({ acc: e.currentTarget.value || undefined })
+					accounts={accounts}
+					onChange={(nextValue) =>
+						setParams({ acc: nextValue || undefined })
 					}
-				>
-					<option value="">all accounts</option>
-					{accounts?.map((a) => (
-						<option key={a.id} value={a.id}>
-							{`${a.name} (${a.currency})`}
-						</option>
-					))}
-				</Select>
+				/>
 				<Select
 					size="sm"
 					className="flex-1 min-w-0"
@@ -749,6 +745,70 @@ function FilterControls({
 				</button>
 			)}
 		</div>
+	);
+}
+
+type AccountFilterItem = {
+	value: string;
+	label: string;
+	currency?: string;
+};
+
+function AccountFilterCombobox({
+	value,
+	accounts,
+	onChange,
+}: {
+	value: string;
+	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
+	onChange: (value: string) => void;
+}) {
+	const items = useMemo<AccountFilterItem[]>(
+		() => [
+			{
+				value: "__all__",
+				label: "all accounts",
+			},
+			...(accounts ?? []).map((account) => ({
+				value: account.id,
+				label: account.name,
+				currency: account.currency,
+			})),
+		],
+		[accounts],
+	);
+
+	const selectedItem =
+		items.find((item) => item.value === (value || "__all__")) ?? items[0];
+
+	return (
+		<PopupCombobox
+			items={items}
+			value={selectedItem}
+			onValueChange={(next) => {
+				if (!next || next.value === "__all__") {
+					onChange("");
+					return;
+				}
+				onChange(next.value);
+			}}
+				getItemKey={(item) => item.value}
+				renderItem={(item) => (
+					<div className="flex w-full items-center justify-between gap-2">
+						<span className="truncate">{item.label}</span>
+						{item.currency ? (
+							<span className="shrink-0 text-xs text-gray-10">
+								{item.currency}
+							</span>
+						) : null}
+					</div>
+				)}
+			itemToStringLabel={(item) => item.label}
+			isItemEqualToValue={(item, selected) => item.value === selected.value}
+			placeholder="all accounts"
+			size="sm"
+			className="flex-1 min-w-0"
+		/>
 	);
 }
 
@@ -825,10 +885,9 @@ function BulkEditBar({
 	const [categoryId, setCategoryId] = useState("");
 
 	async function handleApply() {
-		if (!categoryId) return;
 		await bulkSetCategory.mutateAsync({
 			txIds: [...selectedIds],
-			categoryId: categoryId === "__none__" ? null : categoryId,
+			categoryId: categoryId || null,
 		});
 		onClear();
 	}
@@ -838,25 +897,26 @@ function BulkEditBar({
 			<div className="mx-auto max-w-[35rem] border border-gray-a4 bg-gray-2 px-4 py-3 shadow-lg flex items-center gap-3">
 				<span className="text-sm shrink-0">{selectedIds.size} selected</span>
 
-				<Select
-					size="sm"
-					className="flex-1 min-w-0"
-					value={categoryId}
-					onChange={(e) => setCategoryId(e.currentTarget.value)}
-				>
-					<option value="">set category...</option>
-					<option value="__none__">-- no category --</option>
-					{categories.data?.map((c) => (
-						<option key={c.id} value={c.id}>
-							{c.name}
-						</option>
-					))}
-				</Select>
+					<CategoryCombobox
+						size="sm"
+						className="flex-1 min-w-0"
+						value={categoryId}
+						onChange={setCategoryId}
+						creatable
+						placeholder="select category..."
+						items={
+							categories.data?.map((category) => ({
+								id: category.id,
+								value: category.id,
+								label: category.name,
+							})) ?? []
+						}
+					/>
 
 				<Button
 					size="sm"
 					onClick={handleApply}
-					disabled={!categoryId || bulkSetCategory.isPending}
+					disabled={bulkSetCategory.isPending}
 				>
 					apply
 				</Button>

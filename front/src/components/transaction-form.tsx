@@ -2,7 +2,9 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Input } from "./input";
 import { Select } from "./select";
 import { Textarea } from "./textarea";
+import { DateTimePickerInput } from "./date-picker";
 import { AccountSelectCreate } from "./account-select-create";
+import { CategoryCombobox } from "./category-combobox";
 import { useCategoryOptionsQuery } from "../lib/queries/categories";
 import {
 	COMMON_CURRENCIES,
@@ -44,8 +46,8 @@ export function TransactionForm({
 	actions: ReactNode;
 }) {
 	const categories = useCategoryOptionsQuery();
-	const [selectedAccountId, setSelectedAccountId] = useState(
-		defaultValues?.account_id ?? "",
+	const [selectedCategoryId, setSelectedCategoryId] = useState(
+		defaultValues?.category_id ?? "",
 	);
 	const [currency, setCurrency] = useState(
 		normalizeCurrency(defaultValues?.currency, DEFAULT_CURRENCY),
@@ -62,7 +64,7 @@ export function TransactionForm({
 		e.preventDefault();
 		const data = new FormData(e.currentTarget);
 
-		const accountId = (data.get("account_id") as string) || selectedAccountId;
+		const accountId = (data.get("account_id") as string) || "";
 		if (!accountId) {
 			alert("select an account");
 			return;
@@ -75,7 +77,7 @@ export function TransactionForm({
 			additional: (data.get("additional") as string) || undefined,
 			notes: (data.get("notes") as string) || undefined,
 			currency: normalizeCurrency(data.get("currency") as string, currency),
-			category_id: (data.get("category_id") as string) || undefined,
+			category_id: selectedCategoryId || (data.get("category_id") as string) || undefined,
 			account_id: accountId,
 		});
 	}
@@ -108,10 +110,9 @@ export function TransactionForm({
 			</div>
 
 			<div className="grid grid-cols-2 gap-3">
-				<Input
+				<DateTimePickerInput
 					label="date"
 					name="date"
-					type="datetime-local"
 					className="w-full"
 					defaultValue={defaultDate}
 					required
@@ -119,7 +120,6 @@ export function TransactionForm({
 				<Select
 					label="currency"
 					name="currency"
-					className="w-full"
 					value={currency}
 					onChange={(e) => {
 						setCurrency(normalizeCurrency(e.currentTarget.value, currency));
@@ -134,20 +134,28 @@ export function TransactionForm({
 			</div>
 
 			<div className="grid grid-cols-2 gap-3">
-				<Select label="category" name="category_id" className="w-full" defaultValue={defaultValues?.category_id ?? ""}>
-					<option value="">--</option>
-					{categories.data?.map((c) => (
-						<option key={c.id} value={c.id}>{c.name}</option>
-					))}
-				</Select>
+				<CategoryCombobox
+					label="category"
+					name="category_id"
+					value={selectedCategoryId}
+					onChange={setSelectedCategoryId}
+					creatable
+					placeholder="select category..."
+					items={
+						categories.data?.map((category) => ({
+							id: category.id,
+							value: category.id,
+							label: category.name,
+						})) ?? []
+					}
+					className="w-full"
+				/>
 				<AccountSelectCreate
 					name="account_id"
-					value={selectedAccountId}
-					onChange={setSelectedAccountId}
+					defaultValue={defaultValues?.account_id}
 					disabled={isSubmitting}
-					createCurrencyMode="fixed"
-					fixedCreateCurrency={currency}
-					onAccountResolved={(account) => {
+					defaultCreateCurrency={currency}
+					onChange={(account) => {
 						if (!account) return;
 						setCurrency(normalizeCurrency(account.currency));
 					}}

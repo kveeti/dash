@@ -103,13 +103,15 @@ async function getCategoryOptions(db: DbHandle): Promise<CategoryOption[]> {
 }
 
 async function createCategory(db: DbHandle, cat: CategoryInput) {
+	const newId = id();
 	await db.withTx(async () => {
 		const now = new Date().toISOString();
 		await db.exec(
 			"insert into categories (id, created_at, updated_at, name, is_neutral, _sync_edited_at) values (?, ?, ?, ?, ?, ?)",
-			[id(), now, now, cat.name, cat.is_neutral ? 1 : 0, Date.now()],
+			[newId, now, now, cat.name, cat.is_neutral ? 1 : 0, Date.now()],
 		);
 	});
+	return newId;
 }
 
 async function updateCategory(

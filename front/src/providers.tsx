@@ -7,6 +7,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { getDb } from "./lib/db";
 import { queryKeyRoots } from "./lib/queries/query-keys";
 import { normalizeCurrency } from "./lib/currency";
+import { I18nProvider as AriaI18nProvider } from 'react-aria-components/I18nProvider';
 
 const queryClient = new QueryClient({
 	mutationCache: new MutationCache({
@@ -55,7 +56,11 @@ export function useI18n() {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
 	const value = useI18nValue();
-	return <I18NContext.Provider value={value}>{children}</I18NContext.Provider>;
+	return (
+		<AriaI18nProvider locale={value.locale}>
+			<I18NContext.Provider value={value}>{children}</I18NContext.Provider>
+		</AriaI18nProvider>
+	);
 }
 
 function useI18nValue() {
@@ -94,7 +99,7 @@ function useI18nValue() {
 			new Intl.DateTimeFormat(locale, {
 				month: "numeric",
 				day: "numeric",
-				year: "2-digit",
+				year: "numeric",
 			}),
 		[locale],
 	);

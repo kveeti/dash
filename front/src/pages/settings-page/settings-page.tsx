@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
+import { DatePickerInput } from "../../components/date-picker";
 import { Spinner } from "../../components/spinner";
 import {
 	createDekSeed,
@@ -468,7 +469,7 @@ function AddFxRateForm({
 				Add or update FX rate (currency to {FX_ANCHOR_CURRENCY})
 			</p>
 			<div className="grid grid-cols-2 gap-2">
-				<Input name="rateDate" type="date" defaultValue={defaultDate} required />
+				<DatePickerInput name="rateDate" defaultValue={defaultDate} required />
 				<Select name="currency" required>
 					{COMMON_CURRENCIES.filter((code) => code !== FX_ANCHOR_CURRENCY).map(
 						(currencyCode) => (

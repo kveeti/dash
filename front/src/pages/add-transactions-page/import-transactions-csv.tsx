@@ -3,6 +3,7 @@ import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { AccountSelectCreate } from "../../components/account-select-create";
+import { useAccountsQuery } from "../../lib/queries/accounts";
 import {
 	type CsvFormat,
 	type ImportResult,
@@ -74,19 +75,20 @@ function StandardImportForm({
 	onResult: (result: ImportResult | null) => void;
 }) {
 	const importCsvMutation = useImportCsvMutation();
-	const [selectedAccountId, setSelectedAccountId] = useState("");
-	const [selectedAccountCurrency, setSelectedAccountCurrency] = useState("");
+	const accounts = useAccountsQuery();
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		const data = new FormData(event.currentTarget);
 		const file = data.get("csv_file");
 		if (!(file instanceof File) || file.size === 0) return;
+		const selectedAccountId = (data.get("account_id") as string) || "";
 		if (!selectedAccountId) {
 			alert("select an account");
 			return;
 		}
-		if (!selectedAccountCurrency) {
+		const account = accounts.data?.find((row) => row.id === selectedAccountId) ?? null;
+		if (!account) {
 			alert("selected account not found");
 			return;
 		}
@@ -98,7 +100,7 @@ function StandardImportForm({
 				format,
 				account: {
 					id: selectedAccountId,
-					currency: selectedAccountCurrency,
+					currency: account.currency,
 				},
 			});
 			onResult(result);
@@ -111,12 +113,7 @@ function StandardImportForm({
 		<form className="space-y-4" onSubmit={handleSubmit}>
 			<AccountSelectCreate
 				name="account_id"
-				value={selectedAccountId}
-				onChange={setSelectedAccountId}
 				disabled={importCsvMutation.isPending}
-				onAccountResolved={(account) => {
-					setSelectedAccountCurrency(account?.currency ?? "");
-				}}
 			/>
 
 			<div>
@@ -134,11 +131,7 @@ function StandardImportForm({
 				type="submit"
 				className="w-full"
 				isLoading={importCsvMutation.isPending}
-				disabled={
-					importCsvMutation.isPending ||
-					!selectedAccountId ||
-					!selectedAccountCurrency
-				}
+				disabled={importCsvMutation.isPending}
 			>
 				import
 			</Button>
