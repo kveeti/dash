@@ -45,6 +45,11 @@ export function CommandPalette() {
 			}
 		},
 		{
+			value: "accounts", label: "Accounts", href: "/accounts", onSelect: () => {
+				setLocation("/accounts");
+			}
+		},
+		{
 			value: "settings", label: "Settings", href: "/settings", onSelect: () => {
 				setLocation("/settings");
 			}

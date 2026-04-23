@@ -81,6 +81,9 @@ function Hamburger() {
       </Dropdown.Trigger>
       <Dropdown.Content>
         <Dropdown.Item asChild>
+          <SlowLink href="/accounts">accounts</SlowLink>
+        </Dropdown.Item>
+        <Dropdown.Item asChild>
           <SlowLink href="/settings">settings</SlowLink>
         </Dropdown.Item>
       </Dropdown.Content>
