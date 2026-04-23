@@ -464,10 +464,11 @@ export async function importLegacyCsvBundle(
 
 			const newId = existingAccountIds.has(oldId) ? id() : oldId;
 			const currency = parseCurrency(record.currency, "EUR");
+			const externalId = record.external_id?.trim() || null;
 			await db.exec(
-				`insert into accounts (id, created_at, updated_at, name, currency, _sync_edited_at)
-				values (?, ?, ?, ?, ?, ?)`,
-				[newId, now, now, name, currency, Date.now()],
+				`insert into accounts (id, created_at, updated_at, name, currency, external_id, _sync_edited_at)
+				values (?, ?, ?, ?, ?, ?, ?)`,
+				[newId, now, now, name, currency, externalId, Date.now()],
 			);
 			accountIdMap.set(oldId, newId);
 			existingAccountNames.set(name, newId);

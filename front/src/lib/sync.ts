@@ -121,7 +121,7 @@ async function getDirty(db: DbHandle): Promise<DirtyEntry[]> {
 				'account:' || id as id,
 				_sync_is_deleted,
 				_sync_edited_at,
-				json_object('created_at', created_at, 'updated_at', updated_at, 'name', name, 'currency', currency) as plain_data,
+				json_object('created_at', created_at, 'updated_at', updated_at, 'name', name, 'currency', currency, 'external_id', external_id) as plain_data,
 				1 as priority
 			from accounts where _sync_status = 1
 
@@ -212,10 +212,11 @@ async function applyIncomingOps({
 					/* updated_at */ entry.updated_at,
 					/* name */ entry.name,
 					/* currency */ normalizeCurrency(entry.currency),
+					/* external_id */ entry.external_id ?? null,
 					/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
 					/* _sync_edited_at */ op._sync_edited_at,
 				);
-				accountsValues.push("(?, ?, ?, ?, ?, ?, ?, 0)");
+				accountsValues.push("(?, ?, ?, ?, ?, ?, ?, ?, 0)");
 				break;
 
 			case "category":
@@ -276,7 +277,7 @@ async function applyIncomingOps({
 	if (accounts.length) {
 		await db.exec(
 			`insert into accounts (
-				id, created_at, updated_at, name, currency,
+				id, created_at, updated_at, name, currency, external_id,
 				_sync_is_deleted, _sync_edited_at, _sync_status
 			)
 			values ${accountsValues.join(",")}
@@ -287,7 +288,8 @@ async function applyIncomingOps({
 				_sync_edited_at = excluded._sync_edited_at,
 				_sync_status = 0,
 				name = excluded.name,
-				currency = excluded.currency
+				currency = excluded.currency,
+				external_id = excluded.external_id
 			where excluded._sync_edited_at >= accounts._sync_edited_at;`,
 			accounts,
 		);

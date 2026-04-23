@@ -13,6 +13,7 @@ import {
 import { DEFAULT_CURRENCY, normalizeCurrency, COMMON_CURRENCIES } from "../lib/currency";
 import { PopupCombobox } from "./popup-combobox";
 import { Select } from "./select";
+import { Input } from "./input";
 
 type AccountItem = {
 	value: string;
@@ -42,17 +43,14 @@ export function AccountSelectCreate({
 	const createAccount = useCreateAccountMutation();
 	const [selectedAccountValue, setSelectedAccountValue] = useState(defaultValue ?? "");
 	const [openDialog, setOpenDialog] = useState(false);
-	const [newAccountCurrency, setNewAccountCurrency] = useState(
-		normalizeCurrency(defaultCreateCurrency, DEFAULT_CURRENCY),
-	);
-	const [newAccountName, setNewAccountName] = useState("");
+	const [createFormKey, setCreateFormKey] = useState(0);
+	const [createFormDefaults, setCreateFormDefaults] = useState({
+		name: "",
+		externalId: "",
+		currency: normalizeCurrency(defaultCreateCurrency, DEFAULT_CURRENCY),
+	});
 	const hiddenAccountIdRef = useRef<HTMLInputElement | null>(null);
 	const createInputRef = useRef<HTMLInputElement | null>(null);
-
-	const effectiveNewAccountCurrency = normalizeCurrency(
-		newAccountCurrency,
-		DEFAULT_CURRENCY,
-	);
 
 	const accountRows = accounts.data ?? [];
 
@@ -88,14 +86,26 @@ export function AccountSelectCreate({
 	}
 
 	function openCreateDialog(rawName: string) {
-		setNewAccountCurrency(normalizeCurrency(defaultCreateCurrency, DEFAULT_CURRENCY));
-		setNewAccountName(rawName);
+		const defaultCurrency = normalizeCurrency(
+			defaultCreateCurrency,
+			DEFAULT_CURRENCY,
+		);
+		setCreateFormDefaults({
+			name: rawName,
+			externalId: "",
+			currency: defaultCurrency,
+		});
+		setCreateFormKey((prev) => prev + 1);
 		setOpenDialog(true);
 	}
 
-	async function createAccountFromDialog() {
+	async function createAccountFromDialog(input: {
+		name: string;
+		externalId: string;
+		currency: string;
+	}) {
 		if (createAccount.isPending) return;
-		const accountName = newAccountName.trim();
+		const accountName = input.name.trim();
 		if (!accountName) return;
 
 		const normalized = accountName.toLocaleLowerCase();
@@ -108,9 +118,19 @@ export function AccountSelectCreate({
 			return;
 		}
 
-		const currency = effectiveNewAccountCurrency;
-		const accountId = await createAccount.mutateAsync({ name: accountName, currency });
-		const created: Account = { id: accountId, name: accountName, currency };
+		const currency = normalizeCurrency(input.currency, DEFAULT_CURRENCY);
+		const externalId = input.externalId.trim() || null;
+		const accountId = await createAccount.mutateAsync({
+			name: accountName,
+			currency,
+			external_id: externalId,
+		});
+		const created: Account = {
+			id: accountId,
+			name: accountName,
+			currency,
+			external_id: externalId,
+		};
 
 		handleSelectAccount(created);
 		setOpenDialog(false);
@@ -119,7 +139,12 @@ export function AccountSelectCreate({
 	function handleCreateAccountSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		event.stopPropagation();
-		void createAccountFromDialog();
+		const data = new FormData(event.currentTarget);
+		void createAccountFromDialog({
+			name: String(data.get("account-name") ?? ""),
+			externalId: String(data.get("account-external-id") ?? ""),
+			currency: String(data.get("account-currency") ?? createFormDefaults.currency),
+		});
 	}
 
 	return (
@@ -198,31 +223,33 @@ export function AccountSelectCreate({
 						<Dialog.Description className="mt-1 text-xs text-gray-10">
 							Add an account and select it.
 						</Dialog.Description>
-						<form className="mt-3 space-y-3" onSubmit={handleCreateAccountSubmit}>
-							<input
+						<form
+							key={createFormKey}
+							className="mt-3 space-y-3"
+							onSubmit={handleCreateAccountSubmit}
+						>
+							<Input
 								ref={createInputRef}
 								className="focus border-gray-6 bg-gray-1 h-10 w-full border px-3 outline-none"
-								value={newAccountName}
-								onChange={(event) => {
-									setNewAccountName(event.currentTarget.value);
-								}}
+								defaultValue={createFormDefaults.name}
 								onKeyDownCapture={(event) => {
 									if (event.key === "Enter") event.stopPropagation();
 								}}
-								placeholder="account name"
+								label="Account name"
 								name="account-name"
+								required
+							/>
+							<Input
+								className="focus border-gray-6 bg-gray-1 h-10 w-full border px-3 outline-none"
+								defaultValue={createFormDefaults.externalId}
+								placeholder="optional, e.g. IBAN"
+								name="account-external-id"
+								label="External id"
 							/>
 							<Select
-								label="currency"
-								value={effectiveNewAccountCurrency}
-								onChange={(event) => {
-									setNewAccountCurrency(
-										normalizeCurrency(
-											event.currentTarget.value,
-											effectiveNewAccountCurrency,
-										),
-									);
-								}}
+								label="Currency"
+								name="account-currency"
+								defaultValue={createFormDefaults.currency}
 								className="w-full"
 								disabled={createAccount.isPending}
 							>
@@ -242,7 +269,7 @@ export function AccountSelectCreate({
 								<button
 									type="submit"
 									className="focus border-gray-6 bg-gray-1 h-8 border px-3 text-xs"
-									disabled={createAccount.isPending || !newAccountName.trim()}
+									disabled={createAccount.isPending}
 								>
 									create
 								</button>

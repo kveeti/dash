@@ -169,6 +169,7 @@ export function getDb(): DbClient {
 				id text primary key not null,
 				name text not null unique,
 				currency text not null default 'EUR',
+				external_id text,
 				created_at text not null,
 				updated_at text,
 
