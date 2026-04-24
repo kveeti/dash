@@ -1,30 +1,5 @@
-import {
-	sqlite3Worker1Promiser,
-	type Worker1Promiser,
-} from "@sqlite.org/sqlite-wasm";
-function makeExec(promiser: Worker1Promiser) {
-	return async function exec(sql: string, vars?: any[]): Promise<any> {
-		const result = await promiser("exec", { sql, bind: vars });
-		return result.result;
-	};
-}
-
-function makeQuery(promiser: Worker1Promiser) {
-	return async function query(sql: string, vars?: any[]): Promise<any[]> {
-		const rows: any[] = [];
-		await promiser("exec", {
-			sql,
-			bind: vars,
-			rowMode: "object",
-			callback: (msg) => {
-				if (msg.rowNumber !== null) {
-					rows.push(msg.row);
-				}
-			},
-		});
-		return rows;
-	};
-}
+type VfsChoice = "writeahead" | "coopsync";
+type BindCollection = any[] | Record<string, any> | undefined;
 
 export type DbHandle = {
 	exec: (sql: string, vars?: any[]) => Promise<any>;
@@ -38,6 +13,26 @@ export type DbClient = DbHandle & {
 
 const SQLITE_DB_FILE = "db4";
 const SQLITE_OPFS_DB_BASENAMES = [SQLITE_DB_FILE, "db3", "db2", "db"] as const;
+const WA_SQLITE_LIBRARY_DIR = ".wa-sqlite";
+const VFS_CHOICE_STORAGE_KEY = "dash.sqlite.vfs";
+
+function readStoredVfsChoice(): VfsChoice | null {
+	try {
+		const raw = localStorage.getItem(VFS_CHOICE_STORAGE_KEY);
+		if (raw === "writeahead" || raw === "coopsync") return raw;
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+function writeStoredVfsChoice(choice: VfsChoice) {
+	try {
+		localStorage.setItem(VFS_CHOICE_STORAGE_KEY, choice);
+	} catch {
+		// Ignore storage failures (e.g. private mode restrictions).
+	}
+}
 
 function isSqliteDbRelatedFile(name: string) {
 	return SQLITE_OPFS_DB_BASENAMES.some(
@@ -50,14 +45,155 @@ export async function deleteSqliteOpfsFiles(): Promise<string[]> {
 	const removed: string[] = [];
 
 	for await (const [name, handle] of root.entries()) {
-		if (handle.kind !== "file") continue;
-		if (!isSqliteDbRelatedFile(name)) continue;
-		await root.removeEntry(name);
-		removed.push(name);
+		if (handle.kind === "file") {
+			if (!isSqliteDbRelatedFile(name)) continue;
+			await root.removeEntry(name);
+			removed.push(name);
+			continue;
+		}
+		if (handle.kind === "directory" && name === WA_SQLITE_LIBRARY_DIR) {
+			await root.removeEntry(name, { recursive: true });
+			removed.push(`${name}/`);
+		}
 	}
 
 	removed.sort();
 	return removed;
+}
+
+type WorkerRequest =
+	| {
+			id: number;
+			type: "init";
+			dbFile: string;
+			preferredVfs: VfsChoice | null;
+	  }
+	| {
+			id: number;
+			type: "exec";
+			sql: string;
+			bind?: BindCollection;
+	  }
+	| {
+			id: number;
+			type: "query";
+			sql: string;
+			bind?: BindCollection;
+	  }
+	| {
+			id: number;
+			type: "close";
+	  };
+
+type WorkerSuccessResponse = { id: number; ok: true; result: any };
+type WorkerErrorResponse = { id: number; ok: false; error: string };
+type WorkerResponse = WorkerSuccessResponse | WorkerErrorResponse;
+
+function createWorkerBridge() {
+	const worker = new Worker(new URL("./db-worker.ts", import.meta.url), {
+		type: "module",
+	});
+	let nextId = 1;
+	const pending = new Map<
+		number,
+		{
+			resolve: (value: any) => void;
+			reject: (reason?: unknown) => void;
+		}
+	>();
+
+	const rejectAll = (reason: unknown) => {
+		for (const { reject } of pending.values()) reject(reason);
+		pending.clear();
+	};
+
+	worker.addEventListener("message", (event: MessageEvent<WorkerResponse>) => {
+		const message = event.data;
+		if (!message || typeof message !== "object" || !("id" in message)) return;
+		const record = pending.get(message.id);
+		if (!record) return;
+		pending.delete(message.id);
+		if (message.ok) {
+			record.resolve(message.result);
+		} else {
+			record.reject(new Error(message.error));
+		}
+	});
+
+	worker.addEventListener("error", (event) => {
+		const message = event.message || "Database worker crashed";
+		rejectAll(new Error(message));
+	});
+
+	worker.addEventListener("messageerror", () => {
+		rejectAll(new Error("Database worker message channel error"));
+	});
+
+	const request = <T>(payload: Omit<WorkerRequest, "id">): Promise<T> => {
+		const id = nextId++;
+		return new Promise<T>((resolve, reject) => {
+			pending.set(id, { resolve, reject });
+			worker.postMessage({ id, ...payload } satisfies WorkerRequest);
+		});
+	};
+
+	return {
+		request,
+		terminate: () => {
+			worker.terminate();
+			rejectAll(new Error("Database worker terminated"));
+		},
+	};
+}
+
+function createWorkerDbClient() {
+	const bridge = createWorkerBridge();
+	let closed = false;
+
+	const initPromise = (async () => {
+		const preferredVfs = readStoredVfsChoice();
+		const result = await bridge.request<{
+			selectedVfs: VfsChoice;
+			sqliteVersion: string;
+		}>({
+			type: "init",
+			dbFile: SQLITE_DB_FILE,
+			preferredVfs,
+		});
+
+		if (result.selectedVfs !== preferredVfs) {
+			writeStoredVfsChoice(result.selectedVfs);
+		}
+		console.log("sqlite version", result.sqliteVersion);
+		console.log("sqlite vfs", result.selectedVfs);
+	})();
+
+	const ensureReady = async () => {
+		if (closed) throw new Error("sqlite connection is closed");
+		await initPromise;
+	};
+
+	return {
+		exec: async (sql: string, bind?: BindCollection): Promise<any> => {
+			await ensureReady();
+			return bridge.request({ type: "exec", sql, bind });
+		},
+		query: async <T = any>(sql: string, bind?: BindCollection): Promise<T[]> => {
+			await ensureReady();
+			return bridge.request<T[]>({ type: "query", sql, bind });
+		},
+		close: async () => {
+			if (closed) return;
+			closed = true;
+			try {
+				await bridge.request({ type: "close" });
+			} catch {
+				// The worker may already be gone; ignore close-time failures.
+			} finally {
+				bridge.terminate();
+			}
+		},
+	};
 }
 
 export function sqlite(
@@ -65,30 +201,13 @@ export function sqlite(
 ) {
 	let ready = false;
 	let handle: DbHandle;
-	let promiserRef: Worker1Promiser | null = null;
+	const dbClient = createWorkerDbClient();
 	let closed = false;
 
 	const initPromise = (async () => {
 		console.log("sqlite initializing...");
-
-		const promiser = await new Promise<Worker1Promiser>((resolve) => {
-			sqlite3Worker1Promiser({ onready: resolve });
-		});
-		promiserRef = promiser;
-
-		const configResponse = await promiser("config-get", {});
-		console.log("sqlite version", configResponse.result.version.libVersion);
-
-		const openResponse = await promiser("open", {
-			filename: `file:${SQLITE_DB_FILE}?vfs=opfs`,
-		});
-		console.log(
-			"sqlite db created at",
-			openResponse.result.filename.replace(/^file:(.*?)\?vfs=opfs$/, "$1"),
-		);
-
-		const exec = makeExec(promiser);
-		const query = makeQuery(promiser);
+		const exec = dbClient.exec;
+		const query = dbClient.query;
 		let txDepth = 0;
 		handle = {
 			exec,
@@ -96,7 +215,7 @@ export function sqlite(
 			withTx: async <T>(fn: () => Promise<T>): Promise<T> => {
 				const isOuter = txDepth === 0;
 				txDepth++;
-				if (isOuter) await exec("BEGIN");
+				if (isOuter) await exec("BEGIN IMMEDIATE");
 				try {
 					const result = await fn();
 					txDepth--;
@@ -134,10 +253,12 @@ export function sqlite(
 		},
 		close: async () => {
 			if (closed) return;
-			if (!ready) await initPromise;
-			if (promiserRef) {
-				await promiserRef("close", {});
+			try {
+				if (!ready) await initPromise;
+			} catch {
+				// Ignore initialization failures so we can still terminate the worker.
 			}
+			await dbClient.close();
 			closed = true;
 			ready = false;
 		},
