@@ -1,0 +1,15 @@
+{
+	"project": "sqlite3mc.h",
+	"target": "sqlite3mc_amalgamation.h",
+	"sources": [
+		"sqlite3mc.h"
+	],
+	"include_paths": [
+		"src", "."
+	],
+	"force_include": [
+	],
+	"exclude_files": [
+	]
+}
+
