@@ -1,7 +1,8 @@
 import {
-	sqlite3Worker1Promiser,
 	type Worker1Promiser,
 } from "@sqlite.org/sqlite-wasm";
+import sqlite3Worker1PromiserV2 from "./sqlite-custom/sqlite3-worker1-promiser.mjs";
+
 function makeExec(promiser: Worker1Promiser) {
 	return async function exec(sql: string, vars?: any[]): Promise<any> {
 		const result = await promiser("exec", { sql, bind: vars });
@@ -38,6 +39,57 @@ export type DbClient = DbHandle & {
 
 const SQLITE_DB_FILE = "db4";
 const SQLITE_OPFS_DB_BASENAMES = [SQLITE_DB_FILE, "db3", "db2", "db"] as const;
+const SQLITE_PASSWORD_PROMPT =
+	"Enter your local database password.\nThis is required every time you open the app.";
+const SQLITE_KDF_ITERATIONS = 400_000;
+const SQLITE_KDF_HASH: HmacImportParams["hash"] = "SHA-256";
+const SQLITE_KDF_KEY_BYTES = 32;
+const SQLITE_KDF_SALT = new TextEncoder().encode("dash-local-db-kdf-v1");
+
+function createSqliteWorker(): Worker {
+	return new Worker(new URL("./sqlite-custom/sqlite3-worker1.mjs", import.meta.url), {
+		type: "module",
+	});
+}
+
+function toHex(bytes: Uint8Array): string {
+	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+async function deriveSqliteKeyHexFromPassword(password: string): Promise<string> {
+	if (!globalThis.crypto?.subtle) {
+		throw new Error("WebCrypto subtle API is unavailable; cannot derive database key");
+	}
+	const baseKey = await globalThis.crypto.subtle.importKey(
+		"raw",
+		new TextEncoder().encode(password),
+		{ name: "PBKDF2" },
+		false,
+		["deriveBits"],
+	);
+	const derived = await globalThis.crypto.subtle.deriveBits(
+		{
+			name: "PBKDF2",
+			salt: SQLITE_KDF_SALT,
+			iterations: SQLITE_KDF_ITERATIONS,
+			hash: SQLITE_KDF_HASH,
+		},
+		baseKey,
+		SQLITE_KDF_KEY_BYTES * 8,
+	);
+	return toHex(new Uint8Array(derived));
+}
+
+async function promptForSqliteKeyHex(): Promise<string> {
+	if (typeof window === "undefined" || typeof window.prompt !== "function") {
+		throw new Error("No browser prompt available for database password entry");
+	}
+	const password = window.prompt(SQLITE_PASSWORD_PROMPT);
+	if (!password) {
+		throw new Error("Database password is required");
+	}
+	return await deriveSqliteKeyHexFromPassword(password);
+}
 
 function isSqliteDbRelatedFile(name: string) {
 	return SQLITE_OPFS_DB_BASENAMES.some(
@@ -66,29 +118,34 @@ export function sqlite(
 	let ready = false;
 	let handle: DbHandle;
 	let promiserRef: Worker1Promiser | null = null;
+	let workerRef: Worker | null = null;
 	let closed = false;
 
 	const initPromise = (async () => {
 		console.log("sqlite initializing...");
 
-		const promiser = await new Promise<Worker1Promiser>((resolve) => {
-			sqlite3Worker1Promiser({ onready: resolve });
-		});
+		const keyHex = await promptForSqliteKeyHex();
+		const promiser = await sqlite3Worker1PromiserV2();
 		promiserRef = promiser;
 
 		const configResponse = await promiser("config-get", {});
 		console.log("sqlite version", configResponse.result.version.libVersion);
 
 		const openResponse = await promiser("open", {
-			filename: `file:${SQLITE_DB_FILE}?vfs=opfs`,
+			filename: `file:${SQLITE_DB_FILE}?vfs=multipleciphers-opfs`,
 		});
 		console.log(
-			"sqlite db created at",
-			openResponse.result.filename.replace(/^file:(.*?)\?vfs=opfs$/, "$1"),
+			"sqlite db opened at",
+			openResponse.result.filename.replace(/^file:(.*?)\?vfs=.*$/, "$1"),
 		);
 
 		const exec = makeExec(promiser);
 		const query = makeQuery(promiser);
+		await exec(`pragma cipher='chacha20'`);
+		await exec(`pragma key="x'${keyHex}'"`);
+		await query("select count(*) as c from sqlite_master");
+		console.log("sqlite encryption enabled");
+
 		let txDepth = 0;
 		handle = {
 			exec,
@@ -113,7 +170,7 @@ export function sqlite(
 		await migrations(handle);
 
 		ready = true;
-		console.log("sqlite initialized");
+		console.log("sqlite ready");
 	})();
 
 	return {
@@ -138,6 +195,8 @@ export function sqlite(
 			if (promiserRef) {
 				await promiserRef("close", {});
 			}
+			workerRef?.terminate();
+			workerRef = null;
 			closed = true;
 			ready = false;
 		},

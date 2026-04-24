@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from 'fs/promises';
+import { readdir, readFile, stat, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -10,13 +10,33 @@ async function main() {
 
   const sqlite3Files = files.filter(f => f.startsWith('sqlite3'));
 
-  const nameToHashed = {};
+  const candidatesByBaseName = new Map();
   for (const file of sqlite3Files) {
     const baseName = file.replace(/-[A-Za-z0-9]+(\.wasm|\.js)$/, '$1');
-    nameToHashed[baseName] = file;
+    const filePath = join(assetsDir, file);
+    const fileStat = await stat(filePath);
+    const candidates = candidatesByBaseName.get(baseName) ?? [];
+    candidates.push({ file, size: fileStat.size });
+    candidatesByBaseName.set(baseName, candidates);
+  }
+
+  const nameToHashed = {};
+  for (const [baseName, candidates] of candidatesByBaseName.entries()) {
+    candidates.sort((a, b) => {
+      if (b.size !== a.size) return b.size - a.size;
+      return a.file.localeCompare(b.file);
+    });
+    nameToHashed[baseName] = candidates[0].file;
+    if (candidates.length > 1) {
+      console.log(
+        `Duplicate basename ${baseName}; chose ${candidates[0].file} (${candidates[0].size} bytes)`,
+      );
+    }
   }
 
   console.log('Mapping base names to hashed names:', nameToHashed);
+  const canonicalSqliteWasm = nameToHashed['sqlite3.wasm'];
+  const canonicalWorker1Js = nameToHashed['sqlite3-worker1.js'];
 
   const jsFiles = files.filter(f => f.endsWith('.js') && !f.startsWith('sqlite3'));
 
@@ -30,6 +50,22 @@ async function main() {
       const regex = new RegExp(escapedBase, 'g');
       if (regex.test(content)) {
         content = content.replace(regex, hashedName);
+        modified = true;
+      }
+    }
+
+    if (canonicalSqliteWasm) {
+      const wasmRegex = /sqlite3-[A-Za-z0-9_-]+\.wasm/g;
+      if (wasmRegex.test(content)) {
+        content = content.replace(wasmRegex, canonicalSqliteWasm);
+        modified = true;
+      }
+    }
+
+    if (canonicalWorker1Js) {
+      const workerRegex = /sqlite3-worker1-[A-Za-z0-9_-]+\.js/g;
+      if (workerRegex.test(content)) {
+        content = content.replace(workerRegex, canonicalWorker1Js);
         modified = true;
       }
     }
@@ -50,6 +86,22 @@ async function main() {
       const regex = new RegExp(escapedBase, 'g');
       if (regex.test(content)) {
         content = content.replace(regex, hashedName);
+        modified = true;
+      }
+    }
+
+    if (canonicalSqliteWasm) {
+      const wasmRegex = /sqlite3-[A-Za-z0-9_-]+\.wasm/g;
+      if (wasmRegex.test(content)) {
+        content = content.replace(wasmRegex, canonicalSqliteWasm);
+        modified = true;
+      }
+    }
+
+    if (canonicalWorker1Js) {
+      const workerRegex = /sqlite3-worker1-[A-Za-z0-9_-]+\.js/g;
+      if (workerRegex.test(content)) {
+        content = content.replace(workerRegex, canonicalWorker1Js);
         modified = true;
       }
     }

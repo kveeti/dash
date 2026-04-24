@@ -5,11 +5,24 @@ pkgs.mkShell {
 	nativeBuildInputs = with pkgs; [
 		nodejs_24
 		bun
+		python3
+		git
 
-			rustup
+		rustup
 
-			postgresql_18
-		];
+		postgresql_18
+		gnumake
+		bash
+		gnused
+		gawk
+		autoconf
+		automake
+		libtool
+		pkg-config
+		tcl
+		emscripten
+		wabt
+	];
 
 	postgresConf =
 		pkgs.writeText "postgresql.conf" ''

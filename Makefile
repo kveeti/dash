@@ -14,6 +14,9 @@ backinit:
 	@cargo install cargo-watch
 init: backinit frontinit
 
+sqlitebuild:
+	@./scripts/build-sqlite-wasm-smc-local.sh
+
 frontdev:
 	@cd front && bun run dev
 backdev:
@@ -40,4 +43,3 @@ dbreset:
 
 an:
 	@cd front && BUNDLE_ANALYZE=true bun run build && open dist/report-web.html
-
