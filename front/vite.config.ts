@@ -48,10 +48,6 @@ export default defineConfig({
 		}),
 	],
 
-	optimizeDeps: {
-		exclude: ["@sqlite.org/sqlite-wasm"],
-	},
-
 	clearScreen: false,
 	server: {
 		port: 3000,

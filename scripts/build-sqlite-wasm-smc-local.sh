@@ -93,8 +93,6 @@ env -u MAKEFILE_LIST -u MAKEFILES make -C "$WASM_BUILD_DIR" \
   "emcc_opt=-Oz" \
   "jswasm/sqlite3.mjs" \
   "jswasm/sqlite3.wasm" \
-  "jswasm/sqlite3-worker1.mjs" \
-  "jswasm/sqlite3-worker1-promiser.mjs" \
   "jswasm/sqlite3-opfs-async-proxy.js"
 
 mkdir -p "$FRONT_VENDOR_DIR"
@@ -109,8 +107,6 @@ copy_artifact() {
 
 copy_artifact "sqlite3.mjs"
 copy_artifact "sqlite3.wasm"
-copy_artifact "sqlite3-worker1.mjs"
-copy_artifact "sqlite3-worker1-promiser.mjs"
 copy_artifact "sqlite3-opfs-async-proxy.js"
 
 cat > "$FRONT_VENDOR_DIR/README.md" <<META
@@ -123,9 +119,9 @@ Source inputs:
 - SMC source: $SMC_DIR
 
 Main artifacts:
-- sqlite3-worker1.mjs
 - sqlite3.mjs
 - sqlite3.wasm
+- sqlite3-opfs-async-proxy.js
 META
 
 log "done. vendored artifacts in: $FRONT_VENDOR_DIR"

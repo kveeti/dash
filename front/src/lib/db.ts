@@ -1,32 +1,3 @@
-import {
-	type Worker1Promiser,
-} from "@sqlite.org/sqlite-wasm";
-import sqlite3Worker1PromiserV2 from "./sqlite-custom/sqlite3-worker1-promiser.mjs";
-
-function makeExec(promiser: Worker1Promiser) {
-	return async function exec(sql: string, vars?: any[]): Promise<any> {
-		const result = await promiser("exec", { sql, bind: vars });
-		return result.result;
-	};
-}
-
-function makeQuery(promiser: Worker1Promiser) {
-	return async function query(sql: string, vars?: any[]): Promise<any[]> {
-		const rows: any[] = [];
-		await promiser("exec", {
-			sql,
-			bind: vars,
-			rowMode: "object",
-			callback: (msg) => {
-				if (msg.rowNumber !== null) {
-					rows.push(msg.row);
-				}
-			},
-		});
-		return rows;
-	};
-}
-
 export type DbHandle = {
 	exec: (sql: string, vars?: any[]) => Promise<any>;
 	query: <T = any>(sql: string, vars?: any[]) => Promise<T[]>;
@@ -47,10 +18,54 @@ const SQLITE_KDF_KEY_BYTES = 32;
 const SQLITE_KDF_SALT = new TextEncoder().encode("dash-local-db-kdf-v1");
 
 function createSqliteWorker(): Worker {
-	return new Worker(new URL("./sqlite-custom/sqlite3-worker1.mjs", import.meta.url), {
+	return new Worker(new URL("./sqlite-worker.js", import.meta.url), {
 		type: "module",
 	});
 }
+
+type SqliteWorkerMethod = "init" | "exec" | "query" | "close";
+
+type SqliteWorkerRequestPayloadMap = {
+	init: { keyHex: string; dbFile: string };
+	exec: { sql: string; vars?: any[] };
+	query: { sql: string; vars?: any[] };
+	close: undefined;
+};
+
+type SqliteWorkerResponsePayloadMap = {
+	init: { libVersion: string; filename: string };
+	exec: null;
+	query: any[];
+	close: null;
+};
+
+type SqliteWorkerRequest<M extends SqliteWorkerMethod = SqliteWorkerMethod> = {
+	id: number;
+	method: M;
+	payload: SqliteWorkerRequestPayloadMap[M];
+};
+
+type SqliteWorkerErrorPayload = {
+	name: string;
+	message: string;
+	stack?: string;
+};
+
+type SqliteWorkerSuccessResponse<M extends SqliteWorkerMethod = SqliteWorkerMethod> = {
+	id: number;
+	ok: true;
+	payload: SqliteWorkerResponsePayloadMap[M];
+};
+
+type SqliteWorkerErrorResponse = {
+	id: number;
+	ok: false;
+	error: SqliteWorkerErrorPayload;
+};
+
+type SqliteWorkerResponse =
+	| SqliteWorkerSuccessResponse
+	| SqliteWorkerErrorResponse;
 
 function toHex(bytes: Uint8Array): string {
 	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
@@ -117,34 +132,90 @@ export function sqlite(
 ) {
 	let ready = false;
 	let handle: DbHandle;
-	let promiserRef: Worker1Promiser | null = null;
 	let workerRef: Worker | null = null;
 	let closed = false;
+	let nextRequestId = 1;
+	const pendingRequests = new Map<
+		number,
+		{
+			resolve: (value: unknown) => void;
+			reject: (reason: unknown) => void;
+		}
+	>();
+
+	const rejectPendingRequests = (reason: unknown) => {
+		for (const request of pendingRequests.values()) {
+			request.reject(reason);
+		}
+		pendingRequests.clear();
+	};
+
+	const toWorkerError = (payload: SqliteWorkerErrorPayload) => {
+		const error = new Error(payload.message);
+		error.name = payload.name;
+		if (payload.stack) error.stack = payload.stack;
+		return error;
+	};
+
+	const ensureWorker = () => {
+		if (workerRef) return workerRef;
+		const worker = createSqliteWorker();
+		worker.onmessage = (event: MessageEvent<SqliteWorkerResponse>) => {
+			const message = event.data;
+			const pending = pendingRequests.get(message.id);
+			if (!pending) return;
+			pendingRequests.delete(message.id);
+			if (message.ok) {
+				pending.resolve(message.payload);
+				return;
+			}
+			pending.reject(toWorkerError(message.error));
+		};
+		worker.onerror = (event) => {
+			rejectPendingRequests(
+				new Error(event.message || "sqlite worker crashed"),
+			);
+		};
+		workerRef = worker;
+		return worker;
+	};
+
+	const callWorker = async <M extends SqliteWorkerMethod>(
+		method: M,
+		payload: SqliteWorkerRequestPayloadMap[M],
+	): Promise<SqliteWorkerResponsePayloadMap[M]> => {
+		const worker = ensureWorker();
+		const id = nextRequestId++;
+		return await new Promise<SqliteWorkerResponsePayloadMap[M]>((resolve, reject) => {
+			pendingRequests.set(id, {
+				resolve: (value) => resolve(value as SqliteWorkerResponsePayloadMap[M]),
+				reject,
+			});
+			const request: SqliteWorkerRequest<M> = { id, method, payload };
+			worker.postMessage(request);
+		});
+	};
 
 	const initPromise = (async () => {
 		console.log("sqlite initializing...");
 
 		const keyHex = await promptForSqliteKeyHex();
-		const promiser = await sqlite3Worker1PromiserV2();
-		promiserRef = promiser;
-
-		const configResponse = await promiser("config-get", {});
-		console.log("sqlite version", configResponse.result.version.libVersion);
-
-		const openResponse = await promiser("open", {
-			filename: `file:${SQLITE_DB_FILE}?vfs=multipleciphers-opfs`,
+		const initResponse = await callWorker("init", {
+			keyHex,
+			dbFile: SQLITE_DB_FILE,
 		});
+		console.log("sqlite version", initResponse.libVersion);
 		console.log(
 			"sqlite db opened at",
-			openResponse.result.filename.replace(/^file:(.*?)\?vfs=.*$/, "$1"),
+			initResponse.filename,
 		);
 
-		const exec = makeExec(promiser);
-		const query = makeQuery(promiser);
-		await exec(`pragma cipher='chacha20'`);
-		await exec(`pragma key="x'${keyHex}'"`);
-		await query("select count(*) as c from sqlite_master");
-		console.log("sqlite encryption enabled");
+		const exec = async (sql: string, vars?: any[]) =>
+			await callWorker("exec", { sql, vars });
+		const query = async <T = any>(sql: string, vars?: any[]): Promise<T[]> => {
+			const rows = await callWorker("query", { sql, vars });
+			return rows as T[];
+		};
 
 		let txDepth = 0;
 		handle = {
@@ -189,18 +260,18 @@ export function sqlite(
 			if (!ready) await initPromise;
 			return await handle.withTx(fn);
 		},
-		close: async () => {
-			if (closed) return;
-			if (!ready) await initPromise;
-			if (promiserRef) {
-				await promiserRef("close", {});
-			}
-			workerRef?.terminate();
-			workerRef = null;
-			closed = true;
-			ready = false;
-		},
-	} satisfies DbClient;
+			close: async () => {
+				if (closed) return;
+				if (ready) {
+					await callWorker("close", undefined);
+				}
+				workerRef?.terminate();
+				rejectPendingRequests(new Error("sqlite worker terminated"));
+				workerRef = null;
+				closed = true;
+				ready = false;
+			},
+		} satisfies DbClient;
 }
 
 export function getDb(): DbClient {
