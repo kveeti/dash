@@ -8,6 +8,8 @@ import {
 	useTransactionLinksQuery,
 	useLinkTransactionMutation,
 	useUnlinkTransactionMutation,
+	useTransactionLinkSuggestionsQuery,
+	useDismissTransactionLinkSuggestionMutation,
 	useTransactionCurrenciesQuery,
 	type TransactionRow,
 } from "../../lib/queries/transactions";
@@ -470,8 +472,10 @@ function SelectedTxWindow({
 	const txQuery = useTransactionQuery(txId);
 	const updateTransaction = useUpdateTransactionMutation();
 	const linksQuery = useTransactionLinksQuery(txId);
+	const linkSuggestionsQuery = useTransactionLinkSuggestionsQuery(txId);
 	const linkMutation = useLinkTransactionMutation();
 	const unlinkMutation = useUnlinkTransactionMutation();
+	const dismissLinkSuggestionMutation = useDismissTransactionLinkSuggestionMutation();
 
 	useImperativeHandle(forwardedRef, () => ({
 		nudge: () => selectedTxRef.current?.nudge(),
@@ -497,6 +501,11 @@ function SelectedTxWindow({
 		if (!targetId || targetId === txId) return;
 		await linkMutation.mutateAsync({ aId: txId, bId: targetId });
 		setLinkInput("");
+	}
+
+	async function acceptLinkSuggestion(txIds: string[]) {
+		if (txIds.length < 2) return;
+		await linkMutation.mutateAsync({ aId: txIds[0], bId: txIds[1] });
 	}
 
 	return (
@@ -607,6 +616,59 @@ function SelectedTxWindow({
 							link
 						</Button>
 					</div>
+
+					{linkSuggestionsQuery.data && linkSuggestionsQuery.data.length > 0 && (
+						<div className="border-gray-a4 border p-2 text-xs space-y-2">
+							<p className="text-gray-11">possible links</p>
+							<ul className="space-y-2">
+								{linkSuggestionsQuery.data.map((suggestion) => {
+									const candidate = suggestion.transactions.find(
+										(item) => item.id !== txId,
+									);
+									if (!candidate) return null;
+									return (
+										<li key={suggestion.id} className="space-y-1">
+											<div className="flex items-start justify-between gap-2">
+												<div className="min-w-0">
+													<p className="truncate">{candidate.counter_party}</p>
+													<p className="text-gray-10">
+														{candidate.account_name} ·{" "}
+														{f.amount(candidate.amount, candidate.currency)}
+													</p>
+												</div>
+												<div className="flex shrink-0 gap-1">
+													<Button
+														size="sm"
+														onClick={() =>
+															acceptLinkSuggestion(suggestion.transaction_ids)
+														}
+														disabled={linkMutation.isPending}
+													>
+														link
+													</Button>
+													<Button
+														size="sm"
+														variant="ghost"
+														onClick={() =>
+															dismissLinkSuggestionMutation.mutate({
+																txIds: suggestion.transaction_ids,
+															})
+														}
+														disabled={dismissLinkSuggestionMutation.isPending}
+													>
+														dismiss
+													</Button>
+												</div>
+											</div>
+											<p className="text-gray-10">
+												{suggestion.evidence.join(", ")}
+											</p>
+										</li>
+									);
+								})}
+							</ul>
+						</div>
+					)}
 
 						{linksQuery.data && linksQuery.data.length > 0 && (
 							<ul className="text-xs space-y-1">

@@ -493,6 +493,28 @@ export type LinkedTransaction = {
 	converted_currency: string;
 };
 
+export type TransactionLinkSuggestionKind = "transfer_pair";
+
+export type TransactionLinkSuggestionMember = {
+	id: string;
+	date: string;
+	amount: number;
+	currency: string;
+	counter_party: string;
+	account_name: string;
+};
+
+export type TransactionLinkSuggestion = {
+	id: string;
+	kind: TransactionLinkSuggestionKind;
+	transaction_ids: string[];
+	primary_transaction_id: string;
+	score: number;
+	reason: string;
+	evidence: string[];
+	transactions: TransactionLinkSuggestionMember[];
+};
+
 export function useTransactionLinksQuery(txId: string | undefined) {
 	const db = useDb();
 	return useQuery({
@@ -618,6 +640,135 @@ export function useTransactionLinksQuery(txId: string | undefined) {
 	});
 }
 
+type TransferSuggestionRow = {
+	base_id: string;
+	base_date: string;
+	base_amount: number;
+	base_currency: string;
+	base_counter_party: string;
+	base_account_name: string;
+	candidate_id: string;
+	candidate_date: string;
+	candidate_amount: number;
+	candidate_currency: string;
+	candidate_counter_party: string;
+	candidate_account_name: string;
+	date_gap_days: number;
+	score: number;
+};
+
+async function getTransactionLinkSuggestions(
+	db: DbHandle,
+	txId: string,
+): Promise<TransactionLinkSuggestion[]> {
+	const rows = await db.query<TransferSuggestionRow>(
+		`with base as (
+			select
+				t.id,
+				t.date,
+				t.amount,
+				t.currency,
+				t.counter_party,
+				t.account_id,
+				coalesce(a.name, '') as account_name
+			from transactions t
+			left join accounts a on a.id = t.account_id
+			where t.id = ? and t._sync_is_deleted = 0
+			limit 1
+		)
+		select
+			b.id as base_id,
+			b.date as base_date,
+			b.amount as base_amount,
+			b.currency as base_currency,
+			b.counter_party as base_counter_party,
+			b.account_name as base_account_name,
+			c.id as candidate_id,
+			c.date as candidate_date,
+			c.amount as candidate_amount,
+			c.currency as candidate_currency,
+			c.counter_party as candidate_counter_party,
+			coalesce(ca.name, '') as candidate_account_name,
+			abs(julianday(date(c.date)) - julianday(date(b.date))) as date_gap_days,
+			100 - (abs(julianday(date(c.date)) - julianday(date(b.date))) * 10) as score
+		from base b
+		join transactions c
+			on c.id <> b.id
+			and c._sync_is_deleted = 0
+			and c.currency = b.currency
+			and c.account_id <> b.account_id
+			and c.amount = -b.amount
+			and abs(julianday(date(c.date)) - julianday(date(b.date))) <= 3
+		left join accounts ca on ca.id = c.account_id
+		where not exists (
+			select 1
+			from transaction_links l
+			where l._sync_is_deleted = 0
+				and l.transaction_a_id = case when b.id < c.id then b.id else c.id end
+				and l.transaction_b_id = case when b.id < c.id then c.id else b.id end
+		)
+		and not exists (
+			select 1
+			from transaction_link_dismissals d
+			where d.transaction_a_id = case when b.id < c.id then b.id else c.id end
+				and d.transaction_b_id = case when b.id < c.id then c.id else b.id end
+		)
+		order by score desc, c.date desc, c.id desc
+		limit 5`,
+		[txId],
+	);
+
+	return rows.map((row) => {
+		const ids = [row.base_id, row.candidate_id];
+		const [a, b] =
+			row.base_id < row.candidate_id
+				? [row.base_id, row.candidate_id]
+				: [row.candidate_id, row.base_id];
+
+		return {
+			id: `transfer_pair:${a}_${b}`,
+			kind: "transfer_pair",
+			transaction_ids: ids,
+			primary_transaction_id: row.base_id,
+			score: row.score,
+			reason: "possible own transfer",
+			evidence: [
+				"opposite signs",
+				"same amount and currency",
+				`${Math.round(row.date_gap_days)} day date gap`,
+				"different accounts",
+			],
+			transactions: [
+				{
+					id: row.base_id,
+					date: row.base_date,
+					amount: row.base_amount,
+					currency: row.base_currency,
+					counter_party: row.base_counter_party,
+					account_name: row.base_account_name,
+				},
+				{
+					id: row.candidate_id,
+					date: row.candidate_date,
+					amount: row.candidate_amount,
+					currency: row.candidate_currency,
+					counter_party: row.candidate_counter_party,
+					account_name: row.candidate_account_name,
+				},
+			],
+		};
+	});
+}
+
+export function useTransactionLinkSuggestionsQuery(txId: string | undefined) {
+	const db = useDb();
+	return useQuery({
+		queryKey: queryKeys.transactionLinkSuggestions(txId),
+		queryFn: () => getTransactionLinkSuggestions(db, txId!),
+		enabled: !!txId,
+	});
+}
+
 export function useTransactionCurrenciesQuery() {
 	const db = useDb();
 	return useQuery({
@@ -636,6 +787,7 @@ export function useTransactionCurrenciesQuery() {
 
 function invalidateLinksQueries(qc: ReturnType<typeof useQueryClient>) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinks });
+	qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinkSuggestions });
 }
 
 export function useLinkTransactionMutation() {
@@ -676,6 +828,28 @@ export function useUnlinkTransactionMutation() {
 					_sync_edited_at = ?
 				where transaction_a_id = ? and transaction_b_id = ?`,
 				[now, Date.now(), a, b],
+			);
+		},
+		onSuccess: () => invalidateLinksQueries(qc),
+	});
+}
+
+export function useDismissTransactionLinkSuggestionMutation() {
+	const db = useDb();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: async ({ txIds }: { txIds: string[] }) => {
+			if (txIds.length < 2) return;
+			const [a, b] =
+				txIds[0] < txIds[1]
+					? [txIds[0], txIds[1]]
+					: [txIds[1], txIds[0]];
+			await db.exec(
+				`insert into transaction_link_dismissals
+				(transaction_a_id, transaction_b_id, created_at)
+				values (?, ?, ?)
+				on conflict (transaction_a_id, transaction_b_id) do nothing`,
+				[a, b, new Date().toISOString()],
 			);
 		},
 		onSuccess: () => invalidateLinksQueries(qc),

@@ -17,6 +17,7 @@ export const queryKeyRoots = {
 	transactions: ["transactions"] as const,
 	transaction: ["transaction"] as const,
 	transactionLinks: ["transaction-links"] as const,
+	transactionLinkSuggestions: ["transaction-link-suggestions"] as const,
 	settings: ["settings"] as const,
 	fxRates: ["fx-rates"] as const,
 	sync: ["sync"] as const,
@@ -39,6 +40,8 @@ export const queryKeys = {
 		] as const,
 	transaction: (id?: string) => [...queryKeyRoots.transaction, id] as const,
 	transactionLinks: (id?: string) => [...queryKeyRoots.transactionLinks, id] as const,
+	transactionLinkSuggestions: (id?: string) =>
+		[...queryKeyRoots.transactionLinkSuggestions, id] as const,
 	settings: () => queryKeyRoots.settings,
 	fxRates: () => [...queryKeyRoots.fxRates] as const,
 	syncPull: (canSync: boolean, salt?: string) =>

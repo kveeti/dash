@@ -421,6 +421,13 @@ export function getDb(): DbClient {
 			`create index if not exists idx_tx_import_keys_tx_active
 				on transaction_import_keys(transaction_id)
 				where _sync_is_deleted = 0`,
+
+			`create table if not exists transaction_link_dismissals (
+				transaction_a_id text not null,
+				transaction_b_id text not null,
+				created_at text not null,
+				primary key (transaction_a_id, transaction_b_id)
+			)`,
 		];
 
 		const versionRows = await query<{ current: number }>(
