@@ -220,6 +220,7 @@ function ImportResultPanel({ result }: { result: ImportResult | null }) {
 		<div className="border-gray-a4 space-y-2 border p-3">
 			<p>
 				imported: <strong>{result.imported}</strong>
+				{(result.deduped ?? 0) > 0 && <>, deduped: {result.deduped}</>}
 				{result.skipped > 0 && <>, skipped: {result.skipped}</>}
 			</p>
 			{typeof result.accounts_imported === "number" && (

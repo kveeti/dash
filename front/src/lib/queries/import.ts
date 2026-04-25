@@ -16,6 +16,7 @@ export type CsvFormat =
 
 export type ImportResult = {
 	imported: number;
+	deduped?: number;
 	skipped: number;
 	errors: string[];
 	accounts_imported?: number;
@@ -209,6 +210,27 @@ type ParsedCsvTable = {
 	rows: Array<{ lineNum: number; record: Record<string, string> }>;
 };
 
+type ParsedCsvImportRow = {
+	row: ParsedTransaction;
+	currency: string;
+	importKey: string;
+};
+
+type ImportKeyRow = {
+	id: string;
+	key_value: string;
+};
+
+type ImportKeyIdentity = {
+	sourceType: string;
+	sourceScope: string;
+	keyType: string;
+	keyValue: string;
+};
+
+const CSV_SOURCE_TYPE = "csv";
+const textEncoder = new TextEncoder();
+
 function getErrorMessage(error: unknown): string {
 	if (error instanceof Error) return error.message;
 	return String(error);
@@ -216,6 +238,148 @@ function getErrorMessage(error: unknown): string {
 
 function normalizeHeader(h: string): string {
 	return h.replace(/^\uFEFF/, "").trim().toLowerCase();
+}
+
+function normalizeFingerprintText(value: string | undefined): string {
+	return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+async function sha256Hex(value: string): Promise<string> {
+	const digest = await globalThis.crypto.subtle.digest(
+		"SHA-256",
+		textEncoder.encode(value),
+	);
+	return Array.from(new Uint8Array(digest), (byte) =>
+		byte.toString(16).padStart(2, "0"),
+	).join("");
+}
+
+function csvKeyType(format: Exclude<CsvFormat, "legacy_bundle">): string {
+	return `csv_${format}_fingerprint_v1`;
+}
+
+function csvFingerprintBase(row: ParsedTransaction, currency: string): string {
+	return JSON.stringify([
+		row.date,
+		row.amount,
+		currency,
+		normalizeFingerprintText(row.counter_party),
+		normalizeFingerprintText(row.additional),
+	]);
+}
+
+async function attachCsvImportKeys(
+	rows: Array<{ row: ParsedTransaction; lineNum: number }>,
+	format: Exclude<CsvFormat, "legacy_bundle">,
+	defaultCurrency: string,
+): Promise<ParsedCsvImportRow[]> {
+	const seen = new Map<string, number>();
+
+	return Promise.all(
+		rows.map(async ({ row }) => {
+			const currency = parseCurrency(row.currency, defaultCurrency);
+			const base = csvFingerprintBase(row, currency);
+			const occurrence = seen.get(base) ?? 0;
+			seen.set(base, occurrence + 1);
+			const importKey = await sha256Hex(
+				JSON.stringify([csvKeyType(format), base, occurrence]),
+			);
+
+			return { row, currency, importKey };
+		}),
+	);
+}
+
+async function getExistingImportKeys(
+	db: DbHandle,
+	identity: Omit<ImportKeyIdentity, "keyValue">,
+	keyValues: string[],
+): Promise<Map<string, ImportKeyRow>> {
+	const uniqueKeyValues = [...new Set(keyValues)];
+	const existing = new Map<string, ImportKeyRow>();
+	const BATCH = 200;
+
+	for (let i = 0; i < uniqueKeyValues.length; i += BATCH) {
+		const batch = uniqueKeyValues.slice(i, i + BATCH);
+		if (batch.length === 0) continue;
+		const placeholders = batch.map(() => "?").join(",");
+		const rows = await db.query<ImportKeyRow>(
+			`select id, key_value
+			from transaction_import_keys
+			where _sync_is_deleted = 0
+				and source_type = ?
+				and source_scope = ?
+				and key_type = ?
+				and key_value in (${placeholders})`,
+			[
+				identity.sourceType,
+				identity.sourceScope,
+				identity.keyType,
+				...batch,
+			],
+		);
+		for (const row of rows) existing.set(row.key_value, row);
+	}
+
+	return existing;
+}
+
+async function touchImportKeys(
+	db: DbHandle,
+	keyIds: string[],
+	now: string,
+): Promise<void> {
+	const uniqueIds = [...new Set(keyIds)];
+	const BATCH = 200;
+
+	for (let i = 0; i < uniqueIds.length; i += BATCH) {
+		const batch = uniqueIds.slice(i, i + BATCH);
+		if (batch.length === 0) continue;
+		const placeholders = batch.map(() => "?").join(",");
+		await db.exec(
+			`update transaction_import_keys
+			set last_seen_at = ?,
+				seen_count = seen_count + 1,
+				_sync_status = 1,
+				_sync_edited_at = ?
+			where id in (${placeholders})`,
+			[now, Date.now(), ...batch],
+		);
+	}
+}
+
+async function insertImportKey(
+	db: DbHandle,
+	identity: ImportKeyIdentity,
+	transactionId: string,
+	now: string,
+): Promise<void> {
+	const editedAt = Date.now();
+	await db.exec(
+		`insert into transaction_import_keys (
+			id, transaction_id, source_type, source_scope, key_type, key_value,
+			created_at, last_seen_at, seen_count, _sync_edited_at
+		)
+		values (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+		on conflict(source_type, source_scope, key_type, key_value)
+		where _sync_is_deleted = 0
+		do update set
+			last_seen_at = excluded.last_seen_at,
+			seen_count = transaction_import_keys.seen_count + 1,
+			_sync_status = 1,
+			_sync_edited_at = excluded._sync_edited_at`,
+		[
+			id(),
+			transactionId,
+			identity.sourceType,
+			identity.sourceScope,
+			identity.keyType,
+			identity.keyValue,
+			now,
+			now,
+			editedAt,
+		],
+	);
 }
 
 function parseAmount(raw: string): number {
@@ -313,6 +477,10 @@ export async function importCsv(
 	format: CsvFormat,
 	account: { id: string; currency: string },
 ): Promise<ImportResult> {
+	if (format === "legacy_bundle") {
+		throw new Error("legacy bundle imports must use importLegacyCsvBundle");
+	}
+
 	const parsedCsv = parseCsvRows(
 		text,
 		format === "op" || format === "nordea" ? ";" : undefined,
@@ -329,6 +497,11 @@ export async function importCsv(
 				: parseGenericRow;
 	const accountId = account.id;
 	const defaultCurrency = parseCurrency(account.currency);
+	const importKeyIdentity = {
+		sourceType: CSV_SOURCE_TYPE,
+		sourceScope: accountId,
+		keyType: csvKeyType(format),
+	};
 
 	let skipped = parsedCsv.errors.length;
 	const errors: string[] = [...parsedCsv.errors];
@@ -353,9 +526,20 @@ export async function importCsv(
 		}
 	}
 
+	const keyedRows = await attachCsvImportKeys(parsed, format, defaultCurrency);
+	const existingKeys = await getExistingImportKeys(
+		db,
+		importKeyIdentity,
+		keyedRows.map(({ importKey }) => importKey),
+	);
+	const dedupedRows = keyedRows.filter(({ importKey }) =>
+		existingKeys.has(importKey),
+	);
+	const newRows = keyedRows.filter(({ importKey }) => !existingKeys.has(importKey));
+
 	const categoryCache = new Map<string, string>();
 	const uniqueCategories = new Set(
-		parsed.map((p) => p.row.category_name).filter((n): n is string => !!n),
+		newRows.map((p) => p.row.category_name).filter((n): n is string => !!n),
 	);
 	for (const name of uniqueCategories) {
 		categoryCache.set(name, await getOrCreateCategoryByName(db, name));
@@ -364,19 +548,26 @@ export async function importCsv(
 	const now = new Date().toISOString();
 	const BATCH = 50;
 	return db.withTx(async () => {
-		for (let i = 0; i < parsed.length; i += BATCH) {
-			const batch = parsed.slice(i, i + BATCH);
+		await touchImportKeys(
+			db,
+			dedupedRows.map(({ importKey }) => existingKeys.get(importKey)!.id),
+			now,
+		);
+
+		for (let i = 0; i < newRows.length; i += BATCH) {
+			const batch = newRows.slice(i, i + BATCH);
 			const placeholders = batch
 				.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 				.join(", ");
 			const editedAt = Date.now();
-			const values = batch.flatMap(({ row }) => [
-				id(),
+			const txIds = batch.map(() => id());
+			const values = batch.flatMap(({ row, currency }, index) => [
+				txIds[index],
 				now,
 				now,
 				row.date,
 				row.amount,
-				parseCurrency(row.currency, defaultCurrency),
+				currency,
 				row.counter_party,
 				row.additional ?? null,
 				row.category_name ? categoryCache.get(row.category_name)! : null,
@@ -389,8 +580,22 @@ export async function importCsv(
 				 values ${placeholders}`,
 				values,
 			);
+
+			for (let j = 0; j < batch.length; j++) {
+				await insertImportKey(
+					db,
+					{ ...importKeyIdentity, keyValue: batch[j].importKey },
+					txIds[j],
+					now,
+				);
+			}
 		}
-		return { imported: parsed.length, skipped, errors };
+		return {
+			imported: newRows.length,
+			deduped: dedupedRows.length,
+			skipped,
+			errors,
+		};
 	});
 }
 

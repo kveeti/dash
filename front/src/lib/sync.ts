@@ -35,6 +35,8 @@ type PushOp = {
 	blob: string;
 };
 
+type SqlValue = string | number | null;
+
 type DeltaEvent = {
 	ops: DeltaOp[];
 };
@@ -49,6 +51,7 @@ type SyncTableName =
 	| "categories"
 	| "accounts"
 	| "transactions"
+	| "transaction_import_keys"
 	| "transaction_links";
 
 const DIRTY_BATCH_LIMIT = 1000;
@@ -70,6 +73,7 @@ async function markDirtyEntriesSynced(db: DbHandle, dirty: DirtyEntry[]) {
 		categories: [],
 		accounts: [],
 		transactions: [],
+		transaction_import_keys: [],
 		transaction_links: [],
 	};
 
@@ -138,11 +142,21 @@ async function getDirty(db: DbHandle): Promise<DirtyEntry[]> {
 			union all
 
 			select
+				'transaction_import_key:' || id as id,
+				_sync_is_deleted,
+				_sync_edited_at,
+				json_object('transaction_id', transaction_id, 'source_type', source_type, 'source_scope', source_scope, 'key_type', key_type, 'key_value', key_value, 'created_at', created_at, 'last_seen_at', last_seen_at, 'seen_count', seen_count) as plain_data,
+				3 as priority
+			from transaction_import_keys where _sync_status = 1
+
+			union all
+
+			select
 				'transaction_link:' || transaction_a_id || '_' || transaction_b_id as id,
 				_sync_is_deleted,
 				_sync_edited_at,
 				json_object('transaction_a_id', transaction_a_id, 'transaction_b_id', transaction_b_id, 'created_at', created_at) as plain_data,
-				3 as priority
+				4 as priority
 			from transaction_links where _sync_status = 1
 		)
 		-- Preserve dependency order across entity types so referenced rows
@@ -171,16 +185,19 @@ async function applyIncomingOps({
 }): Promise<{ maxVersion: number | undefined; touchedTypes: Set<string> }> {
 	if (!ops.length) return { maxVersion: undefined, touchedTypes: new Set() };
 
-	const accounts: any[] = [];
+	const accounts: SqlValue[] = [];
 	const accountsValues: string[] = [];
 
-	const categories: any[] = [];
+	const categories: SqlValue[] = [];
 	const categoriesValues: string[] = [];
 
-	const transactions: any[] = [];
+	const transactions: SqlValue[] = [];
 	const transactionsValues: string[] = [];
 
-	const transactionLinks: any[] = [];
+	const transactionImportKeys: SqlValue[] = [];
+	const transactionImportKeysValues: string[] = [];
+
+	const transactionLinks: SqlValue[] = [];
 	const transactionLinksValues: string[] = [];
 
 	let maxVersion: number | undefined;
@@ -251,6 +268,25 @@ async function applyIncomingOps({
 				);
 				transactionsValues.push(
 					"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+				);
+				break;
+
+			case "transaction_import_key":
+				transactionImportKeys.push(
+					/* id */ id,
+					/* transaction_id */ entry.transaction_id,
+					/* source_type */ entry.source_type,
+					/* source_scope */ entry.source_scope,
+					/* key_type */ entry.key_type,
+					/* key_value */ entry.key_value,
+					/* created_at */ entry.created_at,
+					/* last_seen_at */ entry.last_seen_at,
+					/* seen_count */ entry.seen_count,
+					/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
+					/* _sync_edited_at */ op._sync_edited_at,
+				);
+				transactionImportKeysValues.push(
+					"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
 				);
 				break;
 
@@ -341,6 +377,29 @@ async function applyIncomingOps({
 				account_id = excluded.account_id
 			where excluded._sync_edited_at >= transactions._sync_edited_at;`,
 			transactions,
+		);
+	}
+
+	if (transactionImportKeys.length) {
+		await db.exec(
+			`insert into transaction_import_keys (
+				id, transaction_id, source_type, source_scope, key_type, key_value,
+				created_at, last_seen_at, seen_count,
+				_sync_is_deleted, _sync_edited_at, _sync_status
+			)
+			values ${transactionImportKeysValues.join(",")}
+			on conflict(source_type, source_scope, key_type, key_value)
+			where _sync_is_deleted = 0
+			do update set
+				transaction_id = excluded.transaction_id,
+				created_at = excluded.created_at,
+				last_seen_at = excluded.last_seen_at,
+				seen_count = excluded.seen_count,
+				_sync_is_deleted = excluded._sync_is_deleted,
+				_sync_edited_at = excluded._sync_edited_at,
+				_sync_status = 0
+			where excluded._sync_edited_at >= transaction_import_keys._sync_edited_at;`,
+			transactionImportKeys,
 		);
 	}
 
@@ -670,6 +729,7 @@ async function markAllRowsPendingPush(db: DbHandle) {
 		db.exec(`update categories set _sync_status = 1`),
 		db.exec(`update accounts set _sync_status = 1`),
 		db.exec(`update transactions set _sync_status = 1`),
+		db.exec(`update transaction_import_keys set _sync_status = 1`),
 		db.exec(`update transaction_links set _sync_status = 1`),
 	]);
 }

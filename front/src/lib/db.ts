@@ -397,6 +397,30 @@ export function getDb(): DbClient {
 
 			`create index if not exists idx_fx_rates_currency_date_desc
 				on fx_rates(currency, rate_date desc)`,
+
+			`create table if not exists transaction_import_keys (
+				id text primary key not null,
+				transaction_id text not null,
+				source_type text not null,
+				source_scope text not null,
+				key_type text not null,
+				key_value text not null,
+				created_at text not null,
+				last_seen_at text not null,
+				seen_count integer not null default 1,
+
+				_sync_edited_at integer not null default 0,
+				_sync_is_deleted integer default 0,
+				_sync_status integer default 1
+			)`,
+
+			`create unique index if not exists idx_tx_import_keys_unique_active
+				on transaction_import_keys(source_type, source_scope, key_type, key_value)
+				where _sync_is_deleted = 0`,
+
+			`create index if not exists idx_tx_import_keys_tx_active
+				on transaction_import_keys(transaction_id)
+				where _sync_is_deleted = 0`,
 		];
 
 		const versionRows = await query<{ current: number }>(
