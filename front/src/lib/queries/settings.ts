@@ -151,7 +151,7 @@ async function importFxRatesCsv({
 			continue;
 		}
 
-		let anchorAgainst: number | null = null;
+		let anchorAgainst = 1;
 		if (against !== anchor) {
 			if (anchorColumnIndex < 0) {
 				skipped += Math.max(0, currencies.length - 1);
@@ -184,8 +184,7 @@ async function importFxRatesCsv({
 
 			try {
 				const rateAgainst = parseRate(rawRate);
-				const rateToAnchor =
-					against === anchor ? rateAgainst : rateAgainst / (anchorAgainst as number);
+				const rateToAnchor = anchorAgainst / rateAgainst;
 				inserts.push({
 					rateDate,
 					currency,
@@ -364,6 +363,20 @@ export function useUpsertFxRateMutation() {
 					input.rateToAnchor,
 				],
 			);
+		},
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: queryKeyRoots.fxRates });
+			invalidateConversionDependentQueries(qc);
+		},
+	});
+}
+
+export function useDeleteFxRatesMutation() {
+	const db = useDb();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: async () => {
+			await db.exec("delete from fx_rates");
 		},
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeyRoots.fxRates });

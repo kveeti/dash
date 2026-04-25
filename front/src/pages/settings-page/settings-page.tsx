@@ -19,6 +19,7 @@ import {
 	useAppSettingsQuery,
 	useFxRatesQuery,
 	useImportFxRatesCsvMutation,
+	useDeleteFxRatesMutation,
 	useUpdateConversionPolicyMutation,
 	useUpdateReportingCurrencyMutation,
 	useUpsertFxRateMutation,
@@ -292,6 +293,7 @@ function CurrencySection() {
 	const updateConversionPolicy = useUpdateConversionPolicyMutation();
 	const upsertFxRate = useUpsertFxRateMutation();
 	const importFxRatesCsv = useImportFxRatesCsvMutation();
+	const deleteFxRates = useDeleteFxRatesMutation();
 	const fxRates = useFxRatesQuery();
 
 	if (settings.isLoading) {
@@ -419,7 +421,22 @@ function CurrencySection() {
 			/>
 
 			<div className="space-y-2">
-				<p className="text-sm">latest FX rates to {FX_ANCHOR_CURRENCY}</p>
+				<div className="flex items-center justify-between gap-2">
+					<p className="text-sm">latest FX rates in {FX_ANCHOR_CURRENCY}</p>
+					<Button
+						type="button"
+						variant="outline"
+						isLoading={deleteFxRates.isPending}
+						disabled={deleteFxRates.isPending || !fxRates.data?.length}
+						onClick={async () => {
+							const ok = window.confirm("Delete all stored FX rates?");
+							if (!ok) return;
+							await deleteFxRates.mutateAsync();
+						}}
+					>
+						clear rates
+					</Button>
+				</div>
 				{fxRates.data?.length ? (
 					<ul className="text-xs space-y-1">
 						{fxRates.data.map((row) => (
@@ -427,7 +444,7 @@ function CurrencySection() {
 								key={`${row.rate_date}_${row.currency}`}
 								className="font-mono"
 							>
-								{row.rate_date} {row.currency}/{FX_ANCHOR_CURRENCY} = {row.rate_to_anchor}
+								{row.rate_date} 1 {row.currency} = {row.rate_to_anchor} {FX_ANCHOR_CURRENCY}
 							</li>
 						))}
 					</ul>
@@ -466,7 +483,7 @@ function AddFxRateForm({
 			}}
 		>
 			<p className="text-xs text-gray-10">
-				Add or update FX rate (currency to {FX_ANCHOR_CURRENCY})
+				Add or update FX rate (1 currency in {FX_ANCHOR_CURRENCY})
 			</p>
 			<div className="grid grid-cols-2 gap-2">
 				<DatePickerInput name="rateDate" defaultValue={defaultDate} required />
@@ -485,7 +502,7 @@ function AddFxRateForm({
 				type="number"
 				step="0.000001"
 				min="0"
-				placeholder={`rate to ${FX_ANCHOR_CURRENCY}`}
+				placeholder={`${FX_ANCHOR_CURRENCY} per 1 currency`}
 				required
 			/>
 			<Button type="submit" isLoading={pending} disabled={pending}>
@@ -551,9 +568,9 @@ function ImportFxRatesCsvForm({
 		>
 			<p className="text-xs text-gray-10">
 				Import FX CSV format: first column date (`YYYY-MM-DD`), following columns currency
-				codes (for example `USD,SEK`) with rates against selected currency. If selected
-				currency is not {FX_ANCHOR_CURRENCY}, the file must also include an
-				{` ${FX_ANCHOR_CURRENCY} `}column for conversion.
+				codes (for example `USD,SEK`) where each rate means 1 selected currency equals
+				that many column currency units. If selected currency is not {FX_ANCHOR_CURRENCY},
+				the file must also include an {` ${FX_ANCHOR_CURRENCY} `}column for conversion.
 			</p>
 			<div className="grid grid-cols-2 gap-2">
 				<Select
