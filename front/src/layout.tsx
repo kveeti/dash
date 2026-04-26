@@ -38,6 +38,9 @@ export function Nav() {
             <NavLink href="/txs">txs</NavLink>
           </li>
           <li>
+            <NavLink href="/txs/link-suggestions">links</NavLink>
+          </li>
+          <li>
             <NavLink href="/txs/new">add txs</NavLink>
           </li>
           <li>

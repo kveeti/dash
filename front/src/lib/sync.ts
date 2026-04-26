@@ -52,7 +52,7 @@ type SyncTableName =
 	| "accounts"
 	| "transactions"
 	| "transaction_import_keys"
-	| "transaction_links";
+	| "transaction_flows";
 
 const DIRTY_BATCH_LIMIT = 1000;
 const BOOTSTRAP_PAGE_LIMIT = 1000;
@@ -74,7 +74,7 @@ async function markDirtyEntriesSynced(db: DbHandle, dirty: DirtyEntry[]) {
 		accounts: [],
 		transactions: [],
 		transaction_import_keys: [],
-		transaction_links: [],
+		transaction_flows: [],
 	};
 
 	for (const record of dirty) {
@@ -89,21 +89,12 @@ async function markDirtyEntriesSynced(db: DbHandle, dirty: DirtyEntry[]) {
 
 		const placeholders = ids.map(() => "?").join(",");
 
-		if (tableName === "transaction_links") {
-			await db.exec(
-				`update transaction_links
-				set _sync_status = 0
-				where transaction_a_id || '_' || transaction_b_id IN (${placeholders})`,
-				ids,
-			);
-		} else {
-			await db.exec(
-				`update ${tableName}
-				set _sync_status = 0
-				where id in (${placeholders})`,
-				ids,
-			);
-		}
+		await db.exec(
+			`update ${tableName}
+			set _sync_status = 0
+			where id in (${placeholders})`,
+			ids,
+		);
 	}
 }
 
@@ -152,12 +143,12 @@ async function getDirty(db: DbHandle): Promise<DirtyEntry[]> {
 			union all
 
 			select
-				'transaction_link:' || transaction_a_id || '_' || transaction_b_id as id,
+				'transaction_flow:' || id as id,
 				_sync_is_deleted,
 				_sync_edited_at,
-				json_object('transaction_a_id', transaction_a_id, 'transaction_b_id', transaction_b_id, 'created_at', created_at) as plain_data,
+				json_object('from_transaction_id', from_transaction_id, 'to_transaction_id', to_transaction_id, 'amount', amount, 'currency', currency, 'kind', kind, 'created_at', created_at, 'updated_at', updated_at, 'notes', notes) as plain_data,
 				4 as priority
-			from transaction_links where _sync_status = 1
+			from transaction_flows where _sync_status = 1
 		)
 		-- Preserve dependency order across entity types so referenced rows
 		-- (e.g. categories/accounts) land before transactions and links.
@@ -197,8 +188,8 @@ async function applyIncomingOps({
 	const transactionImportKeys: SqlValue[] = [];
 	const transactionImportKeysValues: string[] = [];
 
-	const transactionLinks: SqlValue[] = [];
-	const transactionLinksValues: string[] = [];
+	const transactionFlows: SqlValue[] = [];
+	const transactionFlowsValues: string[] = [];
 
 	let maxVersion: number | undefined;
 	const touchedTypes = new Set<string>();
@@ -290,19 +281,22 @@ async function applyIncomingOps({
 				);
 				break;
 
-			case "transaction_link": {
+			case "transaction_flow": {
 				touchedTypes.add("transaction");
-				const [transactionAId, transactionBId] = id.split("_");
-				if (!transactionAId || !transactionBId) break;
-				transactionLinks.push(
-					/* transaction_a_id */ transactionAId,
-					/* transaction_b_id */ transactionBId,
+				transactionFlows.push(
+					/* id */ id,
+					/* from_transaction_id */ entry.from_transaction_id,
+					/* to_transaction_id */ entry.to_transaction_id,
+					/* amount */ entry.amount,
+					/* currency */ normalizeCurrency(entry.currency),
+					/* kind */ entry.kind,
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at ?? null,
+					/* notes */ entry.notes ?? null,
 					/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
 					/* _sync_edited_at */ op._sync_edited_at,
 				);
-				transactionLinksValues.push("(?, ?, ?, ?, ?, ?, 0)");
+				transactionFlowsValues.push("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)");
 				break;
 			}
 		}
@@ -403,21 +397,28 @@ async function applyIncomingOps({
 		);
 	}
 
-	if (transactionLinks.length) {
+	if (transactionFlows.length) {
 		await db.exec(
-			`insert into transaction_links (
-				transaction_a_id, transaction_b_id, created_at, updated_at,
+			`insert into transaction_flows (
+				id, from_transaction_id, to_transaction_id, amount, currency, kind,
+				created_at, updated_at, notes,
 				_sync_is_deleted, _sync_edited_at, _sync_status
 			)
-			values ${transactionLinksValues.join(",")}
-			on conflict(transaction_a_id, transaction_b_id) do update set
+			values ${transactionFlowsValues.join(",")}
+			on conflict(id) do update set
 				_sync_is_deleted = excluded._sync_is_deleted,
 				_sync_edited_at = excluded._sync_edited_at,
 				_sync_status = 0,
+				from_transaction_id = excluded.from_transaction_id,
+				to_transaction_id = excluded.to_transaction_id,
+				amount = excluded.amount,
+				currency = excluded.currency,
+				kind = excluded.kind,
 				created_at = excluded.created_at,
-				updated_at = excluded.updated_at
-			where excluded._sync_edited_at >= transaction_links._sync_edited_at;`,
-			transactionLinks,
+				updated_at = excluded.updated_at,
+				notes = excluded.notes
+			where excluded._sync_edited_at >= transaction_flows._sync_edited_at;`,
+			transactionFlows,
 		);
 	}
 
@@ -730,7 +731,7 @@ async function markAllRowsPendingPush(db: DbHandle) {
 		db.exec(`update accounts set _sync_status = 1`),
 		db.exec(`update transactions set _sync_status = 1`),
 		db.exec(`update transaction_import_keys set _sync_status = 1`),
-		db.exec(`update transaction_links set _sync_status = 1`),
+		db.exec(`update transaction_flows set _sync_status = 1`),
 	]);
 }
 
@@ -753,9 +754,12 @@ export function useSync() {
 				qc.invalidateQueries({ queryKey: queryKeyRoots.accounts });
 			if (types.has("category"))
 				qc.invalidateQueries({ queryKey: queryKeyRoots.categories });
-			if (types.has("transaction") || types.has("transaction_link")) {
+			if (types.has("transaction") || types.has("transaction_flow")) {
 				qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
 				qc.invalidateQueries({ queryKey: queryKeyRoots.transaction });
+				qc.invalidateQueries({ queryKey: queryKeyRoots.transactionFlows });
+				qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinkSuggestions });
+				qc.invalidateQueries({ queryKey: queryKeyRoots.stats });
 			}
 		},
 		[qc],

@@ -11,13 +11,12 @@ import {
 	useImportLegacyCsvBundleMutation,
 } from "../../lib/queries/import";
 
-type LegacyFileKey = "transactionsCsv" | "accountsCsv" | "categoriesCsv" | "linksCsv";
+type LegacyFileKey = "transactionsCsv" | "accountsCsv" | "categoriesCsv";
 
 const LEGACY_FILE_FIELDS: Array<{ key: LegacyFileKey; label: string }> = [
 	{ key: "transactionsCsv", label: "transactions.csv" },
 	{ key: "accountsCsv", label: "accounts.csv" },
 	{ key: "categoriesCsv", label: "categories.csv" },
-	{ key: "linksCsv", label: "links.csv" },
 ];
 
 function getErrorMessage(error: unknown): string {
@@ -53,7 +52,7 @@ export function ImportTransactionsCSV() {
 				<option value="op">OP bank statement</option>
 				<option value="nordea">Nordea bank statement</option>
 				<option value="revolut">Revolut export</option>
-				<option value="legacy_bundle">legacy export (transactions+accounts+categories+links)</option>
+				<option value="legacy_bundle">legacy export (transactions+accounts+categories)</option>
 			</Select>
 
 			{format === "legacy_bundle" ? (
@@ -167,18 +166,15 @@ function LegacyImportForm({
 				transactionsCsv,
 				accountsCsv,
 				categoriesCsv,
-				linksCsv,
 			] = await Promise.all([
 				(files.transactionsCsv as File).text(),
 				(files.accountsCsv as File).text(),
 				(files.categoriesCsv as File).text(),
-				(files.linksCsv as File).text(),
 			]);
 			const result = await importLegacyBundleMutation.mutateAsync({
 				transactionsCsv,
 				accountsCsv,
 				categoriesCsv,
-				linksCsv,
 			});
 			onResult(result);
 		} catch (error) {
@@ -228,9 +224,6 @@ function ImportResultPanel({ result }: { result: ImportResult | null }) {
 			)}
 			{typeof result.categories_imported === "number" && (
 				<p className="text-xs">categories created: {result.categories_imported}</p>
-			)}
-			{typeof result.links_imported === "number" && (
-				<p className="text-xs">links imported: {result.links_imported}</p>
 			)}
 			{result.errors.length > 0 && (
 				<div>

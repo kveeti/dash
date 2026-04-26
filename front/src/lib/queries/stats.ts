@@ -84,17 +84,17 @@ in_window AS (
 relevant_ids AS (
   SELECT id FROM in_window
   UNION
-  SELECT l.transaction_b_id
+  SELECT f.to_transaction_id
   FROM in_window w
-  JOIN transaction_links l
-    ON l.transaction_a_id = w.id
-  WHERE l._sync_is_deleted = 0
+  JOIN transaction_flows f
+    ON f.from_transaction_id = w.id
+  WHERE f._sync_is_deleted = 0
   UNION
-  SELECT l.transaction_a_id
+  SELECT f.from_transaction_id
   FROM in_window w
-  JOIN transaction_links l
-    ON l.transaction_b_id = w.id
-  WHERE l._sync_is_deleted = 0
+  JOIN transaction_flows f
+    ON f.to_transaction_id = w.id
+  WHERE f._sync_is_deleted = 0
 ),
 txs AS (
   SELECT
@@ -110,48 +110,85 @@ txs AS (
   WHERE t._sync_is_deleted = 0
     AND t.id IN (SELECT id FROM relevant_ids)
 ${sourceCurrencyPredicate}),
-pairs AS (
-  SELECT
-    p.id AS pos_id, p.amount AS pos_amount, p.eff_date AS pos_date,
-    n.id AS neg_id, n.amount AS neg_amount
-  FROM txs p
-  JOIN transaction_links l
-    ON l.transaction_a_id = p.id
-  JOIN txs n
-    ON n.id = l.transaction_b_id
-  WHERE p.amount > 0 AND n.amount < 0 AND p.is_neutral = 0
-    AND p.currency = n.currency
-    AND l._sync_is_deleted = 0
-  UNION ALL
-  SELECT
-    p.id AS pos_id, p.amount AS pos_amount, p.eff_date AS pos_date,
-    n.id AS neg_id, n.amount AS neg_amount
-  FROM txs p
-  JOIN transaction_links l
-    ON l.transaction_b_id = p.id
-  JOIN txs n
-    ON n.id = l.transaction_a_id
-  WHERE p.amount > 0 AND n.amount < 0 AND p.is_neutral = 0
-    AND p.currency = n.currency
-    AND l._sync_is_deleted = 0
-),
 allocations AS (
   SELECT
-    pos_id, neg_id,
-    max(0.0, min(
-      pos_amount,
-      abs(neg_amount) - coalesce(sum(pos_amount) OVER (
-        PARTITION BY neg_id
-        ORDER BY pos_date, pos_id
-        ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-      ), 0)
-    )) AS consumed
-  FROM pairs
+    p.id AS pos_id,
+    n.id AS neg_id,
+    f.amount AS consumed
+  FROM transaction_flows f
+  JOIN txs p
+    ON p.id = f.from_transaction_id
+  JOIN txs n
+    ON n.id = f.to_transaction_id
+  WHERE f._sync_is_deleted = 0
+    AND f.kind IN ('allocation', 'refund')
+    AND p.amount > 0
+    AND n.amount < 0
+    AND p.is_neutral = 0
+    AND p.currency = n.currency
+    AND f.currency = p.currency
+),
+own_transfers AS (
+  SELECT
+    out_tx.id AS out_id,
+    in_tx.id AS in_id,
+    f.amount AS moved
+  FROM transaction_flows f
+  JOIN txs out_tx
+    ON out_tx.id = f.from_transaction_id
+  JOIN txs in_tx
+    ON in_tx.id = f.to_transaction_id
+  WHERE f._sync_is_deleted = 0
+    AND f.kind = 'own_transfer'
+    AND out_tx.amount < 0
+    AND in_tx.amount > 0
+    AND out_tx.currency = in_tx.currency
+    AND f.currency = out_tx.currency
+),
+allocation_to_negative AS (
+  SELECT neg_id AS id, sum(consumed) AS consumed
+  FROM allocations
+  GROUP BY neg_id
+),
+allocation_from_positive AS (
+  SELECT pos_id AS id, sum(consumed) AS consumed
+  FROM allocations
+  GROUP BY pos_id
+),
+own_transfer_out_totals AS (
+  SELECT out_id AS id, sum(moved) AS moved
+  FROM own_transfers
+  GROUP BY out_id
+),
+own_transfer_in_totals AS (
+  SELECT in_id AS id, sum(moved) AS moved
+  FROM own_transfers
+  GROUP BY in_id
 ),
 adjustments_raw AS (
   SELECT pos_id AS id, -sum(consumed) AS adj FROM allocations GROUP BY pos_id
   UNION ALL
   SELECT neg_id AS id,  sum(consumed) AS adj FROM allocations GROUP BY neg_id
+  UNION ALL
+  SELECT
+    ot.id,
+    CASE
+      WHEN ot.moved > coalesce(a.consumed, 0) THEN ot.moved - coalesce(a.consumed, 0)
+      ELSE 0
+    END AS adj
+  FROM own_transfer_out_totals ot
+  LEFT JOIN allocation_to_negative a
+    ON a.id = ot.id
+  UNION ALL
+  SELECT
+    ot.id,
+    -CASE
+      WHEN ot.moved > coalesce(a.consumed, 0) THEN ot.moved - coalesce(a.consumed, 0)
+      ELSE 0
+    END AS adj
+  FROM own_transfer_in_totals ot
+  LEFT JOIN allocation_from_positive a
+    ON a.id = ot.id
 ),
 adjustments AS (
   SELECT id, sum(adj) AS adj

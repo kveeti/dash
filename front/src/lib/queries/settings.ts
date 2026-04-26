@@ -32,7 +32,7 @@ function invalidateConversionDependentQueries(
 ) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transaction });
-	qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinks });
+	qc.invalidateQueries({ queryKey: queryKeyRoots.transactionFlows });
 }
 
 function normalizeConversionMode(value: string | null | undefined): ConversionMode {

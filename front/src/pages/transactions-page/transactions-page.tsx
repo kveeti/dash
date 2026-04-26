@@ -1,15 +1,8 @@
 import { useSearchParams, useLocation } from "wouter";
 import { useI18n } from "../../providers";
 import {
-	useTransactionQuery,
 	useTransactionsQuery,
-	useUpdateTransactionMutation,
 	useBulkSetCategoryMutation,
-	useTransactionLinksQuery,
-	useLinkTransactionMutation,
-	useUnlinkTransactionMutation,
-	useTransactionLinkSuggestionsQuery,
-	useDismissTransactionLinkSuggestionMutation,
 	useTransactionCurrenciesQuery,
 	type TransactionRow,
 } from "../../lib/queries/transactions";
@@ -21,7 +14,6 @@ import { Pagination, buildPaginatedHref } from "../../components/pagination";
 import {
 	Fragment,
 	useMemo,
-	useImperativeHandle,
 	useRef,
 	useState,
 	type Ref,
@@ -31,12 +23,8 @@ import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { CategoryCombobox } from "../../components/category-combobox";
 import { PopupCombobox } from "../../components/popup-combobox";
-import { TransactionForm } from "../../components/transaction-form";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-	SelectedTx,
-	type SelectedTxHandle,
-} from "../../components/selected-tx";
+import { type SelectedTxHandle } from "../../components/selected-tx";
+import { SelectedTxWindow } from "../../components/selected-tx-window";
 
 function useFilterParams() {
 	const [searchParams] = useSearchParams();
@@ -451,263 +439,6 @@ function TxRow(props: {
 			</div>
 		</li>
 	);
-}
-
-function SelectedTxWindow({
-	txId,
-	index,
-	onClose,
-	ref: forwardedRef,
-}: {
-	txId: string;
-	index: number;
-	onClose: () => void;
-	ref?: Ref<SelectedTxHandle>;
-}) {
-	const { f } = useI18n();
-	const [editing, setEditing] = useState(false);
-	const [linkInput, setLinkInput] = useState("");
-	const [copied, setCopied] = useState(false);
-	const selectedTxRef = useRef<SelectedTxHandle>(null);
-	const txQuery = useTransactionQuery(txId);
-	const updateTransaction = useUpdateTransactionMutation();
-	const linksQuery = useTransactionLinksQuery(txId);
-	const linkSuggestionsQuery = useTransactionLinkSuggestionsQuery(txId);
-	const linkMutation = useLinkTransactionMutation();
-	const unlinkMutation = useUnlinkTransactionMutation();
-	const dismissLinkSuggestionMutation = useDismissTransactionLinkSuggestionMutation();
-
-	useImperativeHandle(forwardedRef, () => ({
-		nudge: () => selectedTxRef.current?.nudge(),
-	}));
-
-	if (!txQuery.data) {
-		return;
-	}
-	const tx = txQuery.data;
-	const txAmountDisplay = resolveAmountDisplay(tx);
-
-	const isIncome = txAmountDisplay.amount > 0;
-	const stackOffset = { x: 0, y: (index + 1) * 72 };
-
-	function copyId() {
-		navigator.clipboard.writeText(txId);
-		setCopied(true);
-		setTimeout(() => setCopied(false), 1500);
-	}
-
-	async function handleLink() {
-		const targetId = linkInput.trim();
-		if (!targetId || targetId === txId) return;
-		await linkMutation.mutateAsync({ aId: txId, bId: targetId });
-		setLinkInput("");
-	}
-
-	async function acceptLinkSuggestion(txIds: string[]) {
-		if (txIds.length < 2) return;
-		await linkMutation.mutateAsync({ aId: txIds[0], bId: txIds[1] });
-	}
-
-	return (
-		<SelectedTx
-			ref={selectedTxRef}
-			id={txId}
-			label={`Transaction: ${tx.counter_party}, ${f.amount(txAmountDisplay.amount, txAmountDisplay.currency)}`}
-			onClose={onClose}
-			initialOffset={stackOffset}
-		>
-			<div className="space-y-1 px-3 pt-3">
-				<h2 className="font-medium">{tx.counter_party}</h2>
-				<p className={`text-sm ${isIncome ? "text-green-11" : ""}`}>
-					{f.amount(txAmountDisplay.amount, txAmountDisplay.currency)}
-				</p>
-				{txAmountDisplay.original && (
-					<p className="text-xs text-gray-11">
-						({f.amount(txAmountDisplay.original.amount, txAmountDisplay.original.currency)})
-					</p>
-				)}
-				<p className="text-xs">{f.weekdayLongDate.format(new Date(tx.date))}</p>
-			</div>
-
-			<div className="my-3 space-y-2">
-				<div className="flex items-center gap-2 px-3">
-					<button
-						type="button"
-						onClick={() => setEditing(!editing)}
-						className="text-sm text-gray-11 hover:text-gray-12"
-					>
-						{editing ? "hide edit" : "edit"}
-					</button>
-					<span className="text-gray-a4">|</span>
-					<button
-						type="button"
-						onClick={copyId}
-						className="text-sm text-gray-11 hover:text-gray-12"
-					>
-						{copied ? "copied!" : "copy id"}
-					</button>
-				</div>
-
-				<AnimatePresence>
-					{editing && (
-						<motion.div
-							initial={{ height: 0, opacity: 0 }}
-							animate={{ height: "auto", opacity: 1 }}
-							exit={{ height: 0, opacity: 0 }}
-							transition={{ duration: 0.15 }}
-							className="overflow-hidden"
-						>
-							<div className="px-3">
-								<TransactionForm
-									defaultValues={{
-										date: tx.date,
-										amount: tx.amount,
-										currency: tx.currency,
-										counter_party: tx.counter_party,
-										additional: tx.additional ?? undefined,
-										notes: tx.notes ?? undefined,
-										category_id: tx.category_id ?? undefined,
-										account_id: tx.account_id,
-									}}
-									isSubmitting={updateTransaction.isPending}
-									onSubmit={async (values) => {
-										await updateTransaction.mutateAsync({ txId, tx: values });
-										setEditing(false);
-									}}
-									actions={
-										<>
-											<Button
-												type="button"
-												variant="ghost"
-												disabled={updateTransaction.isPending}
-												onClick={() => setEditing(false)}
-											>
-												cancel
-											</Button>
-											<Button
-												type="submit"
-												isLoading={updateTransaction.isPending}
-												disabled={updateTransaction.isPending}
-											>
-												save
-											</Button>
-										</>
-									}
-								/>
-							</div>
-						</motion.div>
-					)}
-				</AnimatePresence>
-
-				<div className="px-3 space-y-2">
-					<div className="flex gap-1">
-						<input
-							type="text"
-							placeholder="paste tx id to link..."
-							value={linkInput}
-							onChange={(e) => setLinkInput(e.target.value)}
-							className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm flex-1 min-w-0"
-						/>
-						<Button
-							size="sm"
-							onClick={handleLink}
-							disabled={!linkInput.trim() || linkMutation.isPending}
-						>
-							link
-						</Button>
-					</div>
-
-					{linkSuggestionsQuery.data && linkSuggestionsQuery.data.length > 0 && (
-						<div className="border-gray-a4 border p-2 text-xs space-y-2">
-							<p className="text-gray-11">possible links</p>
-							<ul className="space-y-2">
-								{linkSuggestionsQuery.data.map((suggestion) => {
-									const candidate = suggestion.transactions.find(
-										(item) => item.id !== txId,
-									);
-									if (!candidate) return null;
-									return (
-										<li key={suggestion.id} className="space-y-1">
-											<div className="flex items-start justify-between gap-2">
-												<div className="min-w-0">
-													<p className="truncate">{candidate.counter_party}</p>
-													<p className="text-gray-10">
-														{candidate.account_name} ·{" "}
-														{f.amount(candidate.amount, candidate.currency)}
-													</p>
-												</div>
-												<div className="flex shrink-0 gap-1">
-													<Button
-														size="sm"
-														onClick={() =>
-															acceptLinkSuggestion(suggestion.transaction_ids)
-														}
-														disabled={linkMutation.isPending}
-													>
-														link
-													</Button>
-													<Button
-														size="sm"
-														variant="ghost"
-														onClick={() =>
-															dismissLinkSuggestionMutation.mutate({
-																txIds: suggestion.transaction_ids,
-															})
-														}
-														disabled={dismissLinkSuggestionMutation.isPending}
-													>
-														dismiss
-													</Button>
-												</div>
-											</div>
-											<p className="text-gray-10">
-												{suggestion.evidence.join(", ")}
-											</p>
-										</li>
-									);
-								})}
-							</ul>
-						</div>
-					)}
-
-						{linksQuery.data && linksQuery.data.length > 0 && (
-							<ul className="text-xs space-y-1">
-								{linksQuery.data.map((linked) => {
-									const linkedAmountDisplay = resolveAmountDisplay(linked);
-									return (
-										<li
-											key={linked.id}
-											className="flex items-start justify-between gap-2"
-										>
-											<span className="truncate">{linked.counter_party}</span>
-											<div className="text-right shrink-0">
-												<span className="text-gray-10">
-													{f.amount(linkedAmountDisplay.amount, linkedAmountDisplay.currency)}
-												</span>
-												{linkedAmountDisplay.original && (
-													<div className="text-gray-9 leading-tight">
-														({f.amount(linkedAmountDisplay.original.amount, linkedAmountDisplay.original.currency)})
-													</div>
-												)}
-											</div>
-											<button
-												type="button"
-												className="text-gray-10 hover:text-red-11 shrink-0"
-												onClick={() =>
-													unlinkMutation.mutate({ aId: txId, bId: linked.id })
-												}
-											>
-												unlink
-											</button>
-										</li>
-									);
-								})}
-							</ul>
-						)}
-					</div>
-				</div>
-			</SelectedTx>
-		);
 }
 
 function FilterControls({

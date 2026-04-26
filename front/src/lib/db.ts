@@ -372,6 +372,34 @@ export function getDb(): DbClient {
 				on transaction_links(transaction_b_id)
 				where _sync_is_deleted = 0`,
 
+			`create table if not exists transaction_flows (
+				id text primary key not null,
+				from_transaction_id text not null,
+				to_transaction_id text not null,
+				amount real not null,
+				currency text not null,
+				kind text not null check (kind in ('own_transfer', 'allocation', 'refund')),
+				created_at text not null,
+				updated_at text,
+				notes text,
+
+				_sync_edited_at integer not null default 0,
+				_sync_is_deleted integer default 0,
+				_sync_status integer default 1
+			)`,
+
+			`create index if not exists idx_tx_flows_from_active
+				on transaction_flows(from_transaction_id)
+				where _sync_is_deleted = 0`,
+
+			`create index if not exists idx_tx_flows_to_active
+				on transaction_flows(to_transaction_id)
+				where _sync_is_deleted = 0`,
+
+			`create index if not exists idx_tx_flows_kind_active
+				on transaction_flows(kind)
+				where _sync_is_deleted = 0`,
+
 			`create table if not exists app_settings (
 				id integer primary key not null check (id = 1),
 				reporting_currency text not null default 'EUR',
@@ -427,6 +455,14 @@ export function getDb(): DbClient {
 				transaction_b_id text not null,
 				created_at text not null,
 				primary key (transaction_a_id, transaction_b_id)
+			)`,
+
+			`create table if not exists transaction_link_suggestion_dismissals (
+				kind text not null,
+				primary_transaction_id text not null,
+				candidate_signature text not null,
+				created_at text not null,
+				primary key (kind, primary_transaction_id, candidate_signature)
 			)`,
 		];
 

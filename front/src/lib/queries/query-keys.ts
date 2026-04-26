@@ -3,6 +3,11 @@ type TransactionCursorKey = {
 	right?: string;
 };
 
+type SuggestionPageCursorKey = {
+	beforeDate?: string;
+	beforeId?: string;
+};
+
 export type TransactionFilters = {
 	category_id?: string;
 	account_id?: string;
@@ -16,8 +21,9 @@ export const queryKeyRoots = {
 	categories: ["categories"] as const,
 	transactions: ["transactions"] as const,
 	transaction: ["transaction"] as const,
-	transactionLinks: ["transaction-links"] as const,
+	transactionFlows: ["transaction-flows"] as const,
 	transactionLinkSuggestions: ["transaction-link-suggestions"] as const,
+	stats: ["stats"] as const,
 	settings: ["settings"] as const,
 	fxRates: ["fx-rates"] as const,
 	sync: ["sync"] as const,
@@ -39,9 +45,16 @@ export const queryKeys = {
 			cursor?.right,
 		] as const,
 	transaction: (id?: string) => [...queryKeyRoots.transaction, id] as const,
-	transactionLinks: (id?: string) => [...queryKeyRoots.transactionLinks, id] as const,
+	transactionFlows: (id?: string) => [...queryKeyRoots.transactionFlows, id] as const,
 	transactionLinkSuggestions: (id?: string) =>
 		[...queryKeyRoots.transactionLinkSuggestions, id] as const,
+	transactionLinkSuggestionsPage: (cursor?: SuggestionPageCursorKey) =>
+		[
+			...queryKeyRoots.transactionLinkSuggestions,
+			"page",
+			cursor?.beforeDate,
+			cursor?.beforeId,
+		] as const,
 	settings: () => queryKeyRoots.settings,
 	fxRates: () => [...queryKeyRoots.fxRates] as const,
 	syncPull: (canSync: boolean, salt?: string) =>

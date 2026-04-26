@@ -21,14 +21,12 @@ export type ImportResult = {
 	errors: string[];
 	accounts_imported?: number;
 	categories_imported?: number;
-	links_imported?: number;
 };
 
 export type LegacyBundleTexts = {
 	transactionsCsv: string;
 	accountsCsv: string;
 	categoriesCsv: string;
-	linksCsv: string;
 };
 
 function invalidateImportQueries(qc: ReturnType<typeof useQueryClient>) {
@@ -62,7 +60,7 @@ export function useImportLegacyCsvBundleMutation() {
 		mutationFn: (files: LegacyBundleTexts) => importLegacyCsvBundle(db, files),
 		onSuccess: () => {
 			invalidateImportQueries(qc);
-			qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinks });
+			qc.invalidateQueries({ queryKey: queryKeyRoots.transactionFlows });
 		},
 	});
 }
@@ -629,12 +627,6 @@ export async function importLegacyCsvBundle(
 		],
 		"transactions.csv",
 	);
-	const linksTable = parseCsvTable(
-		files.linksCsv,
-		["transaction_a_id", "transaction_b_id"],
-		"links.csv",
-	);
-
 	let skipped = 0;
 	const errors: string[] = [];
 
@@ -643,8 +635,6 @@ export async function importLegacyCsvBundle(
 		let accountsImported = 0;
 		let categoriesImported = 0;
 		let transactionsImported = 0;
-		let linksImported = 0;
-
 		const existingAccounts = await db.query<{ id: string; name: string }>(
 			"select id, name from accounts where _sync_is_deleted = 0",
 		);
@@ -794,58 +784,12 @@ export async function importLegacyCsvBundle(
 			}
 		}
 
-		const seenLinks = new Set<string>();
-		for (const { lineNum, record } of linksTable.rows) {
-			const originalA = record.transaction_a_id;
-			const originalB = record.transaction_b_id;
-			if (!originalA || !originalB) {
-				skipped++;
-				errors.push(`links.csv row ${lineNum}: missing transaction_a_id or transaction_b_id`);
-				continue;
-			}
-
-			const mappedA = transactionIdMap.get(originalA);
-			const mappedB = transactionIdMap.get(originalB);
-			if (!mappedA || !mappedB) {
-				skipped++;
-				errors.push(
-					`links.csv row ${lineNum}: link references missing transaction(s): ${originalA}, ${originalB}`,
-				);
-				continue;
-			}
-
-			if (mappedA === mappedB) {
-				skipped++;
-				errors.push(`links.csv row ${lineNum}: cannot link transaction to itself`);
-				continue;
-			}
-
-			const [a, b] = mappedA < mappedB ? [mappedA, mappedB] : [mappedB, mappedA];
-			const key = `${a}_${b}`;
-			if (seenLinks.has(key)) continue;
-			seenLinks.add(key);
-
-			await db.exec(
-				`insert into transaction_links
-					(transaction_a_id, transaction_b_id, created_at, updated_at, _sync_is_deleted, _sync_status, _sync_edited_at)
-				values (?, ?, ?, ?, 0, 1, ?)
-				on conflict (transaction_a_id, transaction_b_id) do update set
-					_sync_is_deleted = 0,
-					updated_at = excluded.updated_at,
-					_sync_status = 1,
-					_sync_edited_at = excluded._sync_edited_at`,
-				[a, b, now, now, Date.now()],
-			);
-			linksImported++;
-		}
-
 		return {
 			imported: transactionsImported,
 			skipped,
 			errors,
 			accounts_imported: accountsImported,
 			categories_imported: categoriesImported,
-			links_imported: linksImported,
 		};
 	});
 }
