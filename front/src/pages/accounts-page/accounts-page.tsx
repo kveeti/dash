@@ -17,7 +17,8 @@ import {
 	useUpdateAccountMutation,
 	type AccountWithCount,
 } from "../../lib/queries/accounts";
-import { COMMON_CURRENCIES, DEFAULT_CURRENCY } from "../../lib/currency";
+import { DEFAULT_CURRENCY } from "../../lib/currency";
+import { useCurrencyMetaQuery } from "../../lib/queries/currencies";
 
 export function AccountsPage() {
 	const [search, setSearch] = useState("");
@@ -56,6 +57,8 @@ export function AccountsPage() {
 
 function CreateAccountForm() {
 	const createAccount = useCreateAccountMutation();
+	const currencyMeta = useCurrencyMetaQuery();
+	const currencyCodes = currencyMeta.data?.map((meta) => meta.currency) ?? [DEFAULT_CURRENCY];
 
 	async function handleSubmit(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -87,7 +90,7 @@ function CreateAccountForm() {
 						placeholder="e.g. IBAN"
 					/>
 					<Select label="currency" name="currency" defaultValue={DEFAULT_CURRENCY}>
-						{COMMON_CURRENCIES.map((code) => (
+						{currencyCodes.map((code) => (
 							<option key={code} value={code}>
 								{code}
 							</option>
@@ -104,6 +107,8 @@ function CreateAccountForm() {
 function AccountRow({ account }: { account: AccountWithCount }) {
 	const [editing, setEditing] = useState<"name" | "external_id" | "currency" | boolean>(false);
 	const updateAccount = useUpdateAccountMutation();
+	const currencyMeta = useCurrencyMetaQuery();
+	const currencyCodes = currencyMeta.data?.map((meta) => meta.currency) ?? [account.currency];
 
 	async function handleSave(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -152,7 +157,7 @@ function AccountRow({ account }: { account: AccountWithCount }) {
 							name="currency"
 							defaultValue={account.currency}
 						>
-							{COMMON_CURRENCIES.map((code) => (
+							{currencyCodes.map((code) => (
 								<option key={code} value={code}>
 									{code}
 								</option>

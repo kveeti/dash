@@ -10,19 +10,26 @@ import { id } from "../id";
 import type { DbHandle } from "../db";
 import { queryKeys, queryKeyRoots, type TransactionFilters } from "./query-keys";
 import { FX_ANCHOR_CURRENCY } from "./settings";
+import {
+	getCurrencyMeta,
+	normalizeCurrency,
+	parseDecimalToMinorUnits,
+} from "../currency";
 
 const DEFAULT_TRANSACTIONS_LIMIT = 50;
 
 const TRANSACTION_LIST_BASE_SELECT_SQL = `select
 	t.id,
 	t.date,
-	t.amount,
+	t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
 	t.currency,
 	t.counter_party,
 	c.name as category_name,
 	a.name as account_name,
-	t.amount as original_amount,
+	t.amount_minor as original_amount_minor,
+	t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as original_amount,
 	upper(t.currency) as original_currency,
+	coalesce(cm.minor_factor, 100) as original_minor_factor,
 	coalesce(t.categorize_on, t.date) as eff_date,
 	upper(s.reporting_currency) as reporting_currency,
 	s.max_staleness_days as max_staleness_days,
@@ -30,25 +37,29 @@ const TRANSACTION_LIST_BASE_SELECT_SQL = `select
 from transactions t
 left join categories c on t.category_id = c.id
 left join accounts a on t.account_id = a.id
+left join currency_meta cm on cm.currency = upper(t.currency)
 cross join app_settings s`;
 
 const TRANSACTION_DETAIL_BASE_SELECT_SQL = `select
 	t.id,
 	t.date,
-	t.amount,
+	t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
 	t.currency,
 	t.counter_party,
 	t.additional,
 	t.notes,
 	t.category_id,
 	t.account_id,
-	t.amount as original_amount,
+	t.amount_minor as original_amount_minor,
+	t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as original_amount,
 	upper(t.currency) as original_currency,
+	coalesce(cm.minor_factor, 100) as original_minor_factor,
 	coalesce(t.categorize_on, t.date) as eff_date,
 	upper(s.reporting_currency) as reporting_currency,
 	s.max_staleness_days as max_staleness_days,
 	s.conversion_mode as conversion_mode
 from transactions t
+left join currency_meta cm on cm.currency = upper(t.currency)
 cross join app_settings s`;
 
 const TRANSACTION_LIST_ROW_SELECT_SQL = `	b.id,
@@ -78,7 +89,7 @@ type CursorDirection = "left" | "right" | null;
 
 type TransactionInput = {
 	date: string;
-	amount: number;
+	amount: string;
 	currency: string;
 	counter_party: string;
 	additional?: string;
@@ -248,7 +259,11 @@ ${rowSelectSql},
 		when tx.tx_rate_to_anchor is null
 			or rr.reporting_rate_to_anchor is null
 			or rr.reporting_rate_to_anchor = 0 then null
-		else b.original_amount * tx.tx_rate_to_anchor / rr.reporting_rate_to_anchor
+		else cast(round(
+			b.original_amount_minor * 1.0 / b.original_minor_factor
+			* tx.tx_rate_to_anchor / rr.reporting_rate_to_anchor
+			* coalesce(report_meta.minor_factor, 100)
+		) as integer) * 1.0 / coalesce(report_meta.minor_factor, 100)
 	end as converted_amount
 from base_rows b
 left join tx_rates tx
@@ -262,6 +277,8 @@ left join reporting_rates rr
 	and rr.reporting_currency = b.reporting_currency
 	and rr.conversion_mode = b.conversion_mode
 	and rr.max_staleness_days = b.max_staleness_days
+left join currency_meta report_meta
+	on report_meta.currency = b.reporting_currency
 order by b.date ${order}, b.id ${order}`;
 }
 
@@ -416,17 +433,22 @@ export function useCreateTransactionMutation() {
 	return useMutation({
 		mutationFn: async (tx: TransactionInput) => {
 			const now = new Date().toISOString();
+			const currency = normalizeCurrency(tx.currency);
+			const amountMinor = parseDecimalToMinorUnits(
+				tx.amount,
+				await getCurrencyMeta(db, currency),
+			);
 			await db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, category_id, account_id, _sync_edited_at)
+				 (id, created_at, updated_at, date, amount_minor, currency, counter_party, additional, notes, category_id, account_id, _sync_edited_at)
 				 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				[
 					id(),
 					now,
 					now,
 					tx.date,
-					tx.amount,
-					tx.currency,
+					amountMinor,
+					currency,
 					tx.counter_party,
 					tx.additional ?? null,
 					tx.notes ?? null,
@@ -452,11 +474,12 @@ export function useUpdateTransactionMutation() {
 			tx: TransactionInput;
 		}) => {
 			const now = new Date().toISOString();
-			return db.exec(
+			const currency = normalizeCurrency(tx.currency);
+			return getCurrencyMeta(db, currency).then((meta) => db.exec(
 				`update transactions set
 					updated_at = ?,
 					date = ?,
-					amount = ?,
+					amount_minor = ?,
 					currency = ?,
 					counter_party = ?,
 					additional = ?,
@@ -469,8 +492,8 @@ export function useUpdateTransactionMutation() {
 				[
 					now,
 					tx.date,
-					tx.amount,
-					tx.currency,
+					parseDecimalToMinorUnits(tx.amount, meta),
+					currency,
 					tx.counter_party,
 					tx.additional ?? null,
 					tx.notes ?? null,
@@ -479,7 +502,7 @@ export function useUpdateTransactionMutation() {
 					Date.now(),
 					txId,
 				],
-			);
+			));
 		},
 		onSuccess: () => invalidateTransactionQueries(qc),
 	});
@@ -556,20 +579,30 @@ export function useTransactionFlowsQuery(txId: string | undefined) {
 			db.query<TransactionFlow>(
 				`with flow_rows as (
 					select
-						f.id, f.kind, f.amount, f.currency, f.from_transaction_id, f.to_transaction_id,
+						f.id,
+						f.kind,
+						f.amount_minor,
+						f.amount_minor * 1.0 / coalesce(fm.minor_factor, 100) as amount,
+						f.currency,
+						f.from_transaction_id,
+						f.to_transaction_id,
 						case when f.to_transaction_id = ? then 'incoming' else 'outgoing' end as direction,
 						t.id as other_transaction_id,
 						t.counter_party as other_counter_party,
-						t.amount as other_amount,
+						t.amount_minor * 1.0 / coalesce(tm.minor_factor, 100) as other_amount,
 						t.currency as other_currency,
-						t.amount as original_amount,
+						t.amount_minor as original_amount_minor,
+						t.amount_minor * 1.0 / coalesce(tm.minor_factor, 100) as original_amount,
 						upper(t.currency) as original_currency,
+						coalesce(tm.minor_factor, 100) as original_minor_factor,
 						coalesce(t.categorize_on, t.date) as eff_date,
 						upper(s.reporting_currency) as reporting_currency,
 						s.max_staleness_days as max_staleness_days,
 						s.conversion_mode as conversion_mode
 					from transaction_flows f
 					join transactions t on t.id = case when f.from_transaction_id = ? then f.to_transaction_id else f.from_transaction_id end
+					left join currency_meta fm on fm.currency = upper(f.currency)
+					left join currency_meta tm on tm.currency = upper(t.currency)
 					cross join app_settings s
 					where (f.from_transaction_id = ? or f.to_transaction_id = ?)
 						and f._sync_is_deleted = 0
@@ -606,11 +639,16 @@ export function useTransactionFlowsQuery(txId: string | undefined) {
 					case
 						when fr.original_currency = fr.reporting_currency then fr.original_amount
 						when tx.tx_rate_to_anchor is null or rr.reporting_rate_to_anchor is null or rr.reporting_rate_to_anchor = 0 then null
-						else fr.original_amount * tx.tx_rate_to_anchor / rr.reporting_rate_to_anchor
+						else cast(round(
+							fr.original_amount_minor * 1.0 / fr.original_minor_factor
+							* tx.tx_rate_to_anchor / rr.reporting_rate_to_anchor
+							* coalesce(report_meta.minor_factor, 100)
+						) as integer) * 1.0 / coalesce(report_meta.minor_factor, 100)
 					end as other_converted_amount
 				from flow_rows fr
 				left join tx_rates tx on tx.original_currency = fr.original_currency and tx.eff_date = fr.eff_date and tx.reporting_currency = fr.reporting_currency and tx.conversion_mode = fr.conversion_mode and tx.max_staleness_days = fr.max_staleness_days
 				left join reporting_rates rr on rr.eff_date = fr.eff_date and rr.reporting_currency = fr.reporting_currency and rr.conversion_mode = fr.conversion_mode and rr.max_staleness_days = fr.max_staleness_days
+				left join currency_meta report_meta on report_meta.currency = fr.reporting_currency
 				order by fr.kind asc, fr.id desc`,
 				[txId, txId, txId, txId, FX_ANCHOR_CURRENCY],
 			),
@@ -793,16 +831,25 @@ async function getTransactionLinkSuggestions(
 ): Promise<TransactionLinkSuggestion[]> {
 	const rows = await db.query<TransferSuggestionRow>(
 		`with base as (
-			select t.id, t.date, t.amount, t.currency, t.counter_party, t.account_id, coalesce(a.name, '') as account_name
+			select
+				t.id,
+				t.date,
+				t.amount_minor,
+				t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
+				t.currency,
+				t.counter_party,
+				t.account_id,
+				coalesce(a.name, '') as account_name
 			from transactions t
 			left join accounts a on a.id = t.account_id
+			left join currency_meta cm on cm.currency = upper(t.currency)
 			where t.id = ? and t._sync_is_deleted = 0
 			limit 1
 		)
 		select
 			b.id as base_id, b.date as base_date, b.amount as base_amount, b.currency as base_currency,
 			b.counter_party as base_counter_party, b.account_name as base_account_name,
-			c.id as candidate_id, c.date as candidate_date, c.amount as candidate_amount, c.currency as candidate_currency,
+			c.id as candidate_id, c.date as candidate_date, c.amount_minor * 1.0 / coalesce(ccm.minor_factor, 100) as candidate_amount, c.currency as candidate_currency,
 			c.counter_party as candidate_counter_party, coalesce(ca.name, '') as candidate_account_name,
 			abs(julianday(date(c.date)) - julianday(date(b.date))) as date_gap_days,
 			100 - (abs(julianday(date(c.date)) - julianday(date(b.date))) * 10) as score
@@ -811,9 +858,10 @@ async function getTransactionLinkSuggestions(
 			and c._sync_is_deleted = 0
 			and c.currency = b.currency
 			and c.account_id <> b.account_id
-			and c.amount = -b.amount
+			and c.amount_minor = -b.amount_minor
 			and abs(julianday(date(c.date)) - julianday(date(b.date))) <= 3
 		left join accounts ca on ca.id = c.account_id
+		left join currency_meta ccm on ccm.currency = upper(c.currency)
 		where not exists (select 1 from transaction_flows f where f._sync_is_deleted = 0 and f.kind = 'own_transfer' and (f.from_transaction_id = b.id or f.to_transaction_id = b.id))
 		and not exists (select 1 from transaction_flows f where f._sync_is_deleted = 0 and f.kind = 'own_transfer' and (f.from_transaction_id = c.id or f.to_transaction_id = c.id))
 		and not exists (
@@ -873,15 +921,16 @@ async function getTransactionLinkSuggestionPage(
 		`select
 			t.id,
 			t.date,
-			t.amount,
+			t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
 			t.currency,
 			t.counter_party,
 			t.account_id,
 			coalesce(a.name, '') as account_name
 		from transactions t
 		left join accounts a on a.id = t.account_id
+		left join currency_meta cm on cm.currency = upper(t.currency)
 		where t._sync_is_deleted = 0
-			and t.amount < 0
+			and t.amount_minor < 0
 			${hasCursor ? "and (t.date < ? or (t.date = ? and t.id < ?))" : ""}
 		order by t.date desc, t.id desc
 		limit ${SUGGESTION_PAGE_BATCH_SIZE}`,
@@ -930,15 +979,24 @@ async function getTransferSuggestionsForPrimaryRows(
 
 	const rows = await db.query<TransferSuggestionRow>(
 		`with base as (
-			select t.id, t.date, t.amount, t.currency, t.counter_party, t.account_id, coalesce(a.name, '') as account_name
+			select
+				t.id,
+				t.date,
+				t.amount_minor,
+				t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
+				t.currency,
+				t.counter_party,
+				t.account_id,
+				coalesce(a.name, '') as account_name
 			from transactions t
 			left join accounts a on a.id = t.account_id
-			where t.id in (${placeholders}) and t._sync_is_deleted = 0 and t.amount < 0
+			left join currency_meta cm on cm.currency = upper(t.currency)
+			where t.id in (${placeholders}) and t._sync_is_deleted = 0 and t.amount_minor < 0
 		)
 		select
 			b.id as base_id, b.date as base_date, b.amount as base_amount, b.currency as base_currency,
 			b.counter_party as base_counter_party, b.account_name as base_account_name,
-			c.id as candidate_id, c.date as candidate_date, c.amount as candidate_amount, c.currency as candidate_currency,
+			c.id as candidate_id, c.date as candidate_date, c.amount_minor * 1.0 / coalesce(ccm.minor_factor, 100) as candidate_amount, c.currency as candidate_currency,
 			c.counter_party as candidate_counter_party, coalesce(ca.name, '') as candidate_account_name,
 			abs(julianday(date(c.date)) - julianday(date(b.date))) as date_gap_days,
 			100 - (abs(julianday(date(c.date)) - julianday(date(b.date))) * 10) as score
@@ -947,9 +1005,10 @@ async function getTransferSuggestionsForPrimaryRows(
 			and c._sync_is_deleted = 0
 			and c.currency = b.currency
 			and c.account_id <> b.account_id
-			and c.amount = -b.amount
+			and c.amount_minor = -b.amount_minor
 			and abs(julianday(date(c.date)) - julianday(date(b.date))) <= 3
 		left join accounts ca on ca.id = c.account_id
+		left join currency_meta ccm on ccm.currency = upper(c.currency)
 		where not exists (
 				select 1
 				from transaction_flows f
@@ -1030,8 +1089,9 @@ async function getRefundSuggestionsForPrimaryRows(
 		`select
 			f.to_transaction_id as base_id,
 			f.currency,
-			sum(f.amount) as total
+			sum(f.amount_minor) * 1.0 / coalesce(cm.minor_factor, 100) as total
 		from transaction_flows f
+		left join currency_meta cm on cm.currency = upper(f.currency)
 		where f.to_transaction_id in (${placeholders})
 			and f._sync_is_deleted = 0
 			and f.kind in ('allocation', 'refund')
@@ -1065,19 +1125,21 @@ async function getRefundSuggestionsForPrimaryRows(
 			select
 				t.id,
 				t.date,
-				t.amount,
+				t.amount_minor,
+				t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
 				t.currency,
 				t.counter_party,
 				coalesce(a.name, '') as account_name
 			from transactions t
 			left join accounts a on a.id = t.account_id
-			where t.id in (${placeholders}) and t._sync_is_deleted = 0 and t.amount < 0
+			left join currency_meta cm on cm.currency = upper(t.currency)
+			where t.id in (${placeholders}) and t._sync_is_deleted = 0 and t.amount_minor < 0
 		),
 		candidate_used as (
 			select
 				f.from_transaction_id as candidate_id,
 				f.currency,
-				sum(f.amount) as total
+				sum(f.amount_minor) as total_minor
 			from transaction_flows f
 			where f._sync_is_deleted = 0
 				and f.kind in ('allocation', 'refund', 'own_transfer')
@@ -1092,19 +1154,20 @@ async function getRefundSuggestionsForPrimaryRows(
 			b.account_name as base_account_name,
 			c.id as candidate_id,
 			c.date as candidate_date,
-			c.amount as candidate_amount,
+			c.amount_minor * 1.0 / coalesce(ccm.minor_factor, 100) as candidate_amount,
 			c.currency as candidate_currency,
 			c.counter_party as candidate_counter_party,
 			coalesce(ca.name, '') as candidate_account_name,
-			c.amount - coalesce(u.total, 0) as candidate_available_amount,
+			(c.amount_minor - coalesce(u.total_minor, 0)) * 1.0 / coalesce(ccm.minor_factor, 100) as candidate_available_amount,
 			julianday(date(c.date)) - julianday(date(b.date)) as date_gap_days
 		from base b
 		join transactions c on c.id <> b.id
 			and c._sync_is_deleted = 0
 			and c.currency = b.currency
-			and c.amount > 0
+			and c.amount_minor > 0
 			and julianday(date(c.date)) - julianday(date(b.date)) between 0 and 45
 		left join accounts ca on ca.id = c.account_id
+		left join currency_meta ccm on ccm.currency = upper(c.currency)
 		left join candidate_used u on u.candidate_id = c.id and u.currency = c.currency
 		where not exists (
 			select 1
@@ -1204,9 +1267,16 @@ async function getRefundLinkSuggestions(
 	formatAmount: AmountFormatter,
 ): Promise<TransactionLinkSuggestion[]> {
 	const baseRows = await db.query<LinkSuggestionTransactionRow>(
-		`select t.id, t.date, t.amount, t.currency, t.counter_party, coalesce(a.name, '') as account_name
+		`select
+			t.id,
+			t.date,
+			t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
+			t.currency,
+			t.counter_party,
+			coalesce(a.name, '') as account_name
 		from transactions t
 		left join accounts a on a.id = t.account_id
+		left join currency_meta cm on cm.currency = upper(t.currency)
 		where t.id = ? and t._sync_is_deleted = 0
 		limit 1`,
 		[txId],
@@ -1215,8 +1285,9 @@ async function getRefundLinkSuggestions(
 	if (!base || base.amount >= 0) return [];
 
 	const incomingFlowRows = await db.query<FlowAmountTotalRow>(
-		`select sum(f.amount) as total
+		`select sum(f.amount_minor) * 1.0 / coalesce(cm.minor_factor, 100) as total
 		from transaction_flows f
+		left join currency_meta cm on cm.currency = upper(f.currency)
 		where f.to_transaction_id = ?
 			and f._sync_is_deleted = 0
 			and f.currency = ?
@@ -1235,21 +1306,27 @@ async function getRefundLinkSuggestions(
 
 	const candidates = await db.query<AvailableLinkSuggestionTransactionRow>(
 		`select
-			c.id, c.date, c.amount, c.currency, c.counter_party, coalesce(a.name, '') as account_name,
-			c.amount - coalesce((
-				select sum(f.amount)
+			c.id,
+			c.date,
+			c.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
+			c.currency,
+			c.counter_party,
+			coalesce(a.name, '') as account_name,
+			(c.amount_minor - coalesce((
+				select sum(f.amount_minor)
 				from transaction_flows f
 				where f.from_transaction_id = c.id
 					and f._sync_is_deleted = 0
 					and f.currency = c.currency
 					and f.kind in ('allocation', 'refund', 'own_transfer')
-			), 0) as available_amount
+			), 0)) * 1.0 / coalesce(cm.minor_factor, 100) as available_amount
 		from transactions c
 		left join accounts a on a.id = c.account_id
+		left join currency_meta cm on cm.currency = upper(c.currency)
 		where c.id <> ?
 			and c._sync_is_deleted = 0
 			and c.currency = ?
-			and c.amount > 0
+			and c.amount_minor > 0
 			and julianday(date(c.date)) - julianday(date(?)) between 0 and 45
 			and not exists (
 				select 1 from transaction_flows f
@@ -1365,11 +1442,18 @@ export function useCreateTransactionFlowMutation() {
 		mutationFn: async (flow: SuggestedTransactionFlow) => {
 			if (flow.from_transaction_id === flow.to_transaction_id || flow.amount <= 0) return;
 			const now = new Date().toISOString();
+			const currency = normalizeCurrency(flow.currency);
+			const meta = await getCurrencyMeta(db, currency);
+			const amountMinor = parseDecimalToMinorUnits(
+				flow.amount.toFixed(meta.minor_unit),
+				meta,
+			);
+			if (amountMinor <= 0) return;
 			await db.exec(
 				`insert into transaction_flows
-					(id, from_transaction_id, to_transaction_id, amount, currency, kind, created_at, updated_at, _sync_is_deleted, _sync_status, _sync_edited_at)
+					(id, from_transaction_id, to_transaction_id, amount_minor, currency, kind, created_at, updated_at, _sync_is_deleted, _sync_status, _sync_edited_at)
 				values (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?)`,
-				[id(), flow.from_transaction_id, flow.to_transaction_id, flow.amount, flow.currency.toUpperCase(), flow.kind, now, now, Date.now()],
+				[id(), flow.from_transaction_id, flow.to_transaction_id, amountMinor, currency, flow.kind, now, now, Date.now()],
 			);
 		},
 		onSuccess: () => invalidateFlowQueries(qc),

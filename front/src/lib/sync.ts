@@ -126,7 +126,7 @@ async function getDirty(db: DbHandle): Promise<DirtyEntry[]> {
 				'transaction:' || id as id,
 				_sync_is_deleted,
 				_sync_edited_at,
-				json_object('created_at', created_at, 'updated_at', updated_at, 'date', date, 'amount', amount, 'currency', currency, 'counter_party', counter_party, 'additional', additional, 'notes', notes, 'categorize_on', categorize_on, 'category_id', category_id, 'account_id', account_id) as plain_data,
+				json_object('created_at', created_at, 'updated_at', updated_at, 'date', date, 'amount_minor', amount_minor, 'currency', currency, 'counter_party', counter_party, 'additional', additional, 'notes', notes, 'categorize_on', categorize_on, 'category_id', category_id, 'account_id', account_id) as plain_data,
 				2 as priority
 			from transactions where _sync_status = 1
 
@@ -146,7 +146,7 @@ async function getDirty(db: DbHandle): Promise<DirtyEntry[]> {
 				'transaction_flow:' || id as id,
 				_sync_is_deleted,
 				_sync_edited_at,
-				json_object('from_transaction_id', from_transaction_id, 'to_transaction_id', to_transaction_id, 'amount', amount, 'currency', currency, 'kind', kind, 'created_at', created_at, 'updated_at', updated_at, 'notes', notes) as plain_data,
+				json_object('from_transaction_id', from_transaction_id, 'to_transaction_id', to_transaction_id, 'amount_minor', amount_minor, 'currency', currency, 'kind', kind, 'created_at', created_at, 'updated_at', updated_at, 'notes', notes) as plain_data,
 				4 as priority
 			from transaction_flows where _sync_status = 1
 		)
@@ -246,7 +246,7 @@ async function applyIncomingOps({
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at,
 					/* date */ entry.date,
-					/* amount */ entry.amount,
+					/* amount_minor */ entry.amount_minor,
 					/* currency */ entry.currency,
 					/* counter_party */ entry.counter_party,
 					/* additional */ entry.additional,
@@ -287,7 +287,7 @@ async function applyIncomingOps({
 					/* id */ id,
 					/* from_transaction_id */ entry.from_transaction_id,
 					/* to_transaction_id */ entry.to_transaction_id,
-					/* amount */ entry.amount,
+					/* amount_minor */ entry.amount_minor,
 					/* currency */ normalizeCurrency(entry.currency),
 					/* kind */ entry.kind,
 					/* created_at */ entry.created_at,
@@ -348,7 +348,7 @@ async function applyIncomingOps({
 	if (transactions.length) {
 		await db.exec(
 			`insert into transactions (
-				id, created_at, updated_at, date, amount, currency,
+				id, created_at, updated_at, date, amount_minor, currency,
 				counter_party, additional, notes, categorize_on,
 				category_id, account_id,
 				_sync_is_deleted, _sync_edited_at, _sync_status
@@ -361,7 +361,7 @@ async function applyIncomingOps({
 				_sync_edited_at = excluded._sync_edited_at,
 				_sync_status = 0,
 				date = excluded.date,
-				amount = excluded.amount,
+				amount_minor = excluded.amount_minor,
 				currency = excluded.currency,
 				counter_party = excluded.counter_party,
 				additional = excluded.additional,
@@ -400,7 +400,7 @@ async function applyIncomingOps({
 	if (transactionFlows.length) {
 		await db.exec(
 			`insert into transaction_flows (
-				id, from_transaction_id, to_transaction_id, amount, currency, kind,
+				id, from_transaction_id, to_transaction_id, amount_minor, currency, kind,
 				created_at, updated_at, notes,
 				_sync_is_deleted, _sync_edited_at, _sync_status
 			)
@@ -411,7 +411,7 @@ async function applyIncomingOps({
 				_sync_status = 0,
 				from_transaction_id = excluded.from_transaction_id,
 				to_transaction_id = excluded.to_transaction_id,
-				amount = excluded.amount,
+				amount_minor = excluded.amount_minor,
 				currency = excluded.currency,
 				kind = excluded.kind,
 				created_at = excluded.created_at,

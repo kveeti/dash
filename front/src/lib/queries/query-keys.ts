@@ -25,6 +25,7 @@ export const queryKeyRoots = {
 	transactionLinkSuggestions: ["transaction-link-suggestions"] as const,
 	stats: ["stats"] as const,
 	settings: ["settings"] as const,
+	currencyMeta: ["currency-meta"] as const,
 	fxRates: ["fx-rates"] as const,
 	sync: ["sync"] as const,
 };
@@ -56,6 +57,7 @@ export const queryKeys = {
 			cursor?.beforeId,
 		] as const,
 	settings: () => queryKeyRoots.settings,
+	currencyMeta: () => queryKeyRoots.currencyMeta,
 	fxRates: () => [...queryKeyRoots.fxRates] as const,
 	syncPull: (canSync: boolean, salt?: string) =>
 		[...queryKeyRoots.sync, "pull", canSync, salt] as const,

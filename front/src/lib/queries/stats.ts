@@ -100,13 +100,15 @@ txs AS (
   SELECT
     t.id,
     coalesce(t.categorize_on, t.date) AS eff_date,
-    t.amount,
+    t.amount_minor,
     t.currency,
+    coalesce(cm.minor_factor, 100) AS minor_factor,
     t.counter_party,
     coalesce(c.name, '__uncategorized__') AS cat_name,
     coalesce(c.is_neutral, 0) AS is_neutral
   FROM transactions t
   LEFT JOIN categories c ON c.id = t.category_id
+  LEFT JOIN currency_meta cm ON cm.currency = upper(t.currency)
   WHERE t._sync_is_deleted = 0
     AND t.id IN (SELECT id FROM relevant_ids)
 ${sourceCurrencyPredicate}),
@@ -114,7 +116,7 @@ allocations AS (
   SELECT
     p.id AS pos_id,
     n.id AS neg_id,
-    f.amount AS consumed
+    f.amount_minor AS consumed
   FROM transaction_flows f
   JOIN txs p
     ON p.id = f.from_transaction_id
@@ -122,8 +124,8 @@ allocations AS (
     ON n.id = f.to_transaction_id
   WHERE f._sync_is_deleted = 0
     AND f.kind IN ('allocation', 'refund')
-    AND p.amount > 0
-    AND n.amount < 0
+    AND p.amount_minor > 0
+    AND n.amount_minor < 0
     AND p.is_neutral = 0
     AND p.currency = n.currency
     AND f.currency = p.currency
@@ -132,7 +134,7 @@ own_transfers AS (
   SELECT
     out_tx.id AS out_id,
     in_tx.id AS in_id,
-    f.amount AS moved
+    f.amount_minor AS moved
   FROM transaction_flows f
   JOIN txs out_tx
     ON out_tx.id = f.from_transaction_id
@@ -140,8 +142,8 @@ own_transfers AS (
     ON in_tx.id = f.to_transaction_id
   WHERE f._sync_is_deleted = 0
     AND f.kind = 'own_transfer'
-    AND out_tx.amount < 0
-    AND in_tx.amount > 0
+    AND out_tx.amount_minor < 0
+    AND in_tx.amount_minor > 0
     AND out_tx.currency = in_tx.currency
     AND f.currency = out_tx.currency
 ),
@@ -197,8 +199,8 @@ adjustments AS (
 ),
 adjusted AS (
   SELECT
-    t.id, t.eff_date, t.currency, t.cat_name, t.is_neutral, t.counter_party,
-    t.amount + coalesce(a.adj, 0) AS amount
+    t.id, t.eff_date, t.currency, t.minor_factor, t.cat_name, t.is_neutral, t.counter_party,
+    t.amount_minor + coalesce(a.adj, 0) AS amount_minor
   FROM txs t
   LEFT JOIN adjustments a
     ON a.id = t.id
@@ -222,17 +224,18 @@ normalized AS (
     eff_date,
     strftime('%Y-%m', eff_date) AS period,
     upper(currency) AS original_currency,
+    minor_factor AS original_minor_factor,
     cat_name,
     counter_party,
     CASE
       WHEN is_neutral = 1 THEN 'n'
-      WHEN amount > 0     THEN 'i'
-      WHEN amount < 0     THEN 'e'
+      WHEN amount_minor > 0     THEN 'i'
+      WHEN amount_minor < 0     THEN 'e'
     END AS bucket,
-    amount AS original_signed_amount,
-    abs(amount) AS original_amount
+    amount_minor AS original_signed_amount_minor,
+    abs(amount_minor) * 1.0 / minor_factor AS original_amount
   FROM adjusted
-  WHERE amount <> 0
+  WHERE amount_minor <> 0
     AND eff_date BETWEEN ? AND ?
 ),
 distinct_pairs AS (
@@ -264,6 +267,7 @@ distinct_dates AS (
 reporting_rates AS (
   SELECT
     d.eff_date,
+    coalesce(cm.minor_factor, 100) AS reporting_minor_factor,
     CASE
       WHEN ? = ? THEN 1.0
       ELSE (
@@ -277,12 +281,15 @@ reporting_rates AS (
       )
     END AS reporting_rate_to_anchor
   FROM distinct_dates d
+  LEFT JOIN currency_meta cm
+    ON cm.currency = ?
 ),
 with_rates AS (
   SELECT
     n.*,
     tx.tx_rate_to_anchor,
-    rr.reporting_rate_to_anchor
+    rr.reporting_rate_to_anchor,
+    rr.reporting_minor_factor
   FROM normalized n
   LEFT JOIN tx_rates tx
     ON tx.original_currency = n.original_currency
@@ -299,12 +306,17 @@ converted AS (
     n.cat_name,
     n.counter_party,
     n.original_currency,
-    n.original_signed_amount,
+    n.original_minor_factor,
+    n.original_signed_amount_minor,
     n.original_amount,
     CASE
-      WHEN n.original_currency = ? THEN n.original_signed_amount
+      WHEN n.original_currency = ? THEN n.original_signed_amount_minor * 1.0 / n.original_minor_factor
       WHEN n.tx_rate_to_anchor IS NULL OR n.reporting_rate_to_anchor IS NULL OR n.reporting_rate_to_anchor = 0 THEN NULL
-      ELSE n.original_signed_amount * n.tx_rate_to_anchor / n.reporting_rate_to_anchor
+      ELSE cast(round(
+        n.original_signed_amount_minor * 1.0 / n.original_minor_factor
+        * n.tx_rate_to_anchor / n.reporting_rate_to_anchor
+        * n.reporting_minor_factor
+      ) as integer) * 1.0 / n.reporting_minor_factor
     END AS converted_signed_amount
   FROM with_rates n
 )`;
@@ -354,6 +366,7 @@ function buildConvertedParams(input: {
 		base.push(Math.max(0, input.maxStalenessDays));
 	}
 
+	base.push(reportingCurrency);
 	base.push(reportingCurrency);
 	return {
 		params: base,

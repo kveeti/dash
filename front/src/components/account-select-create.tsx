@@ -10,7 +10,8 @@ import {
 	useCreateAccountMutation,
 	type Account,
 } from "../lib/queries/accounts";
-import { DEFAULT_CURRENCY, normalizeCurrency, COMMON_CURRENCIES } from "../lib/currency";
+import { DEFAULT_CURRENCY, normalizeCurrency } from "../lib/currency";
+import { useCurrencyMetaQuery } from "../lib/queries/currencies";
 import { PopupCombobox } from "./popup-combobox";
 import { Select } from "./select";
 import { Input } from "./input";
@@ -41,6 +42,7 @@ export function AccountSelectCreate({
 }) {
 	const accounts = useAccountsQuery();
 	const createAccount = useCreateAccountMutation();
+	const currencyMeta = useCurrencyMetaQuery();
 	const [selectedAccountValue, setSelectedAccountValue] = useState(defaultValue ?? "");
 	const [openDialog, setOpenDialog] = useState(false);
 	const [createFormKey, setCreateFormKey] = useState(0);
@@ -53,6 +55,7 @@ export function AccountSelectCreate({
 	const createInputRef = useRef<HTMLInputElement | null>(null);
 
 	const accountRows = accounts.data ?? [];
+	const currencyCodes = currencyMeta.data?.map((meta) => meta.currency) ?? [createFormDefaults.currency];
 
 	const selectedItem = useMemo<AccountItem | null>(() => {
 		const account = accountRows.find((row) => row.id === selectedAccountValue);
@@ -253,7 +256,7 @@ export function AccountSelectCreate({
 								className="w-full"
 								disabled={createAccount.isPending}
 							>
-								{COMMON_CURRENCIES.map((code) => (
+								{currencyCodes.map((code) => (
 									<option key={code} value={code}>
 										{code}
 									</option>

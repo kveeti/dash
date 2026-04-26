@@ -1,3 +1,5 @@
+import { DEFAULT_CURRENCY_META } from "./currency";
+
 export type DbHandle = {
 	exec: (sql: string, vars?: any[]) => Promise<any>;
 	query: <T = any>(sql: string, vars?: any[]) => Promise<T[]>;
@@ -277,6 +279,22 @@ export function sqlite(
 export function getDb(): DbClient {
 	return sqlite(async ({ exec, query }) => {
 		await exec(`create table if not exists version (current integer not null)`);
+		await exec(`create table if not exists currency_meta (
+			currency text primary key not null,
+			minor_unit integer not null,
+			minor_factor integer not null
+		)`);
+
+		for (const meta of DEFAULT_CURRENCY_META) {
+			await exec(
+				`insert into currency_meta (currency, minor_unit, minor_factor)
+				values (?, ?, ?)
+				on conflict(currency) do update set
+					minor_unit = excluded.minor_unit,
+					minor_factor = excluded.minor_factor`,
+				[meta.currency, meta.minor_unit, meta.minor_factor],
+			);
+		}
 
 		// _sync_status
 		// 0 = synced
@@ -313,7 +331,7 @@ export function getDb(): DbClient {
 				created_at text not null,
 				updated_at text,
 				date text not null,
-				amount integer not null,
+				amount_minor integer not null,
 				currency text not null default 'EUR',
 				counter_party text not null,
 				additional text,
@@ -376,7 +394,7 @@ export function getDb(): DbClient {
 				id text primary key not null,
 				from_transaction_id text not null,
 				to_transaction_id text not null,
-				amount real not null,
+				amount_minor integer not null,
 				currency text not null,
 				kind text not null check (kind in ('own_transfer', 'allocation', 'refund')),
 				created_at text not null,

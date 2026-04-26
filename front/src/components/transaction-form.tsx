@@ -7,14 +7,14 @@ import { AccountSelectCreate } from "./account-select-create";
 import { CategoryCombobox } from "./category-combobox";
 import { useCategoryOptionsQuery } from "../lib/queries/categories";
 import {
-	COMMON_CURRENCIES,
 	DEFAULT_CURRENCY,
 	normalizeCurrency,
 } from "../lib/currency";
+import { useCurrencyMetaQuery } from "../lib/queries/currencies";
 
 export type TxFormValues = {
 	date: string;
-	amount: number;
+	amount: string;
 	currency: string;
 	counter_party: string;
 	additional?: string;
@@ -46,6 +46,7 @@ export function TransactionForm({
 	actions: ReactNode;
 }) {
 	const categories = useCategoryOptionsQuery();
+	const currencyMeta = useCurrencyMetaQuery();
 	const [selectedCategoryId, setSelectedCategoryId] = useState(
 		defaultValues?.category_id ?? "",
 	);
@@ -53,12 +54,17 @@ export function TransactionForm({
 		normalizeCurrency(defaultValues?.currency, DEFAULT_CURRENCY),
 	);
 	const currencyOptions = useMemo(() => {
-		const options = [...COMMON_CURRENCIES];
-		if (!options.includes(currency as (typeof COMMON_CURRENCIES)[number])) {
+		const options = (currencyMeta.data?.map((meta) => meta.currency) ?? [DEFAULT_CURRENCY]);
+		if (!options.includes(currency)) {
 			options.unshift(currency);
 		}
 		return options;
-	}, [currency]);
+	}, [currency, currencyMeta.data]);
+	const amountStep = useMemo(() => {
+		const minorUnit =
+			currencyMeta.data?.find((meta) => meta.currency === currency)?.minor_unit ?? 2;
+		return minorUnit === 0 ? "1" : `0.${"0".repeat(Math.max(0, minorUnit - 1))}1`;
+	}, [currency, currencyMeta.data]);
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
@@ -72,7 +78,7 @@ export function TransactionForm({
 
 		await onSubmit({
 			date: new Date(data.get("date") as string).toISOString(),
-			amount: Number(data.get("amount")),
+			amount: String(data.get("amount") ?? ""),
 			counter_party: data.get("counter_party") as string,
 			additional: (data.get("additional") as string) || undefined,
 			notes: (data.get("notes") as string) || undefined,
@@ -102,10 +108,10 @@ export function TransactionForm({
 					label="amount"
 					name="amount"
 					type="number"
-					step="0.01"
+					step={amountStep}
 					className="w-full"
 					required
-					defaultValue={defaultValues?.amount}
+					defaultValue={defaultValues?.amount?.toString()}
 				/>
 			</div>
 

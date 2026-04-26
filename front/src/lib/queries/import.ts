@@ -5,7 +5,7 @@ import { id } from "../id";
 import { useDb } from "../../providers";
 import { queryKeyRoots } from "./query-keys";
 import { getOrCreateCategoryByName } from "./categories";
-import { parseCurrency } from "../currency";
+import { getCurrencyMeta, parseCurrency, parseDecimalToMinorUnits } from "../currency";
 
 export type CsvFormat =
 	| "generic"
@@ -67,7 +67,7 @@ export function useImportLegacyCsvBundleMutation() {
 
 type ParsedTransaction = {
 	date: string;
-	amount: number;
+	amount: string;
 	currency?: string;
 	counter_party: string;
 	additional?: string;
@@ -192,11 +192,11 @@ function parseRevolutRow(cols: string[]): ParsedTransaction | null {
 
 	const amount = parseAmount(cols[5] ?? "");
 	const feeRaw = cols[6]?.trim() ?? "";
-	const fee = feeRaw ? parseAmount(feeRaw) : 0;
+	const fee = feeRaw ? parseAmount(feeRaw) : "0";
 
 	return {
 		date: date.toISOString(),
-		amount: amount + fee,
+		amount: String(Number(amount) + Number(fee)),
 		currency: cols[7]?.trim() || undefined,
 		counter_party,
 		additional: fee !== 0 ? `Fee: ${fee}` : undefined,
@@ -380,11 +380,11 @@ async function insertImportKey(
 	);
 }
 
-function parseAmount(raw: string): number {
+function parseAmount(raw: string): string {
 	const cleaned = raw.replace(/[–—]/g, "-").replace(",", ".").trim();
 	const n = parseFloat(cleaned);
 	if (isNaN(n)) throw new Error(`invalid amount: ${raw}`);
-	return n;
+	return cleaned;
 }
 
 function parseOptionalDate(raw: string): string | null {
@@ -542,6 +542,10 @@ export async function importCsv(
 	for (const name of uniqueCategories) {
 		categoryCache.set(name, await getOrCreateCategoryByName(db, name));
 	}
+	const currencyMetaByCode = new Map<string, Awaited<ReturnType<typeof getCurrencyMeta>>>();
+	for (const currency of new Set(newRows.map((row) => row.currency))) {
+		currencyMetaByCode.set(currency, await getCurrencyMeta(db, currency));
+	}
 
 	const now = new Date().toISOString();
 	const BATCH = 50;
@@ -564,7 +568,7 @@ export async function importCsv(
 				now,
 				now,
 				row.date,
-				row.amount,
+				parseDecimalToMinorUnits(row.amount, currencyMetaByCode.get(currency)!),
 				currency,
 				row.counter_party,
 				row.additional ?? null,
@@ -574,7 +578,7 @@ export async function importCsv(
 			]);
 			await db.exec(
 				`insert into transactions
-				 (id, created_at, updated_at, date, amount, currency, counter_party, additional, category_id, account_id, _sync_edited_at)
+				 (id, created_at, updated_at, date, amount_minor, currency, counter_party, additional, category_id, account_id, _sync_edited_at)
 				 values ${placeholders}`,
 				values,
 			);
@@ -749,22 +753,25 @@ export async function importLegacyCsvBundle(
 
 				const date = parseRequiredDate(record.date ?? "");
 				const categorizeOn = parseOptionalDate(record.categorize_on ?? "");
-				const amount = parseAmount(record.amount ?? "");
 				const counterParty = record.counter_party?.trim();
 				if (!counterParty) throw new Error("missing counter_party");
 				const currency = parseCurrency(record.currency, "EUR");
+				const amountMinor = parseDecimalToMinorUnits(
+					parseAmount(record.amount ?? ""),
+					await getCurrencyMeta(db, currency),
+				);
 
 				const newTxId = existingTransactionIds.has(txId) ? id() : txId;
 				await db.exec(
 					`insert into transactions
-					(id, created_at, updated_at, date, amount, currency, counter_party, additional, notes, categorize_on, category_id, account_id, _sync_edited_at)
+					(id, created_at, updated_at, date, amount_minor, currency, counter_party, additional, notes, categorize_on, category_id, account_id, _sync_edited_at)
 					values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 					[
 						newTxId,
 						now,
 						now,
 						date,
-						amount,
+						amountMinor,
 						currency,
 						counterParty,
 						record.additional?.trim() || null,

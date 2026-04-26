@@ -28,7 +28,8 @@ import {
 } from "../../lib/queries/settings";
 import { loginWithSeed } from "../../lib/queries/auth";
 import { idb, uiStorageDefaults, type UiStorage } from "../../lib/sync";
-import { COMMON_CURRENCIES, normalizeCurrency } from "../../lib/currency";
+import { normalizeCurrency } from "../../lib/currency";
+import { useCurrencyMetaQuery } from "../../lib/queries/currencies";
 
 export function SettingsPage() {
 	return (
@@ -295,6 +296,8 @@ function CurrencySection() {
 	const importFxRatesCsv = useImportFxRatesCsvMutation();
 	const deleteFxRates = useDeleteFxRatesMutation();
 	const fxRates = useFxRatesQuery();
+	const currencyMeta = useCurrencyMetaQuery();
+	const currencyCodes = currencyMeta.data?.map((meta) => meta.currency) ?? [FX_ANCHOR_CURRENCY];
 
 	if (settings.isLoading) {
 		return (
@@ -337,7 +340,7 @@ function CurrencySection() {
 					name="reporting_currency"
 					defaultValue={appSettings.reporting_currency}
 				>
-					{COMMON_CURRENCIES.map((currencyCode) => (
+					{currencyCodes.map((currencyCode) => (
 						<option key={currencyCode} value={currencyCode}>
 							{currencyCode}
 						</option>
@@ -404,6 +407,7 @@ function CurrencySection() {
 			</form>
 
 			<AddFxRateForm
+				currencyCodes={currencyCodes}
 				onAdd={async (input) => {
 					await upsertFxRate.mutateAsync(input);
 				}}
@@ -411,6 +415,7 @@ function CurrencySection() {
 			/>
 			<ImportFxRatesCsvForm
 				defaultAgainstCurrency={FX_ANCHOR_CURRENCY}
+				currencyCodes={currencyCodes}
 				onImport={async (input) =>
 					importFxRatesCsv.mutateAsync({
 						text: input.text,
@@ -457,9 +462,11 @@ function CurrencySection() {
 }
 
 function AddFxRateForm({
+	currencyCodes,
 	onAdd,
 	pending,
 }: {
+	currencyCodes: string[];
 	onAdd: (input: {
 		rateDate: string;
 		currency: string;
@@ -488,7 +495,7 @@ function AddFxRateForm({
 			<div className="grid grid-cols-2 gap-2">
 				<DatePickerInput name="rateDate" defaultValue={defaultDate} required />
 				<Select name="currency" required>
-					{COMMON_CURRENCIES.filter((code) => code !== FX_ANCHOR_CURRENCY).map(
+					{currencyCodes.filter((code) => code !== FX_ANCHOR_CURRENCY).map(
 						(currencyCode) => (
 							<option key={currencyCode} value={currencyCode}>
 								{currencyCode}
@@ -514,10 +521,12 @@ function AddFxRateForm({
 
 function ImportFxRatesCsvForm({
 	defaultAgainstCurrency,
+	currencyCodes,
 	onImport,
 	pending,
 }: {
 	defaultAgainstCurrency: string;
+	currencyCodes: string[];
 	onImport: (input: {
 		text: string;
 		againstCurrency: string;
@@ -578,7 +587,7 @@ function ImportFxRatesCsvForm({
 					name="against_currency"
 					defaultValue={defaultAgainstCurrency}
 				>
-					{COMMON_CURRENCIES.map((currencyCode) => (
+					{currencyCodes.map((currencyCode) => (
 						<option key={currencyCode} value={currencyCode}>
 							{currencyCode}
 						</option>
