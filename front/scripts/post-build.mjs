@@ -1,18 +1,39 @@
-import { readdir, readFile, stat, writeFile } from 'fs/promises';
+import { copyFile, readdir, readFile, stat, writeFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const assetsDir = join(__dirname, '..', 'dist/assets');
+const sqliteVendorDir = join(__dirname, '..', 'src/lib/sqlite-custom');
+
+function dehashAssetBasename(fileName) {
+  const match = fileName.match(/^(.*)-([A-Za-z0-9_-]+)\.([A-Za-z0-9]+)$/);
+  if (!match) return fileName;
+  return `${match[1]}.${match[3]}`;
+}
 
 async function main() {
-  const files = await readdir(assetsDir);
+  const [files, vendorFiles] = await Promise.all([
+    readdir(assetsDir),
+    readdir(sqliteVendorDir),
+  ]);
+  const distFileSet = new Set(files);
 
-  const sqlite3Files = files.filter(f => f.startsWith('sqlite3'));
+  const sqliteVendorBaseNames = new Set(
+    vendorFiles.filter((f) => f.startsWith('sqlite3')),
+  );
+  if (sqliteVendorBaseNames.size === 0) {
+    console.log('No sqlite3* vendor files found, skipping sqlite post-build rewrite.');
+    return;
+  }
+
+  const sqlite3Files = files.filter((f) => f.startsWith('sqlite3'));
 
   const candidatesByBaseName = new Map();
   for (const file of sqlite3Files) {
-    const baseName = file.replace(/-[A-Za-z0-9]+(\.wasm|\.js)$/, '$1');
+    const baseName = dehashAssetBasename(file);
+    if (!sqliteVendorBaseNames.has(baseName)) continue;
+
     const filePath = join(assetsDir, file);
     const fileStat = await stat(filePath);
     const candidates = candidatesByBaseName.get(baseName) ?? [];
@@ -35,48 +56,24 @@ async function main() {
   }
 
   console.log('Mapping base names to hashed names:', nameToHashed);
-  const canonicalSqliteWasm = nameToHashed['sqlite3.wasm'];
-  const canonicalWorker1Js = nameToHashed['sqlite3-worker1.js'];
 
-  const jsFiles = files.filter(f => f.endsWith('.js') && !f.startsWith('sqlite3'));
-
-  for (const file of jsFiles) {
-    const filePath = join(assetsDir, file);
-    let content = await readFile(filePath, 'utf-8');
-    let modified = false;
-
-    for (const [baseName, hashedName] of Object.entries(nameToHashed)) {
-      const escapedBase = baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedBase, 'g');
-      if (regex.test(content)) {
-        content = content.replace(regex, hashedName);
-        modified = true;
-      }
+  // Some sqlite runtime files (notably sqlite3-opfs-async-proxy.js) are
+  // loaded via dynamic URL construction inside sqlite3.mjs, so Vite does not
+  // always emit them. Ensure those vendor sqlite3* files exist in dist/assets.
+  for (const vendorFile of sqliteVendorBaseNames) {
+    const hashedVariant = nameToHashed[vendorFile];
+    if (distFileSet.has(vendorFile) || (hashedVariant && distFileSet.has(hashedVariant))) {
+      continue;
     }
-
-    if (canonicalSqliteWasm) {
-      const wasmRegex = /sqlite3-[A-Za-z0-9_-]+\.wasm/g;
-      if (wasmRegex.test(content)) {
-        content = content.replace(wasmRegex, canonicalSqliteWasm);
-        modified = true;
-      }
-    }
-
-    if (canonicalWorker1Js) {
-      const workerRegex = /sqlite3-worker1-[A-Za-z0-9_-]+\.js/g;
-      if (workerRegex.test(content)) {
-        content = content.replace(workerRegex, canonicalWorker1Js);
-        modified = true;
-      }
-    }
-
-    if (modified) {
-      await writeFile(filePath, content);
-      console.log(`Updated: ${file}`);
-    }
+    const sourcePath = join(sqliteVendorDir, vendorFile);
+    const destPath = join(assetsDir, vendorFile);
+    await copyFile(sourcePath, destPath);
+    distFileSet.add(vendorFile);
+    console.log(`Copied missing sqlite runtime asset: ${vendorFile}`);
   }
+  const targetFiles = files.filter((f) => f.endsWith('.js') || f.endsWith('.mjs'));
 
-  for (const file of sqlite3Files) {
+  for (const file of targetFiles) {
     const filePath = join(assetsDir, file);
     let content = await readFile(filePath, 'utf-8');
     let modified = false;
@@ -86,22 +83,6 @@ async function main() {
       const regex = new RegExp(escapedBase, 'g');
       if (regex.test(content)) {
         content = content.replace(regex, hashedName);
-        modified = true;
-      }
-    }
-
-    if (canonicalSqliteWasm) {
-      const wasmRegex = /sqlite3-[A-Za-z0-9_-]+\.wasm/g;
-      if (wasmRegex.test(content)) {
-        content = content.replace(wasmRegex, canonicalSqliteWasm);
-        modified = true;
-      }
-    }
-
-    if (canonicalWorker1Js) {
-      const workerRegex = /sqlite3-worker1-[A-Za-z0-9_-]+\.js/g;
-      if (workerRegex.test(content)) {
-        content = content.replace(workerRegex, canonicalWorker1Js);
         modified = true;
       }
     }
