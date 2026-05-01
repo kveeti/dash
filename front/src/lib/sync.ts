@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	createDekSyncPayloadCodec,
 	type SyncPayloadCodec,
+	type SyncPayloadMetadata,
 } from "./crypto";
 import { useCrypto, useDb } from "../providers";
 import type { DbHandle } from "./db";
@@ -53,18 +54,49 @@ type SyncTableName =
 	| "transaction_import_keys"
 	| "transaction_flows";
 
+type SyncRecordType =
+	| "category"
+	| "account"
+	| "transaction"
+	| "transaction_import_key"
+	| "transaction_flow";
+
 const DIRTY_BATCH_LIMIT = 1000;
 const BOOTSTRAP_PAGE_LIMIT = 1000;
 
-function resolveTargetTable(recordId: string): {
+function parseSyncRecordId(recordId: string): {
+	recordType: SyncRecordType;
 	tableName: SyncTableName;
 	actualId: string;
 } {
-	const [tableNameRaw, actualId] = recordId.split(":");
-	if (tableNameRaw === "category") {
-		return { tableName: "categories", actualId };
+	const parts = recordId.split(":");
+	if (parts.length !== 2 || !parts[1]) {
+		throw new Error(`invalid sync record id: ${recordId}`);
 	}
-	return { tableName: `${tableNameRaw}s` as SyncTableName, actualId };
+
+	const [recordTypeRaw, actualId] = parts;
+	switch (recordTypeRaw) {
+		case "category":
+			return { recordType: recordTypeRaw, tableName: "categories", actualId };
+		case "account":
+			return { recordType: recordTypeRaw, tableName: "accounts", actualId };
+		case "transaction":
+			return { recordType: recordTypeRaw, tableName: "transactions", actualId };
+		case "transaction_import_key":
+			return {
+				recordType: recordTypeRaw,
+				tableName: "transaction_import_keys",
+				actualId,
+			};
+		case "transaction_flow":
+			return {
+				recordType: recordTypeRaw,
+				tableName: "transaction_flows",
+				actualId,
+			};
+		default:
+			throw new Error(`unsupported sync record type: ${recordTypeRaw}`);
+	}
 }
 
 async function markDirtyEntriesSynced(db: DbHandle, dirty: DirtyEntry[]) {
@@ -77,7 +109,7 @@ async function markDirtyEntriesSynced(db: DbHandle, dirty: DirtyEntry[]) {
 	};
 
 	for (const record of dirty) {
-		const { tableName, actualId } = resolveTargetTable(record.id);
+		const { tableName, actualId } = parseSyncRecordId(record.id);
 		byTable[tableName].push(actualId);
 	}
 
@@ -195,26 +227,24 @@ async function applyIncomingOps({
 
 	const decodedOps = await Promise.all(
 		ops.map(async (op) => {
-			const entry = await codec.decode(op.blob);
-			if (!entry) return null;
-			return { op, entry };
+			const { recordType, actualId } = parseSyncRecordId(op.id);
+			const entry = await codec.decode(op.blob, op);
+			return { op, entry, recordType, actualId };
 		}),
 	);
 
 	for (const item of decodedOps) {
-		if (!item) continue;
-		const { op, entry } = item;
+		const { op, entry, recordType, actualId } = item;
 
 		if (maxVersion === undefined || op.server_version > maxVersion) {
 			maxVersion = op.server_version;
 		}
 
-		const [type, id] = op.id.split(":");
-		touchedTypes.add(type);
-		switch (type) {
+		touchedTypes.add(recordType);
+		switch (recordType) {
 			case "account":
 				accounts.push(
-					/* id */ id,
+					/* id */ actualId,
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at,
 					/* name */ entry.name,
@@ -228,7 +258,7 @@ async function applyIncomingOps({
 
 			case "category":
 				categories.push(
-					/* id */ id,
+					/* id */ actualId,
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at,
 					/* name */ entry.name,
@@ -241,7 +271,7 @@ async function applyIncomingOps({
 
 			case "transaction":
 				transactions.push(
-					/* id */ id,
+					/* id */ actualId,
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at,
 					/* date */ entry.date,
@@ -263,7 +293,7 @@ async function applyIncomingOps({
 
 			case "transaction_import_key":
 				transactionImportKeys.push(
-					/* id */ id,
+					/* id */ actualId,
 					/* transaction_id */ entry.transaction_id,
 					/* source_type */ entry.source_type,
 					/* source_scope */ entry.source_scope,
@@ -283,7 +313,7 @@ async function applyIncomingOps({
 			case "transaction_flow": {
 				touchedTypes.add("transaction");
 				transactionFlows.push(
-					/* id */ id,
+					/* id */ actualId,
 					/* from_transaction_id */ entry.from_transaction_id,
 					/* to_transaction_id */ entry.to_transaction_id,
 					/* amount_minor */ entry.amount_minor,
@@ -562,7 +592,7 @@ class SyncClient {
 			// Drain queued deltas that arrived during bootstrap.
 			const queued = this.deltaQueue;
 			this.deltaQueue = null;
-			if (queued) {
+			if (succeeded && queued) {
 				for (const msg of queued) {
 					const { maxVersion, touchedTypes } = await applyIncomingOps({
 						db: this.db,
@@ -636,12 +666,19 @@ class SyncClient {
 			if (!entries.length) return;
 
 			const ops: PushOp[] = await Promise.all(
-				entries.map(async (e) => ({
-					id: e.id,
-					_sync_is_deleted: !!e._sync_is_deleted,
-					_sync_edited_at: e._sync_edited_at,
-					blob: await this.codec.encodeJsonString(e.plain_data),
-				})),
+				entries.map(async (e) => {
+					const metadata: SyncPayloadMetadata = {
+						id: e.id,
+						_sync_is_deleted: !!e._sync_is_deleted,
+						_sync_edited_at: e._sync_edited_at,
+					};
+					return {
+						id: e.id,
+						_sync_is_deleted: metadata._sync_is_deleted,
+						_sync_edited_at: metadata._sync_edited_at,
+						blob: await this.codec.encodeJsonString(e.plain_data, metadata),
+					};
+				}),
 			);
 
 			const res = await fetch("/api/v1/push", {
