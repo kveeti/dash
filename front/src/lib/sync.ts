@@ -1,17 +1,16 @@
-import { Dexie, type EntityTable } from "dexie";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	createDekSyncPayloadCodec,
 	type SyncPayloadCodec,
-	unwrapSeedFromStorage,
-} from "./crypt";
-import { useDb } from "../providers";
+} from "./crypto";
+import { useCrypto, useDb } from "../providers";
 import type { DbHandle } from "./db";
 import { queryKeyRoots, queryKeys } from "./queries/query-keys";
 import { normalizeCurrency } from "./currency";
 import { loginWithSeed } from "./queries/auth";
+import { getUiStorage, idb, uiStorageDefaults } from "./local-storage";
 
 type DirtyEntry = {
 	id: string;
@@ -673,35 +672,6 @@ class SyncClient {
 	}
 }
 
-export type UiStorage = {
-	id: string;
-	dek: CryptoKey | null;
-	local_wrap_key: CryptoKey | null;
-	wrapped_dek_seed: string | null;
-	cursor: number | null;
-	sync_state: "enabled" | "paused" | null;
-};
-
-export const idb = new Dexie("money") as Dexie & {
-	uiStorage: EntityTable<UiStorage, "id">;
-};
-idb.version(1).stores({
-	uiStorage: "id, dek, cursor, sync_state",
-});
-
-export const uiStorageDefaults = {
-	id: "1",
-	dek: null,
-	local_wrap_key: null,
-	wrapped_dek_seed: null,
-	cursor: null,
-	sync_state: null,
-} satisfies UiStorage;
-
-async function getUiStorage() {
-	return await idb.uiStorage.where("id").equals(uiStorageDefaults.id).first();
-}
-
 async function persistCursor(newCursor: number) {
 	const prev = await getUiStorage();
 	// Monotonic: only advance, never regress (live delta vs. bootstrap race).
@@ -739,14 +709,13 @@ async function markAllRowsPendingPush(db: DbHandle) {
 
 export function useSync() {
 	const uiStorage = useLiveQuery(getUiStorage);
-	const canSync =
-		uiStorage?.sync_state === "enabled" && !!uiStorage?.dek;
+	const canSync = uiStorage?.sync_state === "enabled";
+	const isOnline = useOnlineStatus();
 	const db = useDb();
+	const { masterDek, syncContentKey } = useCrypto();
 	const qc = useQueryClient();
 
 	const clientRef = useRef<SyncClient | null>(null);
-	const dekRef = useRef<CryptoKey | null>(uiStorage?.dek ?? null);
-	dekRef.current = uiStorage?.dek ?? null;
 
 	const onEntitiesChanged = useCallback(
 		(types: Set<string>) => {
@@ -765,9 +734,11 @@ export function useSync() {
 		[qc],
 	);
 	const onEntitiesChangedRef = useRef(onEntitiesChanged);
-	onEntitiesChangedRef.current = onEntitiesChanged;
+	useEffect(() => {
+		onEntitiesChangedRef.current = onEntitiesChanged;
+	}, [onEntitiesChanged]);
 
-	const enabled = canSync;
+	const enabled = canSync && isOnline;
 
 	useEffect(() => {
 		let cancelled = false;
@@ -778,26 +749,16 @@ export function useSync() {
 			return;
 		}
 
-		const dek = dekRef.current;
-		if (!dek) return;
-
 		if (clientRef.current) return;
 
 		(async () => {
 			try {
-				const currentStorage = await getUiStorage();
-				if (currentStorage?.local_wrap_key && currentStorage?.wrapped_dek_seed) {
-					const seed = await unwrapSeedFromStorage(
-						currentStorage.wrapped_dek_seed,
-						currentStorage.local_wrap_key,
-					);
-					await loginWithSeed(seed);
-				}
+				await loginWithSeed(masterDek);
 
 				if (cancelled) return;
 				const client = new SyncClient(
 					db,
-					dek,
+					syncContentKey,
 					readCursor,
 					persistCursor,
 					resetCursor,
@@ -815,7 +776,7 @@ export function useSync() {
 			clientRef.current?.stop();
 			clientRef.current = null;
 		};
-	}, [enabled, db]);
+	}, [enabled, db, masterDek, syncContentKey]);
 
 	// Drive push whenever the mutation cache invalidates our sync key.
 	useQuery({
@@ -828,4 +789,23 @@ export function useSync() {
 	});
 
 	return null;
+}
+
+function useOnlineStatus() {
+	const [isOnline, setIsOnline] = useState(() =>
+		typeof navigator === "undefined" ? true : navigator.onLine,
+	);
+
+	useEffect(() => {
+		const updateOnlineStatus = () => setIsOnline(navigator.onLine);
+		window.addEventListener("online", updateOnlineStatus);
+		window.addEventListener("offline", updateOnlineStatus);
+		updateOnlineStatus();
+		return () => {
+			window.removeEventListener("online", updateOnlineStatus);
+			window.removeEventListener("offline", updateOnlineStatus);
+		};
+	}, []);
+
+	return isOnline;
 }

@@ -6,6 +6,18 @@ create table users (
     _sync_server_version bigint not null default 0
 );
 
+create table auth_challenges (
+    id text primary key not null,
+    user_id text not null references users(id) on delete cascade,
+    auth_id text not null,
+    nonce text not null,
+    expires_at timestamptz not null,
+    created_at timestamptz not null default now()
+);
+
+create index idx_auth_challenges_expires_at on auth_challenges(expires_at);
+create index idx_auth_challenges_user_id on auth_challenges(user_id);
+
 -- entries: opaque e2e-encrypted blobs, keyed by (user_id, id).
 -- _sync_server_version is assigned from users._sync_server_version at write time
 -- (not by a trigger), so that assignment order == broadcast order per user.

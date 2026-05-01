@@ -1,20 +1,10 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { DatePickerInput } from "../../components/date-picker";
 import { Spinner } from "../../components/spinner";
-import {
-	createDekSeed,
-	createLocalWrapKey,
-	decodeDekSeedFromWords,
-	encodeDekSeedAsWords,
-	importDekFromSeed,
-	unwrapSeedFromStorage,
-	wrapSeedForStorage,
-} from "../../lib/crypt";
 import {
 	useAppSettingsQuery,
 	useFxRatesQuery,
@@ -26,8 +16,7 @@ import {
 	type FxCsvImportResult,
 	FX_ANCHOR_CURRENCY,
 } from "../../lib/queries/settings";
-import { loginWithSeed } from "../../lib/queries/auth";
-import { idb, uiStorageDefaults, type UiStorage } from "../../lib/sync";
+import { getUiStorage, idb, uiStorageDefaults } from "../../lib/local-storage";
 import { normalizeCurrency } from "../../lib/currency";
 import { useCurrencyMetaQuery } from "../../lib/queries/currencies";
 
@@ -53,16 +42,7 @@ function SyncSection() {
 }
 
 function SyncSectionContent() {
-	const uiStorage = useLiveQuery(
-		async () => {
-			return await idb.uiStorage
-				.where("id")
-				.equals(uiStorageDefaults.id)
-				.first();
-		},
-		[],
-		"loading",
-	);
+	const uiStorage = useLiveQuery(getUiStorage, [], "loading");
 
 	if (uiStorage === "loading") {
 		return (
@@ -75,27 +55,10 @@ function SyncSectionContent() {
 	return <SyncSectionLoggedInContent uiStorage={uiStorage} />;
 }
 
-async function saveSeedAsSyncKey(
-	uiStorage: UiStorage | undefined,
-	seed: Uint8Array<ArrayBuffer>,
-) {
-	await loginWithSeed(seed);
-	const dek = await importDekFromSeed(seed);
-	const localWrapKey = await createLocalWrapKey();
-	const wrappedDekSeed = await wrapSeedForStorage(seed, localWrapKey);
-	await idb.uiStorage.put({
-		...(uiStorage ?? uiStorageDefaults),
-		dek,
-		local_wrap_key: localWrapKey,
-		wrapped_dek_seed: wrappedDekSeed,
-		sync_state: "enabled",
-	});
-}
-
 function SyncSectionLoggedInContent({
 	uiStorage,
 }: {
-	uiStorage: UiStorage | undefined;
+	uiStorage: Awaited<ReturnType<typeof getUiStorage>>;
 }) {
 	const syncState = uiStorage?.sync_state;
 
@@ -104,6 +67,9 @@ function SyncSectionLoggedInContent({
 			{syncState === "enabled" ? (
 				<div className="space-y-2 pt-1">
 					<p>Syncing enabled</p>
+					<p className="text-xs text-gray-10">
+						Dash will authenticate and sync when this browser is online.
+					</p>
 
 					<Button
 						variant="outline"
@@ -134,14 +100,11 @@ function SyncSectionLoggedInContent({
 				</div>
 			) : (
 				<div className="pb-1 space-y-6">
-					<p>Syncing disabled on this device.</p>
+					<p>Syncing is not configured on this device.</p>
 					<EnableSyncingForm uiStorage={uiStorage} />
-					<p className="text-xs text-gray-10">
-						This stores a local non-extractable encryption key in this browser.
-					</p>
 				</div>
 			)}
-			<BackupKeySection uiStorage={uiStorage} />
+			<PasskeySection uiStorage={uiStorage} />
 		</div>
 	);
 }
@@ -149,7 +112,7 @@ function SyncSectionLoggedInContent({
 function EnableSyncingForm({
 	uiStorage,
 }: {
-	uiStorage: UiStorage | undefined;
+	uiStorage: Awaited<ReturnType<typeof getUiStorage>>;
 }) {
 	const [error, setError] = useState<string | null>(null);
 
@@ -160,130 +123,44 @@ function EnableSyncingForm({
 				ev.preventDefault();
 				setError(null);
 				try {
-					const seed = createDekSeed();
-					await saveSeedAsSyncKey(uiStorage, seed);
+					await idb.uiStorage.put({
+						...(uiStorage ?? uiStorageDefaults),
+						sync_state: "enabled",
+					});
 				} catch (error) {
 					setError((error as Error).message);
 				}
 			}}
 		>
+			<p className="text-xs text-gray-10">
+				This keeps the app usable offline. Server login and encrypted row sync
+				start automatically once the browser is online.
+			</p>
 			<Button>Start syncing</Button>
 			{error ? <p className="text-xs text-red-11">{error}</p> : null}
 		</form>
 	);
 }
 
-function BackupKeySection({ uiStorage }: { uiStorage: UiStorage | undefined }) {
-	const [words, setWords] = useState<string>("");
-	const [importError, setImportError] = useState<string | null>(null);
-	const exportWords = useMutation({
-		mutationFn: async () => {
-			if (!uiStorage?.local_wrap_key || !uiStorage?.wrapped_dek_seed) {
-				throw new Error("No backup key available on this device yet.");
-			}
-			const seed = await unwrapSeedFromStorage(
-				uiStorage.wrapped_dek_seed,
-				uiStorage.local_wrap_key,
-			);
-			return encodeDekSeedAsWords(seed);
-		},
-	});
-	const importWords = useMutation({
-		mutationFn: async (inputWords: string) => {
-			if (uiStorage?.dek) {
-				const ok = window.confirm(
-					"Replace current sync key on this device with imported words?",
-				);
-				if (!ok) return;
-			}
-			const seed = await decodeDekSeedFromWords(inputWords);
-			await saveSeedAsSyncKey(uiStorage, seed);
-		},
-	});
-	const isBusy = exportWords.isPending || importWords.isPending;
-
+function PasskeySection({
+	uiStorage,
+}: {
+	uiStorage: Awaited<ReturnType<typeof getUiStorage>>;
+}) {
 	return (
 		<div className="space-y-2 border border-gray-a4 p-3">
-			<p className="text-sm">Backup key (24 words)</p>
+			<p className="text-sm">Passkey unlock</p>
 			<p className="text-xs text-gray-10">
-				Use this to restore syncing key on another device.
+				The local SQLite key is wrapped by this device's passkey PRF.
 			</p>
 			<p className="text-xs text-gray-10">
-				Import replaces this device's current sync key.
+				Recovery words are only shown during setup. To rotate the passkey,
+				clear this browser profile and recover from the 24 words.
 			</p>
-
-			<div className="flex gap-2">
-				<Button
-					variant="outline"
-					isLoading={exportWords.isPending}
-					disabled={isBusy}
-					onClick={async () => {
-						setImportError(null);
-						try {
-							setWords(await exportWords.mutateAsync());
-						} catch (error) {
-							setImportError((error as Error).message);
-						}
-					}}
-				>
-					Export words
-				</Button>
-				{words ? (
-					<Button
-						variant="outline"
-						disabled={isBusy}
-						onClick={async () => {
-							try {
-								await navigator.clipboard.writeText(words);
-							} catch {
-								// no-op clipboard failures
-							}
-						}}
-					>
-						Copy
-					</Button>
-				) : null}
-			</div>
-
-			{words ? (
-				<textarea
-					readOnly
-					value={words}
-					className="w-full min-h-20 border border-gray-a5 p-2 text-xs rounded"
-				/>
-			) : null}
-
-			<form
-				className="space-y-2"
-				onSubmit={async (event) => {
-					event.preventDefault();
-					const data = new FormData(event.currentTarget);
-					const wordsToImport = String(data.get("words") ?? "").trim();
-					if (!wordsToImport) return;
-					setImportError(null);
-					try {
-						await importWords.mutateAsync(wordsToImport);
-					} catch (error) {
-						setImportError((error as Error).message);
-					}
-				}}
-			>
-				<Input
-					label="Import words"
-					name="words"
-					value={words}
-					onChange={(event) => setWords(event.currentTarget.value)}
-					placeholder="24 words separated by spaces"
-				/>
-				<Button
-					isLoading={importWords.isPending}
-					disabled={isBusy || !words.trim()}
-				>
-					Import words
-				</Button>
-			</form>
-
-			{importError ? <p className="text-xs text-red-11">{importError}</p> : null}
+			<p className="text-xs text-gray-10">
+				Passkey credential:{" "}
+				{uiStorage?.passkey_credential_id ? "configured" : "missing"}
+			</p>
 		</div>
 	);
 }

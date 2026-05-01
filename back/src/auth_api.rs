@@ -15,19 +15,20 @@ use ring::{
     signature::{ED25519, UnparsedPublicKey},
 };
 use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
-use ulid::Ulid;
 
 use crate::{
     auth::{AUTH_SESSION_COOKIE, require_user_id},
     error::ApiError,
-    state::{AppState, AuthChallenge},
+    state::AppState,
 };
 
 const CHALLENGE_TTL_SECS: i64 = 120;
-const MAX_ACTIVE_CHALLENGES: usize = 10_000;
-const MAX_ACTIVE_CHALLENGES_PER_USER: usize = 10;
+const MAX_ACTIVE_CHALLENGES: i64 = 10_000;
+const MAX_ACTIVE_CHALLENGES_PER_USER: i64 = 10;
 const AUTH_ID_CONTEXT: &str = "dash/auth/id/v1";
+const AUTH_CHALLENGE_CONTEXT: &str = "dash/auth/challenge/v1";
+const AUTH_VERIFY_METHOD: &str = "POST";
+const AUTH_VERIFY_PATH: &str = "/api/v1/auth/verify";
 
 #[derive(Debug, Deserialize)]
 struct RegisterRequest {
@@ -67,6 +68,7 @@ struct LogoutResponse {}
 struct ChallengeResponse {
     challenge_id: String,
     nonce: String,
+    signature_payload: String,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -78,13 +80,6 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/@me", get(me))
 }
 
-fn now_unix() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs() as i64
-}
-
 fn random_nonce_b64url() -> String {
     let mut buf = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut buf);
@@ -93,8 +88,7 @@ fn random_nonce_b64url() -> String {
 
 fn verify_signature(
     auth_public_key_b64url: &str,
-    challenge_id: &str,
-    nonce: &str,
+    payload: &str,
     signature_b64url: &str,
 ) -> Result<bool, ApiError> {
     let public_key = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -103,9 +97,24 @@ fn verify_signature(
     let signature = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(signature_b64url.as_bytes())
         .map_err(|_| ApiError::Unauthorized)?;
-    let payload = format!("{challenge_id}:{nonce}");
     let verifier = UnparsedPublicKey::new(&ED25519, public_key);
     Ok(verifier.verify(payload.as_bytes(), &signature).is_ok())
+}
+
+fn normalized_base_url(base_url: &str) -> String {
+    base_url.trim_end_matches('/').to_string()
+}
+
+fn auth_signature_payload(
+    base_url: &str,
+    auth_id: &str,
+    challenge_id: &str,
+    nonce: &str,
+) -> String {
+    format!(
+        "{AUTH_CHALLENGE_CONTEXT}\nbase_url:{}\nmethod:{AUTH_VERIFY_METHOD}\npath:{AUTH_VERIFY_PATH}\nauth_id:{auth_id}\nchallenge_id:{challenge_id}\nnonce:{nonce}",
+        normalized_base_url(base_url)
+    )
 }
 
 fn compute_auth_id_from_public_key(public_key: &[u8]) -> String {
@@ -149,12 +158,6 @@ fn validate_stored_auth_binding(auth_id: &str, auth_public_key: &str) -> Result<
         return Err(ApiError::Unauthorized);
     }
     Ok(())
-}
-
-fn prune_expired_challenges(state: &AppState, now: i64) {
-    state
-        .auth_challenges
-        .retain(|_challenge_id, challenge| challenge.expires_at_unix > now);
 }
 
 async fn register(
@@ -204,37 +207,31 @@ async fn challenge(
     };
     validate_stored_auth_binding(auth_id, &auth_public_key)?;
 
-    let now = now_unix();
-    prune_expired_challenges(&state, now);
+    state.db.delete_expired_auth_challenges().await?;
     let active_for_user = state
-        .auth_challenges
-        .iter()
-        .filter(|entry| entry.user_id == user_id)
-        .count();
+        .db
+        .count_active_auth_challenges_for_user(&user_id)
+        .await?;
     if active_for_user >= MAX_ACTIVE_CHALLENGES_PER_USER {
         return Err(ApiError::TooManyRequests(
             "too many active auth challenges".to_string(),
         ));
     }
-    if state.auth_challenges.len() >= MAX_ACTIVE_CHALLENGES {
+    let active_total = state.db.count_active_auth_challenges().await?;
+    if active_total >= MAX_ACTIVE_CHALLENGES {
         return Err(ApiError::TooManyRequests(
             "auth challenge capacity reached".to_string(),
         ));
     }
 
-    let challenge_id = Ulid::new().to_string();
     let nonce = random_nonce_b64url();
-    let expires_at_unix = now + CHALLENGE_TTL_SECS;
-    state.auth_challenges.insert(
-        challenge_id.clone(),
-        AuthChallenge {
-            user_id,
-            nonce: nonce.clone(),
-            expires_at_unix,
-        },
-    );
+    let challenge_id = state
+        .db
+        .create_auth_challenge(&user_id, auth_id, &nonce, CHALLENGE_TTL_SECS)
+        .await?;
 
     Ok(Json(ChallengeResponse {
+        signature_payload: auth_signature_payload(&state.base_url, auth_id, &challenge_id, &nonce),
         challenge_id,
         nonce,
     })
@@ -256,23 +253,29 @@ async fn verify(
     };
     validate_stored_auth_binding(auth_id, &auth_public_key)?;
 
-    let now = now_unix();
-    prune_expired_challenges(&state, now);
-    let Some((_key, challenge)) = state.auth_challenges.remove(body.challenge_id.trim()) else {
+    let Some(challenge) = state
+        .db
+        .consume_auth_challenge(body.challenge_id.trim())
+        .await?
+    else {
         return Err(ApiError::Unauthorized);
     };
 
     if challenge.user_id != user_id {
         return Err(ApiError::Unauthorized);
     }
-    if now > challenge.expires_at_unix {
+    if challenge.auth_id != auth_id {
         return Err(ApiError::Unauthorized);
     }
 
     let ok = verify_signature(
         &auth_public_key,
-        body.challenge_id.trim(),
-        &challenge.nonce,
+        &auth_signature_payload(
+            &state.base_url,
+            auth_id,
+            body.challenge_id.trim(),
+            &challenge.nonce,
+        ),
         body.signature.trim(),
     )?;
     if !ok {

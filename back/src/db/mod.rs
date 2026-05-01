@@ -19,6 +19,12 @@ pub struct BootstrapPage {
     pub server_max_version: i64,
 }
 
+pub struct ConsumedAuthChallenge {
+    pub user_id: String,
+    pub auth_id: String,
+    pub nonce: String,
+}
+
 impl Db {
     pub fn from_pool(pool: PgPool) -> Self {
         Self { pool }
@@ -52,9 +58,7 @@ impl Db {
         external_id: &str,
     ) -> Result<Option<(String, String)>, sqlx::Error> {
         let row: Option<(String, String)> =
-            sqlx::query_as(
-                "select id, auth_public_key from users where external_id = $1 limit 1",
-            )
+            sqlx::query_as("select id, auth_public_key from users where external_id = $1 limit 1")
                 .bind(external_id)
                 .fetch_optional(&self.pool)
                 .await?;
@@ -67,10 +71,94 @@ impl Db {
     ) -> Result<Option<String>, sqlx::Error> {
         let row: Option<(String,)> =
             sqlx::query_as("select auth_public_key from users where id = $1")
-            .bind(user_id)
-            .fetch_optional(&self.pool)
-            .await?;
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await?;
         Ok(row.map(|(auth_public_key,)| auth_public_key))
+    }
+
+    pub async fn delete_expired_auth_challenges(&self) -> Result<(), sqlx::Error> {
+        sqlx::query("delete from auth_challenges where expires_at <= now()")
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn count_active_auth_challenges_for_user(
+        &self,
+        user_id: &str,
+    ) -> Result<i64, sqlx::Error> {
+        sqlx::query_scalar(
+            r#"
+            select count(*)::bigint
+            from auth_challenges
+            where user_id = $1 and expires_at > now()
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await
+    }
+
+    pub async fn count_active_auth_challenges(&self) -> Result<i64, sqlx::Error> {
+        sqlx::query_scalar(
+            r#"
+            select count(*)::bigint
+            from auth_challenges
+            where expires_at > now()
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await
+    }
+
+    pub async fn create_auth_challenge(
+        &self,
+        user_id: &str,
+        auth_id: &str,
+        nonce: &str,
+        ttl_secs: i64,
+    ) -> Result<String, sqlx::Error> {
+        let challenge_id = Ulid::new().to_string();
+        sqlx::query(
+            r#"
+            insert into auth_challenges (id, user_id, auth_id, nonce, expires_at)
+            values ($1, $2, $3, $4, now() + make_interval(secs => $5::double precision))
+            "#,
+        )
+        .bind(&challenge_id)
+        .bind(user_id)
+        .bind(auth_id)
+        .bind(nonce)
+        .bind(ttl_secs as f64)
+        .execute(&self.pool)
+        .await?;
+        Ok(challenge_id)
+    }
+
+    pub async fn consume_auth_challenge(
+        &self,
+        challenge_id: &str,
+    ) -> Result<Option<ConsumedAuthChallenge>, sqlx::Error> {
+        let row = sqlx::query(
+            r#"
+            delete from auth_challenges
+            where id = $1 and expires_at > now()
+            returning user_id, auth_id, nonce
+            "#,
+        )
+        .bind(challenge_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| {
+            Ok(ConsumedAuthChallenge {
+                user_id: row.try_get("user_id")?,
+                auth_id: row.try_get("auth_id")?,
+                nonce: row.try_get("nonce")?,
+            })
+        })
+        .transpose()
     }
 
     pub async fn create_session(

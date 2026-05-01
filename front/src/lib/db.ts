@@ -1,4 +1,5 @@
 import { DEFAULT_CURRENCY_META } from "./currency";
+import { hkdfSha256 } from "./crypto";
 
 export type DbHandle = {
 	exec: (sql: string, vars?: any[]) => Promise<any>;
@@ -10,14 +11,10 @@ export type DbClient = DbHandle & {
 	close: () => Promise<void>;
 };
 
-const SQLITE_DB_FILE = "db4";
-const SQLITE_OPFS_DB_BASENAMES = [SQLITE_DB_FILE, "db3", "db2", "db"] as const;
-const SQLITE_PASSWORD_PROMPT =
-	"Enter your local database password.\nThis is required every time you open the app.";
-const SQLITE_KDF_ITERATIONS = 400_000;
-const SQLITE_KDF_HASH: HmacImportParams["hash"] = "SHA-256";
+const SQLITE_DB_FILE = "db5";
+const SQLITE_OPFS_DB_BASENAMES = [SQLITE_DB_FILE, "db4", "db3", "db2", "db"] as const;
 const SQLITE_KDF_KEY_BYTES = 32;
-const SQLITE_KDF_SALT = new TextEncoder().encode("dash-local-db-kdf-v1");
+const SQLITE_KEY_CONTEXT = "dash/sqlite-opfs/v1";
 
 function createSqliteWorker(): Worker {
 	return new Worker(new URL("./sqlite-worker.js", import.meta.url), {
@@ -73,39 +70,13 @@ function toHex(bytes: Uint8Array): string {
 	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function deriveSqliteKeyHexFromPassword(password: string): Promise<string> {
+async function deriveSqliteKeyHexFromMasterDek(
+	masterDek: Uint8Array<ArrayBuffer>,
+): Promise<string> {
 	if (!globalThis.crypto?.subtle) {
 		throw new Error("WebCrypto subtle API is unavailable; cannot derive database key");
 	}
-	const baseKey = await globalThis.crypto.subtle.importKey(
-		"raw",
-		new TextEncoder().encode(password),
-		{ name: "PBKDF2" },
-		false,
-		["deriveBits"],
-	);
-	const derived = await globalThis.crypto.subtle.deriveBits(
-		{
-			name: "PBKDF2",
-			salt: SQLITE_KDF_SALT,
-			iterations: SQLITE_KDF_ITERATIONS,
-			hash: SQLITE_KDF_HASH,
-		},
-		baseKey,
-		SQLITE_KDF_KEY_BYTES * 8,
-	);
-	return toHex(new Uint8Array(derived));
-}
-
-async function promptForSqliteKeyHex(): Promise<string> {
-	if (typeof window === "undefined" || typeof window.prompt !== "function") {
-		throw new Error("No browser prompt available for database password entry");
-	}
-	const password = window.prompt(SQLITE_PASSWORD_PROMPT);
-	if (!password) {
-		throw new Error("Database password is required");
-	}
-	return await deriveSqliteKeyHexFromPassword(password);
+	return toHex(await hkdfSha256(masterDek, SQLITE_KEY_CONTEXT, SQLITE_KDF_KEY_BYTES));
 }
 
 function isSqliteDbRelatedFile(name: string) {
@@ -130,12 +101,14 @@ export async function deleteSqliteOpfsFiles(): Promise<string[]> {
 }
 
 export function sqlite(
+	masterDek: Uint8Array<ArrayBuffer>,
 	migrations: (db: DbHandle) => Promise<void>,
 ) {
 	let ready = false;
 	let handle: DbHandle;
 	let workerRef: Worker | null = null;
 	let closed = false;
+	let initPromise: Promise<void> | null = null;
 	let nextRequestId = 1;
 	const pendingRequests = new Map<
 		number,
@@ -198,10 +171,17 @@ export function sqlite(
 		});
 	};
 
-	const initPromise = (async () => {
+	const init = async () => {
+		if (ready) return;
+		if (initPromise) {
+			await initPromise;
+			return;
+		}
+
+		initPromise = (async () => {
 		console.log("sqlite initializing...");
 
-		const keyHex = await promptForSqliteKeyHex();
+		const keyHex = await deriveSqliteKeyHexFromMasterDek(masterDek);
 		const initResponse = await callWorker("init", {
 			keyHex,
 			dbFile: SQLITE_DB_FILE,
@@ -244,22 +224,29 @@ export function sqlite(
 
 		ready = true;
 		console.log("sqlite ready");
-	})();
+		})();
+
+		try {
+			await initPromise;
+		} finally {
+			if (!ready) initPromise = null;
+		}
+	};
 
 	return {
 		query: async <T = any>(sql: string, vars?: any[]): Promise<T[]> => {
 			if (closed) throw new Error("sqlite connection is closed");
-			if (!ready) await initPromise;
+			await init();
 			return await handle.query<T>(sql, vars);
 		},
 		exec: async (sql: string, vars?: any[]) => {
 			if (closed) throw new Error("sqlite connection is closed");
-			if (!ready) await initPromise;
+			await init();
 			return await handle.exec(sql, vars);
 		},
 		withTx: async <T>(fn: () => Promise<T>): Promise<T> => {
 			if (closed) throw new Error("sqlite connection is closed");
-			if (!ready) await initPromise;
+			await init();
 			return await handle.withTx(fn);
 		},
 			close: async () => {
@@ -276,8 +263,8 @@ export function sqlite(
 		} satisfies DbClient;
 }
 
-export function getDb(): DbClient {
-	return sqlite(async ({ exec, query }) => {
+export function getDb(masterDek: Uint8Array<ArrayBuffer>): DbClient {
+	return sqlite(masterDek, async ({ exec, query }) => {
 		await exec(`create table if not exists version (current integer not null)`);
 		await exec(`create table if not exists currency_meta (
 			currency text primary key not null,

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
 	computeAuthChallengeSignature,
 	deriveAuthMaterialFromSeed,
-} from "../crypt";
+} from "../crypto";
 import { queryKeys } from "./query-keys";
 
 export type Me = { user_id: string };
@@ -30,6 +30,7 @@ export function useMe() {
 type ChallengeResponse = {
 	challenge_id: string;
 	nonce: string;
+	signature_payload: string;
 };
 
 async function registerWithAuthMaterial(input: {
@@ -97,8 +98,7 @@ export async function loginWithSeed(seed: Uint8Array<ArrayBuffer>): Promise<void
 
 	const signature = await computeAuthChallengeSignature({
 		authPrivateKey,
-		challengeId: challenge.challenge_id,
-		nonce: challenge.nonce,
+		signaturePayload: challenge.signature_payload,
 	});
 	await verifyChallenge({
 		authId,

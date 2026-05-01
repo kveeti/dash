@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use axum::{Router, http::Method, routing::get};
-use dashmap::DashMap;
 use sqlx::{PgPool, migrate};
 use state::AppState;
 use tokio::{net::TcpListener, signal};
@@ -59,7 +58,6 @@ async fn main() {
         hub,
         base_url: config.base_url,
         session_ttl_days: config.session_ttl_days,
-        auth_challenges: Arc::new(DashMap::new()),
     };
 
     let cors = match &config.cors_origin {

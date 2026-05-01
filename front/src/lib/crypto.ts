@@ -1,4 +1,8 @@
-import { entropyToMnemonic, mnemonicToEntropy, validateMnemonic } from "@scure/bip39";
+import {
+	generateMnemonic as generateBip39Mnemonic,
+	mnemonicToSeedWebcrypto,
+	validateMnemonic,
+} from "@scure/bip39";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
 
@@ -6,7 +10,17 @@ const IV_BYTES = 12;
 const DEK_SEED_BYTES = 32;
 const BIP39_WORD_COUNT = 24;
 const AUTH_ID_CONTEXT = "dash/auth/id/v1";
-const AUTH_SIGNING_KEY_CONTEXT = "dash/auth/signing-key/v1";
+const AUTH_SIGNING_KEY_CONTEXT = "dash/recovery-auth/v1";
+const AUTH_CHALLENGE_CONTEXT = "dash/auth/challenge/v1";
+const MASTER_DEK_CONTEXT = "dash/master-dek/v1";
+const SYNC_CONTENT_KEY_CONTEXT = "dash/sync-content/v1";
+
+export type WrappedDek = {
+	v: 1;
+	alg: "AES-256-GCM";
+	iv: string;
+	ciphertext: string;
+};
 
 export type SyncPayloadCodec = {
 	encode: (payload: Record<string, unknown>) => Promise<string>;
@@ -121,6 +135,22 @@ export function encodeBase64(value: Uint8Array<ArrayBuffer>): string {
 	throw new Error('base64 codec unavailable in runtime');
 }
 
+export function encodeBase64Url(bytes: Uint8Array<ArrayBuffer>): string {
+	return encodeBase64(bytes)
+		.replace(/\+/g, "-")
+		.replace(/\//g, "_")
+		.replace(/=+$/g, "");
+}
+
+export function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
+	const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+	const padded = normalized.padEnd(
+		normalized.length + ((4 - (normalized.length % 4)) % 4),
+		"=",
+	);
+	return decodeBase64(padded);
+}
+
 const PBKDF2_ITERS = 300_000;
 
 export async function deriveCryptoKeyFromPassphrase(passphrase: string, salt: Uint8Array<ArrayBuffer>) {
@@ -154,7 +184,7 @@ export function createDekSeed(): Uint8Array<ArrayBuffer> {
 	return crypto.getRandomValues(new Uint8Array(DEK_SEED_BYTES));
 }
 
-export async function importDekFromSeed(seed: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+async function importAesGcmKeyFromSeed(seed: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
 	if (seed.byteLength !== DEK_SEED_BYTES) {
 		throw new Error("invalid dek seed length");
 	}
@@ -165,6 +195,19 @@ export async function importDekFromSeed(seed: Uint8Array<ArrayBuffer>): Promise<
 		false,
 		["encrypt", "decrypt"],
 	);
+}
+
+export async function importDekFromSeed(masterDek: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+	const syncContentDek = await hkdfSha256(
+		masterDek,
+		SYNC_CONTENT_KEY_CONTEXT,
+		DEK_SEED_BYTES,
+	);
+	try {
+		return await importAesGcmKeyFromSeed(syncContentDek);
+	} finally {
+		syncContentDek.fill(0);
+	}
 }
 
 export async function createLocalWrapKey(): Promise<CryptoKey> {
@@ -203,14 +246,11 @@ export async function unwrapSeedFromStorage(
 	return new Uint8Array(plaintext);
 }
 
-export async function encodeDekSeedAsWords(
-	seed: Uint8Array<ArrayBuffer>,
-): Promise<string> {
-	if (seed.byteLength !== DEK_SEED_BYTES) throw new Error("invalid dek seed length");
-	return entropyToMnemonic(seed, wordlist);
+export function generateMnemonic(): string {
+	return generateBip39Mnemonic(wordlist, 256);
 }
 
-export async function decodeDekSeedFromWords(wordsInput: string): Promise<Uint8Array<ArrayBuffer>> {
+export function normalizeMnemonic(wordsInput: string): string {
 	const normalized = wordsInput.trim().toLowerCase().replace(/\s+/g, " ");
 	const words = normalized.split(" ").filter(Boolean);
 	if (words.length !== BIP39_WORD_COUNT) {
@@ -219,35 +259,104 @@ export async function decodeDekSeedFromWords(wordsInput: string): Promise<Uint8A
 	if (!validateMnemonic(normalized, wordlist)) {
 		throw new Error("invalid BIP39 mnemonic");
 	}
-	return mnemonicToEntropy(normalized, wordlist);
+	return normalized;
 }
 
-function toBase64Url(bytes: Uint8Array<ArrayBuffer>): string {
-	return encodeBase64(bytes)
-		.replace(/\+/g, "-")
-		.replace(/\//g, "_")
-		.replace(/=+$/g, "");
+export async function mnemonicToSeed(wordsInput: string): Promise<Uint8Array<ArrayBuffer>> {
+	return new Uint8Array(await mnemonicToSeedWebcrypto(normalizeMnemonic(wordsInput)));
 }
 
-async function sha256WithContext(
-	context: string,
-	seed: Uint8Array<ArrayBuffer>,
+export async function deriveMasterDek(
+	bip39Seed: Uint8Array<ArrayBuffer>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-	if (seed.byteLength !== DEK_SEED_BYTES) {
-		throw new Error("invalid dek seed length");
+	return await hkdfSha256(bip39Seed, MASTER_DEK_CONTEXT, DEK_SEED_BYTES);
+}
+
+export async function hkdfSha256(
+	inputKeyMaterial: Uint8Array<ArrayBuffer>,
+	info: string,
+	lengthBytes: number,
+	salt = new Uint8Array(0),
+): Promise<Uint8Array<ArrayBuffer>> {
+	const key = await crypto.subtle.importKey(
+		"raw",
+		inputKeyMaterial,
+		"HKDF",
+		false,
+		["deriveBits"],
+	);
+	const bits = await crypto.subtle.deriveBits(
+		{
+			name: "HKDF",
+			hash: "SHA-256",
+			salt,
+			info: new TextEncoder().encode(info),
+		},
+		key,
+		lengthBytes * 8,
+	);
+	return new Uint8Array(bits);
+}
+
+async function importPrfWrapKey(prfKey: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+	if (prfKey.byteLength !== DEK_SEED_BYTES) {
+		throw new Error("invalid WebAuthn PRF key length");
 	}
-	const contextBytes = new TextEncoder().encode(`${context}:`);
-	const input = new Uint8Array(contextBytes.byteLength + seed.byteLength);
-	input.set(contextBytes, 0);
-	input.set(seed, contextBytes.byteLength);
-	const digest = await crypto.subtle.digest("SHA-256", input);
-	return new Uint8Array(digest);
+	return await crypto.subtle.importKey(
+		"raw",
+		prfKey,
+		{ name: "AES-GCM" },
+		false,
+		["encrypt", "decrypt"],
+	);
+}
+
+export async function wrapDek(
+	masterDek: Uint8Array<ArrayBuffer>,
+	prfKey: Uint8Array<ArrayBuffer>,
+): Promise<WrappedDek> {
+	if (masterDek.byteLength !== DEK_SEED_BYTES) {
+		throw new Error("invalid master DEK length");
+	}
+	const wrapKey = await importPrfWrapKey(prfKey);
+	const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+	const ciphertext = await crypto.subtle.encrypt(
+		{ name: "AES-GCM", iv },
+		wrapKey,
+		masterDek,
+	);
+	return {
+		v: 1,
+		alg: "AES-256-GCM",
+		iv: encodeBase64(iv),
+		ciphertext: encodeBase64(new Uint8Array(ciphertext)),
+	};
+}
+
+export async function unwrapDek(
+	wrappedDek: WrappedDek,
+	prfKey: Uint8Array<ArrayBuffer>,
+): Promise<Uint8Array<ArrayBuffer>> {
+	if (wrappedDek.v !== 1 || wrappedDek.alg !== "AES-256-GCM") {
+		throw new Error("unsupported wrapped DEK format");
+	}
+	const wrapKey = await importPrfWrapKey(prfKey);
+	const plaintext = await crypto.subtle.decrypt(
+		{ name: "AES-GCM", iv: decodeBase64(wrappedDek.iv) },
+		wrapKey,
+		decodeBase64(wrappedDek.ciphertext),
+	);
+	const masterDek = new Uint8Array(plaintext);
+	if (masterDek.byteLength !== DEK_SEED_BYTES) {
+		throw new Error("invalid unwrapped master DEK length");
+	}
+	return masterDek;
 }
 
 export async function deriveAuthMaterialFromSeed(
 	seed: Uint8Array<ArrayBuffer>,
 ): Promise<{ authId: string; authPublicKey: string; authPrivateKey: Uint8Array<ArrayBuffer> }> {
-	const privateKey = await sha256WithContext(AUTH_SIGNING_KEY_CONTEXT, seed);
+	const privateKey = await hkdfSha256(seed, AUTH_SIGNING_KEY_CONTEXT, DEK_SEED_BYTES);
 	const publicKey = ed25519.getPublicKey(privateKey);
 	const idPrefix = new TextEncoder().encode(`${AUTH_ID_CONTEXT}:`);
 	const idInput = new Uint8Array(idPrefix.byteLength + publicKey.byteLength);
@@ -255,18 +364,20 @@ export async function deriveAuthMaterialFromSeed(
 	idInput.set(publicKey, idPrefix.byteLength);
 	const idDigest = await crypto.subtle.digest("SHA-256", idInput);
 	return {
-		authId: toBase64Url(new Uint8Array(idDigest)),
-		authPublicKey: toBase64Url(publicKey),
+		authId: encodeBase64Url(new Uint8Array(idDigest)),
+		authPublicKey: encodeBase64Url(publicKey),
 		authPrivateKey: privateKey,
 	};
 }
 
 export async function computeAuthChallengeSignature(input: {
 	authPrivateKey: Uint8Array<ArrayBuffer>;
-	challengeId: string;
-	nonce: string;
+	signaturePayload: string;
 }): Promise<string> {
-	const payload = new TextEncoder().encode(`${input.challengeId}:${input.nonce}`);
+	if (!input.signaturePayload.startsWith(`${AUTH_CHALLENGE_CONTEXT}\n`)) {
+		throw new Error("invalid auth challenge payload");
+	}
+	const payload = new TextEncoder().encode(input.signaturePayload);
 	const signature = ed25519.sign(payload, input.authPrivateKey);
-	return toBase64Url(new Uint8Array(signature));
+	return encodeBase64Url(new Uint8Array(signature));
 }
