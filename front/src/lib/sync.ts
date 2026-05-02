@@ -10,7 +10,7 @@ import { useCrypto, useDb } from "../providers";
 import type { DbHandle } from "./db";
 import { queryKeyRoots, queryKeys } from "./queries/query-keys";
 import { normalizeCurrency } from "./currency";
-import { loginWithSeed } from "./queries/auth";
+import { loginWithAccountRootKey } from "./queries/auth";
 import { getUiStorage, idb, uiStorageDefaults } from "./local-storage";
 
 type DirtyEntry = {
@@ -749,7 +749,7 @@ export function useSync() {
 	const canSync = uiStorage?.sync_state === "enabled";
 	const isOnline = useOnlineStatus();
 	const db = useDb();
-	const { masterDek, syncContentKey } = useCrypto();
+	const { accountRootKey, syncContentKey } = useCrypto();
 	const qc = useQueryClient();
 
 	const clientRef = useRef<SyncClient | null>(null);
@@ -790,7 +790,7 @@ export function useSync() {
 
 		(async () => {
 			try {
-				await loginWithSeed(masterDek);
+				await loginWithAccountRootKey(accountRootKey);
 
 				if (cancelled) return;
 				const client = new SyncClient(
@@ -813,7 +813,7 @@ export function useSync() {
 			clientRef.current?.stop();
 			clientRef.current = null;
 		};
-	}, [enabled, db, masterDek, syncContentKey]);
+	}, [enabled, db, accountRootKey, syncContentKey]);
 
 	// Drive push whenever the mutation cache invalidates our sync key.
 	useQuery({

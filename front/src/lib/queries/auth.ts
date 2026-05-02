@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
 	computeAuthChallengeSignature,
-	deriveAuthMaterialFromSeed,
+	deriveAuthMaterialFromAccountRootKey,
 } from "../crypto";
 import { queryKeys } from "./query-keys";
 
@@ -85,8 +85,11 @@ async function verifyChallenge(input: {
 	}
 }
 
-export async function loginWithSeed(seed: Uint8Array<ArrayBuffer>): Promise<void> {
-	const { authId, authPublicKey, authPrivateKey } = await deriveAuthMaterialFromSeed(seed);
+export async function loginWithAccountRootKey(
+	accountRootKey: Uint8Array<ArrayBuffer>,
+): Promise<void> {
+	const { authId, authPublicKey, authPrivateKey } =
+		await deriveAuthMaterialFromAccountRootKey(accountRootKey);
 	let challenge = await fetchChallenge(authId);
 	if (!challenge) {
 		await registerWithAuthMaterial({ authId, authPublicKey });

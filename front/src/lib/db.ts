@@ -69,17 +69,17 @@ function toHex(bytes: Uint8Array): string {
 	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function deriveSqliteKeyHexFromMasterDek(
-	masterDek: Uint8Array<ArrayBuffer>,
+async function deriveSqliteKeyHexFromAccountRootKey(
+	accountRootKey: Uint8Array<ArrayBuffer>,
 ): Promise<string> {
 	if (!globalThis.crypto?.subtle) {
 		throw new Error("WebCrypto subtle API is unavailable; cannot derive database key");
 	}
-	return toHex(await hkdfSha256(masterDek, SQLITE_KEY_CONTEXT, SQLITE_KDF_KEY_BYTES));
+	return toHex(await hkdfSha256(accountRootKey, SQLITE_KEY_CONTEXT, SQLITE_KDF_KEY_BYTES));
 }
 
 export function sqlite(
-	masterDek: Uint8Array<ArrayBuffer>,
+	accountRootKey: Uint8Array<ArrayBuffer>,
 	migrations: (db: DbHandle) => Promise<void>,
 ) {
 	let ready = false;
@@ -159,7 +159,7 @@ export function sqlite(
 		initPromise = (async () => {
 		console.log("sqlite initializing...");
 
-		const keyHex = await deriveSqliteKeyHexFromMasterDek(masterDek);
+		const keyHex = await deriveSqliteKeyHexFromAccountRootKey(accountRootKey);
 		const initResponse = await callWorker("init", {
 			keyHex,
 			dbFile: SQLITE_DB_FILE,
@@ -241,8 +241,8 @@ export function sqlite(
 		} satisfies DbClient;
 }
 
-export function getDb(masterDek: Uint8Array<ArrayBuffer>): DbClient {
-	return sqlite(masterDek, async ({ exec, query }) => {
+export function getDb(accountRootKey: Uint8Array<ArrayBuffer>): DbClient {
+	return sqlite(accountRootKey, async ({ exec, query }) => {
 		await exec(`create table if not exists version (current integer not null)`);
 		await exec(`create table if not exists currency_meta (
 			currency text primary key not null,

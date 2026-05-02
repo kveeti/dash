@@ -14,10 +14,11 @@ const SYNC_SCHEMA_VERSION = 1;
 const AUTH_ID_CONTEXT = "dash/auth/id/v1";
 const AUTH_SIGNING_KEY_CONTEXT = "dash/recovery-auth/v1";
 const AUTH_CHALLENGE_CONTEXT = "dash/auth/challenge/v1";
-const MASTER_DEK_CONTEXT = "dash/master-dek/v1";
+const ACCOUNT_ROOT_KEY_CONTEXT = "dash/account-root/v1";
 const SYNC_CONTENT_KEY_CONTEXT = "dash/sync-content/v1";
+const LOCAL_WRAP_KEY_CONTEXT = "dash/local-wrap/v1";
 
-export type WrappedDek = {
+export type WrappedAccountRootKey = {
 	v: 1;
 	alg: "AES-256-GCM";
 	iv: string;
@@ -242,39 +243,6 @@ export function decodeBase64Url(value: string): Uint8Array<ArrayBuffer> {
 	return decodeBase64(padded);
 }
 
-const PBKDF2_ITERS = 300_000;
-
-export async function deriveCryptoKeyFromPassphrase(passphrase: string, salt: Uint8Array<ArrayBuffer>) {
-	const enc = new TextEncoder();
-
-	const keyMaterial = await crypto.subtle.importKey(
-		"raw",
-		enc.encode(passphrase),
-		{ name: "PBKDF2" },
-		false,
-		["deriveKey"]
-	);
-
-	const cryptoKey = await crypto.subtle.deriveKey(
-		{
-			name: "PBKDF2",
-			salt: salt,
-			iterations: PBKDF2_ITERS,
-			hash: "SHA-256"
-		},
-		keyMaterial,
-		{ name: "AES-GCM", length: 256 },
-		false, // extractable: false
-		["encrypt", "decrypt"]
-	);
-
-	return cryptoKey;
-}
-
-export function createDekSeed(): Uint8Array<ArrayBuffer> {
-	return crypto.getRandomValues(new Uint8Array(DEK_SEED_BYTES));
-}
-
 async function importAesGcmKeyFromSeed(seed: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
 	if (seed.byteLength !== DEK_SEED_BYTES) {
 		throw new Error("invalid dek seed length");
@@ -288,9 +256,11 @@ async function importAesGcmKeyFromSeed(seed: Uint8Array<ArrayBuffer>): Promise<C
 	);
 }
 
-export async function importDekFromSeed(masterDek: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+export async function importSyncContentKey(
+	accountRootKey: Uint8Array<ArrayBuffer>,
+): Promise<CryptoKey> {
 	const syncContentDek = await hkdfSha256(
-		masterDek,
+		accountRootKey,
 		SYNC_CONTENT_KEY_CONTEXT,
 		DEK_SEED_BYTES,
 	);
@@ -299,42 +269,6 @@ export async function importDekFromSeed(masterDek: Uint8Array<ArrayBuffer>): Pro
 	} finally {
 		syncContentDek.fill(0);
 	}
-}
-
-export async function createLocalWrapKey(): Promise<CryptoKey> {
-	return await crypto.subtle.generateKey(
-		{ name: "AES-GCM", length: 256 },
-		false,
-		["encrypt", "decrypt"],
-	);
-}
-
-export async function wrapSeedForStorage(
-	seed: Uint8Array<ArrayBuffer>,
-	wrapKey: CryptoKey,
-): Promise<string> {
-	const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
-	const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, wrapKey, seed);
-	const packed = new Uint8Array(IV_BYTES + ciphertext.byteLength);
-	packed.set(iv, 0);
-	packed.set(new Uint8Array(ciphertext), IV_BYTES);
-	return encodeBase64(packed);
-}
-
-export async function unwrapSeedFromStorage(
-	wrappedSeed: string,
-	wrapKey: CryptoKey,
-): Promise<Uint8Array<ArrayBuffer>> {
-	const packed = decodeBase64(wrappedSeed);
-	if (packed.byteLength <= IV_BYTES) throw new Error("invalid wrapped seed");
-	const iv = packed.slice(0, IV_BYTES);
-	const ciphertext = packed.slice(IV_BYTES);
-	const plaintext = await crypto.subtle.decrypt(
-		{ name: "AES-GCM", iv },
-		wrapKey,
-		ciphertext,
-	);
-	return new Uint8Array(plaintext);
 }
 
 export function generateMnemonic(): string {
@@ -357,10 +291,10 @@ export async function mnemonicToSeed(wordsInput: string): Promise<Uint8Array<Arr
 	return new Uint8Array(await mnemonicToSeedWebcrypto(normalizeMnemonic(wordsInput)));
 }
 
-export async function deriveMasterDek(
+export async function deriveAccountRootKey(
 	bip39Seed: Uint8Array<ArrayBuffer>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-	return await hkdfSha256(bip39Seed, MASTER_DEK_CONTEXT, DEK_SEED_BYTES);
+	return await hkdfSha256(bip39Seed, ACCOUNT_ROOT_KEY_CONTEXT, DEK_SEED_BYTES);
 }
 
 export async function hkdfSha256(
@@ -389,32 +323,41 @@ export async function hkdfSha256(
 	return new Uint8Array(bits);
 }
 
-async function importPrfWrapKey(prfKey: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
+async function importPrfLocalWrapKey(prfKey: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
 	if (prfKey.byteLength !== DEK_SEED_BYTES) {
 		throw new Error("invalid WebAuthn PRF key length");
 	}
-	return await crypto.subtle.importKey(
-		"raw",
+	const localWrapKeySeed = await hkdfSha256(
 		prfKey,
-		{ name: "AES-GCM" },
-		false,
-		["encrypt", "decrypt"],
+		LOCAL_WRAP_KEY_CONTEXT,
+		DEK_SEED_BYTES,
 	);
+	try {
+		return await crypto.subtle.importKey(
+			"raw",
+			localWrapKeySeed,
+			{ name: "AES-GCM" },
+			false,
+			["encrypt", "decrypt"],
+		);
+	} finally {
+		localWrapKeySeed.fill(0);
+	}
 }
 
-export async function wrapDek(
-	masterDek: Uint8Array<ArrayBuffer>,
+export async function wrapAccountRootKey(
+	accountRootKey: Uint8Array<ArrayBuffer>,
 	prfKey: Uint8Array<ArrayBuffer>,
-): Promise<WrappedDek> {
-	if (masterDek.byteLength !== DEK_SEED_BYTES) {
-		throw new Error("invalid master DEK length");
+): Promise<WrappedAccountRootKey> {
+	if (accountRootKey.byteLength !== DEK_SEED_BYTES) {
+		throw new Error("invalid account root key length");
 	}
-	const wrapKey = await importPrfWrapKey(prfKey);
+	const wrapKey = await importPrfLocalWrapKey(prfKey);
 	const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
 	const ciphertext = await crypto.subtle.encrypt(
 		{ name: "AES-GCM", iv },
 		wrapKey,
-		masterDek,
+		accountRootKey,
 	);
 	return {
 		v: 1,
@@ -424,30 +367,37 @@ export async function wrapDek(
 	};
 }
 
-export async function unwrapDek(
-	wrappedDek: WrappedDek,
+export async function unwrapAccountRootKey(
+	wrappedAccountRootKey: WrappedAccountRootKey,
 	prfKey: Uint8Array<ArrayBuffer>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-	if (wrappedDek.v !== 1 || wrappedDek.alg !== "AES-256-GCM") {
-		throw new Error("unsupported wrapped DEK format");
+	if (
+		wrappedAccountRootKey.v !== 1 ||
+		wrappedAccountRootKey.alg !== "AES-256-GCM"
+	) {
+		throw new Error("unsupported wrapped account root key format");
 	}
-	const wrapKey = await importPrfWrapKey(prfKey);
+	const wrapKey = await importPrfLocalWrapKey(prfKey);
 	const plaintext = await crypto.subtle.decrypt(
-		{ name: "AES-GCM", iv: decodeBase64(wrappedDek.iv) },
+		{ name: "AES-GCM", iv: decodeBase64(wrappedAccountRootKey.iv) },
 		wrapKey,
-		decodeBase64(wrappedDek.ciphertext),
+		decodeBase64(wrappedAccountRootKey.ciphertext),
 	);
-	const masterDek = new Uint8Array(plaintext);
-	if (masterDek.byteLength !== DEK_SEED_BYTES) {
-		throw new Error("invalid unwrapped master DEK length");
+	const accountRootKey = new Uint8Array(plaintext);
+	if (accountRootKey.byteLength !== DEK_SEED_BYTES) {
+		throw new Error("invalid unwrapped account root key length");
 	}
-	return masterDek;
+	return accountRootKey;
 }
 
-export async function deriveAuthMaterialFromSeed(
-	seed: Uint8Array<ArrayBuffer>,
+export async function deriveAuthMaterialFromAccountRootKey(
+	accountRootKey: Uint8Array<ArrayBuffer>,
 ): Promise<{ authId: string; authPublicKey: string; authPrivateKey: Uint8Array<ArrayBuffer> }> {
-	const privateKey = await hkdfSha256(seed, AUTH_SIGNING_KEY_CONTEXT, DEK_SEED_BYTES);
+	const privateKey = await hkdfSha256(
+		accountRootKey,
+		AUTH_SIGNING_KEY_CONTEXT,
+		DEK_SEED_BYTES,
+	);
 	const publicKey = ed25519.getPublicKey(privateKey);
 	const idPrefix = new TextEncoder().encode(`${AUTH_ID_CONTEXT}:`);
 	const idInput = new Uint8Array(idPrefix.byteLength + publicKey.byteLength);

@@ -8,7 +8,7 @@ import { getDb } from "./lib/db";
 import { queryKeyRoots } from "./lib/queries/query-keys";
 import { normalizeCurrency } from "./lib/currency";
 import { I18nProvider as AriaI18nProvider } from 'react-aria-components/I18nProvider';
-import { importDekFromSeed } from "./lib/crypto";
+import { importSyncContentKey } from "./lib/crypto";
 import { WebAuthnGate } from "./webauthn-gate";
 
 const queryClient = new QueryClient({
@@ -35,9 +35,9 @@ export function Providers(props: { children: ReactNode }) {
 		<I18nProvider>
 			<QueryClientProvider client={queryClient}>
 				<WebAuthnGate>
-					{(masterDek) => (
-						<CryptoProvider masterDek={masterDek}>
-							<DbProvider masterDek={masterDek}>
+					{(accountRootKey) => (
+						<CryptoProvider accountRootKey={accountRootKey}>
+							<DbProvider accountRootKey={accountRootKey}>
 								{props.children}
 							</DbProvider>
 						</CryptoProvider>
@@ -50,8 +50,8 @@ export function Providers(props: { children: ReactNode }) {
 
 const DbContext = createContext<ReturnType<typeof getDb> | null>(null);
 
-function DbProvider(props: { children: ReactNode; masterDek: Uint8Array<ArrayBuffer> }) {
-	const db = useMemo(() => getDb(props.masterDek), [props.masterDek]);
+function DbProvider(props: { children: ReactNode; accountRootKey: Uint8Array<ArrayBuffer> }) {
+	const db = useMemo(() => getDb(props.accountRootKey), [props.accountRootKey]);
 
 	return <DbContext.Provider value={db}>{props.children}</DbContext.Provider>;
 }
@@ -63,7 +63,7 @@ export function useDb() {
 }
 
 type CryptoContextValue = {
-	masterDek: Uint8Array<ArrayBuffer>;
+	accountRootKey: Uint8Array<ArrayBuffer>;
 	syncContentKey: CryptoKey;
 };
 
@@ -71,14 +71,14 @@ const CryptoContext = createContext<CryptoContextValue | null>(null);
 
 function CryptoProvider(props: {
 	children: ReactNode;
-	masterDek: Uint8Array<ArrayBuffer>;
+	accountRootKey: Uint8Array<ArrayBuffer>;
 }) {
 	const [syncContentKey, setSyncContentKey] = useState<CryptoKey | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		let cancelled = false;
-		importDekFromSeed(props.masterDek)
+		importSyncContentKey(props.accountRootKey)
 			.then((key) => {
 				if (!cancelled) setSyncContentKey(key);
 			})
@@ -88,15 +88,15 @@ function CryptoProvider(props: {
 		return () => {
 			cancelled = true;
 		};
-	}, [props.masterDek]);
+	}, [props.accountRootKey]);
 
 	const value = useMemo(() => {
 		if (!syncContentKey) return null;
 		return {
-			masterDek: props.masterDek,
+			accountRootKey: props.accountRootKey,
 			syncContentKey,
 		};
-	}, [syncContentKey, props.masterDek]);
+	}, [syncContentKey, props.accountRootKey]);
 
 	if (error) {
 		return <div className="p-6 text-sm text-red-11">{error}</div>;

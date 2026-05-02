@@ -4,11 +4,11 @@ import { useState, type ReactNode } from "react";
 import { Button } from "./components/button";
 import { Spinner } from "./components/spinner";
 import {
-	deriveMasterDek,
+	deriveAccountRootKey,
 	generateMnemonic,
 	mnemonicToSeed,
-	unwrapDek,
-	wrapDek,
+	unwrapAccountRootKey,
+	wrapAccountRootKey,
 } from "./lib/crypto";
 import { getUiStorage, idb, uiStorageDefaults } from "./lib/local-storage";
 import {
@@ -20,16 +20,16 @@ import { Checkbox } from "./components/checkbox";
 
 type GateState =
 	| { status: "locked" }
-	| { status: "ready"; masterDek: Uint8Array<ArrayBuffer> };
+	| { status: "ready"; accountRootKey: Uint8Array<ArrayBuffer> };
 
 export function WebAuthnGate(props: {
-	children: (masterDek: Uint8Array<ArrayBuffer>) => ReactNode;
+	children: (accountRootKey: Uint8Array<ArrayBuffer>) => ReactNode;
 }) {
 	const [gateState, setGateState] = useState<GateState>({ status: "locked" });
 	const uiStorage = useLiveQuery(getUiStorage, [], "loading");
 
 	if (gateState.status === "ready") {
-		return props.children(gateState.masterDek);
+		return props.children(gateState.accountRootKey);
 	}
 
 	if (uiStorage === "loading") {
@@ -40,33 +40,41 @@ export function WebAuthnGate(props: {
 		);
 	}
 
-	if (uiStorage?.wrapped_master_dek && uiStorage.passkey_credential_id) {
+	if (uiStorage?.wrapped_account_root_key && uiStorage.passkey_credential_id) {
 		return (
 			<UnlockScreen
-				wrappedMasterDek={uiStorage.wrapped_master_dek}
+				wrappedAccountRootKey={uiStorage.wrapped_account_root_key}
 				credentialId={uiStorage.passkey_credential_id}
-				onReady={(masterDek) => setGateState({ status: "ready", masterDek })}
+				onReady={(accountRootKey) =>
+					setGateState({ status: "ready", accountRootKey })
+				}
 			/>
 		);
 	}
 
 	return (
 		<OnboardingScreen
-			onReady={(masterDek) => setGateState({ status: "ready", masterDek })}
+			onReady={(accountRootKey) =>
+				setGateState({ status: "ready", accountRootKey })
+			}
 		/>
 	);
 }
 
 function UnlockScreen(props: {
-	wrappedMasterDek: NonNullable<Awaited<ReturnType<typeof getUiStorage>>>["wrapped_master_dek"];
+	wrappedAccountRootKey: NonNullable<
+		Awaited<ReturnType<typeof getUiStorage>>
+	>["wrapped_account_root_key"];
 	credentialId: string;
-	onReady: (masterDek: Uint8Array<ArrayBuffer>) => void;
+	onReady: (accountRootKey: Uint8Array<ArrayBuffer>) => void;
 }) {
 	const unlock = useMutation({
 		mutationFn: async () => {
-			if (!props.wrappedMasterDek) throw new Error("Missing wrapped DEK");
+			if (!props.wrappedAccountRootKey) {
+				throw new Error("Missing wrapped account root key");
+			}
 			const prfKey = await authenticateWithPasskeyPrf(props.credentialId);
-			return await unwrapDek(props.wrappedMasterDek, prfKey);
+			return await unwrapAccountRootKey(props.wrappedAccountRootKey, prfKey);
 		},
 		onSuccess: props.onReady,
 	});
@@ -99,7 +107,7 @@ const checkboxId = "user-wrote-down-words";
 const wordsId = "words";
 
 function OnboardingScreen(props: {
-	onReady: (masterDek: Uint8Array<ArrayBuffer>) => void;
+	onReady: (accountRootKey: Uint8Array<ArrayBuffer>) => void;
 }) {
 	const setup = useMutation({ mutationFn: setupFromMnemonic });
 
@@ -114,8 +122,8 @@ function OnboardingScreen(props: {
 		const words = data.get(wordsId) as string;
 		if (!words.trim()) return;
 
-		const masterDek = await setup.mutateAsync(words);
-		props.onReady(masterDek);
+		const accountRootKey = await setup.mutateAsync(words);
+		props.onReady(accountRootKey);
 	}
 
 	const [words, setWords] = useState(null);
@@ -176,7 +184,7 @@ function OnboardingScreen(props: {
 }
 
 function RecoveryForm(props: {
-	onReady: (masterDek: Uint8Array<ArrayBuffer>) => void;
+	onReady: (accountRootKey: Uint8Array<ArrayBuffer>) => void;
 }) {
 	const recover = useMutation({ mutationFn: setupFromMnemonic });
 
@@ -187,8 +195,8 @@ function RecoveryForm(props: {
 		const words = new FormData(e.currentTarget).get(wordsId) as string;
 		if (!words.trim()) return;
 
-		const masterDek = await recover.mutateAsync(words);
-		props.onReady(masterDek);
+		const accountRootKey = await recover.mutateAsync(words);
+		props.onReady(accountRootKey);
 	}
 
 	return (
@@ -232,22 +240,25 @@ function getErrorMessage(error: unknown): string {
 async function setupFromMnemonic(words: string): Promise<Uint8Array<ArrayBuffer>> {
 	await assertWebAuthnPrfAvailable();
 	const existing = await getUiStorage();
-	if (existing?.wrapped_master_dek || existing?.passkey_credential_id) {
+	if (existing?.wrapped_account_root_key || existing?.passkey_credential_id) {
 		throw new Error("passkey already configured");
 	}
 
 	const bip39Seed = await mnemonicToSeed(words);
 	try {
-		const masterDek = await deriveMasterDek(bip39Seed);
+		const accountRootKey = await deriveAccountRootKey(bip39Seed);
 		const { credentialId, prfKey } = await registerPasskeyWithPrf();
-		const wrappedMasterDek = await wrapDek(masterDek, prfKey);
+		const wrappedAccountRootKey = await wrapAccountRootKey(
+			accountRootKey,
+			prfKey,
+		);
 		await idb.uiStorage.put({
 			...uiStorageDefaults,
-			wrapped_master_dek: wrappedMasterDek,
+			wrapped_account_root_key: wrappedAccountRootKey,
 			passkey_credential_id: credentialId,
 			sync_state: "not_configured",
 		});
-		return masterDek;
+		return accountRootKey;
 	} finally {
 		bip39Seed.fill(0);
 	}

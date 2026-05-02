@@ -1,9 +1,9 @@
 import { Dexie, type EntityTable } from "dexie";
-import type { WrappedDek } from "./crypto";
+import type { WrappedAccountRootKey } from "./crypto";
 
 export type UiStorage = {
 	id: string;
-	wrapped_master_dek: WrappedDek | null;
+	wrapped_account_root_key: WrappedAccountRootKey | null;
 	passkey_credential_id: string | null;
 	cursor: number | null;
 	sync_state: "not_configured" | "enabled" | "paused" | null;
@@ -23,7 +23,7 @@ idb.version(2).stores({
 
 export const uiStorageDefaults = {
 	id: "1",
-	wrapped_master_dek: null,
+	wrapped_account_root_key: null,
 	passkey_credential_id: null,
 	cursor: null,
 	sync_state: "not_configured",
