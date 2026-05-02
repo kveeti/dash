@@ -11,8 +11,7 @@ export type DbClient = DbHandle & {
 	close: () => Promise<void>;
 };
 
-const SQLITE_DB_FILE = "db5";
-const SQLITE_OPFS_DB_BASENAMES = [SQLITE_DB_FILE, "db4", "db3", "db2", "db"] as const;
+const SQLITE_DB_FILE = "db";
 const SQLITE_KDF_KEY_BYTES = 32;
 const SQLITE_KEY_CONTEXT = "dash/sqlite-opfs/v1";
 
@@ -77,27 +76,6 @@ async function deriveSqliteKeyHexFromMasterDek(
 		throw new Error("WebCrypto subtle API is unavailable; cannot derive database key");
 	}
 	return toHex(await hkdfSha256(masterDek, SQLITE_KEY_CONTEXT, SQLITE_KDF_KEY_BYTES));
-}
-
-function isSqliteDbRelatedFile(name: string) {
-	return SQLITE_OPFS_DB_BASENAMES.some(
-		(base) => name === base || name.startsWith(`${base}-`),
-	);
-}
-
-export async function deleteSqliteOpfsFiles(): Promise<string[]> {
-	const root = await navigator.storage.getDirectory();
-	const removed: string[] = [];
-
-	for await (const [name, handle] of root.entries()) {
-		if (handle.kind !== "file") continue;
-		if (!isSqliteDbRelatedFile(name)) continue;
-		await root.removeEntry(name);
-		removed.push(name);
-	}
-
-	removed.sort();
-	return removed;
 }
 
 export function sqlite(

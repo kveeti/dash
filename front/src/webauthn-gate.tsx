@@ -1,7 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useLiveQuery } from "dexie-react-hooks";
 import { useState, type ReactNode } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "./components/button";
 import { Spinner } from "./components/spinner";
 import {
@@ -91,7 +90,6 @@ function UnlockScreen(props: {
 				{unlock.error ? (
 					<p className="text-xs text-red-11">{getErrorMessage(unlock.error)}</p>
 				) : null}
-				<RecoveryForm onReady={props.onReady} />
 			</div>
 		</main>
 	);
@@ -233,6 +231,11 @@ function getErrorMessage(error: unknown): string {
 
 async function setupFromMnemonic(words: string): Promise<Uint8Array<ArrayBuffer>> {
 	await assertWebAuthnPrfAvailable();
+	const existing = await getUiStorage();
+	if (existing?.wrapped_master_dek || existing?.passkey_credential_id) {
+		throw new Error("passkey already configured");
+	}
+
 	const bip39Seed = await mnemonicToSeed(words);
 	try {
 		const masterDek = await deriveMasterDek(bip39Seed);
@@ -240,7 +243,6 @@ async function setupFromMnemonic(words: string): Promise<Uint8Array<ArrayBuffer>
 		const wrappedMasterDek = await wrapDek(masterDek, prfKey);
 		await idb.uiStorage.put({
 			...uiStorageDefaults,
-			...(await getUiStorage()),
 			wrapped_master_dek: wrappedMasterDek,
 			passkey_credential_id: credentialId,
 			sync_state: "not_configured",

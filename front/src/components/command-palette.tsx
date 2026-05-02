@@ -3,8 +3,6 @@ import { useLocation } from "wouter";
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import { Dialog } from "@base-ui/react/dialog";
 import { ScrollArea } from "@base-ui/react/scroll-area";
-import { useDb } from "../providers";
-import { deleteSqliteOpfsFiles } from "../lib/db";
 
 interface Item {
 	value: string;
@@ -21,7 +19,6 @@ interface Group {
 export function CommandPalette() {
 	const [open, setOpen] = useState(false);
 	const [, setLocation] = useLocation();
-	const db = useDb();
 
 	const pages: Item[] = [
 		{
@@ -58,31 +55,6 @@ export function CommandPalette() {
 
 	const groupedItems: Group[] = [
 		{ value: "Pages", items: pages },
-		{
-			value: "Maintenance",
-			items: [
-				{
-					value: "delete-opfs-sqlite-files",
-					label: "Delete SQLite files from OPFS",
-					onSelect: async () => {
-						const confirmed = window.confirm(
-							"This deletes local SQLite files in OPFS (db4/db3/db2/db + sidecar files) and reloads the app. Continue?",
-						);
-						if (!confirmed) return;
-
-						try {
-							await db.close();
-							await deleteSqliteOpfsFiles();
-							window.location.reload();
-						} catch (err) {
-							window.alert(
-								`Failed to delete SQLite files from OPFS: ${err instanceof Error ? err.message : String(err)}`,
-							);
-						}
-					},
-				},
-			],
-		},
 	];
 
 	useEffect(() => {
