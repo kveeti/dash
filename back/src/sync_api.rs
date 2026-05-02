@@ -72,19 +72,19 @@ async fn push(
     jar: CookieJar,
     Json(body): Json<PushRequest>,
 ) -> Result<Response, ApiError> {
-    let user_id = require_user_id(&state, &jar).await?;
+    let session = require_user_id(&state, jar).await?;
     let secure = state.base_url.starts_with("https://");
-    let (jar, source_client_id) = get_or_issue_sync_client_id(jar, secure);
+    let (jar, source_client_id) = get_or_issue_sync_client_id(session.jar, secure);
     let result = state
         .db
-        .apply_push_ops(&user_id, &body.ops)
+        .apply_push_ops(&session.user_id, &body.ops)
         .await
         .map_err(ApiError::UnexpectedError)?;
     let ack_max_version = result.applied.last().map(|op| op.server_version);
     let not_applied_ids = result.not_applied_ids;
     state
         .hub
-        .publish_delta(&user_id, source_client_id, result.applied);
+        .publish_delta(&session.user_id, source_client_id, result.applied);
 
     Ok((
         jar,
@@ -97,17 +97,17 @@ async fn push(
 }
 
 async fn events(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
-    let user_id = require_user_id(&state, &jar).await?;
+    let session = require_user_id(&state, jar).await?;
     let secure = state.base_url.starts_with("https://");
-    let (jar, client_id) = get_or_issue_sync_client_id(jar, secure);
-    let bcast_rx = state.hub.register_client(&user_id, &client_id);
+    let (jar, client_id) = get_or_issue_sync_client_id(session.jar, secure);
+    let bcast_rx = state.hub.register_client(&session.user_id, &client_id);
     let registration = HubClientRegistration {
         hub: state.hub.clone(),
-        user_id: user_id.clone(),
+        user_id: session.user_id.clone(),
         client_id: client_id.clone(),
     };
 
-    let user_id_for_stream = user_id;
+    let user_id_for_stream = session.user_id;
     let realtime_stream = stream::unfold(
         (bcast_rx, registration),
         move |(mut rx, registration)| {

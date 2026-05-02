@@ -11,6 +11,7 @@ struct EnvironmentVariables {
     cors_origin: Option<String>,
     base_url: String,
     session_ttl_days: Option<i64>,
+    session_secret: String,
 }
 
 pub struct Config {
@@ -19,6 +20,7 @@ pub struct Config {
     pub cors_origin: Option<String>,
     pub base_url: String,
     pub session_ttl_days: i64,
+    pub session_secret: Vec<u8>,
 }
 
 impl Config {
@@ -47,12 +49,18 @@ impl Config {
             );
         }
 
+        let session_secret = envs.session_secret.into_bytes();
+        if session_secret.len() < 32 {
+            anyhow::bail!("SESSION_SECRET must be at least 32 bytes");
+        }
+
         Ok(Config {
             database_url: envs.database_url,
             port: envs.port.unwrap_or(8000),
             cors_origin: envs.cors_origin,
             base_url: envs.base_url,
             session_ttl_days,
+            session_secret,
         })
     }
 }

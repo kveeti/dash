@@ -17,8 +17,9 @@ use ring::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    auth::{AUTH_SESSION_COOKIE, require_user_id},
+    auth::{AUTH_SESSION_COOKIE, auth_session_cookie, require_user_id},
     error::ApiError,
+    session::{generate_session_token, hash_session_token},
     state::AppState,
 };
 
@@ -282,31 +283,33 @@ async fn verify(
         return Err(ApiError::Unauthorized);
     }
 
-    let session_id = state
+    let session_token = generate_session_token();
+    let session_token_hash = hash_session_token(&state.session_secret, &session_token);
+    state
         .db
-        .create_session(&user_id, state.session_ttl_days)
+        .create_session(&user_id, &session_token_hash, state.session_ttl_days)
         .await?;
     let secure = state.base_url.starts_with("https://");
-    let mut cookie = Cookie::new(AUTH_SESSION_COOKIE, session_id);
-    cookie.set_http_only(true);
-    cookie.set_same_site(SameSite::Lax);
-    cookie.set_secure(secure);
-    cookie.set_path("/");
+    let cookie = auth_session_cookie(session_token, secure, state.session_ttl_days);
 
     Ok((jar.add(cookie), Json(LoginResponse {})).into_response())
 }
 
 async fn me(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
-    let user_id = require_user_id(&state, &jar).await?;
-    Ok(Json(MeResponse { user_id }).into_response())
+    let session = require_user_id(&state, jar).await?;
+    Ok((
+        session.jar,
+        Json(MeResponse {
+            user_id: session.user_id,
+        }),
+    )
+        .into_response())
 }
 
 async fn logout(State(state): State<AppState>, jar: CookieJar) -> Result<Response, ApiError> {
     if let Some(cookie) = jar.get(AUTH_SESSION_COOKIE) {
-        let session_id = cookie.value().to_string();
-        if let Some(user_id) = state.db.resolve_session_user_id(&session_id).await? {
-            state.db.delete_session(&user_id, &session_id).await?;
-        }
+        let token_hash = hash_session_token(&state.session_secret, cookie.value());
+        state.db.delete_session(&token_hash).await?;
     }
 
     let secure = state.base_url.starts_with("https://");

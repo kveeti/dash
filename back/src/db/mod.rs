@@ -164,74 +164,51 @@ impl Db {
     pub async fn create_session(
         &self,
         user_id: &str,
+        token_hash: &[u8],
         ttl_days: i64,
-    ) -> Result<String, sqlx::Error> {
-        let session_id = Ulid::new().to_string();
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-            insert into sessions (id, user_id, expires_at)
+            insert into sessions (token_hash, user_id, expires_at)
             values ($1, $2, now() + make_interval(days => $3::int))
             "#,
         )
-        .bind(&session_id)
+        .bind(token_hash)
         .bind(user_id)
         .bind(ttl_days)
         .execute(&self.pool)
         .await?;
-        Ok(session_id)
+        Ok(())
     }
 
     pub async fn touch_session(
         &self,
-        user_id: &str,
-        session_id: &str,
+        token_hash: &[u8],
         ttl_days: i64,
-    ) -> Result<bool, sqlx::Error> {
-        let result = sqlx::query(
-            r#"
-            update sessions
-            set expires_at = now() + make_interval(days => $3::int),
-                updated_at = now()
-            where user_id = $1
-              and id = $2
-              and expires_at > now()
-            "#,
-        )
-        .bind(user_id)
-        .bind(session_id)
-        .bind(ttl_days)
-        .execute(&self.pool)
-        .await?;
-
-        Ok(result.rows_affected() > 0)
-    }
-
-    pub async fn delete_session(&self, user_id: &str, session_id: &str) -> Result<(), sqlx::Error> {
-        sqlx::query("delete from sessions where user_id = $1 and id = $2")
-            .bind(user_id)
-            .bind(session_id)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn resolve_session_user_id(
-        &self,
-        session_id: &str,
     ) -> Result<Option<String>, sqlx::Error> {
         let row: Option<(String,)> = sqlx::query_as(
             r#"
-            select user_id
-            from sessions
-            where id = $1
-              and expires_at > now()
-            limit 1
+            update sessions
+            set expires_at = now() + make_interval(days => $2::int),
+                updated_at = now()
+            where token_hash = $1 and expires_at > now()
+            returning user_id
             "#,
         )
-        .bind(session_id)
+        .bind(token_hash)
+        .bind(ttl_days)
         .fetch_optional(&self.pool)
         .await?;
+
         Ok(row.map(|(user_id,)| user_id))
+    }
+
+    pub async fn delete_session(&self, token_hash: &[u8]) -> Result<(), sqlx::Error> {
+        sqlx::query("delete from sessions where token_hash = $1")
+            .bind(token_hash)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     pub async fn load_bootstrap_page(

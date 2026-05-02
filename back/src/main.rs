@@ -16,6 +16,7 @@ mod db;
 mod error;
 mod hub;
 mod proto;
+mod session;
 mod state;
 mod sync_api;
 
@@ -58,6 +59,7 @@ async fn main() {
         hub,
         base_url: config.base_url,
         session_ttl_days: config.session_ttl_days,
+        session_secret: config.session_secret,
     };
 
     let cors = match &config.cors_origin {

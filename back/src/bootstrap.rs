@@ -27,19 +27,22 @@ async fn bootstrap(
     jar: CookieJar,
     Query(q): Query<BootstrapQuery>,
 ) -> Result<Response, ApiError> {
-    let user_id = require_user_id(&state, &jar).await?;
+    let session = require_user_id(&state, jar).await?;
 
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let cursor = q.cursor.unwrap_or(0);
     let page = state
         .db
-        .load_bootstrap_page(&user_id, cursor, limit)
+        .load_bootstrap_page(&session.user_id, cursor, limit)
         .await?;
 
-    Ok(Json(BootstrapResponse {
-        entries: page.entries,
-        next_cursor: page.next_cursor,
-        server_max_version: page.server_max_version,
-    })
-    .into_response())
+    Ok((
+        session.jar,
+        Json(BootstrapResponse {
+            entries: page.entries,
+            next_cursor: page.next_cursor,
+            server_max_version: page.server_max_version,
+        }),
+    )
+        .into_response())
 }

@@ -8,4 +8,5 @@ pub struct AppState {
     pub hub: std::sync::Arc<Hub>,
     pub base_url: String,
     pub session_ttl_days: i64,
+    pub session_secret: Vec<u8>,
 }
