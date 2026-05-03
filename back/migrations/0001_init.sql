@@ -24,6 +24,7 @@ create index idx_auth_challenges_user_id on auth_challenges(user_id);
 create table entries (
     user_id text not null references users(id) on delete cascade,
     id text not null,
+    pv integer not null,
     blob bytea not null,
 
     _sync_is_deleted boolean not null default false,

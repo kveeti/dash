@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize)]
 pub struct PushOp {
     pub id: String,
+    pub pv: i32,
     #[serde(with = "base64_blob")]
     pub blob: Vec<u8>,
     #[serde(rename = "_sync_is_deleted", default)]
@@ -14,6 +15,7 @@ pub struct PushOp {
 #[derive(Debug, Clone, Serialize)]
 pub struct DeltaOp {
     pub id: String,
+    pub pv: i32,
     #[serde(with = "base64_blob")]
     pub blob: Vec<u8>,
     #[serde(rename = "_sync_is_deleted")]

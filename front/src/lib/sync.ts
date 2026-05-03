@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	createDekSyncPayloadCodec,
+	parseJsonObjectBlob,
 	type SyncPayloadCodec,
 	type SyncPayloadMetadata,
 } from "./crypto";
@@ -12,6 +13,13 @@ import { queryKeyRoots, queryKeys } from "./queries/query-keys";
 import { normalizeCurrency } from "./currency";
 import { loginWithAccountRootKey } from "./queries/auth";
 import { getUiStorage, idb, uiStorageDefaults } from "./local-storage";
+import {
+	CURRENT_PAYLOAD_VERSION,
+	decodeSyncRecord,
+	parseSyncRecordId,
+	validateDirtyPayload,
+	type SyncTableName,
+} from "./sync-schema";
 
 type DirtyEntry = {
 	id: string;
@@ -22,6 +30,7 @@ type DirtyEntry = {
 
 type DeltaOp = {
 	id: string;
+	pv: number;
 	_sync_is_deleted: boolean;
 	_sync_edited_at: number;
 	blob: string;
@@ -30,6 +39,7 @@ type DeltaOp = {
 
 type PushOp = {
 	id: string;
+	pv: number;
 	_sync_is_deleted: boolean;
 	_sync_edited_at: number;
 	blob: string;
@@ -47,57 +57,8 @@ type BootstrapResponse = {
 	server_max_version: number;
 };
 
-type SyncTableName =
-	| "categories"
-	| "accounts"
-	| "transactions"
-	| "transaction_import_keys"
-	| "transaction_flows";
-
-type SyncRecordType =
-	| "category"
-	| "account"
-	| "transaction"
-	| "transaction_import_key"
-	| "transaction_flow";
-
 const DIRTY_BATCH_LIMIT = 1000;
 const BOOTSTRAP_PAGE_LIMIT = 1000;
-
-function parseSyncRecordId(recordId: string): {
-	recordType: SyncRecordType;
-	tableName: SyncTableName;
-	actualId: string;
-} {
-	const parts = recordId.split(":");
-	if (parts.length !== 2 || !parts[1]) {
-		throw new Error(`invalid sync record id: ${recordId}`);
-	}
-
-	const [recordTypeRaw, actualId] = parts;
-	switch (recordTypeRaw) {
-		case "category":
-			return { recordType: recordTypeRaw, tableName: "categories", actualId };
-		case "account":
-			return { recordType: recordTypeRaw, tableName: "accounts", actualId };
-		case "transaction":
-			return { recordType: recordTypeRaw, tableName: "transactions", actualId };
-		case "transaction_import_key":
-			return {
-				recordType: recordTypeRaw,
-				tableName: "transaction_import_keys",
-				actualId,
-			};
-		case "transaction_flow":
-			return {
-				recordType: recordTypeRaw,
-				tableName: "transaction_flows",
-				actualId,
-			};
-		default:
-			throw new Error(`unsupported sync record type: ${recordTypeRaw}`);
-	}
-}
 
 async function markDirtyEntriesSynced(db: DbHandle, dirty: DirtyEntry[]) {
 	const byTable: Record<SyncTableName, string[]> = {
@@ -227,24 +188,24 @@ async function applyIncomingOps({
 
 	const decodedOps = await Promise.all(
 		ops.map(async (op) => {
-			const { recordType, actualId } = parseSyncRecordId(op.id);
-			const entry = await codec.decode(op.blob, op);
-			return { op, entry, recordType, actualId };
+			const envelope = await codec.decode(op.blob, op);
+			return { op, record: decodeSyncRecord(envelope) };
 		}),
 	);
 
 	for (const item of decodedOps) {
-		const { op, entry, recordType, actualId } = item;
+		const { op, record } = item;
 
 		if (maxVersion === undefined || op.server_version > maxVersion) {
 			maxVersion = op.server_version;
 		}
 
-		touchedTypes.add(recordType);
-		switch (recordType) {
-			case "account":
+		touchedTypes.add(record.recordType);
+		switch (record.recordType) {
+			case "account": {
+				const entry = record.data;
 				accounts.push(
-					/* id */ actualId,
+					/* id */ record.actualId,
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at,
 					/* name */ entry.name,
@@ -255,10 +216,12 @@ async function applyIncomingOps({
 				);
 				accountsValues.push("(?, ?, ?, ?, ?, ?, ?, ?, 0)");
 				break;
+			}
 
-			case "category":
+			case "category": {
+				const entry = record.data;
 				categories.push(
-					/* id */ actualId,
+					/* id */ record.actualId,
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at,
 					/* name */ entry.name,
@@ -268,10 +231,12 @@ async function applyIncomingOps({
 				);
 				categoriesValues.push("(?, ?, ?, ?, ?, ?, ?, 0)");
 				break;
+			}
 
-			case "transaction":
+			case "transaction": {
+				const entry = record.data;
 				transactions.push(
-					/* id */ actualId,
+					/* id */ record.actualId,
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at,
 					/* date */ entry.date,
@@ -290,10 +255,12 @@ async function applyIncomingOps({
 					"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
 				);
 				break;
+			}
 
-			case "transaction_import_key":
+			case "transaction_import_key": {
+				const entry = record.data;
 				transactionImportKeys.push(
-					/* id */ actualId,
+					/* id */ record.actualId,
 					/* transaction_id */ entry.transaction_id,
 					/* source_type */ entry.source_type,
 					/* source_scope */ entry.source_scope,
@@ -309,11 +276,13 @@ async function applyIncomingOps({
 					"(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
 				);
 				break;
+			}
 
 			case "transaction_flow": {
 				touchedTypes.add("transaction");
+				const entry = record.data;
 				transactionFlows.push(
-					/* id */ actualId,
+					/* id */ record.actualId,
 					/* from_transaction_id */ entry.from_transaction_id,
 					/* to_transaction_id */ entry.to_transaction_id,
 					/* amount_minor */ entry.amount_minor,
@@ -669,11 +638,18 @@ class SyncClient {
 				entries.map(async (e) => {
 					const metadata: SyncPayloadMetadata = {
 						id: e.id,
+						pv: CURRENT_PAYLOAD_VERSION,
 						_sync_is_deleted: !!e._sync_is_deleted,
 						_sync_edited_at: e._sync_edited_at,
 					};
+					const data = parseJsonObjectBlob(e.plain_data);
+					if (!data) {
+						throw new Error(`invalid dirty sync payload: ${e.id}`);
+					}
+					validateDirtyPayload({ id: e.id, pv: metadata.pv, d: data });
 					return {
 						id: e.id,
+						pv: metadata.pv,
 						_sync_is_deleted: metadata._sync_is_deleted,
 						_sync_edited_at: metadata._sync_edited_at,
 						blob: await this.codec.encodeJsonString(e.plain_data, metadata),

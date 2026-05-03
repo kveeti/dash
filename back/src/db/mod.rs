@@ -226,7 +226,7 @@ impl Db {
 
         let rows = sqlx::query(
             r#"
-            select id, blob, _sync_is_deleted, _sync_edited_at, _sync_server_version
+            select id, pv, blob, _sync_is_deleted, _sync_edited_at, _sync_server_version
             from entries
             where user_id = $1 and _sync_server_version > $2
             order by _sync_server_version asc
@@ -247,6 +247,7 @@ impl Db {
             let blob: Vec<u8> = row.try_get("blob")?;
             entries.push(DeltaOp {
                 id: row.try_get("id")?,
+                pv: row.try_get("pv")?,
                 blob,
                 is_deleted: row.try_get("_sync_is_deleted")?,
                 edited_at: row.try_get("_sync_edited_at")?,
@@ -293,15 +294,16 @@ impl Db {
             let row = sqlx::query(
                 r#"
                 insert into entries (
-                    user_id, id, blob, _sync_is_deleted, _sync_edited_at,
+                    user_id, id, pv, blob, _sync_is_deleted, _sync_edited_at,
                     _sync_server_version, _sync_server_updated_at
                 )
-                values ($1, $2, $3, $4, $5, $6, now())
+                values ($1, $2, $3, $4, $5, $6, $7, now())
                 on conflict (user_id, id) do update set
+                    pv = excluded.pv,
                     blob = excluded.blob,
                     _sync_is_deleted = excluded._sync_is_deleted,
                     _sync_edited_at = excluded._sync_edited_at,
-                    _sync_server_version = $6,
+                    _sync_server_version = $7,
                     _sync_server_updated_at = now()
                 where excluded._sync_edited_at >= entries._sync_edited_at
                 returning _sync_server_version, _sync_is_deleted, _sync_edited_at
@@ -309,6 +311,7 @@ impl Db {
             )
             .bind(user_id)
             .bind(&op.id)
+            .bind(op.pv)
             .bind(&op.blob)
             .bind(op.is_deleted)
             .bind(op.edited_at)
@@ -322,6 +325,7 @@ impl Db {
                 let edited_at: i64 = row.try_get("_sync_edited_at")?;
                 applied.push(DeltaOp {
                     id: op.id.clone(),
+                    pv: op.pv,
                     blob: op.blob.clone(),
                     is_deleted,
                     edited_at,

@@ -5,12 +5,12 @@ import {
 } from "@scure/bip39";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { wordlist } from "@scure/bip39/wordlists/english.js";
+import type { SyncPlaintextEnvelope } from "./sync-schema";
 
 const IV_BYTES = 12;
 const DEK_SEED_BYTES = 32;
 const BIP39_WORD_COUNT = 24;
-const SYNC_ENVELOPE_VERSION = 1;
-const SYNC_SCHEMA_VERSION = 1;
+const CURRENT_SYNC_ENVELOPE_VERSION = 1;
 const AUTH_ID_CONTEXT = "dash/auth/id/v1";
 const AUTH_SIGNING_KEY_CONTEXT = "dash/recovery-auth/v1";
 const AUTH_CHALLENGE_CONTEXT = "dash/auth/challenge/v1";
@@ -29,12 +29,13 @@ export type SyncPayloadCodec = {
 	encode: (payload: Record<string, unknown>, metadata: SyncPayloadMetadata) => Promise<string>;
 	encodeJsonString: (payload: string, metadata: SyncPayloadMetadata) => Promise<string>;
 	encodeJsonBytes: (payload: string, metadata: SyncPayloadMetadata) => Promise<Uint8Array<ArrayBuffer>>;
-	decode: (blob: string, metadata: SyncPayloadMetadata) => Promise<Record<string, unknown>>;
-	decodeBytes: (blob: Uint8Array, metadata: SyncPayloadMetadata) => Promise<Record<string, unknown>>;
+	decode: (blob: string, metadata: SyncPayloadMetadata) => Promise<SyncPlaintextEnvelope>;
+	decodeBytes: (blob: Uint8Array, metadata: SyncPayloadMetadata) => Promise<SyncPlaintextEnvelope>;
 };
 
 export type SyncPayloadMetadata = {
 	id: string;
+	pv: number;
 	_sync_is_deleted: boolean;
 	_sync_edited_at: number;
 };
@@ -56,11 +57,14 @@ export function parseJsonObjectBlob(blob: string): Record<string, unknown> | nul
 	return asJsonObject(parsed);
 }
 
-function buildSyncAad(metadata: SyncPayloadMetadata): Uint8Array<ArrayBuffer> {
+function buildSyncAad(
+	ev: number,
+	metadata: SyncPayloadMetadata,
+): Uint8Array<ArrayBuffer> {
 	return new TextEncoder().encode(
 		JSON.stringify({
-			ev: SYNC_ENVELOPE_VERSION,
-			sv: SYNC_SCHEMA_VERSION,
+			ev,
+			pv: metadata.pv,
 			id: metadata.id,
 			del: metadata._sync_is_deleted,
 			ts: metadata._sync_edited_at,
@@ -73,8 +77,7 @@ function encodeSyncEnvelopeString(
 	metadata: SyncPayloadMetadata,
 ): string {
 	return JSON.stringify({
-		ev: SYNC_ENVELOPE_VERSION,
-		sv: SYNC_SCHEMA_VERSION,
+		pv: metadata.pv,
 		id: metadata.id,
 		d: payload,
 	});
@@ -94,25 +97,25 @@ function encodeSyncEnvelopeJsonString(
 function decodeSyncEnvelopeString(
 	plaintext: string,
 	metadata: SyncPayloadMetadata,
-): Record<string, unknown> {
+): SyncPlaintextEnvelope {
 	const envelope = parseJsonObjectBlob(plaintext);
 	if (!envelope) {
 		throw new Error("invalid sync envelope");
 	}
-	if (envelope.ev !== SYNC_ENVELOPE_VERSION) {
-		throw new Error("unsupported sync envelope version");
-	}
-	if (envelope.sv !== SYNC_SCHEMA_VERSION) {
-		throw new Error("unsupported sync schema version");
+	if (!Number.isSafeInteger(envelope.pv) || envelope.pv < 1) {
+		throw new Error("invalid sync payload version");
 	}
 	if (envelope.id !== metadata.id) {
 		throw new Error("sync envelope id mismatch");
 	}
-	const data = asJsonObject(envelope.d);
-	if (!data) {
-		throw new Error("invalid sync envelope data");
+	if (envelope.pv !== metadata.pv) {
+		throw new Error("sync envelope payload version mismatch");
 	}
-	return data;
+	return {
+		pv: envelope.pv,
+		id: envelope.id,
+		d: envelope.d,
+	};
 }
 
 export function createJsonSyncPayloadCodec(): SyncPayloadCodec {
@@ -128,10 +131,10 @@ export function createJsonSyncPayloadCodec(): SyncPayloadCodec {
 		async encode(payload, metadata): Promise<string> {
 			return encodeSyncEnvelopeString(payload, metadata);
 		},
-		async decode(blob, metadata): Promise<Record<string, unknown>> {
+		async decode(blob, metadata): Promise<SyncPlaintextEnvelope> {
 			return decodeSyncEnvelopeString(blob, metadata);
 		},
-		async decodeBytes(blob, metadata): Promise<Record<string, unknown>> {
+		async decodeBytes(blob, metadata): Promise<SyncPlaintextEnvelope> {
 			return decodeSyncEnvelopeString(new TextDecoder().decode(blob), metadata);
 		},
 	};
@@ -142,17 +145,18 @@ export function createDekSyncPayloadCodec(dek: CryptoKey): SyncPayloadCodec {
 		payload: string,
 		metadata: SyncPayloadMetadata,
 	): Promise<Uint8Array<ArrayBuffer>> {
+		const ev = CURRENT_SYNC_ENVELOPE_VERSION;
 		const plaintext = new TextEncoder().encode(
 			encodeSyncEnvelopeJsonString(payload, metadata),
 		);
 		const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
 		const ciphertext = await crypto.subtle.encrypt(
-			{ name: "AES-GCM", iv, additionalData: buildSyncAad(metadata) },
+			{ name: "AES-GCM", iv, additionalData: buildSyncAad(ev, metadata) },
 			dek,
 			plaintext,
 		);
 		const packed = new Uint8Array(1 + IV_BYTES + ciphertext.byteLength);
-		packed[0] = SYNC_ENVELOPE_VERSION;
+		packed[0] = ev;
 		packed.set(iv, 1);
 		packed.set(new Uint8Array(ciphertext), 1 + IV_BYTES);
 		return packed;
@@ -160,21 +164,28 @@ export function createDekSyncPayloadCodec(dek: CryptoKey): SyncPayloadCodec {
 	async function decodeBytes(
 		blob: Uint8Array,
 		metadata: SyncPayloadMetadata,
-	): Promise<Record<string, unknown>> {
+	): Promise<SyncPlaintextEnvelope> {
 		if (blob.byteLength <= 1 + IV_BYTES) {
 			throw new Error("invalid sync blob");
 		}
-		if (blob[0] !== SYNC_ENVELOPE_VERSION) {
-			throw new Error("unsupported sync blob version");
-		}
+		const ev = blob[0];
 		const iv = blob.slice(1, 1 + IV_BYTES);
 		const ciphertext = blob.slice(1 + IV_BYTES);
-		const plaintext = await crypto.subtle.decrypt(
-			{ name: "AES-GCM", iv, additionalData: buildSyncAad(metadata) },
-			dek,
-			ciphertext,
-		);
-		return decodeSyncEnvelopeString(new TextDecoder().decode(plaintext), metadata);
+		switch (ev) {
+			case 1: {
+				const plaintext = await crypto.subtle.decrypt(
+					{ name: "AES-GCM", iv, additionalData: buildSyncAad(ev, metadata) },
+					dek,
+					ciphertext,
+				);
+				return decodeSyncEnvelopeString(
+					new TextDecoder().decode(plaintext),
+					metadata,
+				);
+			}
+			default:
+				throw new Error("unsupported sync blob version");
+		}
 	}
 
 	return {
@@ -190,7 +201,7 @@ export function createDekSyncPayloadCodec(dek: CryptoKey): SyncPayloadCodec {
 
 		decodeBytes,
 
-		async decode(blob, metadata): Promise<Record<string, unknown>> {
+		async decode(blob, metadata): Promise<SyncPlaintextEnvelope> {
 			return decodeBytes(decodeBase64(blob), metadata);
 		},
 	};
