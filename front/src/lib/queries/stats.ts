@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useDb } from "../../providers";
+import { useEncrypted } from "../../encrypted-context";
 import { normalizeCurrency } from "../currency";
 import type { DbHandle } from "../db";
 import { FX_ANCHOR_CURRENCY, type ConversionMode } from "./settings";
@@ -689,7 +689,7 @@ export function useStatsQuery(input: {
 	mode?: ConversionMode;
 	enabled?: boolean;
 }) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const reportingCurrency = input.reportingCurrency
 		? normalizeCurrency(input.reportingCurrency)
 		: undefined;
@@ -722,7 +722,7 @@ export function useStatsQuery(input: {
 }
 
 export function useTransactionYearsQuery() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: ["stats", "transaction-years"],
 		queryFn: () => getTransactionYears(db),
@@ -738,7 +738,7 @@ export function useYearStatsQuery(input: {
 	mode?: ConversionMode;
 	enabled?: boolean;
 }) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const reportingCurrency = input.reportingCurrency
 		? normalizeCurrency(input.reportingCurrency)
 		: undefined;
@@ -779,7 +779,7 @@ export function useMonthStatsQuery(input: {
 	mode?: ConversionMode;
 	enabled?: boolean;
 }) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const reportingCurrency = input.reportingCurrency
 		? normalizeCurrency(input.reportingCurrency)
 		: undefined;
@@ -820,7 +820,7 @@ export function useConvertedStatsSummaryQuery(input: {
 	mode?: ConversionMode;
 	enabled?: boolean;
 }) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const reportingCurrency = input.reportingCurrency
 		? normalizeCurrency(input.reportingCurrency)
 		: undefined;
@@ -862,7 +862,7 @@ export function useConvertedStatTransactionsQuery(input: {
 	enabled?: boolean;
 	perCategoryLimit?: number;
 }) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const reportingCurrency = input.reportingCurrency
 		? normalizeCurrency(input.reportingCurrency)
 		: undefined;

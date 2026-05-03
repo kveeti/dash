@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { DbHandle } from "../db";
 import Papa from "papaparse";
 import { id } from "../id";
-import { useDb } from "../../providers";
+import { useEncrypted } from "../../encrypted-context";
 import { queryKeyRoots } from "./query-keys";
 import { getOrCreateCategoryByName } from "./categories";
 import { getCurrencyMeta, parseCurrency, parseDecimalToMinorUnits } from "../currency";
@@ -36,7 +36,7 @@ function invalidateImportQueries(qc: ReturnType<typeof useQueryClient>) {
 }
 
 export function useImportCsvMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (input: {
@@ -54,7 +54,7 @@ export function useImportCsvMutation() {
 }
 
 export function useImportLegacyCsvBundleMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (files: LegacyBundleTexts) => importLegacyCsvBundle(db, files),

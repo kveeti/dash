@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Papa from "papaparse";
-import { useDb } from "../../providers";
+import { useEncrypted } from "../../encrypted-context";
 import { DEFAULT_CURRENCY, normalizeCurrency, parseCurrency } from "../currency";
 import type { DbHandle } from "../db";
 import { queryKeys, queryKeyRoots } from "./query-keys";
@@ -262,7 +262,7 @@ async function getAppSettings(db: DbHandle): Promise<AppSettings> {
 }
 
 export function useAppSettingsQuery() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: queryKeys.settings(),
 		queryFn: () => getAppSettings(db),
@@ -270,7 +270,7 @@ export function useAppSettingsQuery() {
 }
 
 export function useUpdateReportingCurrencyMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async (currency: string) => {
@@ -290,7 +290,7 @@ export function useUpdateReportingCurrencyMutation() {
 }
 
 export function useUpdateConversionPolicyMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async (input: {
@@ -335,7 +335,7 @@ async function getFxRates(
 }
 
 export function useFxRatesQuery(limit = 20) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: queryKeys.fxRates(),
 		queryFn: () => getFxRates(db, limit),
@@ -343,7 +343,7 @@ export function useFxRatesQuery(limit = 20) {
 }
 
 export function useUpsertFxRateMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async (input: {
@@ -372,7 +372,7 @@ export function useUpsertFxRateMutation() {
 }
 
 export function useDeleteFxRatesMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async () => {
@@ -386,7 +386,7 @@ export function useDeleteFxRatesMutation() {
 }
 
 export function useImportFxRatesCsvMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (input: {

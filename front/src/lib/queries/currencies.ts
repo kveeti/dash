@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
-import { useDb } from "../../providers";
+import { useEncrypted } from "../../encrypted-context";
 import type { CurrencyMeta } from "../currency";
 import { queryKeys } from "./query-keys";
 
 export function useCurrencyMetaQuery() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: queryKeys.currencyMeta(),
 		queryFn: () =>

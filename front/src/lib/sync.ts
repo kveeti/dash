@@ -6,7 +6,7 @@ import {
 	type SyncPayloadCodec,
 	type SyncPayloadMetadata,
 } from "./crypto";
-import { useCrypto, useDb } from "../providers";
+import { useEncrypted } from "../encrypted-context";
 import type { DbHandle } from "./db";
 import { queryKeyRoots, queryKeys } from "./queries/query-keys";
 import { normalizeCurrency } from "./currency";
@@ -748,8 +748,7 @@ export function useSync() {
 	const uiStorage = useLiveQuery(getUiStorage);
 	const canSync = uiStorage?.sync_state === "enabled";
 	const isOnline = useOnlineStatus();
-	const db = useDb();
-	const { accountRootKey, syncContentKey } = useCrypto();
+	const { db, accountRootKey, syncContentKey } = useEncrypted();
 	const qc = useQueryClient();
 
 	const clientRef = useRef<SyncClient | null>(null);

@@ -69,7 +69,7 @@ function toHex(bytes: Uint8Array): string {
 	return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function deriveSqliteKeyHexFromAccountRootKey(
+export async function deriveSqliteKeyHexFromAccountRootKey(
 	accountRootKey: Uint8Array<ArrayBuffer>,
 ): Promise<string> {
 	if (!globalThis.crypto?.subtle) {

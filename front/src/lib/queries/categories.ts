@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useDb } from "../../providers";
+import { useEncrypted } from "../../encrypted-context";
 import type { DbHandle } from "../db";
 import { id } from "../id";
 import { queryKeys, queryKeyRoots } from "./query-keys";
@@ -35,7 +35,7 @@ function invalidateCategoriesQuery(qc: ReturnType<typeof useQueryClient>) {
 }
 
 export function useCategoriesQuery(search?: string) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: queryKeys.categories(search),
 		queryFn: () => getCategories(db, search),
@@ -43,7 +43,7 @@ export function useCategoriesQuery(search?: string) {
 }
 
 export function useCategoryOptionsQuery() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: [...queryKeyRoots.categories, "options"],
 		queryFn: () => getCategoryOptions(db),
@@ -51,7 +51,7 @@ export function useCategoryOptionsQuery() {
 }
 
 export function useCreateCategoryMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (cat: CategoryInput) => createCategory(db, cat),
@@ -60,7 +60,7 @@ export function useCreateCategoryMutation() {
 }
 
 export function useUpdateCategoryMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: ({
@@ -76,7 +76,7 @@ export function useUpdateCategoryMutation() {
 }
 
 export function useDeleteCategoryMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (id: string) => deleteCategory(db, id),

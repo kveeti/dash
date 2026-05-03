@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useDb } from "../../providers";
+import { useEncrypted } from "../../encrypted-context";
 import type { DbHandle } from "../db";
 import { id } from "../id";
 import { queryKeys, queryKeyRoots } from "./query-keys";
@@ -42,7 +42,7 @@ function invalidateAccountsQuery(qc: ReturnType<typeof useQueryClient>) {
 }
 
 export function useAccountsQuery() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: queryKeys.accounts(),
 		queryFn: () => getAccounts(db),
@@ -50,7 +50,7 @@ export function useAccountsQuery() {
 }
 
 export function useAccountsWithCountQuery(search?: string) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: [...queryKeyRoots.accounts, "with-count", search],
 		queryFn: () => getAccountsWithCount(db, search),
@@ -58,7 +58,7 @@ export function useAccountsWithCountQuery(search?: string) {
 }
 
 export function useCreateAccountMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (account: AccountInput) =>
@@ -68,7 +68,7 @@ export function useCreateAccountMutation() {
 }
 
 export function useUpdateAccountMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: ({ id, ...account }: { id: string } & AccountInput) =>
@@ -78,7 +78,7 @@ export function useUpdateAccountMutation() {
 }
 
 export function useDeleteAccountMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (id: string) => deleteAccount(db, id),

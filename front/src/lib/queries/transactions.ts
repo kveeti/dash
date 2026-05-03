@@ -5,7 +5,8 @@ import {
 	useQueryClient,
 	keepPreviousData,
 } from "@tanstack/react-query";
-import { useDb, useI18n } from "../../providers";
+import { useI18n } from "../../providers";
+import { useEncrypted } from "../../encrypted-context";
 import { id } from "../id";
 import type { DbHandle } from "../db";
 import { queryKeys, queryKeyRoots, type TransactionFilters } from "./query-keys";
@@ -158,7 +159,7 @@ export function useTransactionsQuery(props: {
 	filters?: TransactionFilters;
 	cursor?: TransactionCursorInput;
 }) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const cursor = normalizeCursor(props.cursor);
 
 	return useQuery({
@@ -388,7 +389,7 @@ async function getTransactionById(
 }
 
 export function useTransactionQuery(id: string | undefined) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: queryKeys.transaction(id),
 		queryFn: () => getTransactionById(db, id!),
@@ -428,7 +429,7 @@ export type TransactionDetails = TransactionWithConvertedAmount & {
 };
 
 export function useCreateTransactionMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async (tx: TransactionInput) => {
@@ -463,7 +464,7 @@ export function useCreateTransactionMutation() {
 }
 
 export function useUpdateTransactionMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: ({
@@ -572,7 +573,7 @@ export type TransactionLinkSuggestionPageResult = {
 };
 
 export function useTransactionFlowsQuery(txId: string | undefined) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: queryKeys.transactionFlows(txId),
 		queryFn: () =>
@@ -1387,7 +1388,7 @@ async function getRefundLinkSuggestions(
 }
 
 export function useTransactionLinkSuggestionsQuery(txId: string | undefined) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const { f } = useI18n();
 	return useQuery({
 		queryKey: queryKeys.transactionLinkSuggestions(txId),
@@ -1400,7 +1401,7 @@ export function useTransactionLinkSuggestionPageQuery(cursor?: {
 	beforeDate?: string;
 	beforeId?: string;
 }) {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const { f } = useI18n();
 	return useInfiniteQuery({
 		queryKey: queryKeys.transactionLinkSuggestionsPage(cursor),
@@ -1418,7 +1419,7 @@ export function useTransactionLinkSuggestionPageQuery(cursor?: {
 }
 
 export function useTransactionCurrenciesQuery() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	return useQuery({
 		queryKey: [...queryKeyRoots.transactions, "currencies"],
 		queryFn: async () =>
@@ -1436,7 +1437,7 @@ function invalidateFlowQueries(qc: ReturnType<typeof useQueryClient>) {
 }
 
 export function useCreateTransactionFlowMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async (flow: SuggestedTransactionFlow) => {
@@ -1461,7 +1462,7 @@ export function useCreateTransactionFlowMutation() {
 }
 
 export function useDeleteTransactionFlowMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async ({ flowId }: { flowId: string }) => {
@@ -1481,7 +1482,7 @@ export function useDeleteTransactionFlowMutation() {
 }
 
 export function useDismissTransactionLinkSuggestionMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async ({ kind, primaryTransactionId, candidateIds }: { kind: TransactionLinkSuggestionKind; primaryTransactionId: string; candidateIds: string[] }) => {
@@ -1499,7 +1500,7 @@ export function useDismissTransactionLinkSuggestionMutation() {
 }
 
 export function useBulkSetCategoryMutation() {
-	const db = useDb();
+	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: async ({

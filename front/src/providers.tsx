@@ -3,13 +3,11 @@ import {
 	QueryClient,
 	QueryClientProvider,
 } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getDb } from "./lib/db";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { queryKeyRoots } from "./lib/queries/query-keys";
 import { normalizeCurrency } from "./lib/currency";
 import { I18nProvider as AriaI18nProvider } from 'react-aria-components/I18nProvider';
-import { importSyncContentKey } from "./lib/crypto";
-import { WebAuthnGate } from "./webauthn-gate";
+import { EncryptedProvider } from "./webauthn-gate";
 
 const queryClient = new QueryClient({
 	defaultOptions: {
@@ -34,84 +32,12 @@ export function Providers(props: { children: ReactNode }) {
 	return (
 		<I18nProvider>
 			<QueryClientProvider client={queryClient}>
-				<WebAuthnGate>
-					{(accountRootKey) => (
-						<CryptoProvider accountRootKey={accountRootKey}>
-							<DbProvider accountRootKey={accountRootKey}>
-								{props.children}
-							</DbProvider>
-						</CryptoProvider>
-					)}
-				</WebAuthnGate>
+				<EncryptedProvider>
+					{props.children}
+				</EncryptedProvider>
 			</QueryClientProvider>
 		</I18nProvider>
 	);
-}
-
-const DbContext = createContext<ReturnType<typeof getDb> | null>(null);
-
-function DbProvider(props: { children: ReactNode; accountRootKey: Uint8Array<ArrayBuffer> }) {
-	const db = useMemo(() => getDb(props.accountRootKey), [props.accountRootKey]);
-
-	return <DbContext.Provider value={db}>{props.children}</DbContext.Provider>;
-}
-
-export function useDb() {
-	const context = useContext(DbContext);
-	if (!context) throw new Error("useDb must be used within a DbProvider!");
-	return context;
-}
-
-type CryptoContextValue = {
-	accountRootKey: Uint8Array<ArrayBuffer>;
-	syncContentKey: CryptoKey;
-};
-
-const CryptoContext = createContext<CryptoContextValue | null>(null);
-
-function CryptoProvider(props: {
-	children: ReactNode;
-	accountRootKey: Uint8Array<ArrayBuffer>;
-}) {
-	const [syncContentKey, setSyncContentKey] = useState<CryptoKey | null>(null);
-	const [error, setError] = useState<string | null>(null);
-
-	useEffect(() => {
-		let cancelled = false;
-		importSyncContentKey(props.accountRootKey)
-			.then((key) => {
-				if (!cancelled) setSyncContentKey(key);
-			})
-			.catch((err: unknown) => {
-				if (!cancelled) setError((err as Error).message);
-			});
-		return () => {
-			cancelled = true;
-		};
-	}, [props.accountRootKey]);
-
-	const value = useMemo(() => {
-		if (!syncContentKey) return null;
-		return {
-			accountRootKey: props.accountRootKey,
-			syncContentKey,
-		};
-	}, [syncContentKey, props.accountRootKey]);
-
-	if (error) {
-		return <div className="p-6 text-sm text-red-11">{error}</div>;
-	}
-	if (!value) {
-		return <div className="p-6 text-sm text-gray-10">Preparing crypto...</div>;
-	}
-
-	return <CryptoContext.Provider value={value}>{props.children}</CryptoContext.Provider>;
-}
-
-export function useCrypto() {
-	const context = useContext(CryptoContext);
-	if (!context) throw new Error("useCrypto must be used within a CryptoProvider!");
-	return context;
 }
 
 const I18NContext = createContext<ReturnType<typeof useI18nValue> | null>(null);

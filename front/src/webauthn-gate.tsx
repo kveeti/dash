@@ -6,6 +6,7 @@ import { Spinner } from "./components/spinner";
 import {
 	deriveAccountRootKey,
 	generateMnemonic,
+	importSyncContentKey,
 	mnemonicToSeed,
 	unwrapAccountRootKey,
 	wrapAccountRootKey,
@@ -17,19 +18,25 @@ import {
 	registerPasskeyWithPrf,
 } from "./lib/webauthn";
 import { Checkbox } from "./components/checkbox";
+import { EncryptedContext, type EncryptedContextValue } from "./encrypted-context";
+import { deriveSqliteKeyHexFromAccountRootKey, getDb } from "./lib/db";
 
-type GateState =
-	| { status: "locked" }
-	| { status: "ready"; accountRootKey: Uint8Array<ArrayBuffer> };
+type State = { status: "locked" } | EncryptedContextValue;
 
-export function WebAuthnGate(props: {
-	children: (accountRootKey: Uint8Array<ArrayBuffer>) => ReactNode;
+export function EncryptedProvider(props: {
+	children: ReactNode
 }) {
-	const [gateState, setGateState] = useState<GateState>({ status: "locked" });
+	const [state, setState] = useState<State>({
+		status: "locked",
+	});
 	const uiStorage = useLiveQuery(getUiStorage, [], "loading");
 
-	if (gateState.status === "ready") {
-		return props.children(gateState.accountRootKey);
+	if (state.status === "ready") {
+		return (
+			<EncryptedContext.Provider value={state}>
+				{props.children}
+			</EncryptedContext.Provider>
+		)
 	}
 
 	if (uiStorage === "loading") {
@@ -45,39 +52,56 @@ export function WebAuthnGate(props: {
 			<UnlockScreen
 				wrappedAccountRootKey={uiStorage.wrapped_account_root_key}
 				credentialId={uiStorage.passkey_credential_id}
-				onReady={(accountRootKey) =>
-					setGateState({ status: "ready", accountRootKey })
-				}
+				onUnlockAttempt={async () => {
+					const prfKey = await authenticateWithPasskeyPrf(
+						uiStorage.passkey_credential_id,
+					);
+					const accountRootKey = await unwrapAccountRootKey(
+						uiStorage.wrapped_account_root_key,
+						prfKey,
+					);
+					const [syncContentKey, sqliteKeyHex] = await Promise.all([
+						importSyncContentKey(accountRootKey),
+						deriveSqliteKeyHexFromAccountRootKey(accountRootKey)
+					]);
+					const db = getDb(accountRootKey);
+					setState({
+						status: "ready",
+						db,
+						accountRootKey,
+						syncContentKey,
+						sqliteKeyHex
+					});
+				}}
 			/>
 		);
 	}
 
 	return (
 		<OnboardingScreen
-			onReady={(accountRootKey) =>
-				setGateState({ status: "ready", accountRootKey })
-			}
+			onProvision={async (words) => {
+				const accountRootKey = await setupFromMnemonic(words);
+				const [syncContentKey, sqliteKeyHex] = await Promise.all([
+					importSyncContentKey(accountRootKey),
+					deriveSqliteKeyHexFromAccountRootKey(accountRootKey)
+				]);
+				const db = getDb(accountRootKey);
+				setState({
+					status: "ready",
+					db,
+					accountRootKey,
+					syncContentKey,
+					sqliteKeyHex
+				});
+			}}
 		/>
 	);
 }
 
 function UnlockScreen(props: {
-	wrappedAccountRootKey: NonNullable<
-		Awaited<ReturnType<typeof getUiStorage>>
-	>["wrapped_account_root_key"];
-	credentialId: string;
-	onReady: (accountRootKey: Uint8Array<ArrayBuffer>) => void;
+	onUnlockAttempt: () => Promise<void>;
 }) {
-	const unlock = useMutation({
-		mutationFn: async () => {
-			if (!props.wrappedAccountRootKey) {
-				throw new Error("Missing wrapped account root key");
-			}
-			const prfKey = await authenticateWithPasskeyPrf(props.credentialId);
-			return await unwrapAccountRootKey(props.wrappedAccountRootKey, prfKey);
-		},
-		onSuccess: props.onReady,
-	});
+	const unlock = useMutation({ mutationFn: props.onUnlockAttempt });
 
 	return (
 		<main className="min-h-dvh flex items-center justify-center p-6">
@@ -107,23 +131,23 @@ const checkboxId = "user-wrote-down-words";
 const wordsId = "words";
 
 function OnboardingScreen(props: {
-	onReady: (accountRootKey: Uint8Array<ArrayBuffer>) => void;
+	onProvision: (words: string) => Promise<void>;
 }) {
-	const setup = useMutation({ mutationFn: setupFromMnemonic });
+	const setup = useMutation({ mutationFn: props.onProvision });
 
 	async function onSubmit(e) {
 		e.preventDefault();
 		if (setup.isPending) return;
 
 		const data = new FormData(e.currentTarget);
+
 		const userWroteDownWords = data.get(checkboxId);
 		if (!userWroteDownWords) return;
 
 		const words = data.get(wordsId) as string;
 		if (!words.trim()) return;
 
-		const accountRootKey = await setup.mutateAsync(words);
-		props.onReady(accountRootKey);
+		setup.mutate(words);
 	}
 
 	const [words, setWords] = useState(null);
@@ -177,16 +201,16 @@ function OnboardingScreen(props: {
 					) : null}
 				</form>
 
-				<RecoveryForm onReady={props.onReady} />
+				<RecoveryForm onProvision={props.onProvision} />
 			</div>
 		</main>
 	);
 }
 
 function RecoveryForm(props: {
-	onReady: (accountRootKey: Uint8Array<ArrayBuffer>) => void;
+	onProvision: (words: string) => Promise<void>;
 }) {
-	const recover = useMutation({ mutationFn: setupFromMnemonic });
+	const recover = useMutation({ mutationFn: props.onProvision });
 
 	async function onSubmit(e) {
 		e.preventDefault();
@@ -195,8 +219,7 @@ function RecoveryForm(props: {
 		const words = new FormData(e.currentTarget).get(wordsId) as string;
 		if (!words.trim()) return;
 
-		const accountRootKey = await recover.mutateAsync(words);
-		props.onReady(accountRootKey);
+		recover.mutate(words);
 	}
 
 	return (
