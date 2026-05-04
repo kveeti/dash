@@ -71,7 +71,9 @@ export type TransactionFlowSyncData = {
 	to_transaction_id: string;
 	amount_minor: number;
 	currency: string;
-	kind: string;
+	to_amount_minor: number | null;
+	to_currency: string | null;
+	kind: "own_transfer" | "allocation" | "refund" | "currency_exchange";
 	created_at: string;
 	updated_at: string | null;
 	notes: string | null;
@@ -244,6 +246,19 @@ function string(value: unknown, path: string): string {
 	return value;
 }
 
+function oneOf<T extends string>(
+	value: unknown,
+	path: string,
+	allowed: readonly T[],
+): T {
+	const text = string(value, path);
+	if ((allowed as readonly string[]).includes(text)) return text as T;
+	throw new SyncAcceptError("invalid_schema", "invalid sync payload enum", {
+		path,
+		allowed,
+	});
+}
+
 function nullableString(value: unknown, path: string): string | null {
 	if (value === null) return null;
 	return string(value, path);
@@ -254,6 +269,12 @@ function integer(value: unknown, path: string): number {
 		throw invalid(path, "safe integer");
 	}
 	return value;
+}
+
+function positiveInteger(value: unknown, path: string): number {
+	const parsed = integer(value, path);
+	if (parsed <= 0) throw invalid(path, "positive safe integer");
+	return parsed;
 }
 
 function invalid(path: string, expected: string): SyncAcceptError {
@@ -365,11 +386,42 @@ const transactionFlowV1: SyncSchema<TransactionFlowSyncData> = {
 			"to_transaction_id",
 			"amount_minor",
 			"currency",
+			"to_amount_minor",
+			"to_currency",
 			"kind",
 			"created_at",
 			"updated_at",
 			"notes",
 		]);
+		const kind = oneOf(o.kind, "transaction_flow.kind", [
+			"own_transfer",
+			"allocation",
+			"refund",
+			"currency_exchange",
+		]);
+		const toAmountMinor =
+			o.to_amount_minor === null
+				? null
+				: integer(o.to_amount_minor, "transaction_flow.to_amount_minor");
+		const toCurrency =
+			o.to_currency === null
+				? null
+				: string(o.to_currency, "transaction_flow.to_currency");
+		if (kind === "currency_exchange") {
+			if (toAmountMinor === null) {
+				throw invalid("transaction_flow.to_amount_minor", "safe integer");
+			}
+			if (toAmountMinor <= 0) {
+				throw invalid("transaction_flow.to_amount_minor", "positive safe integer");
+			}
+			if (toCurrency === null) {
+				throw invalid("transaction_flow.to_currency", "string");
+			}
+		} else if (toAmountMinor !== null || toCurrency !== null) {
+			throw new SyncAcceptError("invalid_schema", "unexpected exchange fields", {
+				path: "transaction_flow",
+			});
+		}
 		return {
 			from_transaction_id: string(
 				o.from_transaction_id,
@@ -379,9 +431,14 @@ const transactionFlowV1: SyncSchema<TransactionFlowSyncData> = {
 				o.to_transaction_id,
 				"transaction_flow.to_transaction_id",
 			),
-			amount_minor: integer(o.amount_minor, "transaction_flow.amount_minor"),
+			amount_minor: positiveInteger(
+				o.amount_minor,
+				"transaction_flow.amount_minor",
+			),
 			currency: string(o.currency, "transaction_flow.currency"),
-			kind: string(o.kind, "transaction_flow.kind"),
+			to_amount_minor: toAmountMinor,
+			to_currency: toCurrency,
+			kind,
 			created_at: string(o.created_at, "transaction_flow.created_at"),
 			updated_at: nullableString(o.updated_at, "transaction_flow.updated_at"),
 			notes: nullableString(o.notes, "transaction_flow.notes"),

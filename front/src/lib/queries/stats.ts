@@ -167,6 +167,44 @@ own_transfer_in_totals AS (
   FROM own_transfers
   GROUP BY in_id
 ),
+currency_exchange_out_adjustments AS (
+  SELECT
+    out_tx.id AS id,
+    sum(f.amount_minor) AS adj
+  FROM txs out_tx
+  JOIN transaction_flows f
+    ON f.from_transaction_id = out_tx.id
+  JOIN transactions in_tx
+    ON in_tx.id = f.to_transaction_id
+  WHERE f._sync_is_deleted = 0
+    AND f.kind = 'currency_exchange'
+    AND out_tx.amount_minor < 0
+    AND in_tx._sync_is_deleted = 0
+    AND in_tx.amount_minor > 0
+    AND upper(out_tx.currency) = upper(f.currency)
+    AND upper(in_tx.currency) = upper(f.to_currency)
+    AND f.to_amount_minor IS NOT NULL
+  GROUP BY out_tx.id
+),
+currency_exchange_in_adjustments AS (
+  SELECT
+    in_tx.id AS id,
+    -sum(f.to_amount_minor) AS adj
+  FROM txs in_tx
+  JOIN transaction_flows f
+    ON f.to_transaction_id = in_tx.id
+  JOIN transactions out_tx
+    ON out_tx.id = f.from_transaction_id
+  WHERE f._sync_is_deleted = 0
+    AND f.kind = 'currency_exchange'
+    AND in_tx.amount_minor > 0
+    AND out_tx._sync_is_deleted = 0
+    AND out_tx.amount_minor < 0
+    AND upper(out_tx.currency) = upper(f.currency)
+    AND upper(in_tx.currency) = upper(f.to_currency)
+    AND f.to_amount_minor IS NOT NULL
+  GROUP BY in_tx.id
+),
 adjustments_raw AS (
   SELECT pos_id AS id, -sum(consumed) AS adj FROM allocations GROUP BY pos_id
   UNION ALL
@@ -191,6 +229,10 @@ adjustments_raw AS (
   FROM own_transfer_in_totals ot
   LEFT JOIN allocation_from_positive a
     ON a.id = ot.id
+  UNION ALL
+  SELECT id, adj FROM currency_exchange_out_adjustments
+  UNION ALL
+  SELECT id, adj FROM currency_exchange_in_adjustments
 ),
 adjustments AS (
   SELECT id, sum(adj) AS adj

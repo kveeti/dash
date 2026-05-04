@@ -519,13 +519,19 @@ export function useUpdateTransactionMutation() {
 	});
 }
 
-export type TransactionFlowKind = "own_transfer" | "allocation" | "refund";
+export type TransactionFlowKind =
+	| "own_transfer"
+	| "allocation"
+	| "refund"
+	| "currency_exchange";
 
 export type TransactionFlow = {
 	id: string;
 	kind: TransactionFlowKind;
 	amount: number;
 	currency: string;
+	to_amount: number | null;
+	to_currency: string | null;
 	from_transaction_id: string;
 	to_transaction_id: string;
 	direction: "incoming" | "outgoing";
@@ -555,6 +561,8 @@ export type SuggestedTransactionFlow = {
 	to_transaction_id: string;
 	amount: number;
 	currency: string;
+	to_amount?: number;
+	to_currency?: string;
 	kind: TransactionFlowKind;
 };
 
@@ -595,6 +603,12 @@ export function useTransactionFlowsQuery(txId: string | undefined) {
 						f.amount_minor,
 						f.amount_minor * 1.0 / coalesce(fm.minor_factor, 100) as amount,
 						f.currency,
+						f.to_amount_minor,
+						case
+							when f.to_amount_minor is null then null
+							else f.to_amount_minor * 1.0 / coalesce(tfm.minor_factor, 100)
+						end as to_amount,
+						f.to_currency,
 						f.from_transaction_id,
 						f.to_transaction_id,
 						case when f.to_transaction_id = ? then 'incoming' else 'outgoing' end as direction,
@@ -613,6 +627,7 @@ export function useTransactionFlowsQuery(txId: string | undefined) {
 					from transaction_flows f
 					join transactions t on t.id = case when f.from_transaction_id = ? then f.to_transaction_id else f.from_transaction_id end
 					left join currency_meta fm on fm.currency = upper(f.currency)
+					left join currency_meta tfm on tfm.currency = upper(f.to_currency)
 					left join currency_meta tm on tm.currency = upper(t.currency)
 					cross join app_settings s
 					where (f.from_transaction_id = ? or f.to_transaction_id = ?)
@@ -645,6 +660,7 @@ export function useTransactionFlowsQuery(txId: string | undefined) {
 				)
 				select
 					fr.id, fr.kind, fr.amount, fr.currency, fr.from_transaction_id, fr.to_transaction_id, fr.direction,
+					fr.to_amount, fr.to_currency,
 					fr.other_transaction_id, fr.other_counter_party, fr.other_amount, fr.other_currency,
 					fr.reporting_currency as other_converted_currency,
 					case
@@ -704,6 +720,15 @@ type LinkSuggestionDismissalRow = {
 };
 
 type FlowAmountTotalRow = { total: number | null };
+type FlowEndpointRow = {
+	id: string;
+	amount_minor: number;
+	currency: string;
+};
+type FlowUsageRows = {
+	from_used_minor: number | null;
+	to_used_minor: number | null;
+};
 type AmountFormatter = (amount: number, currency: string) => string;
 type SuggestionPrimaryRow = LinkSuggestionTransactionRow & {
 	account_id: string;
@@ -1460,11 +1485,108 @@ export function useCreateTransactionFlowMutation() {
 				meta,
 			);
 			if (amountMinor <= 0) return;
+			const toCurrency =
+				flow.kind === "currency_exchange" && flow.to_currency
+					? normalizeCurrency(flow.to_currency)
+					: null;
+			let toAmountMinor: number | null = null;
+			if (flow.kind === "currency_exchange" && flow.to_amount != null && toCurrency) {
+				const toMeta = await getCurrencyMeta(db, toCurrency);
+				toAmountMinor = parseDecimalToMinorUnits(
+					flow.to_amount.toFixed(toMeta.minor_unit),
+					toMeta,
+				);
+			}
+			if (flow.kind === "currency_exchange" && (!toAmountMinor || toAmountMinor <= 0 || !toCurrency)) {
+				return;
+			}
+			const endpoints = await db.query<FlowEndpointRow>(
+				`select id, amount_minor, currency
+				from transactions
+				where id in (?, ?) and _sync_is_deleted = 0`,
+				[flow.from_transaction_id, flow.to_transaction_id],
+			);
+			const fromTx = endpoints.find((tx) => tx.id === flow.from_transaction_id);
+			const toTx = endpoints.find((tx) => tx.id === flow.to_transaction_id);
+			if (!fromTx || !toTx) return;
+			const fromCurrency = normalizeCurrency(fromTx.currency);
+			const endpointToCurrency = normalizeCurrency(toTx.currency);
+			if (currency !== fromCurrency) return;
+			const usage = (
+				await db.query<FlowUsageRows>(
+					`select
+						coalesce(sum(case
+							when from_transaction_id = ? and currency = ? then amount_minor
+							else 0
+						end), 0) as from_used_minor,
+						coalesce(sum(case
+							when to_transaction_id = ? and (
+								(kind = 'currency_exchange' and to_currency = ?)
+								or
+								(kind <> 'currency_exchange' and currency = ?)
+							) then case
+								when kind = 'currency_exchange' then to_amount_minor
+								else amount_minor
+							end
+							else 0
+						end), 0) as to_used_minor
+					from transaction_flows
+					where _sync_is_deleted = 0
+						and kind = ?
+						and (
+							from_transaction_id = ?
+							or to_transaction_id = ?
+						)`,
+					[
+						flow.from_transaction_id,
+						currency,
+						flow.to_transaction_id,
+						toCurrency ?? currency,
+						toCurrency ?? currency,
+						flow.kind,
+						flow.from_transaction_id,
+						flow.to_transaction_id,
+					],
+				)
+			)[0];
+			const fromUsedMinor = usage?.from_used_minor ?? 0;
+			const toUsedMinor = usage?.to_used_minor ?? 0;
+			if (flow.kind === "currency_exchange") {
+				if (toCurrency !== endpointToCurrency) return;
+				if (currency === toCurrency) return;
+				if (fromTx.amount_minor >= 0 || toTx.amount_minor <= 0) return;
+				if (fromUsedMinor + amountMinor > Math.abs(fromTx.amount_minor)) return;
+				if (!toAmountMinor || toUsedMinor + toAmountMinor > toTx.amount_minor) return;
+			} else {
+				if (endpointToCurrency !== currency) return;
+				if (flow.kind === "own_transfer") {
+					if (fromTx.amount_minor >= 0 || toTx.amount_minor <= 0) return;
+					if (fromUsedMinor + amountMinor > Math.abs(fromTx.amount_minor)) return;
+					if (toUsedMinor + amountMinor > toTx.amount_minor) return;
+				} else if (fromTx.amount_minor <= 0 || toTx.amount_minor >= 0) {
+					return;
+				} else {
+					if (fromUsedMinor + amountMinor > fromTx.amount_minor) return;
+					if (toUsedMinor + amountMinor > Math.abs(toTx.amount_minor)) return;
+				}
+			}
 			await db.exec(
 				`insert into transaction_flows
-					(id, from_transaction_id, to_transaction_id, amount_minor, currency, kind, created_at, updated_at, _sync_is_deleted, _sync_status, _sync_edited_at)
-				values (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?)`,
-				[id(), flow.from_transaction_id, flow.to_transaction_id, amountMinor, currency, flow.kind, now, now, Date.now()],
+					(id, from_transaction_id, to_transaction_id, amount_minor, currency, to_amount_minor, to_currency, kind, created_at, updated_at, _sync_is_deleted, _sync_status, _sync_edited_at)
+				values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?)`,
+				[
+					id(),
+					flow.from_transaction_id,
+					flow.to_transaction_id,
+					amountMinor,
+					currency,
+					toAmountMinor,
+					toCurrency,
+					flow.kind,
+					now,
+					now,
+					Date.now(),
+				],
 			);
 		},
 		onSuccess: () => invalidateFlowQueries(qc),

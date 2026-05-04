@@ -10,6 +10,7 @@ import {
 	type TransactionDetails,
 	type TransactionFlow,
 	type TransactionFlowKind,
+	type SuggestedTransactionFlow,
 	useCreateTransactionFlowMutation,
 	useDeleteTransactionFlowMutation,
 	useDismissTransactionLinkSuggestionMutation,
@@ -61,16 +62,24 @@ function sumFlowAmounts(
 	);
 }
 
+function flowAmountForTransaction(flow: TransactionFlow) {
+	if (flow.kind === "currency_exchange" && flow.direction === "incoming") {
+		return flow.to_amount ?? 0;
+	}
+	return flow.amount;
+}
+
 function getAvailableFlowAmount(
 	tx: TransactionDetails | undefined,
 	flows: TransactionFlow[] | undefined,
 	kind: TransactionFlowKind,
 ) {
 	if (!tx) return 0;
-	if (kind === "own_transfer") {
-		const moved = sumFlowAmounts(
-			flows,
-			(flow) => flow.kind === "own_transfer",
+	if (kind === "own_transfer" || kind === "currency_exchange") {
+		const moved = (flows ?? []).reduce(
+			(total, flow) =>
+				total + (flow.kind === kind ? flowAmountForTransaction(flow) : 0),
+			0,
 		);
 		return Math.max(0, Math.abs(tx.amount) - moved);
 	}
@@ -119,6 +128,22 @@ function inferFlowDirection({
 		return null;
 	}
 
+	if (kind === "currency_exchange") {
+		if (selected.amount < 0 && target.amount > 0) {
+			return {
+				from_transaction_id: selected.id,
+				to_transaction_id: target.id,
+			};
+		}
+		if (selected.amount > 0 && target.amount < 0) {
+			return {
+				from_transaction_id: target.id,
+				to_transaction_id: selected.id,
+			};
+		}
+		return null;
+	}
+
 	if (selected.amount > 0 && target.amount < 0) {
 		return {
 			from_transaction_id: selected.id,
@@ -150,6 +175,7 @@ export function SelectedTxWindow({
 	const [flowTargetInput, setFlowTargetInput] = useState("");
 	const [flowKind, setFlowKind] = useState<TransactionFlowKind>("allocation");
 	const [flowAmountInput, setFlowAmountInput] = useState("");
+	const [flowToAmountInput, setFlowToAmountInput] = useState("");
 	const [copied, setCopied] = useState(false);
 	const selectedTxRef = useRef<SelectedTxHandle>(null);
 	const targetTxId = flowTargetInput.trim();
@@ -181,10 +207,27 @@ export function SelectedTxWindow({
 		? inferFlowDirection({ selected: tx, target: targetTx, kind: flowKind })
 		: null;
 	const flowAmount = Number(flowAmountInput.replace(",", "."));
+	const flowToAmount = Number(flowToAmountInput.replace(",", "."));
+	const exchangeFromTx =
+		flowDirection && targetTx
+			? flowDirection.from_transaction_id === tx.id
+				? tx
+				: targetTx
+			: null;
+	const exchangeToTx =
+		flowDirection && targetTx
+			? flowDirection.to_transaction_id === tx.id
+				? tx
+				: targetTx
+			: null;
 	const canCreateFlow =
 		!!flowDirection &&
 		!!targetTx &&
-		tx.currency === targetTx.currency &&
+		(flowKind === "currency_exchange"
+			? tx.currency !== targetTx.currency &&
+				Number.isFinite(flowToAmount) &&
+				flowToAmount > 0
+			: tx.currency === targetTx.currency) &&
 		Number.isFinite(flowAmount) &&
 		flowAmount > 0;
 	const allocationUsed = sumFlowAmounts(
@@ -203,6 +246,14 @@ export function SelectedTxWindow({
 		flowsQuery.data,
 		(flow) => flow.kind === "own_transfer",
 	);
+	const currencyExchangeMoved = sumFlowAmounts(
+		flowsQuery.data?.map((flow) =>
+			flow.kind === "currency_exchange"
+				? { ...flow, amount: flowAmountForTransaction(flow) }
+				: flow,
+		),
+		(flow) => flow.kind === "currency_exchange",
+	);
 	const txAvailable = Math.max(0, tx.amount > 0 ? tx.amount - allocationUsed : 0);
 	const txRemaining = Math.max(
 		0,
@@ -213,7 +264,14 @@ export function SelectedTxWindow({
 		tx.amount < 0 ? allocationCovered - Math.abs(tx.amount) : 0,
 	);
 	const suggestedFlowAmount = (() => {
-		if (!targetTx || !flowDirection || tx.currency !== targetTx.currency) return 0;
+		if (!targetTx || !flowDirection) return 0;
+		if (flowKind !== "currency_exchange" && tx.currency !== targetTx.currency) {
+			return 0;
+		}
+		if (flowKind === "currency_exchange") {
+			if (!exchangeFromTx) return 0;
+			return Math.max(0, Math.round(Math.abs(exchangeFromTx.amount) * 100) / 100);
+		}
 		const selectedAvailable = getAvailableFlowAmount(tx, flowsQuery.data, flowKind);
 		const targetAvailable = getAvailableFlowAmount(
 			targetTx,
@@ -226,6 +284,10 @@ export function SelectedTxWindow({
 				: Math.min(selectedAvailable, targetAvailable);
 		return Math.max(0, Math.round(amount * 100) / 100);
 	})();
+	const suggestedExchangeToAmount =
+		flowKind === "currency_exchange" && exchangeToTx
+			? Math.max(0, Math.round(Math.abs(exchangeToTx.amount) * 100) / 100)
+			: 0;
 
 	const isIncome = txAmountDisplay.amount > 0;
 	const stackOffset = { x: 0, y: (index + 1) * 72 };
@@ -243,24 +305,30 @@ export function SelectedTxWindow({
 		if (!direction) return;
 		const amount = Number(flowAmountInput.replace(",", "."));
 		if (!Number.isFinite(amount) || amount <= 0) return;
+		const fromTx = direction.from_transaction_id === tx.id ? tx : target;
+		const toTx = direction.to_transaction_id === tx.id ? tx : target;
+		const toAmount = Number(flowToAmountInput.replace(",", "."));
+		if (
+			flowKind === "currency_exchange" &&
+			(!Number.isFinite(toAmount) || toAmount <= 0)
+		) {
+			return;
+		}
 		await createFlowMutation.mutateAsync({
 			...direction,
 			amount,
-			currency: tx.currency,
+			currency: fromTx.currency,
+			to_amount: flowKind === "currency_exchange" ? toAmount : undefined,
+			to_currency: flowKind === "currency_exchange" ? toTx.currency : undefined,
 			kind: flowKind,
 		});
 		setFlowTargetInput("");
 		setFlowAmountInput("");
+		setFlowToAmountInput("");
 	}
 
 	async function acceptLinkSuggestion(
-		flows: Array<{
-			from_transaction_id: string;
-			to_transaction_id: string;
-			amount: number;
-			currency: string;
-			kind: "own_transfer" | "allocation" | "refund";
-		}>,
+		flows: SuggestedTransactionFlow[],
 	) {
 		for (const flow of flows) {
 			await createFlowMutation.mutateAsync(flow);
@@ -383,6 +451,11 @@ export function SelectedTxWindow({
 								own transfer moved {f.amount(ownTransferMoved, tx.currency)}
 							</p>
 						)}
+						{currencyExchangeMoved > 0 && (
+							<p className="text-gray-10">
+								exchanged {f.amount(currencyExchangeMoved, tx.currency)}
+							</p>
+						)}
 						<div className="grid grid-cols-2 gap-1">
 							<Select
 								size="sm"
@@ -394,17 +467,37 @@ export function SelectedTxWindow({
 								<option value="allocation">allocation</option>
 								<option value="own_transfer">own transfer</option>
 								<option value="refund">refund</option>
+								<option value="currency_exchange">currency exchange</option>
 							</Select>
 							<input
 								type="number"
 								step="0.01"
 								min="0"
-								placeholder="amount"
+								placeholder={
+									flowKind === "currency_exchange"
+										? exchangeFromTx
+											? `${exchangeFromTx.currency} amount`
+											: "from amount"
+										: "amount"
+								}
 								value={flowAmountInput}
 								onChange={(e) => setFlowAmountInput(e.currentTarget.value)}
 								className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm min-w-0"
 							/>
 						</div>
+						{flowKind === "currency_exchange" && (
+							<input
+								type="number"
+								step="0.01"
+								min="0"
+								placeholder={
+									exchangeToTx ? `${exchangeToTx.currency} amount` : "to amount"
+								}
+								value={flowToAmountInput}
+								onChange={(e) => setFlowToAmountInput(e.currentTarget.value)}
+								className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm min-w-0 w-full"
+							/>
+						)}
 						<div className="flex gap-1">
 							<input
 								type="text"
@@ -437,13 +530,27 @@ export function SelectedTxWindow({
 							<button
 								type="button"
 								className="text-xs text-gray-10 hover:text-gray-12 underline"
-								onClick={() => setFlowAmountInput(String(suggestedFlowAmount))}
+								onClick={() => {
+									setFlowAmountInput(String(suggestedFlowAmount));
+									if (
+										flowKind === "currency_exchange" &&
+										suggestedExchangeToAmount > 0
+									) {
+										setFlowToAmountInput(String(suggestedExchangeToAmount));
+									}
+								}}
 							>
-								use suggested {f.amount(suggestedFlowAmount, tx.currency)}
+								use suggested{" "}
+								{flowKind === "currency_exchange" && exchangeFromTx && exchangeToTx
+									? `${f.amount(suggestedFlowAmount, exchangeFromTx.currency)} -> ${f.amount(suggestedExchangeToAmount, exchangeToTx.currency)}`
+									: f.amount(suggestedFlowAmount, tx.currency)}
 							</button>
 						)}
-						{targetTx && targetTx.currency !== tx.currency && (
+						{targetTx && flowKind !== "currency_exchange" && targetTx.currency !== tx.currency && (
 							<p className="text-red-11">target currency must match</p>
+						)}
+						{targetTx && flowKind === "currency_exchange" && targetTx.currency === tx.currency && (
+							<p className="text-red-11">exchange target currency must differ</p>
 						)}
 					</div>
 
@@ -512,6 +619,19 @@ export function SelectedTxWindow({
 					{flowsQuery.data && flowsQuery.data.length > 0 && (
 						<ul className="text-xs space-y-1">
 							{flowsQuery.data.map((flow) => {
+								const displayAmount =
+									flow.kind === "currency_exchange" &&
+									flow.direction === "incoming" &&
+									flow.to_amount != null &&
+									flow.to_currency
+										? {
+												amount: flow.to_amount,
+												currency: flow.to_currency,
+											}
+										: {
+												amount: flow.amount,
+												currency: flow.currency,
+											};
 								return (
 									<li
 										key={flow.id}
@@ -524,7 +644,7 @@ export function SelectedTxWindow({
 										</span>
 										<div className="text-right shrink-0">
 											<span className="text-gray-10">
-												{f.amount(flow.amount, flow.currency)}
+												{f.amount(displayAmount.amount, displayAmount.currency)}
 											</span>
 										</div>
 										<button

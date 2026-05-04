@@ -138,7 +138,7 @@ async function getDirty(db: DbHandle): Promise<DirtyEntry[]> {
 				'transaction_flow:' || id as id,
 				_sync_is_deleted,
 				_sync_edited_at,
-				json_object('from_transaction_id', from_transaction_id, 'to_transaction_id', to_transaction_id, 'amount_minor', amount_minor, 'currency', currency, 'kind', kind, 'created_at', created_at, 'updated_at', updated_at, 'notes', notes) as plain_data,
+				json_object('from_transaction_id', from_transaction_id, 'to_transaction_id', to_transaction_id, 'amount_minor', amount_minor, 'currency', currency, 'to_amount_minor', to_amount_minor, 'to_currency', to_currency, 'kind', kind, 'created_at', created_at, 'updated_at', updated_at, 'notes', notes) as plain_data,
 				4 as priority
 			from transaction_flows where _sync_status = 1
 		)
@@ -287,6 +287,10 @@ async function applyIncomingOps({
 					/* to_transaction_id */ entry.to_transaction_id,
 					/* amount_minor */ entry.amount_minor,
 					/* currency */ normalizeCurrency(entry.currency),
+					/* to_amount_minor */ entry.to_amount_minor ?? null,
+					/* to_currency */ entry.to_currency
+						? normalizeCurrency(entry.to_currency)
+						: null,
 					/* kind */ entry.kind,
 					/* created_at */ entry.created_at,
 					/* updated_at */ entry.updated_at ?? null,
@@ -294,7 +298,7 @@ async function applyIncomingOps({
 					/* _sync_is_deleted */ op._sync_is_deleted ? 1 : 0,
 					/* _sync_edited_at */ op._sync_edited_at,
 				);
-				transactionFlowsValues.push("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)");
+				transactionFlowsValues.push("(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)");
 				break;
 			}
 		}
@@ -398,7 +402,8 @@ async function applyIncomingOps({
 	if (transactionFlows.length) {
 		await db.exec(
 			`insert into transaction_flows (
-				id, from_transaction_id, to_transaction_id, amount_minor, currency, kind,
+				id, from_transaction_id, to_transaction_id, amount_minor, currency,
+				to_amount_minor, to_currency, kind,
 				created_at, updated_at, notes,
 				_sync_is_deleted, _sync_edited_at, _sync_status
 			)
@@ -411,6 +416,8 @@ async function applyIncomingOps({
 				to_transaction_id = excluded.to_transaction_id,
 				amount_minor = excluded.amount_minor,
 				currency = excluded.currency,
+				to_amount_minor = excluded.to_amount_minor,
+				to_currency = excluded.to_currency,
 				kind = excluded.kind,
 				created_at = excluded.created_at,
 				updated_at = excluded.updated_at,
