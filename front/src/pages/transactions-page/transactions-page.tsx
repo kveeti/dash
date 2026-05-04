@@ -25,6 +25,37 @@ import { CategoryCombobox } from "../../components/category-combobox";
 import { PopupCombobox } from "../../components/popup-combobox";
 import { type SelectedTxHandle } from "../../components/selected-tx";
 import { SelectedTxWindow } from "../../components/selected-tx-window";
+import { DateRangePickerInput } from "../../components/date-picker";
+
+type DateRangeFilter = {
+	from: string;
+	to: string;
+};
+
+function formatIsoDate(date: Date) {
+	return date.toISOString().slice(0, 10);
+}
+
+function isIsoDate(value: string) {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+	const date = new Date(`${value}T00:00:00.000Z`);
+	if (Number.isNaN(date.getTime())) return false;
+	return formatIsoDate(date) === value;
+}
+
+function normalizeDateRange(from: string, to: string): DateRangeFilter | undefined {
+	if (!isIsoDate(from) || !isIsoDate(to)) return undefined;
+	return from <= to ? { from, to } : { from: to, to: from };
+}
+
+function defaultDateRange(now: Date): DateRangeFilter {
+	return {
+		from: formatIsoDate(
+			new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+		),
+		to: formatIsoDate(now),
+	};
+}
 
 function useFilterParams() {
 	const [searchParams] = useSearchParams();
@@ -37,14 +68,29 @@ function useFilterParams() {
 	const accountId = searchParams.get("acc") ?? "";
 	const currency = searchParams.get("cur") ?? "";
 	const uncategorized = searchParams.get("uncat") === "1";
+	const dateRange = normalizeDateRange(
+		searchParams.get("from") ?? "",
+		searchParams.get("to") ?? "",
+	);
 
 	const filters: TransactionFilters = {};
 	if (categoryId) filters.category_id = categoryId;
 	if (accountId) filters.account_id = accountId;
 	if (currency) filters.currency = currency;
 	if (uncategorized) filters.uncategorized = true;
+	if (dateRange) {
+		filters.date_from = dateRange.from;
+		filters.date_to = dateRange.to;
+	}
 
-	const hasFilters = !!(q || categoryId || accountId || currency || uncategorized);
+	const hasFilters = !!(
+		q ||
+		categoryId ||
+		accountId ||
+		currency ||
+		uncategorized ||
+		dateRange
+	);
 
 	function setParams(updates: Record<string, string | undefined>) {
 		const params = new URLSearchParams();
@@ -54,6 +100,7 @@ function useFilterParams() {
 			...(accountId && { acc: accountId }),
 			...(currency && { cur: currency }),
 			...(uncategorized && { uncat: "1" }),
+			...(dateRange && { from: dateRange.from, to: dateRange.to }),
 		};
 		for (const [k, v] of Object.entries({ ...current, ...updates })) {
 			if (v) params.set(k, v);
@@ -73,6 +120,8 @@ function useFilterParams() {
 		acc: accountId || undefined,
 		cur: currency || undefined,
 		uncat: uncategorized ? "1" : undefined,
+		from: dateRange?.from,
+		to: dateRange?.to,
 	};
 
 	return {
@@ -83,6 +132,7 @@ function useFilterParams() {
 		accountId,
 		currency,
 		uncategorized,
+		dateRange,
 		filters,
 		hasFilters,
 		setParams,
@@ -170,6 +220,7 @@ export function TransactionsPage() {
 		accountId,
 		currency,
 		uncategorized,
+		dateRange,
 		filters,
 		hasFilters,
 		setParams,
@@ -220,6 +271,7 @@ export function TransactionsPage() {
 							accountId={accountId}
 							currency={currency}
 							uncategorized={uncategorized}
+							dateRange={dateRange}
 							hasFilters={hasFilters}
 							categories={categories.data}
 							accounts={accounts.data}
@@ -279,11 +331,11 @@ export function TransactionsPage() {
 				className={
 					"fixed right-0 left-0 max-w-[35rem] mx-auto z-40 pointer-events-none" +
 					(selection.isSelecting && showFilters
-						? " bottom-40 sm:bottom-12"
+						? " bottom-52 sm:bottom-12"
 						: selection.isSelecting
 							? " bottom-32 sm:bottom-12"
 							: showFilters
-								? " bottom-40 sm:bottom-0"
+								? " bottom-52 sm:bottom-0"
 								: " bottom-16 sm:bottom-0")
 				}
 			>
@@ -314,6 +366,7 @@ export function TransactionsPage() {
 				accountId={accountId}
 				currency={currency}
 				uncategorized={uncategorized}
+				dateRange={dateRange}
 				categories={categories.data}
 				accounts={accounts.data}
 				currencies={currencies.data}
@@ -447,6 +500,7 @@ function FilterControls({
 	accountId,
 	currency,
 	uncategorized,
+	dateRange,
 	hasFilters,
 	categories,
 	accounts,
@@ -458,6 +512,7 @@ function FilterControls({
 	accountId: string;
 	currency: string;
 	uncategorized: boolean;
+	dateRange: DateRangeFilter | undefined;
 	hasFilters: boolean;
 	categories: Array<{ id: string; name: string }> | undefined;
 	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
@@ -474,6 +529,28 @@ function FilterControls({
 				value={q}
 				onChange={(e) => setParams({ q: e.currentTarget.value || undefined })}
 			/>
+			<div className="flex items-end gap-2">
+				<div className="flex-1 min-w-0 text-xs font-mono">
+					<DateRangePickerInput
+						label="date"
+						size="sm"
+						value={dateRange ?? defaultDateRange(new Date())}
+						showWeekNumbers
+						onChange={(nextRange) =>
+							setParams({ from: nextRange.from, to: nextRange.to })
+						}
+					/>
+				</div>
+				{dateRange && (
+					<button
+						type="button"
+						className="h-8 shrink-0 px-2 text-xs text-gray-10 hover:text-gray-12"
+						onClick={() => setParams({ from: undefined, to: undefined })}
+					>
+						clear
+					</button>
+				)}
+			</div>
 			<div className="flex gap-2">
 				<CategoryCombobox
 					size="sm"
@@ -531,6 +608,8 @@ function FilterControls({
 							acc: undefined,
 							cur: undefined,
 							uncat: undefined,
+							from: undefined,
+							to: undefined,
 						})
 					}
 				>
@@ -614,6 +693,7 @@ function MobileFilterBar({
 	accountId,
 	currency,
 	uncategorized,
+	dateRange,
 	categories,
 	accounts,
 	currencies,
@@ -627,6 +707,7 @@ function MobileFilterBar({
 	accountId: string;
 	currency: string;
 	uncategorized: boolean;
+	dateRange: DateRangeFilter | undefined;
 	categories: Array<{ id: string; name: string }> | undefined;
 	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
 	currencies: string[] | undefined;
@@ -643,6 +724,7 @@ function MobileFilterBar({
 							accountId={accountId}
 							currency={currency}
 							uncategorized={uncategorized}
+							dateRange={dateRange}
 							hasFilters={hasFilters}
 							categories={categories}
 							accounts={accounts}

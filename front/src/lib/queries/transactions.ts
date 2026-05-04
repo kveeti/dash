@@ -323,6 +323,16 @@ async function getTransactions(
 		wheres.push("t.category_id is null");
 	}
 
+	if (opts?.filters?.date_from) {
+		wheres.push("t.date >= ?");
+		params.push(opts.filters.date_from);
+	}
+
+	if (opts?.filters?.date_to) {
+		wheres.push("t.date <= ?");
+		params.push(opts.filters.date_to);
+	}
+
 	let direction: CursorDirection = null;
 	if (opts?.cursor) {
 		if ("left" in opts.cursor) {

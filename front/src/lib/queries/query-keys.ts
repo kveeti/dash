@@ -13,6 +13,8 @@ export type TransactionFilters = {
 	account_id?: string;
 	currency?: string;
 	uncategorized?: boolean;
+	date_from?: string;
+	date_to?: string;
 };
 
 export const queryKeyRoots = {
@@ -42,6 +44,8 @@ export const queryKeys = {
 			filters?.account_id,
 			filters?.currency,
 			filters?.uncategorized,
+			filters?.date_from,
+			filters?.date_to,
 			cursor?.left,
 			cursor?.right,
 		] as const,
