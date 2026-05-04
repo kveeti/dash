@@ -12,6 +12,13 @@ import type { DbHandle } from "../db";
 import { queryKeys, queryKeyRoots, type TransactionFilters } from "./query-keys";
 import { FX_ANCHOR_CURRENCY } from "./settings";
 import {
+	validateTransactionFlowCreate,
+	type FlowEndpoint,
+	type FlowUsage,
+	type SuggestedTransactionFlow,
+	type TransactionFlowKind,
+} from "../transaction-flow-validation";
+import {
 	getCurrencyMeta,
 	normalizeCurrency,
 	parseDecimalToMinorUnits,
@@ -519,11 +526,7 @@ export function useUpdateTransactionMutation() {
 	});
 }
 
-export type TransactionFlowKind =
-	| "own_transfer"
-	| "allocation"
-	| "refund"
-	| "currency_exchange";
+export type { SuggestedTransactionFlow, TransactionFlowKind };
 
 export type TransactionFlow = {
 	id: string;
@@ -554,16 +557,6 @@ export type TransactionLinkSuggestionMember = {
 	currency: string;
 	counter_party: string;
 	account_name: string;
-};
-
-export type SuggestedTransactionFlow = {
-	from_transaction_id: string;
-	to_transaction_id: string;
-	amount: number;
-	currency: string;
-	to_amount?: number;
-	to_currency?: string;
-	kind: TransactionFlowKind;
 };
 
 export type TransactionLinkSuggestion = {
@@ -720,15 +713,8 @@ type LinkSuggestionDismissalRow = {
 };
 
 type FlowAmountTotalRow = { total: number | null };
-type FlowEndpointRow = {
-	id: string;
-	amount_minor: number;
-	currency: string;
-};
-type FlowUsageRows = {
-	from_used_minor: number | null;
-	to_used_minor: number | null;
-};
+type FlowEndpointRow = FlowEndpoint;
+type FlowUsageRows = Partial<FlowUsage>;
 type AmountFormatter = (amount: number, currency: string) => string;
 type SuggestionPrimaryRow = LinkSuggestionTransactionRow & {
 	account_id: string;
@@ -1512,6 +1498,10 @@ export function useCreateTransactionFlowMutation() {
 			const fromCurrency = normalizeCurrency(fromTx.currency);
 			const endpointToCurrency = normalizeCurrency(toTx.currency);
 			if (currency !== fromCurrency) return;
+			const usageKinds =
+				flow.kind === "allocation" || flow.kind === "refund"
+					? ["allocation", "refund"]
+					: [flow.kind];
 			const usage = (
 				await db.query<FlowUsageRows>(
 					`select
@@ -1532,7 +1522,7 @@ export function useCreateTransactionFlowMutation() {
 						end), 0) as to_used_minor
 					from transaction_flows
 					where _sync_is_deleted = 0
-						and kind = ?
+						and kind in (${usageKinds.map(() => "?").join(",")})
 						and (
 							from_transaction_id = ?
 							or to_transaction_id = ?
@@ -1543,7 +1533,7 @@ export function useCreateTransactionFlowMutation() {
 						flow.to_transaction_id,
 						toCurrency ?? currency,
 						toCurrency ?? currency,
-						flow.kind,
+						...usageKinds,
 						flow.from_transaction_id,
 						flow.to_transaction_id,
 					],
@@ -1551,24 +1541,22 @@ export function useCreateTransactionFlowMutation() {
 			)[0];
 			const fromUsedMinor = usage?.from_used_minor ?? 0;
 			const toUsedMinor = usage?.to_used_minor ?? 0;
-			if (flow.kind === "currency_exchange") {
-				if (toCurrency !== endpointToCurrency) return;
-				if (currency === toCurrency) return;
-				if (fromTx.amount_minor >= 0 || toTx.amount_minor <= 0) return;
-				if (fromUsedMinor + amountMinor > Math.abs(fromTx.amount_minor)) return;
-				if (!toAmountMinor || toUsedMinor + toAmountMinor > toTx.amount_minor) return;
-			} else {
-				if (endpointToCurrency !== currency) return;
-				if (flow.kind === "own_transfer") {
-					if (fromTx.amount_minor >= 0 || toTx.amount_minor <= 0) return;
-					if (fromUsedMinor + amountMinor > Math.abs(fromTx.amount_minor)) return;
-					if (toUsedMinor + amountMinor > toTx.amount_minor) return;
-				} else if (fromTx.amount_minor <= 0 || toTx.amount_minor >= 0) {
-					return;
-				} else {
-					if (fromUsedMinor + amountMinor > fromTx.amount_minor) return;
-					if (toUsedMinor + amountMinor > Math.abs(toTx.amount_minor)) return;
-				}
+			if (
+				!validateTransactionFlowCreate({
+					kind: flow.kind,
+					fromTx: { ...fromTx, currency: fromCurrency },
+					toTx: { ...toTx, currency: endpointToCurrency },
+					amountMinor,
+					currency,
+					toAmountMinor,
+					toCurrency,
+					usage: {
+						from_used_minor: fromUsedMinor,
+						to_used_minor: toUsedMinor,
+					},
+				})
+			) {
+				return;
 			}
 			await db.exec(
 				`insert into transaction_flows
