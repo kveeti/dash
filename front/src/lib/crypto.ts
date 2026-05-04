@@ -26,11 +26,8 @@ export type WrappedAccountRootKey = {
 };
 
 export type SyncPayloadCodec = {
-	encode: (payload: Record<string, unknown>, metadata: SyncPayloadMetadata) => Promise<string>;
 	encodeJsonString: (payload: string, metadata: SyncPayloadMetadata) => Promise<string>;
-	encodeJsonBytes: (payload: string, metadata: SyncPayloadMetadata) => Promise<Uint8Array<ArrayBuffer>>;
 	decode: (blob: string, metadata: SyncPayloadMetadata) => Promise<SyncPlaintextEnvelope>;
-	decodeBytes: (blob: Uint8Array, metadata: SyncPayloadMetadata) => Promise<SyncPlaintextEnvelope>;
 };
 
 export type SyncPayloadMetadata = {
@@ -118,28 +115,6 @@ function decodeSyncEnvelopeString(
 	};
 }
 
-export function createJsonSyncPayloadCodec(): SyncPayloadCodec {
-	return {
-		async encodeJsonString(payload, metadata) {
-			return encodeSyncEnvelopeJsonString(payload, metadata);
-		},
-		async encodeJsonBytes(payload, metadata) {
-			return new TextEncoder().encode(
-				encodeSyncEnvelopeJsonString(payload, metadata),
-			);
-		},
-		async encode(payload, metadata): Promise<string> {
-			return encodeSyncEnvelopeString(payload, metadata);
-		},
-		async decode(blob, metadata): Promise<SyncPlaintextEnvelope> {
-			return decodeSyncEnvelopeString(blob, metadata);
-		},
-		async decodeBytes(blob, metadata): Promise<SyncPlaintextEnvelope> {
-			return decodeSyncEnvelopeString(new TextDecoder().decode(blob), metadata);
-		},
-	};
-}
-
 export function createDekSyncPayloadCodec(dek: CryptoKey): SyncPayloadCodec {
 	async function encodeJsonBytes(
 		payload: string,
@@ -189,17 +164,9 @@ export function createDekSyncPayloadCodec(dek: CryptoKey): SyncPayloadCodec {
 	}
 
 	return {
-		async encode(payload, metadata): Promise<string> {
-			return encodeBase64(await encodeJsonBytes(JSON.stringify(payload), metadata));
-		},
-
 		async encodeJsonString(payload, metadata): Promise<string> {
 			return encodeBase64(await encodeJsonBytes(payload, metadata));
 		},
-
-		encodeJsonBytes,
-
-		decodeBytes,
 
 		async decode(blob, metadata): Promise<SyncPlaintextEnvelope> {
 			return decodeBytes(decodeBase64(blob), metadata);
