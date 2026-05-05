@@ -44,10 +44,10 @@ const TRANSACTION_LIST_BASE_SELECT_SQL = `select
 	t.amount_minor + coalesce(fs.adjustment_minor, 0) as effective_original_amount_minor,
 	t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as original_amount,
 	(t.amount_minor + coalesce(fs.adjustment_minor, 0)) * 1.0 / coalesce(cm.minor_factor, 100) as effective_amount,
-	upper(t.currency) as original_currency,
+	t.currency as original_currency,
 	coalesce(cm.minor_factor, 100) as original_minor_factor,
 	coalesce(t.categorize_on, t.date) as eff_date,
-	upper(s.reporting_currency) as reporting_currency,
+	s.reporting_currency as reporting_currency,
 	s.max_staleness_days as max_staleness_days,
 	s.conversion_mode as conversion_mode
 from transactions t
@@ -86,7 +86,7 @@ left join (
 	)
 	group by tx_id
 ) fs on fs.tx_id = t.id
-left join currency_meta cm on cm.currency = upper(t.currency)
+left join currency_meta cm on cm.currency = t.currency
 cross join app_settings s`;
 
 const TRANSACTION_DETAIL_BASE_SELECT_SQL = `select
@@ -102,15 +102,15 @@ const TRANSACTION_DETAIL_BASE_SELECT_SQL = `select
 	coalesce(a.name, '') as account_name,
 	t.amount_minor as original_amount_minor,
 	t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as original_amount,
-	upper(t.currency) as original_currency,
+	t.currency as original_currency,
 	coalesce(cm.minor_factor, 100) as original_minor_factor,
 	coalesce(t.categorize_on, t.date) as eff_date,
-	upper(s.reporting_currency) as reporting_currency,
+	s.reporting_currency as reporting_currency,
 	s.max_staleness_days as max_staleness_days,
 	s.conversion_mode as conversion_mode
 from transactions t
 left join accounts a on t.account_id = a.id
-left join currency_meta cm on cm.currency = upper(t.currency)
+left join currency_meta cm on cm.currency = t.currency
 cross join app_settings s`;
 
 const TRANSACTION_LIST_ROW_SELECT_SQL = `	b.id,
@@ -683,17 +683,17 @@ export function useTransactionFlowsQuery(txId: string | undefined) {
 						t.currency as other_currency,
 						t.amount_minor as original_amount_minor,
 						t.amount_minor * 1.0 / coalesce(tm.minor_factor, 100) as original_amount,
-						upper(t.currency) as original_currency,
+						t.currency as original_currency,
 						coalesce(tm.minor_factor, 100) as original_minor_factor,
 						coalesce(t.categorize_on, t.date) as eff_date,
-						upper(s.reporting_currency) as reporting_currency,
+						s.reporting_currency as reporting_currency,
 						s.max_staleness_days as max_staleness_days,
 						s.conversion_mode as conversion_mode
 					from transaction_flows f
 					join transactions t on t.id = case when f.from_transaction_id = ? then f.to_transaction_id else f.from_transaction_id end
-					left join currency_meta fm on fm.currency = upper(f.currency)
-					left join currency_meta tfm on tfm.currency = upper(f.to_currency)
-					left join currency_meta tm on tm.currency = upper(t.currency)
+					left join currency_meta fm on fm.currency = f.currency
+					left join currency_meta tfm on tfm.currency = f.to_currency
+					left join currency_meta tm on tm.currency = t.currency
 					cross join app_settings s
 					where (f.from_transaction_id = ? or f.to_transaction_id = ?)
 						and f._sync_is_deleted = 0
@@ -936,7 +936,7 @@ async function getTransactionLinkSuggestions(
 				coalesce(a.name, '') as account_name
 			from transactions t
 			left join accounts a on a.id = t.account_id
-			left join currency_meta cm on cm.currency = upper(t.currency)
+			left join currency_meta cm on cm.currency = t.currency
 			where t.id = ? and t._sync_is_deleted = 0
 			limit 1
 		)
@@ -955,7 +955,7 @@ async function getTransactionLinkSuggestions(
 			and c.amount_minor = -b.amount_minor
 			and abs(julianday(date(c.date)) - julianday(date(b.date))) <= 3
 		left join accounts ca on ca.id = c.account_id
-		left join currency_meta ccm on ccm.currency = upper(c.currency)
+		left join currency_meta ccm on ccm.currency = c.currency
 		where not exists (select 1 from transaction_flows f where f._sync_is_deleted = 0 and f.kind = 'own_transfer' and (f.from_transaction_id = b.id or f.to_transaction_id = b.id))
 		and not exists (select 1 from transaction_flows f where f._sync_is_deleted = 0 and f.kind = 'own_transfer' and (f.from_transaction_id = c.id or f.to_transaction_id = c.id))
 		and not exists (
@@ -1022,7 +1022,7 @@ async function getTransactionLinkSuggestionPage(
 			coalesce(a.name, '') as account_name
 		from transactions t
 		left join accounts a on a.id = t.account_id
-		left join currency_meta cm on cm.currency = upper(t.currency)
+		left join currency_meta cm on cm.currency = t.currency
 		where t._sync_is_deleted = 0
 			and t.amount_minor < 0
 			${hasCursor ? "and (t.date < ? or (t.date = ? and t.id < ?))" : ""}
@@ -1084,7 +1084,7 @@ async function getTransferSuggestionsForPrimaryRows(
 				coalesce(a.name, '') as account_name
 			from transactions t
 			left join accounts a on a.id = t.account_id
-			left join currency_meta cm on cm.currency = upper(t.currency)
+			left join currency_meta cm on cm.currency = t.currency
 			where t.id in (${placeholders}) and t._sync_is_deleted = 0 and t.amount_minor < 0
 		)
 		select
@@ -1102,7 +1102,7 @@ async function getTransferSuggestionsForPrimaryRows(
 			and c.amount_minor = -b.amount_minor
 			and abs(julianday(date(c.date)) - julianday(date(b.date))) <= 3
 		left join accounts ca on ca.id = c.account_id
-		left join currency_meta ccm on ccm.currency = upper(c.currency)
+		left join currency_meta ccm on ccm.currency = c.currency
 		where not exists (
 				select 1
 				from transaction_flows f
@@ -1185,7 +1185,7 @@ async function getRefundSuggestionsForPrimaryRows(
 			f.currency,
 			sum(f.amount_minor) * 1.0 / coalesce(cm.minor_factor, 100) as total
 		from transaction_flows f
-		left join currency_meta cm on cm.currency = upper(f.currency)
+		left join currency_meta cm on cm.currency = f.currency
 		where f.to_transaction_id in (${placeholders})
 			and f._sync_is_deleted = 0
 			and f.kind in ('allocation', 'refund')
@@ -1226,7 +1226,7 @@ async function getRefundSuggestionsForPrimaryRows(
 				coalesce(a.name, '') as account_name
 			from transactions t
 			left join accounts a on a.id = t.account_id
-			left join currency_meta cm on cm.currency = upper(t.currency)
+			left join currency_meta cm on cm.currency = t.currency
 			where t.id in (${placeholders}) and t._sync_is_deleted = 0 and t.amount_minor < 0
 		),
 		candidate_used as (
@@ -1261,7 +1261,7 @@ async function getRefundSuggestionsForPrimaryRows(
 			and c.amount_minor > 0
 			and julianday(date(c.date)) - julianday(date(b.date)) between 0 and 45
 		left join accounts ca on ca.id = c.account_id
-		left join currency_meta ccm on ccm.currency = upper(c.currency)
+		left join currency_meta ccm on ccm.currency = c.currency
 		left join candidate_used u on u.candidate_id = c.id and u.currency = c.currency
 		where not exists (
 			select 1
@@ -1370,7 +1370,7 @@ async function getRefundLinkSuggestions(
 			coalesce(a.name, '') as account_name
 		from transactions t
 		left join accounts a on a.id = t.account_id
-		left join currency_meta cm on cm.currency = upper(t.currency)
+		left join currency_meta cm on cm.currency = t.currency
 		where t.id = ? and t._sync_is_deleted = 0
 		limit 1`,
 		[txId],
@@ -1381,7 +1381,7 @@ async function getRefundLinkSuggestions(
 	const incomingFlowRows = await db.query<FlowAmountTotalRow>(
 		`select sum(f.amount_minor) * 1.0 / coalesce(cm.minor_factor, 100) as total
 		from transaction_flows f
-		left join currency_meta cm on cm.currency = upper(f.currency)
+		left join currency_meta cm on cm.currency = f.currency
 		where f.to_transaction_id = ?
 			and f._sync_is_deleted = 0
 			and f.currency = ?
@@ -1416,7 +1416,7 @@ async function getRefundLinkSuggestions(
 			), 0)) * 1.0 / coalesce(cm.minor_factor, 100) as available_amount
 		from transactions c
 		left join accounts a on a.id = c.account_id
-		left join currency_meta cm on cm.currency = upper(c.currency)
+		left join currency_meta cm on cm.currency = c.currency
 		where c.id <> ?
 			and c._sync_is_deleted = 0
 			and c.currency = ?

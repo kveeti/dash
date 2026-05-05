@@ -108,7 +108,7 @@ txs AS (
     coalesce(c.is_neutral, 0) AS is_neutral
   FROM transactions t
   LEFT JOIN categories c ON c.id = t.category_id
-  LEFT JOIN currency_meta cm ON cm.currency = upper(t.currency)
+  LEFT JOIN currency_meta cm ON cm.currency = t.currency
   WHERE t._sync_is_deleted = 0
     AND t.id IN (SELECT id FROM relevant_ids)
 ${sourceCurrencyPredicate}),
@@ -181,8 +181,8 @@ currency_exchange_out_adjustments AS (
     AND out_tx.amount_minor < 0
     AND in_tx._sync_is_deleted = 0
     AND in_tx.amount_minor > 0
-    AND upper(out_tx.currency) = upper(f.currency)
-    AND upper(in_tx.currency) = upper(f.to_currency)
+    AND out_tx.currency = f.currency
+    AND in_tx.currency = f.to_currency
     AND f.to_amount_minor IS NOT NULL
   GROUP BY out_tx.id
 ),
@@ -200,8 +200,8 @@ currency_exchange_in_adjustments AS (
     AND in_tx.amount_minor > 0
     AND out_tx._sync_is_deleted = 0
     AND out_tx.amount_minor < 0
-    AND upper(out_tx.currency) = upper(f.currency)
-    AND upper(in_tx.currency) = upper(f.to_currency)
+    AND out_tx.currency = f.currency
+    AND in_tx.currency = f.to_currency
     AND f.to_amount_minor IS NOT NULL
   GROUP BY in_tx.id
 ),
@@ -265,7 +265,7 @@ normalized AS (
     id,
     eff_date,
     strftime('%Y-%m', eff_date) AS period,
-    upper(currency) AS original_currency,
+    currency AS original_currency,
     minor_factor AS original_minor_factor,
     cat_name,
     counter_party,
