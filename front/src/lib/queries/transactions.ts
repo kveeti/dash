@@ -34,8 +34,16 @@ const TRANSACTION_LIST_BASE_SELECT_SQL = `select
 	t.counter_party,
 	c.name as category_name,
 	a.name as account_name,
+	coalesce(fs.flow_count, 0) as flow_count,
+	coalesce(fs.has_exchange, 0) as has_exchange,
+	coalesce(fs.has_transfer, 0) as has_transfer,
+	coalesce(fs.has_allocation, 0) as has_allocation,
+	coalesce(fs.has_refund, 0) as has_refund,
+	coalesce(fs.adjustment_minor, 0) as flow_adjustment_minor,
 	t.amount_minor as original_amount_minor,
+	t.amount_minor + coalesce(fs.adjustment_minor, 0) as effective_original_amount_minor,
 	t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as original_amount,
+	(t.amount_minor + coalesce(fs.adjustment_minor, 0)) * 1.0 / coalesce(cm.minor_factor, 100) as effective_amount,
 	upper(t.currency) as original_currency,
 	coalesce(cm.minor_factor, 100) as original_minor_factor,
 	coalesce(t.categorize_on, t.date) as eff_date,
@@ -45,6 +53,39 @@ const TRANSACTION_LIST_BASE_SELECT_SQL = `select
 from transactions t
 left join categories c on t.category_id = c.id
 left join accounts a on t.account_id = a.id
+left join (
+	select
+		tx_id,
+		count(*) as flow_count,
+		max(case when kind = 'currency_exchange' then 1 else 0 end) as has_exchange,
+		max(case when kind = 'own_transfer' then 1 else 0 end) as has_transfer,
+		max(case when kind = 'allocation' then 1 else 0 end) as has_allocation,
+		max(case when kind = 'refund' then 1 else 0 end) as has_refund,
+		sum(adjustment_minor) as adjustment_minor
+	from (
+		select
+			from_transaction_id as tx_id,
+			kind,
+			case
+				when kind in ('own_transfer', 'currency_exchange') then amount_minor
+				else -amount_minor
+			end as adjustment_minor
+		from transaction_flows
+		where _sync_is_deleted = 0
+		union all
+		select
+			to_transaction_id as tx_id,
+			kind,
+			case
+				when kind = 'currency_exchange' then -to_amount_minor
+				when kind = 'own_transfer' then -amount_minor
+				else amount_minor
+			end as adjustment_minor
+		from transaction_flows
+		where _sync_is_deleted = 0
+	)
+	group by tx_id
+) fs on fs.tx_id = t.id
 left join currency_meta cm on cm.currency = upper(t.currency)
 cross join app_settings s`;
 
@@ -76,7 +117,15 @@ const TRANSACTION_LIST_ROW_SELECT_SQL = `	b.id,
 	b.currency,
 	b.counter_party,
 	b.category_name,
-	b.account_name`;
+	b.account_name,
+	b.original_amount_minor,
+	b.effective_original_amount_minor,
+	b.effective_amount,
+	b.flow_count,
+	b.has_exchange,
+	b.has_transfer,
+	b.has_allocation,
+	b.has_refund`;
 
 const TRANSACTION_DETAIL_ROW_SELECT_SQL = `	b.id,
 	b.date,
@@ -433,6 +482,14 @@ export type TransactionRow = TransactionWithConvertedAmount & {
 	counter_party: string;
 	category_name: string | null;
 	account_name: string;
+	original_amount_minor: number;
+	effective_original_amount_minor: number;
+	effective_amount: number;
+	flow_count: number;
+	has_exchange: number;
+	has_transfer: number;
+	has_allocation: number;
+	has_refund: number;
 };
 
 export type TransactionDetails = TransactionWithConvertedAmount & {

@@ -211,6 +211,16 @@ function resolveAmountDisplay(
 	};
 }
 
+function resolveFlowLabel(tx: TransactionRow) {
+	if (!tx.flow_count) return null;
+	if (tx.flow_count > 1) return `${tx.flow_count} links`;
+	if (tx.has_exchange) return "exchange";
+	if (tx.has_transfer) return "transfer";
+	if (tx.has_refund) return "refund";
+	if (tx.has_allocation) return "allocated";
+	return "linked";
+}
+
 export function TransactionsPage() {
 	const {
 		left,
@@ -431,6 +441,9 @@ function TxRow(props: {
 	const { f } = useI18n();
 	const amountDisplay = resolveAmountDisplay(props.tx);
 	const isIncome = amountDisplay.amount > 0;
+	const flowLabel = resolveFlowLabel(props.tx);
+	const hasEffectiveAmount =
+		props.tx.effective_original_amount_minor !== props.tx.original_amount_minor;
 
 	const longPress = useLongPress(() => {
 		props.onSelect();
@@ -472,12 +485,19 @@ function TxRow(props: {
 					<div className="flex items-baseline gap-2">
 						<span className="truncate">{props.tx.counter_party}</span>
 					</div>
-					<div className="mt-0.5 flex gap-3 text-xs">
-						{props.tx.category_name && <span>{props.tx.category_name}</span>}
-						<span className="text-gray-11">{props.tx.account_name}</span>
+					<div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs">
+						{flowLabel && (
+							<span className="shrink-0 border border-gray-a4 px-1.25 text-[11px] leading-4 text-gray-a11">
+								{flowLabel}
+							</span>
+						)}
+						{props.tx.category_name && (
+							<span className="truncate">{props.tx.category_name}</span>
+						)}
+						<span className="truncate text-gray-11">{props.tx.account_name}</span>
 					</div>
 				</div>
-				<div>
+				<div className="text-right">
 					<span
 						className={`shrink-0 text-sm ${isIncome ? "text-green-11" : ""}`}
 					>
@@ -486,6 +506,11 @@ function TxRow(props: {
 					{amountDisplay.original && (
 						<div className="text-[11px] text-gray-11 leading-tight text-right">
 							({f.amount(amountDisplay.original.amount, amountDisplay.original.currency)})
+						</div>
+					)}
+					{hasEffectiveAmount && (
+						<div className="text-[11px] text-gray-11 leading-tight text-right">
+							net {f.amount(props.tx.effective_amount, props.tx.currency)}
 						</div>
 					)}
 				</div>
