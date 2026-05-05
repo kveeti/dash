@@ -193,13 +193,16 @@ function parseRevolutRow(cols: string[]): ParsedTransaction | null {
 	const amount = parseAmount(cols[5] ?? "");
 	const feeRaw = cols[6]?.trim() ?? "";
 	const fee = feeRaw ? parseAmount(feeRaw) : "0";
+	const feeAmount = Number(fee);
+	const signedFee = feeAmount === 0 ? 0 : -Math.abs(feeAmount);
+	const netAmount = Number(amount) + signedFee;
 
 	return {
 		date: date.toISOString(),
-		amount: String(Number(amount) + Number(fee)),
+		amount: String(netAmount),
 		currency: cols[7]?.trim() || undefined,
 		counter_party,
-		additional: fee !== 0 ? `Fee: ${fee}` : undefined,
+		additional: signedFee !== 0 ? `Fee: ${signedFee}` : undefined,
 	};
 }
 
