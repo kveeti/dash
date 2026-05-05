@@ -117,7 +117,7 @@ export function StatsPage() {
 
 	return (
 		<div className="w-full mx-auto max-w-[900px] mt-14 px-4">
-			<h1 className="text-lg mb-4">stats</h1>
+			<h1 className="font-medium text-2xl font-cool mb-4">stats</h1>
 
 			{(settings.isLoading || yearStats.isLoading) && (
 				<p className="text-sm text-gray-10">loading...</p>

@@ -27,7 +27,7 @@ export function AccountsPage() {
 	return (
 		<div className="w-full mx-auto max-w-[25rem] mt-14">
 			<div className="mb-4 flex items-center justify-between gap-3">
-				<h1 className="text-lg">accounts</h1>
+				<h1 className="font-medium text-2xl font-cool">accounts</h1>
 			</div>
 
 			<Input
