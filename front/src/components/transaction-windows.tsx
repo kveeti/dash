@@ -51,6 +51,7 @@ export function TransactionWindowsProvider({ children }: { children: ReactNode }
 					txId={id}
 					index={index}
 					onClose={() => closeTransaction(id)}
+					onOpenTransaction={openTransaction}
 					ref={(handle) => setRef(id, handle)}
 				/>
 			))}

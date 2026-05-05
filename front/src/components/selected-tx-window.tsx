@@ -163,11 +163,13 @@ export function SelectedTxWindow({
 	txId,
 	index,
 	onClose,
+	onOpenTransaction,
 	ref: forwardedRef,
 }: {
 	txId: string;
 	index: number;
 	onClose: () => void;
+	onOpenTransaction: (txId: string) => void;
 	ref?: Ref<SelectedTxHandle>;
 }) {
 	const { f } = useI18n();
@@ -595,14 +597,20 @@ export function SelectedTxWindow({
 														<div className="flex items-start justify-between gap-2">
 															<div className="min-w-0">
 																<p className="truncate">{suggestion.reason}</p>
-																<p className="text-gray-10">
-																	{candidates
-																		.map(
-																			(candidate) =>
-																				`${candidate.counter_party} ${f.amount(candidate.amount, candidate.currency)}`,
-																		)
-																		.join(" · ")}
-																</p>
+																<ul className="text-gray-10">
+																	{candidates.map((candidate) => (
+																		<li key={candidate.id}>
+																			<button
+																				type="button"
+																				className="max-w-full truncate text-left hover:text-gray-12 hover:underline"
+																				onClick={() => onOpenTransaction(candidate.id)}
+																			>
+																				{candidate.counter_party}{" "}
+																				{f.amount(candidate.amount, candidate.currency)}
+																			</button>
+																		</li>
+																	))}
+																</ul>
 															</div>
 															<div className="flex shrink-0 gap-1">
 																<Button
@@ -664,11 +672,15 @@ export function SelectedTxWindow({
 													key={flow.id}
 													className="flex items-start justify-between gap-2"
 												>
-													<span className="truncate">
+													<button
+														type="button"
+														className="min-w-0 truncate text-left hover:underline"
+														onClick={() => onOpenTransaction(flow.other_transaction_id)}
+													>
 														{flow.direction === "incoming" ? "from" : "to"}{" "}
 														{flow.other_counter_party}
 														<span className="text-gray-10"> · {flow.kind}</span>
-													</span>
+													</button>
 													<div className="text-right shrink-0">
 														<span className="text-gray-10">
 															{f.amount(displayAmount.amount, displayAmount.currency)}
