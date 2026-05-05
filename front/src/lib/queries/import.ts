@@ -5,7 +5,12 @@ import { id } from "../id";
 import { useEncrypted } from "../../encrypted-context";
 import { queryKeyRoots } from "./query-keys";
 import { getOrCreateCategoryByName } from "./categories";
-import { getCurrencyMeta, parseCurrency, parseDecimalToMinorUnits } from "../currency";
+import {
+	parseCurrency,
+	parseDecimalToMinorUnits,
+	type CurrencyMeta,
+} from "../currency";
+import { currencyMetaQueryOptions, findCurrencyMeta } from "./currencies";
 
 export type CsvFormat =
 	| "generic"
@@ -46,7 +51,12 @@ export function useImportCsvMutation() {
 				id: string;
 				currency: string;
 			};
-		}) => importCsv(db, input.text, input.format, input.account),
+		}) =>
+			qc
+				.ensureQueryData(currencyMetaQueryOptions(db))
+				.then((currencyMeta) =>
+					importCsv(db, input.text, input.format, input.account, currencyMeta),
+				),
 		onSuccess: () => {
 			invalidateImportQueries(qc);
 		},
@@ -57,7 +67,10 @@ export function useImportLegacyCsvBundleMutation() {
 	const { db } = useEncrypted();
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: (files: LegacyBundleTexts) => importLegacyCsvBundle(db, files),
+		mutationFn: (files: LegacyBundleTexts) =>
+			qc
+				.ensureQueryData(currencyMetaQueryOptions(db))
+				.then((currencyMeta) => importLegacyCsvBundle(db, files, currencyMeta)),
 		onSuccess: () => {
 			invalidateImportQueries(qc);
 			qc.invalidateQueries({ queryKey: queryKeyRoots.transactionFlows });
@@ -477,6 +490,7 @@ export async function importCsv(
 	text: string,
 	format: CsvFormat,
 	account: { id: string; currency: string },
+	currencyMeta: CurrencyMeta[],
 ): Promise<ImportResult> {
 	if (format === "legacy_bundle") {
 		throw new Error("legacy bundle imports must use importLegacyCsvBundle");
@@ -545,9 +559,9 @@ export async function importCsv(
 	for (const name of uniqueCategories) {
 		categoryCache.set(name, await getOrCreateCategoryByName(db, name));
 	}
-	const currencyMetaByCode = new Map<string, Awaited<ReturnType<typeof getCurrencyMeta>>>();
+	const currencyMetaByCode = new Map<string, CurrencyMeta>();
 	for (const currency of new Set(newRows.map((row) => row.currency))) {
-		currencyMetaByCode.set(currency, await getCurrencyMeta(db, currency));
+		currencyMetaByCode.set(currency, findCurrencyMeta(currencyMeta, currency));
 	}
 
 	const now = new Date().toISOString();
@@ -607,6 +621,7 @@ export async function importCsv(
 export async function importLegacyCsvBundle(
 	db: DbHandle,
 	files: LegacyBundleTexts,
+	currencyMeta: CurrencyMeta[],
 ): Promise<ImportResult> {
 	const accountsTable = parseCsvTable(
 		files.accountsCsv,
@@ -761,7 +776,7 @@ export async function importLegacyCsvBundle(
 				const currency = parseCurrency(record.currency, "EUR");
 				const amountMinor = parseDecimalToMinorUnits(
 					parseAmount(record.amount ?? ""),
-					await getCurrencyMeta(db, currency),
+					findCurrencyMeta(currencyMeta, currency),
 				);
 
 				const newTxId = existingTransactionIds.has(txId) ? id() : txId;

@@ -65,20 +65,6 @@ export function fallbackCurrencyMeta(currency: string): CurrencyMeta {
 	};
 }
 
-export async function getCurrencyMeta(
-	db: {
-		query: <T = unknown>(sql: string, vars?: unknown[]) => Promise<T[]>;
-	},
-	currency: string,
-): Promise<CurrencyMeta> {
-	const normalized = normalizeCurrency(currency);
-	const rows = await db.query<CurrencyMeta>(
-		`select currency, minor_unit, minor_factor from currency_meta where currency = ? limit 1`,
-		[normalized],
-	);
-	return rows[0] ?? fallbackCurrencyMeta(normalized);
-}
-
 export function parseDecimalToMinorUnits(
 	value: string,
 	meta: Pick<CurrencyMeta, "currency" | "minor_unit">,
