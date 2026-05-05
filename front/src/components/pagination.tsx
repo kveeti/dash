@@ -22,7 +22,7 @@ export function PaginationLink({
 	children: ReactNode;
 }) {
 	let cls =
-		"bg-gray-1 border-gray-5 focus rounded-full border select-none aria-disabled:opacity-40 aria-disabled:cursor-not-allowed";
+		"bg-gray-1 border-gray-5 focus rounded-full border shadow-lg select-none aria-disabled:opacity-40 aria-disabled:cursor-not-allowed";
 	if (className) cls += " " + className;
 
 	return (
