@@ -99,6 +99,7 @@ const TRANSACTION_DETAIL_BASE_SELECT_SQL = `select
 	t.notes,
 	t.category_id,
 	t.account_id,
+	coalesce(a.name, '') as account_name,
 	t.amount_minor as original_amount_minor,
 	t.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as original_amount,
 	upper(t.currency) as original_currency,
@@ -108,6 +109,7 @@ const TRANSACTION_DETAIL_BASE_SELECT_SQL = `select
 	s.max_staleness_days as max_staleness_days,
 	s.conversion_mode as conversion_mode
 from transactions t
+left join accounts a on t.account_id = a.id
 left join currency_meta cm on cm.currency = upper(t.currency)
 cross join app_settings s`;
 
@@ -135,7 +137,8 @@ const TRANSACTION_DETAIL_ROW_SELECT_SQL = `	b.id,
 	b.additional,
 	b.notes,
 	b.category_id,
-	b.account_id`;
+	b.account_id,
+	b.account_name`;
 
 type TransactionCursor = { left: string } | { right: string };
 type TransactionCursorInput = {
@@ -500,6 +503,7 @@ export type TransactionDetails = TransactionWithConvertedAmount & {
 	notes: string | null;
 	category_id: string | null;
 	account_id: string;
+	account_name: string;
 };
 
 export function useCreateTransactionMutation() {

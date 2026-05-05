@@ -345,15 +345,24 @@ export function SelectedTxWindow({
 		>
 			<div className="space-y-1 px-3 pt-3">
 				<h2 className="font-medium">{tx.counter_party}</h2>
-				<p className={`text-sm ${isIncome ? "text-green-11" : ""}`}>
-					{f.amount(txAmountDisplay.amount, txAmountDisplay.currency)}
+				<p className="flex flex-wrap items-baseline gap-1.5 text-sm">
+					<span className={isIncome ? "text-green-11" : ""}>
+						{f.amount(txAmountDisplay.amount, txAmountDisplay.currency)}
+					</span>
+					<span className="text-gray-9">·</span>
+					<span>{f.weekdayLongDate.format(new Date(tx.date))}</span>
 				</p>
 				{txAmountDisplay.original && (
 					<p className="text-xs text-gray-11">
 						({f.amount(txAmountDisplay.original.amount, txAmountDisplay.original.currency)})
 					</p>
 				)}
-				<p className="text-xs">{f.weekdayLongDate.format(new Date(tx.date))}</p>
+				<p className="text-xs text-gray-11">{tx.account_name}</p>
+				{tx.additional?.trim() && (
+					<p className="whitespace-pre-wrap text-xs text-gray-11">
+						{tx.additional}
+					</p>
+				)}
 			</div>
 
 			<div className="my-3 space-y-2">
