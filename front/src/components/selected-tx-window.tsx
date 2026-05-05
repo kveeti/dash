@@ -172,6 +172,7 @@ export function SelectedTxWindow({
 }) {
 	const { f } = useI18n();
 	const [editing, setEditing] = useState(false);
+	const [showLinking, setShowLinking] = useState(false);
 	const [flowTargetInput, setFlowTargetInput] = useState("");
 	const [flowKind, setFlowKind] = useState<TransactionFlowKind>("allocation");
 	const [flowAmountInput, setFlowAmountInput] = useState("");
@@ -382,6 +383,14 @@ export function SelectedTxWindow({
 					>
 						{copied ? "copied!" : "copy id"}
 					</button>
+					<span className="text-gray-a4">|</span>
+					<button
+						type="button"
+						onClick={() => setShowLinking(!showLinking)}
+						className="text-sm text-gray-11 hover:text-gray-12"
+					>
+						{showLinking ? "hide links" : "links"}
+					</button>
 				</div>
 
 				<AnimatePresence>
@@ -435,242 +444,254 @@ export function SelectedTxWindow({
 					)}
 				</AnimatePresence>
 
-				<div className="px-3 space-y-2">
-					<div className="border-gray-a4 border p-2 text-xs space-y-2">
-						<div className="flex items-center justify-between gap-2">
-							<p className="text-gray-11">flows</p>
-							{tx.amount > 0 ? (
-								<p className="text-gray-10">
-									available {f.amount(txAvailable, tx.currency)}
-								</p>
-							) : (
-								<p className="text-gray-10">
-									covered {f.amount(allocationCovered, tx.currency)} /{" "}
-									{f.amount(Math.abs(tx.amount), tx.currency)}
-									{txOverfunded > 0
-										? `, over ${f.amount(txOverfunded, tx.currency)}`
-										: txRemaining > 0
-											? `, left ${f.amount(txRemaining, tx.currency)}`
-											: ""}
-								</p>
-							)}
-						</div>
-						{ownTransferMoved > 0 && (
-							<p className="text-gray-10">
-								own transfer moved {f.amount(ownTransferMoved, tx.currency)}
-							</p>
-						)}
-						{currencyExchangeMoved > 0 && (
-							<p className="text-gray-10">
-								exchanged {f.amount(currencyExchangeMoved, tx.currency)}
-							</p>
-						)}
-						<div className="grid grid-cols-2 gap-1">
-							<Select
-								size="sm"
-								value={flowKind}
-								onChange={(e) =>
-									setFlowKind(e.currentTarget.value as TransactionFlowKind)
-								}
-							>
-								<option value="allocation">allocation</option>
-								<option value="own_transfer">own transfer</option>
-								<option value="refund">refund</option>
-								<option value="currency_exchange">currency exchange</option>
-							</Select>
-							<input
-								type="number"
-								step="0.01"
-								min="0"
-								placeholder={
-									flowKind === "currency_exchange"
-										? exchangeFromTx
-											? `${exchangeFromTx.currency} amount`
-											: "from amount"
-										: "amount"
-								}
-								value={flowAmountInput}
-								onChange={(e) => setFlowAmountInput(e.currentTarget.value)}
-								className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm min-w-0"
-							/>
-						</div>
-						{flowKind === "currency_exchange" && (
-							<input
-								type="number"
-								step="0.01"
-								min="0"
-								placeholder={
-									exchangeToTx ? `${exchangeToTx.currency} amount` : "to amount"
-								}
-								value={flowToAmountInput}
-								onChange={(e) => setFlowToAmountInput(e.currentTarget.value)}
-								className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm min-w-0 w-full"
-							/>
-						)}
-						<div className="flex gap-1">
-							<input
-								type="text"
-								placeholder="paste target tx id..."
-								value={flowTargetInput}
-								onChange={(e) => setFlowTargetInput(e.currentTarget.value)}
-								className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm flex-1 min-w-0"
-							/>
-							<Button
-								size="sm"
-								onClick={handleCreateFlow}
-								disabled={!canCreateFlow || createFlowMutation.isPending}
-							>
-								create
-							</Button>
-						</div>
-						{targetTxId && targetTxQuery.isLoading && (
-							<p className="text-gray-10">loading target...</p>
-						)}
-						{targetTxId && targetTx && (
-							<p className="text-gray-10 truncate">
-								target: {targetTx.counter_party} ·{" "}
-								{f.amount(targetTx.amount, targetTx.currency)}
-								{flowDirection
-									? ` · ${flowDirection.from_transaction_id === txId ? "from this" : "to this"}`
-									: " · incompatible signs"}
-							</p>
-						)}
-						{suggestedFlowAmount > 0 && (
-							<button
-								type="button"
-								className="text-xs text-gray-10 hover:text-gray-12 underline"
-								onClick={() => {
-									setFlowAmountInput(String(suggestedFlowAmount));
-									if (
-										flowKind === "currency_exchange" &&
-										suggestedExchangeToAmount > 0
-									) {
-										setFlowToAmountInput(String(suggestedExchangeToAmount));
-									}
-								}}
-							>
-								use suggested{" "}
-								{flowKind === "currency_exchange" && exchangeFromTx && exchangeToTx
-									? `${f.amount(suggestedFlowAmount, exchangeFromTx.currency)} -> ${f.amount(suggestedExchangeToAmount, exchangeToTx.currency)}`
-									: f.amount(suggestedFlowAmount, tx.currency)}
-							</button>
-						)}
-						{targetTx && flowKind !== "currency_exchange" && targetTx.currency !== tx.currency && (
-							<p className="text-red-11">target currency must match</p>
-						)}
-						{targetTx && flowKind === "currency_exchange" && targetTx.currency === tx.currency && (
-							<p className="text-red-11">exchange target currency must differ</p>
-						)}
-					</div>
-
-					{linkSuggestionsQuery.data && linkSuggestionsQuery.data.length > 0 && (
-						<div className="border-gray-a4 border p-2 text-xs space-y-2">
-							<p className="text-gray-11">possible links</p>
-							<ul className="space-y-2">
-								{linkSuggestionsQuery.data.map((suggestion) => {
-									const candidates = suggestion.transactions.filter(
-										(item) => item.id !== suggestion.primary_transaction_id,
-									);
-									if (candidates.length === 0) return null;
-									return (
-										<li key={suggestion.id} className="space-y-1">
-											<div className="flex items-start justify-between gap-2">
-												<div className="min-w-0">
-													<p className="truncate">{suggestion.reason}</p>
-													<p className="text-gray-10">
-														{candidates
-															.map(
-																(candidate) =>
-																	`${candidate.counter_party} ${f.amount(candidate.amount, candidate.currency)}`,
-															)
-															.join(" · ")}
-													</p>
-												</div>
-												<div className="flex shrink-0 gap-1">
-													<Button
-														size="sm"
-														onClick={() =>
-															acceptLinkSuggestion(suggestion.suggested_flows)
-														}
-														disabled={createFlowMutation.isPending}
-													>
-														link
-													</Button>
-													<Button
-														size="sm"
-														variant="ghost"
-														onClick={() =>
-															dismissLinkSuggestionMutation.mutate({
-																kind: suggestion.kind,
-																primaryTransactionId:
-																	suggestion.primary_transaction_id,
-																candidateIds: candidates.map(
-																	(candidate) => candidate.id,
-																),
-															})
-														}
-														disabled={dismissLinkSuggestionMutation.isPending}
-													>
-														dismiss
-													</Button>
-												</div>
-											</div>
+				<AnimatePresence>
+					{showLinking && (
+						<motion.div
+							initial={{ height: 0, opacity: 0 }}
+							animate={{ height: "auto", opacity: 1 }}
+							exit={{ height: 0, opacity: 0 }}
+							transition={{ duration: 0.15 }}
+							className="overflow-hidden"
+						>
+							<div className="px-3 space-y-2">
+								<div className="border-gray-a4 border p-2 text-xs space-y-2">
+									<div className="flex items-center justify-between gap-2">
+										<p className="text-gray-11">flows</p>
+										{tx.amount > 0 ? (
 											<p className="text-gray-10">
-												{suggestion.evidence.join(", ")}
+												available {f.amount(txAvailable, tx.currency)}
 											</p>
-										</li>
-									);
-								})}
-							</ul>
-						</div>
-					)}
-
-					{flowsQuery.data && flowsQuery.data.length > 0 && (
-						<ul className="text-xs space-y-1">
-							{flowsQuery.data.map((flow) => {
-								const displayAmount =
-									flow.kind === "currency_exchange" &&
-									flow.direction === "incoming" &&
-									flow.to_amount != null &&
-									flow.to_currency
-										? {
-												amount: flow.to_amount,
-												currency: flow.to_currency,
-											}
-										: {
-												amount: flow.amount,
-												currency: flow.currency,
-											};
-								return (
-									<li
-										key={flow.id}
-										className="flex items-start justify-between gap-2"
-									>
-										<span className="truncate">
-											{flow.direction === "incoming" ? "from" : "to"}{" "}
-											{flow.other_counter_party}
-											<span className="text-gray-10"> · {flow.kind}</span>
-										</span>
-										<div className="text-right shrink-0">
-											<span className="text-gray-10">
-												{f.amount(displayAmount.amount, displayAmount.currency)}
-											</span>
-										</div>
-										<button
-											type="button"
-											className="text-gray-10 hover:text-red-11 shrink-0"
-											onClick={() =>
-												deleteFlowMutation.mutate({ flowId: flow.id })
+										) : (
+											<p className="text-gray-10">
+												covered {f.amount(allocationCovered, tx.currency)} /{" "}
+												{f.amount(Math.abs(tx.amount), tx.currency)}
+												{txOverfunded > 0
+													? `, over ${f.amount(txOverfunded, tx.currency)}`
+													: txRemaining > 0
+														? `, left ${f.amount(txRemaining, tx.currency)}`
+														: ""}
+											</p>
+										)}
+									</div>
+									{ownTransferMoved > 0 && (
+										<p className="text-gray-10">
+											own transfer moved {f.amount(ownTransferMoved, tx.currency)}
+										</p>
+									)}
+									{currencyExchangeMoved > 0 && (
+										<p className="text-gray-10">
+											exchanged {f.amount(currencyExchangeMoved, tx.currency)}
+										</p>
+									)}
+									<div className="grid grid-cols-2 gap-1">
+										<Select
+											size="sm"
+											value={flowKind}
+											onChange={(e) =>
+												setFlowKind(e.currentTarget.value as TransactionFlowKind)
 											}
 										>
-											delete
+											<option value="allocation">allocation</option>
+											<option value="own_transfer">own transfer</option>
+											<option value="refund">refund</option>
+											<option value="currency_exchange">currency exchange</option>
+										</Select>
+										<input
+											type="number"
+											step="0.01"
+											min="0"
+											placeholder={
+												flowKind === "currency_exchange"
+													? exchangeFromTx
+														? `${exchangeFromTx.currency} amount`
+														: "from amount"
+													: "amount"
+											}
+											value={flowAmountInput}
+											onChange={(e) => setFlowAmountInput(e.currentTarget.value)}
+											className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm min-w-0"
+										/>
+									</div>
+									{flowKind === "currency_exchange" && (
+										<input
+											type="number"
+											step="0.01"
+											min="0"
+											placeholder={
+												exchangeToTx ? `${exchangeToTx.currency} amount` : "to amount"
+											}
+											value={flowToAmountInput}
+											onChange={(e) => setFlowToAmountInput(e.currentTarget.value)}
+											className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm min-w-0 w-full"
+										/>
+									)}
+									<div className="flex gap-1">
+										<input
+											type="text"
+											placeholder="paste target tx id..."
+											value={flowTargetInput}
+											onChange={(e) => setFlowTargetInput(e.currentTarget.value)}
+											className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm flex-1 min-w-0"
+										/>
+										<Button
+											size="sm"
+											onClick={handleCreateFlow}
+											disabled={!canCreateFlow || createFlowMutation.isPending}
+										>
+											create
+										</Button>
+									</div>
+									{targetTxId && targetTxQuery.isLoading && (
+										<p className="text-gray-10">loading target...</p>
+									)}
+									{targetTxId && targetTx && (
+										<p className="text-gray-10 truncate">
+											target: {targetTx.counter_party} ·{" "}
+											{f.amount(targetTx.amount, targetTx.currency)}
+											{flowDirection
+												? ` · ${flowDirection.from_transaction_id === txId ? "from this" : "to this"}`
+												: " · incompatible signs"}
+										</p>
+									)}
+									{suggestedFlowAmount > 0 && (
+										<button
+											type="button"
+											className="text-xs text-gray-10 hover:text-gray-12 underline"
+											onClick={() => {
+												setFlowAmountInput(String(suggestedFlowAmount));
+												if (
+													flowKind === "currency_exchange" &&
+													suggestedExchangeToAmount > 0
+												) {
+													setFlowToAmountInput(String(suggestedExchangeToAmount));
+												}
+											}}
+										>
+											use suggested{" "}
+											{flowKind === "currency_exchange" && exchangeFromTx && exchangeToTx
+												? `${f.amount(suggestedFlowAmount, exchangeFromTx.currency)} -> ${f.amount(suggestedExchangeToAmount, exchangeToTx.currency)}`
+												: f.amount(suggestedFlowAmount, tx.currency)}
 										</button>
-									</li>
-								);
-							})}
-						</ul>
+									)}
+									{targetTx && flowKind !== "currency_exchange" && targetTx.currency !== tx.currency && (
+										<p className="text-red-11">target currency must match</p>
+									)}
+									{targetTx && flowKind === "currency_exchange" && targetTx.currency === tx.currency && (
+										<p className="text-red-11">exchange target currency must differ</p>
+									)}
+								</div>
+
+								{linkSuggestionsQuery.data && linkSuggestionsQuery.data.length > 0 && (
+									<div className="border-gray-a4 border p-2 text-xs space-y-2">
+										<p className="text-gray-11">possible links</p>
+										<ul className="space-y-2">
+											{linkSuggestionsQuery.data.map((suggestion) => {
+												const candidates = suggestion.transactions.filter(
+													(item) => item.id !== suggestion.primary_transaction_id,
+												);
+												if (candidates.length === 0) return null;
+												return (
+													<li key={suggestion.id} className="space-y-1">
+														<div className="flex items-start justify-between gap-2">
+															<div className="min-w-0">
+																<p className="truncate">{suggestion.reason}</p>
+																<p className="text-gray-10">
+																	{candidates
+																		.map(
+																			(candidate) =>
+																				`${candidate.counter_party} ${f.amount(candidate.amount, candidate.currency)}`,
+																		)
+																		.join(" · ")}
+																</p>
+															</div>
+															<div className="flex shrink-0 gap-1">
+																<Button
+																	size="sm"
+																	onClick={() =>
+																		acceptLinkSuggestion(suggestion.suggested_flows)
+																	}
+																	disabled={createFlowMutation.isPending}
+																>
+																	link
+																</Button>
+																<Button
+																	size="sm"
+																	variant="ghost"
+																	onClick={() =>
+																		dismissLinkSuggestionMutation.mutate({
+																			kind: suggestion.kind,
+																			primaryTransactionId:
+																				suggestion.primary_transaction_id,
+																			candidateIds: candidates.map(
+																				(candidate) => candidate.id,
+																			),
+																		})
+																	}
+																	disabled={dismissLinkSuggestionMutation.isPending}
+																>
+																	dismiss
+																</Button>
+															</div>
+														</div>
+														<p className="text-gray-10">
+															{suggestion.evidence.join(", ")}
+														</p>
+													</li>
+												);
+											})}
+										</ul>
+									</div>
+								)}
+
+								{flowsQuery.data && flowsQuery.data.length > 0 && (
+									<ul className="text-xs space-y-1">
+										{flowsQuery.data.map((flow) => {
+											const displayAmount =
+												flow.kind === "currency_exchange" &&
+												flow.direction === "incoming" &&
+												flow.to_amount != null &&
+												flow.to_currency
+													? {
+															amount: flow.to_amount,
+															currency: flow.to_currency,
+														}
+													: {
+															amount: flow.amount,
+															currency: flow.currency,
+														};
+											return (
+												<li
+													key={flow.id}
+													className="flex items-start justify-between gap-2"
+												>
+													<span className="truncate">
+														{flow.direction === "incoming" ? "from" : "to"}{" "}
+														{flow.other_counter_party}
+														<span className="text-gray-10"> · {flow.kind}</span>
+													</span>
+													<div className="text-right shrink-0">
+														<span className="text-gray-10">
+															{f.amount(displayAmount.amount, displayAmount.currency)}
+														</span>
+													</div>
+													<button
+														type="button"
+														className="text-gray-10 hover:text-red-11 shrink-0"
+														onClick={() =>
+															deleteFlowMutation.mutate({ flowId: flow.id })
+														}
+													>
+														delete
+													</button>
+												</li>
+											);
+										})}
+									</ul>
+								)}
+							</div>
+						</motion.div>
 					)}
-				</div>
+				</AnimatePresence>
 			</div>
 		</SelectedTx>
 	);
