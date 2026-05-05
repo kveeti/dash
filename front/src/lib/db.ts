@@ -1,4 +1,4 @@
-import { DEFAULT_CURRENCY_META } from "./currency";
+import { DEFAULT_CURRENCY, DEFAULT_CURRENCY_META } from "./currency";
 import { hkdfSha256 } from "./crypto";
 
 export type DbHandle = {
@@ -14,6 +14,11 @@ export type DbClient = DbHandle & {
 const SQLITE_DB_FILE = "db";
 const SQLITE_KDF_KEY_BYTES = 32;
 const SQLITE_KEY_CONTEXT = "dash/sqlite-opfs/v1";
+const DEFAULT_APP_SETTINGS = {
+	reportingCurrency: DEFAULT_CURRENCY,
+	maxStalenessDays: 7,
+	conversionMode: "strict",
+};
 
 function createSqliteWorker(): Worker {
 	return new Worker(new URL("./sqlite-worker.js", import.meta.url), {
@@ -249,6 +254,13 @@ export function getDb(accountRootKey: Uint8Array<ArrayBuffer>): DbClient {
 			minor_unit integer not null,
 			minor_factor integer not null
 		)`);
+		await exec(`create table if not exists app_settings (
+			id integer primary key not null check (id = 1),
+			reporting_currency text not null default 'EUR',
+			max_staleness_days integer not null default 7,
+			conversion_mode text not null default 'strict',
+			updated_at text not null
+		)`);
 
 		for (const meta of DEFAULT_CURRENCY_META) {
 			await exec(
@@ -260,6 +272,20 @@ export function getDb(accountRootKey: Uint8Array<ArrayBuffer>): DbClient {
 				[meta.currency, meta.minor_unit, meta.minor_factor],
 			);
 		}
+		await exec(
+			`insert into app_settings (
+				id, reporting_currency, max_staleness_days, conversion_mode, updated_at
+			)
+			values (
+				1, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+			)
+			on conflict(id) do nothing`,
+			[
+				DEFAULT_APP_SETTINGS.reportingCurrency,
+				DEFAULT_APP_SETTINGS.maxStalenessDays,
+				DEFAULT_APP_SETTINGS.conversionMode,
+			],
+		);
 
 		// _sync_status
 		// 0 = synced
@@ -384,22 +410,6 @@ export function getDb(accountRootKey: Uint8Array<ArrayBuffer>): DbClient {
 			`create index if not exists idx_tx_flows_kind_active
 				on transaction_flows(kind)
 				where _sync_is_deleted = 0`,
-
-			`create table if not exists app_settings (
-				id integer primary key not null check (id = 1),
-				reporting_currency text not null default 'EUR',
-				max_staleness_days integer not null default 7,
-				conversion_mode text not null default 'strict',
-				updated_at text not null
-			)`,
-
-			`insert into app_settings (
-				id, reporting_currency, max_staleness_days, conversion_mode, updated_at
-			)
-			values (
-				1, 'EUR', 7, 'strict', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-			)
-			on conflict(id) do nothing`,
 
 			`create table if not exists fx_rates (
 				rate_date text not null,
