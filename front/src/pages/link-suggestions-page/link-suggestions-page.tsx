@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "wouter";
 import { Button } from "../../components/button";
 import { Empty } from "../../components/empty";
-import { type SelectedTxHandle } from "../../components/selected-tx";
-import { SelectedTxWindow } from "../../components/selected-tx-window";
 import { Spinner } from "../../components/spinner";
 import { Select } from "../../components/select";
+import { useTransactionWindows } from "../../components/transaction-windows";
 import { useI18n } from "../../providers";
 import {
 	useDismissTransactionLinkSuggestionMutation,
@@ -52,11 +51,10 @@ export function LinkSuggestionsPage() {
 	const createFlowMutation = useCreateTransactionFlowMutation();
 	const dismissMutation = useDismissTransactionLinkSuggestionMutation();
 	const isMutating = createFlowMutation.isPending || dismissMutation.isPending;
-	const [openTxIds, setOpenTxIds] = useState<Array<string>>([]);
+	const { openTransaction } = useTransactionWindows();
 	const [manualScanUntilCount, setManualScanUntilCount] = useState<number | null>(
 		null,
 	);
-	const windowRefs = useRef<Map<string, SelectedTxHandle>>(new Map());
 
 	const loadedSuggestions = useMemo(() => {
 		const byId = new Map<string, TransactionLinkSuggestion>();
@@ -74,23 +72,6 @@ export function LinkSuggestionsPage() {
 		) ?? 0;
 	const nextCursor =
 		suggestionsQuery.data?.pages.at(-1)?.next_cursor ?? null;
-
-	function openTxWindow(txId: string) {
-		if (openTxIds.includes(txId)) {
-			windowRefs.current.get(txId)?.nudge();
-			return;
-		}
-		setOpenTxIds((prev) => [...prev, txId]);
-	}
-
-	function closeTxWindow(txId: string) {
-		setOpenTxIds((prev) => prev.filter((id) => id !== txId));
-	}
-
-	function setWindowRef(id: string, handle: SelectedTxHandle | null) {
-		if (handle) windowRefs.current.set(id, handle);
-		else windowRefs.current.delete(id);
-	}
 
 	function setParams(updates: Record<string, string | undefined>) {
 		const params = new URLSearchParams(searchParams.toString());
@@ -256,7 +237,7 @@ export function LinkSuggestionsPage() {
 							isMutating={isMutating}
 							onAccept={acceptSuggestion}
 							onDismiss={dismissSuggestion}
-							onOpenTx={openTxWindow}
+							onOpenTx={openTransaction}
 							reviewSuggestions={reviewSuggestions}
 							formatAmount={f.amount}
 						/>
@@ -270,15 +251,6 @@ export function LinkSuggestionsPage() {
 				</div>
 			)}
 
-			{openTxIds.map((id, index) => (
-				<SelectedTxWindow
-					key={id}
-					txId={id}
-					index={index}
-					onClose={() => closeTxWindow(id)}
-					ref={(handle) => setWindowRef(id, handle)}
-				/>
-			))}
 		</div>
 	);
 }

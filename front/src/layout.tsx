@@ -6,16 +6,19 @@ import { FastLink, SlowLink } from "./components/link";
 import { CommandPalette } from "./components/command-palette";
 import { useRoute } from "wouter";
 import { useSync } from "./lib/sync";
+import { TransactionWindowsProvider } from "./components/transaction-windows";
 
 export function Layout(props: { children: ReactNode }) {
   useSync()
 
   return (
     <div className="mx-auto flex ">
-      <Nav />
-      <CommandPalette />
+      <TransactionWindowsProvider>
+        <Nav />
+        <CommandPalette />
 
-      {props.children}
+        {props.children}
+      </TransactionWindowsProvider>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
 	useStatsQuery,
 } from "../../lib/queries/stats";
 import { useI18n } from "../../providers";
+import { useTransactionWindows } from "../../components/transaction-windows";
 
 function getYearBounds(year: number): [string, string] {
 	const y = String(year);
@@ -375,6 +376,7 @@ function BucketSection({
 	reportingCurrency: string;
 }) {
 	const { f } = useI18n();
+	const { openTransaction } = useTransactionWindows();
 	const bucketRows = rows.filter((row) => row.bucket === bucket);
 	const bucketTransactions = transactions.filter((row) => row.bucket === bucket);
 	if (bucketRows.length === 0) return null;
@@ -419,9 +421,11 @@ function BucketSection({
 										convertedAmount != null &&
 										tx.original_currency !== reportingCurrency;
 									return (
-										<div
+										<button
+											type="button"
 											key={tx.id}
-											className="flex items-center justify-between pl-2 text-[11px]"
+											className="flex w-full items-center justify-between pl-2 text-left text-[11px] hover:bg-gray-a2"
+											onClick={() => openTransaction(tx.id)}
 										>
 											<span className="text-gray-10">{tx.counter_party}</span>
 											<span className="text-right">
@@ -441,7 +445,7 @@ function BucketSection({
 													</>
 												)}
 											</span>
-										</div>
+										</button>
 									);
 								})}
 						</div>

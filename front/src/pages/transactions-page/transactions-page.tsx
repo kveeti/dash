@@ -23,9 +23,8 @@ import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { CategoryCombobox } from "../../components/category-combobox";
 import { PopupCombobox } from "../../components/popup-combobox";
-import { type SelectedTxHandle } from "../../components/selected-tx";
-import { SelectedTxWindow } from "../../components/selected-tx-window";
 import { DateRangePickerInput } from "../../components/date-picker";
+import { useTransactionWindows } from "../../components/transaction-windows";
 
 type DateRangeFilter = {
 	from: string;
@@ -159,30 +158,6 @@ function useSelection() {
 	return { selectedIds, toggle, clear, isSelecting: selectedIds.size > 0 };
 }
 
-function useOpenTxWindows() {
-	const [openIds, setOpenIds] = useState<Array<string>>([]);
-	const refs = useRef<Map<string, SelectedTxHandle>>(new Map());
-
-	function open(txId: string) {
-		if (openIds.includes(txId)) {
-			refs.current.get(txId)?.nudge();
-			return;
-		}
-		setOpenIds((p) => [...p, txId]);
-	}
-
-	function close(txId: string) {
-		setOpenIds((p) => p.filter((id) => id !== txId));
-	}
-
-	function setRef(id: string, handle: SelectedTxHandle | null) {
-		if (handle) refs.current.set(id, handle);
-		else refs.current.delete(id);
-	}
-
-	return { openIds, open, close, setRef };
-}
-
 function resolveAmountDisplay(
 	tx: {
 		amount: number;
@@ -250,7 +225,7 @@ export function TransactionsPage() {
 	const currencies = useTransactionCurrenciesQuery();
 
 	const selection = useSelection();
-	const txWindows = useOpenTxWindows();
+	const { openTransaction } = useTransactionWindows();
 	const scrolledForCursor = useRef<string | null>(null);
 	const [showFilters, setShowFilters] = useState(hasFilters);
 
@@ -313,7 +288,7 @@ export function TransactionsPage() {
 									selected={isSelected}
 									selecting={selection.isSelecting}
 									onSelect={() => selection.toggle(tx.id)}
-									onClick={() => txWindows.open(tx.id)}
+									onClick={() => openTransaction(tx.id)}
 									ref={(elem) => {
 										const cursorKey = left ?? right;
 										if (
@@ -390,15 +365,6 @@ export function TransactionsPage() {
 				/>
 			)}
 
-				{txWindows.openIds.map((id, index) => (
-					<SelectedTxWindow
-						key={id}
-						txId={id}
-						index={index}
-						onClose={() => txWindows.close(id)}
-						ref={(handle) => txWindows.setRef(id, handle)}
-					/>
-			))}
 			</>
 		);
 }
