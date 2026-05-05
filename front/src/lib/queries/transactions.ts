@@ -19,10 +19,10 @@ import {
 	type TransactionFlowKind,
 } from "../transaction-flow-validation";
 import {
-	getCurrencyMeta,
 	normalizeCurrency,
 	parseDecimalToMinorUnits,
 } from "../currency";
+import { currencyMetaQueryOptions, findCurrencyMeta } from "./currencies";
 
 const DEFAULT_TRANSACTIONS_LIMIT = 50;
 
@@ -211,6 +211,17 @@ function resolvePagination({
 function invalidateTransactionQueries(qc: ReturnType<typeof useQueryClient>) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transaction });
+}
+
+async function getCurrencyMetaFromQuery(
+	qc: ReturnType<typeof useQueryClient>,
+	db: DbHandle,
+	currency: string,
+) {
+	return findCurrencyMeta(
+		await qc.ensureQueryData(currencyMetaQueryOptions(db)),
+		currency,
+	);
 }
 
 export function useTransactionsQuery(props: {
@@ -515,7 +526,7 @@ export function useCreateTransactionMutation() {
 			const currency = normalizeCurrency(tx.currency);
 			const amountMinor = parseDecimalToMinorUnits(
 				tx.amount,
-				await getCurrencyMeta(db, currency),
+				await getCurrencyMetaFromQuery(qc, db, currency),
 			);
 			await db.exec(
 				`insert into transactions
@@ -554,7 +565,7 @@ export function useUpdateTransactionMutation() {
 		}) => {
 			const now = new Date().toISOString();
 			const currency = normalizeCurrency(tx.currency);
-			return getCurrencyMeta(db, currency).then((meta) => db.exec(
+			return getCurrencyMetaFromQuery(qc, db, currency).then((meta) => db.exec(
 				`update transactions set
 					updated_at = ?,
 					date = ?,
@@ -1526,7 +1537,7 @@ export function useCreateTransactionFlowMutation() {
 			if (flow.from_transaction_id === flow.to_transaction_id || flow.amount <= 0) return;
 			const now = new Date().toISOString();
 			const currency = normalizeCurrency(flow.currency);
-			const meta = await getCurrencyMeta(db, currency);
+			const meta = await getCurrencyMetaFromQuery(qc, db, currency);
 			const amountMinor = parseDecimalToMinorUnits(
 				flow.amount.toFixed(meta.minor_unit),
 				meta,
@@ -1538,7 +1549,7 @@ export function useCreateTransactionFlowMutation() {
 					: null;
 			let toAmountMinor: number | null = null;
 			if (flow.kind === "currency_exchange" && flow.to_amount != null && toCurrency) {
-				const toMeta = await getCurrencyMeta(db, toCurrency);
+				const toMeta = await getCurrencyMetaFromQuery(qc, db, toCurrency);
 				toAmountMinor = parseDecimalToMinorUnits(
 					flow.to_amount.toFixed(toMeta.minor_unit),
 					toMeta,
