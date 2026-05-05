@@ -38,13 +38,7 @@ export function Nav() {
             <NavLink href="/txs">txs</NavLink>
           </li>
           <li>
-            <NavLink href="/txs/link-suggestions">links</NavLink>
-          </li>
-          <li>
             <NavLink href="/txs/new">add txs</NavLink>
-          </li>
-          <li>
-            <NavLink href="/cats">cats</NavLink>
           </li>
         </div>
         <Hamburger />
@@ -83,6 +77,12 @@ function Hamburger() {
         </Button>
       </Dropdown.Trigger>
       <Dropdown.Content>
+        <Dropdown.Item asChild>
+          <SlowLink href="/txs/link-suggestions">links</SlowLink>
+        </Dropdown.Item>
+        <Dropdown.Item asChild>
+          <SlowLink href="/cats">cats</SlowLink>
+        </Dropdown.Item>
         <Dropdown.Item asChild>
           <SlowLink href="/accounts">accounts</SlowLink>
         </Dropdown.Item>
