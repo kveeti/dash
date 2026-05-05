@@ -10,6 +10,7 @@ import {
 	type TransactionDetails,
 	type TransactionFlow,
 	type TransactionFlowKind,
+	type TransactionRow,
 	type SuggestedTransactionFlow,
 	useCreateTransactionFlowMutation,
 	useDeleteTransactionFlowMutation,
@@ -17,9 +18,11 @@ import {
 	useTransactionFlowsQuery,
 	useTransactionLinkSuggestionsQuery,
 	useTransactionQuery,
+	useTransactionsQuery,
 	useUpdateTransactionMutation,
 } from "../lib/queries/transactions";
 import { Button } from "./button";
+import { PopupCombobox } from "./popup-combobox";
 import { Select } from "./select";
 import { SelectedTx, type SelectedTxHandle } from "./selected-tx";
 import { TransactionForm } from "./transaction-form";
@@ -159,6 +162,11 @@ function inferFlowDirection({
 	return null;
 }
 
+type FlowTargetItem = Pick<
+	TransactionRow,
+	"id" | "date" | "counter_party" | "amount" | "currency" | "account_name"
+>;
+
 export function SelectedTxWindow({
 	txId,
 	index,
@@ -175,14 +183,18 @@ export function SelectedTxWindow({
 	const { f } = useI18n();
 	const [editing, setEditing] = useState(false);
 	const [showLinking, setShowLinking] = useState(false);
-	const [flowTargetInput, setFlowTargetInput] = useState("");
+	const [flowTargetSearch, setFlowTargetSearch] = useState("");
+	const [flowTarget, setFlowTarget] = useState<FlowTargetItem | null>(null);
 	const [flowKind, setFlowKind] = useState<TransactionFlowKind>("allocation");
 	const [flowAmountInput, setFlowAmountInput] = useState("");
 	const [flowToAmountInput, setFlowToAmountInput] = useState("");
 	const [copied, setCopied] = useState(false);
 	const selectedTxRef = useRef<SelectedTxHandle>(null);
-	const targetTxId = flowTargetInput.trim();
+	const targetTxId = flowTarget?.id ?? "";
 	const txQuery = useTransactionQuery(txId);
+	const targetSearchQuery = useTransactionsQuery({
+		search: flowTargetSearch.trim() || undefined,
+	});
 	const targetTxQuery = useTransactionQuery(
 		targetTxId && targetTxId !== txId ? targetTxId : undefined,
 	);
@@ -206,6 +218,9 @@ export function SelectedTxWindow({
 	const tx = txQuery.data;
 	const txAmountDisplay = resolveAmountDisplay(tx);
 	const targetTx = targetTxQuery.data;
+	const flowTargetItems =
+		targetSearchQuery.data?.transactions.filter((item) => item.id !== txId) ??
+		[];
 	const flowDirection = targetTx
 		? inferFlowDirection({ selected: tx, target: targetTx, kind: flowKind })
 		: null;
@@ -325,7 +340,8 @@ export function SelectedTxWindow({
 			to_currency: flowKind === "currency_exchange" ? toTx.currency : undefined,
 			kind: flowKind,
 		});
-		setFlowTargetInput("");
+		setFlowTarget(null);
+		setFlowTargetSearch("");
 		setFlowAmountInput("");
 		setFlowToAmountInput("");
 	}
@@ -528,12 +544,38 @@ export function SelectedTxWindow({
 										/>
 									)}
 									<div className="flex gap-1">
-										<input
-											type="text"
-											placeholder="paste target tx id..."
-											value={flowTargetInput}
-											onChange={(e) => setFlowTargetInput(e.currentTarget.value)}
-											className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm flex-1 min-w-0"
+										<PopupCombobox
+											items={flowTargetItems}
+											value={flowTarget}
+											onValueChange={setFlowTarget}
+											onInputValueChange={setFlowTargetSearch}
+											getItemKey={(item) => item.id}
+											renderItem={(item) => (
+												<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+													<div className="min-w-0">
+														<p className="truncate">{item.counter_party}</p>
+														<p className="truncate text-xs text-gray-10">
+															{item.date.slice(0, 10)} · {item.account_name}
+														</p>
+													</div>
+													<span className="shrink-0 text-xs text-gray-10">
+														{f.amount(item.amount, item.currency)}
+													</span>
+												</div>
+											)}
+											itemToStringLabel={(item) =>
+												`${item.counter_party} ${item.account_name} ${item.date.slice(0, 10)} ${f.amount(item.amount, item.currency)}`
+											}
+											isItemEqualToValue={(item, selected) => item.id === selected.id}
+											placeholder="target transaction"
+											inputPlaceholder="search transactions..."
+											emptyState={
+												<p className="px-2 py-3 text-sm text-gray-10">
+													no transactions found
+												</p>
+											}
+											size="sm"
+											className="flex-1"
 										/>
 										<Button
 											size="sm"

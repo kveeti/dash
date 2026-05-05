@@ -17,6 +17,7 @@ export function PopupCombobox<TItem>({
 	items,
 	value,
 	onValueChange,
+	onInputValueChange,
 	getItemKey,
 	renderItem,
 	itemToStringLabel,
@@ -35,6 +36,7 @@ export function PopupCombobox<TItem>({
 	items: TItem[];
 	value: TItem | null;
 	onValueChange: (value: TItem | null) => void;
+	onInputValueChange?: (value: string) => void;
 	getItemKey: (item: TItem) => string;
 	renderItem: (item: TItem) => ReactNode;
 	itemToStringLabel: (item: TItem) => string;
@@ -104,6 +106,7 @@ export function PopupCombobox<TItem>({
 			}}
 			onInputValueChange={(nextValue) => {
 				setQuery(nextValue);
+				onInputValueChange?.(nextValue);
 			}}
 			onItemHighlighted={(item) => {
 				highlightedItemRef.current = item;
