@@ -3,6 +3,7 @@ import {
 	useImperativeHandle,
 	useRef,
 	useState,
+	type FormEvent,
 	type Ref,
 } from "react";
 import { useI18n } from "../providers";
@@ -186,10 +187,9 @@ export function SelectedTxWindow({
 	const [flowTargetSearch, setFlowTargetSearch] = useState("");
 	const [flowTarget, setFlowTarget] = useState<FlowTargetItem | null>(null);
 	const [flowKind, setFlowKind] = useState<TransactionFlowKind>("allocation");
-	const [flowAmountInput, setFlowAmountInput] = useState("");
-	const [flowToAmountInput, setFlowToAmountInput] = useState("");
 	const [copied, setCopied] = useState(false);
 	const selectedTxRef = useRef<SelectedTxHandle>(null);
+	const linkFormRef = useRef<HTMLFormElement>(null);
 	const targetTxId = flowTarget?.id ?? "";
 	const txQuery = useTransactionQuery(txId);
 	const targetSearchQuery = useTransactionsQuery({
@@ -224,8 +224,6 @@ export function SelectedTxWindow({
 	const flowDirection = targetTx
 		? inferFlowDirection({ selected: tx, target: targetTx, kind: flowKind })
 		: null;
-	const flowAmount = Number(flowAmountInput.replace(",", "."));
-	const flowToAmount = Number(flowToAmountInput.replace(",", "."));
 	const exchangeFromTx =
 		flowDirection && targetTx
 			? flowDirection.from_transaction_id === tx.id
@@ -243,11 +241,9 @@ export function SelectedTxWindow({
 		!!targetTx &&
 		(flowKind === "currency_exchange"
 			? tx.currency !== targetTx.currency &&
-				Number.isFinite(flowToAmount) &&
-				flowToAmount > 0
+				!!targetTx
 			: tx.currency === targetTx.currency) &&
-		Number.isFinite(flowAmount) &&
-		flowAmount > 0;
+		!!targetTx;
 	const allocationUsed = sumFlowAmounts(
 		flowsQuery.data,
 		(flow) =>
@@ -316,18 +312,21 @@ export function SelectedTxWindow({
 		setTimeout(() => setCopied(false), 1500);
 	}
 
-	async function handleCreateFlow() {
+	async function handleCreateFlow(e: FormEvent<HTMLFormElement>) {
+		e.preventDefault();
 		const target = targetTxQuery.data;
 		if (!target || target.id === txId) return;
-		const direction = inferFlowDirection({ selected: tx, target, kind: flowKind });
+		const formData = new FormData(e.currentTarget);
+		const kind = formData.get("kind") as TransactionFlowKind;
+		const direction = inferFlowDirection({ selected: tx, target, kind });
 		if (!direction) return;
-		const amount = Number(flowAmountInput.replace(",", "."));
+		const amount = Number(String(formData.get("amount") ?? "").replace(",", "."));
 		if (!Number.isFinite(amount) || amount <= 0) return;
 		const fromTx = direction.from_transaction_id === tx.id ? tx : target;
 		const toTx = direction.to_transaction_id === tx.id ? tx : target;
-		const toAmount = Number(flowToAmountInput.replace(",", "."));
+		const toAmount = Number(String(formData.get("to_amount") ?? "").replace(",", "."));
 		if (
-			flowKind === "currency_exchange" &&
+			kind === "currency_exchange" &&
 			(!Number.isFinite(toAmount) || toAmount <= 0)
 		) {
 			return;
@@ -336,14 +335,13 @@ export function SelectedTxWindow({
 			...direction,
 			amount,
 			currency: fromTx.currency,
-			to_amount: flowKind === "currency_exchange" ? toAmount : undefined,
-			to_currency: flowKind === "currency_exchange" ? toTx.currency : undefined,
-			kind: flowKind,
+			to_amount: kind === "currency_exchange" ? toAmount : undefined,
+			to_currency: kind === "currency_exchange" ? toTx.currency : undefined,
+			kind,
 		});
 		setFlowTarget(null);
 		setFlowTargetSearch("");
-		setFlowAmountInput("");
-		setFlowToAmountInput("");
+		e.currentTarget.reset();
 	}
 
 	async function acceptLinkSuggestion(
@@ -501,8 +499,14 @@ export function SelectedTxWindow({
 											exchanged {f.amount(currencyExchangeMoved, tx.currency)}
 										</p>
 									)}
+									<form
+										ref={linkFormRef}
+										onSubmit={handleCreateFlow}
+										className="space-y-2"
+									>
 									<div className="grid grid-cols-2 gap-1">
 										<Select
+											name="kind"
 											size="sm"
 											value={flowKind}
 											onChange={(e) =>
@@ -515,6 +519,7 @@ export function SelectedTxWindow({
 											<option value="currency_exchange">currency exchange</option>
 										</Select>
 										<input
+											name="amount"
 											type="number"
 											step="0.01"
 											min="0"
@@ -525,21 +530,18 @@ export function SelectedTxWindow({
 														: "from amount"
 													: "amount"
 											}
-											value={flowAmountInput}
-											onChange={(e) => setFlowAmountInput(e.currentTarget.value)}
 											className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm min-w-0"
 										/>
 									</div>
 									{flowKind === "currency_exchange" && (
 										<input
+											name="to_amount"
 											type="number"
 											step="0.01"
 											min="0"
 											placeholder={
 												exchangeToTx ? `${exchangeToTx.currency} amount` : "to amount"
 											}
-											value={flowToAmountInput}
-											onChange={(e) => setFlowToAmountInput(e.currentTarget.value)}
 											className="focus border-gray-6 bg-gray-1 border px-2 h-8 text-sm min-w-0 w-full"
 										/>
 									)}
@@ -578,13 +580,14 @@ export function SelectedTxWindow({
 											className="flex-1"
 										/>
 										<Button
+											type="submit"
 											size="sm"
-											onClick={handleCreateFlow}
 											disabled={!canCreateFlow || createFlowMutation.isPending}
 										>
 											create
 										</Button>
 									</div>
+									</form>
 									{targetTxId && targetTxQuery.isLoading && (
 										<p className="text-gray-10">loading target...</p>
 									)}
@@ -602,12 +605,20 @@ export function SelectedTxWindow({
 											type="button"
 											className="text-xs text-gray-10 hover:text-gray-12 underline"
 											onClick={() => {
-												setFlowAmountInput(String(suggestedFlowAmount));
+												const form = linkFormRef.current;
+												const amountInput = form?.elements.namedItem("amount");
+												if (amountInput instanceof HTMLInputElement) {
+													amountInput.value = String(suggestedFlowAmount);
+												}
 												if (
 													flowKind === "currency_exchange" &&
 													suggestedExchangeToAmount > 0
 												) {
-													setFlowToAmountInput(String(suggestedExchangeToAmount));
+													const toAmountInput =
+														form?.elements.namedItem("to_amount");
+													if (toAmountInput instanceof HTMLInputElement) {
+														toAmountInput.value = String(suggestedExchangeToAmount);
+													}
 												}
 											}}
 										>
