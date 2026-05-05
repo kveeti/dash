@@ -207,14 +207,19 @@ export function LinkSuggestionsPage() {
 						<option value="transfer_pair">own transfers</option>
 						<option value="refund_group">refunds</option>
 					</Select>
-					<label className="border-gray-a4 bg-gray-1 flex h-8 items-center gap-2 border px-2 text-sm">
-						<input
-							type="checkbox"
-							checked={highOnly}
-							onChange={(e) => setHighOnly(e.currentTarget.checked)}
-						/>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						aria-pressed={highOnly}
+						className={
+							"hover:bg-gray-a3" +
+							(highOnly ? " bg-gray-a3 text-gray-12" : " bg-gray-1 text-gray-11")
+						}
+						onClick={() => setHighOnly(!highOnly)}
+					>
 						high only
-					</label>
+					</Button>
 				</div>
 				<div className="flex gap-1">
 					<Button
