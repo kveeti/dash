@@ -1,3 +1,7 @@
+import type { TransactionFilters } from "../db/transactions";
+
+export type { TransactionFilters };
+
 type TransactionCursorKey = {
 	left?: string;
 	right?: string;
@@ -6,15 +10,6 @@ type TransactionCursorKey = {
 type SuggestionPageCursorKey = {
 	beforeDate?: string;
 	beforeId?: string;
-};
-
-export type TransactionFilters = {
-	category_id?: string;
-	account_id?: string;
-	currency?: string;
-	uncategorized?: boolean;
-	date_from?: string;
-	date_to?: string;
 };
 
 export const queryKeyRoots = {

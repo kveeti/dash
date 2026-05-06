@@ -8,7 +8,7 @@ import {
 	type SyncPayloadMetadata,
 } from "./crypto";
 import { useEncrypted } from "../encrypted-context";
-import type { DbHandle } from "./db";
+import type { DbHandle } from "./db/client";
 import { queryKeyRoots, queryKeys } from "./queries/query-keys";
 import { normalizeCurrency } from "./currency";
 import { loginWithAccountRootKey } from "./queries/auth";

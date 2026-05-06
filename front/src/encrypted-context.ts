@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { DbClient } from "./lib/db";
+import type { DbClient } from "./lib/db/client";
 
 export type EncryptedContextValue = {
 	status: "ready";

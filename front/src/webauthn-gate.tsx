@@ -19,7 +19,7 @@ import {
 } from "./lib/webauthn";
 import { Checkbox } from "./components/checkbox";
 import { EncryptedContext, type EncryptedContextValue } from "./encrypted-context";
-import { deriveSqliteKeyHexFromAccountRootKey, getDb } from "./lib/db";
+import { deriveSqliteKeyHexFromAccountRootKey, getDb } from "./lib/db/client";
 
 type State = { status: "locked" } | EncryptedContextValue;
 

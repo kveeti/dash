@@ -1,4 +1,4 @@
-import sqlite3InitModule from "./sqlite-custom/sqlite3.mjs";
+import sqlite3InitModule from "../sqlite-custom/sqlite3.mjs";
 
 let sqlite3ModulePromise = null;
 let sqlite3Module = null;

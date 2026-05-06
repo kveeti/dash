@@ -1,5 +1,5 @@
-import { DEFAULT_CURRENCY, DEFAULT_CURRENCY_META } from "./currency";
-import { hkdfSha256 } from "./crypto";
+import { DEFAULT_CURRENCY, DEFAULT_CURRENCY_META } from "../currency";
+import { hkdfSha256 } from "../crypto";
 
 export type DbHandle = {
 	exec: (sql: string, vars?: any[]) => Promise<any>;

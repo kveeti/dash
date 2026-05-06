@@ -1,32 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEncrypted } from "../../encrypted-context";
-import type { DbHandle } from "../db";
+import type { DbHandle } from "../db/client";
 import {
-	fallbackCurrencyMeta,
-	normalizeCurrency,
-	type CurrencyMeta,
-} from "../currency";
+	findCurrencyMeta,
+	listCurrencyMeta,
+} from "../db/currencies";
 import { queryKeys } from "./query-keys";
+
+export { findCurrencyMeta };
 
 export function currencyMetaQueryOptions(db: DbHandle) {
 	return {
 		queryKey: queryKeys.currencyMeta(),
-		queryFn: () =>
-			db.query<CurrencyMeta>(
-				`select currency, minor_unit, minor_factor from currency_meta order by currency asc`,
-			),
+		queryFn: () => listCurrencyMeta(db),
 	};
-}
-
-export function findCurrencyMeta(
-	rows: CurrencyMeta[] | undefined,
-	currency: string,
-): CurrencyMeta {
-	const normalized = normalizeCurrency(currency);
-	return (
-		rows?.find((meta) => meta.currency === normalized) ??
-		fallbackCurrencyMeta(normalized)
-	);
 }
 
 export function useCurrencyMetaQuery() {
