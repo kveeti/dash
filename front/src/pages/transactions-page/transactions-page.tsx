@@ -268,8 +268,7 @@ export function TransactionsPage() {
 
 				<ul className="mt-4">
 					{transactionsQuery.data?.transactions.map((tx, i) => {
-						const date = new Date(tx.date);
-						const day = f.weekdayShortDate.format(date);
+						const day = f.weekdayShortDate.format(tx.date);
 						const dayChanged = day !== currentDay;
 						currentDay = day;
 

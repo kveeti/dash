@@ -31,7 +31,6 @@ function confidenceLabel(confidence: TransactionLinkSuggestion["confidence"]) {
 }
 
 export function LinkSuggestionsPage() {
-	const { f } = useI18n();
 	const [searchParams] = useSearchParams();
 	const [, navigate] = useLocation();
 	const filterParam = searchParams.get("kind");
@@ -123,10 +122,6 @@ export function LinkSuggestionsPage() {
 	);
 	const reviewSuggestions = filteredSuggestions.filter(
 		(suggestion) => suggestion.confidence !== "high",
-	);
-	const bulkOwnTransfers = filteredSuggestions.filter(
-		(suggestion) =>
-			suggestion.kind === "transfer_pair" && suggestion.confidence === "high",
 	);
 	const autoScanStoppedAtLimit =
 		totalScannedCount >= AUTO_SCAN_MAX_TRANSACTIONS &&
@@ -239,7 +234,6 @@ export function LinkSuggestionsPage() {
 							onDismiss={dismissSuggestion}
 							onOpenTx={openTransaction}
 							reviewSuggestions={reviewSuggestions}
-							formatAmount={f.amount}
 						/>
 					) : (
 						<Empty>no link suggestions in this scan</Empty>
@@ -331,7 +325,6 @@ function ScanStatus({
 }
 
 function SuggestionSections({
-	formatAmount,
 	highSuggestions,
 	isCreatePending,
 	isMutating,
@@ -340,7 +333,6 @@ function SuggestionSections({
 	onOpenTx,
 	reviewSuggestions,
 }: {
-	formatAmount: (amount: number, currency: string) => string;
 	highSuggestions: TransactionLinkSuggestion[];
 	isCreatePending: boolean;
 	isMutating: boolean;
@@ -358,7 +350,6 @@ function SuggestionSections({
 						{highSuggestions.map((suggestion) => (
 							<SuggestionItem
 								key={suggestion.id}
-								formatAmount={formatAmount}
 								isCreatePending={isCreatePending}
 								isMutating={isMutating}
 								onAccept={onAccept}
@@ -377,7 +368,6 @@ function SuggestionSections({
 						{reviewSuggestions.map((suggestion) => (
 							<SuggestionItem
 								key={suggestion.id}
-								formatAmount={formatAmount}
 								isCreatePending={isCreatePending}
 								isMutating={isMutating}
 								onAccept={onAccept}
@@ -394,7 +384,6 @@ function SuggestionSections({
 }
 
 function SuggestionItem({
-	formatAmount,
 	isCreatePending,
 	isMutating,
 	onAccept,
@@ -402,7 +391,6 @@ function SuggestionItem({
 	onOpenTx,
 	suggestion,
 }: {
-	formatAmount: (amount: number, currency: string) => string;
 	isCreatePending: boolean;
 	isMutating: boolean;
 	onAccept: (suggestion: TransactionLinkSuggestion) => void;
@@ -410,6 +398,8 @@ function SuggestionItem({
 	onOpenTx: (txId: string) => void;
 	suggestion: TransactionLinkSuggestion;
 }) {
+	const { f } = useI18n();
+
 	const primary = suggestion.transactions.find(
 		(tx) => tx.id === suggestion.primary_transaction_id,
 	);
@@ -436,8 +426,8 @@ function SuggestionItem({
 						{primary.counter_party}
 					</button>
 					<p className="text-xs text-gray-10">
-						{primary.date.slice(0, 10)} · {primary.account_name} ·{" "}
-						{formatAmount(primary.amount, primary.currency)}
+						{f.longDate.format(primary.date)} · {primary.account_name} ·{" "}
+						{f.amount(primary.amount, primary.currency)}
 					</p>
 				</div>
 				<div className="flex gap-1 shrink-0">
@@ -468,7 +458,7 @@ function SuggestionItem({
 							onClick={() => onOpenTx(candidate.id)}
 							className="truncate hover:underline text-left"
 						>
-							{candidate.date.slice(0, 10)} · {candidate.account_name} ·{" "}
+							{formatDate(candidate.date)} · {candidate.account_name} ·{" "}
 							{candidate.counter_party}
 						</button>
 						<span className="text-gray-10 shrink-0">

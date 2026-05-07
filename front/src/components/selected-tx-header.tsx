@@ -20,7 +20,7 @@ export function SelectedTxHeader({
 					{f.amount(amountDisplay.amount, amountDisplay.currency)}
 				</span>
 				<span className="text-gray-9">·</span>
-				<span>{f.weekdayLongDate.format(new Date(tx.date))}</span>
+				<span>{f.weekdayLongDate.format(tx.date)}</span>
 			</p>
 			{amountDisplay.original && (
 				<p className="text-xs text-gray-11">

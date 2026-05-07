@@ -54,6 +54,7 @@ export function SelectedTxCreateFlowForm({
 	const flowTargetItems =
 		targetSearchQuery.data?.transactions.filter((item) => item.id !== txId) ??
 		[];
+	const formatTargetDate = (date: Date) => f.longDate.format(date);
 	const flowDirection = targetTx
 		? inferFlowDirection({ selected: tx, target: targetTx, kind: flowKind })
 		: null;
@@ -210,7 +211,7 @@ export function SelectedTxCreateFlowForm({
 								<div className="min-w-0">
 									<p className="truncate">{item.counter_party}</p>
 									<p className="truncate text-xs text-gray-10">
-										{item.date.slice(0, 10)} · {item.account_name}
+										{formatTargetDate(item.date)} · {item.account_name}
 									</p>
 								</div>
 								<span className="shrink-0 text-xs text-gray-10">
@@ -219,7 +220,7 @@ export function SelectedTxCreateFlowForm({
 							</div>
 						)}
 						itemToStringLabel={(item) =>
-							`${item.counter_party} ${item.account_name} ${item.date.slice(0, 10)} ${f.amount(item.amount, item.currency)}`
+							`${item.counter_party} ${item.account_name} ${formatTargetDate(item.date)} ${f.amount(item.amount, item.currency)}`
 						}
 						isItemEqualToValue={(item, selected) => item.id === selected.id}
 						placeholder="target transaction"

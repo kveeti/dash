@@ -9,7 +9,7 @@ export type AppSettings = {
 	reporting_currency: string;
 	max_staleness_days: number;
 	conversion_mode: ConversionMode;
-	updated_at: string;
+	updated_at: Date;
 };
 
 export type FxRateRow = {
@@ -219,7 +219,7 @@ export async function importFxRatesCsv({
 }
 
 export async function getAppSettings(db: DbHandle): Promise<AppSettings> {
-	const rows = await db.query<AppSettings>(
+	const rows = await db.query<Omit<AppSettings, "updated_at"> & { updated_at: string }>(
 		`select reporting_currency, max_staleness_days, conversion_mode, updated_at
 		from app_settings
 		where id = 1
@@ -231,6 +231,7 @@ export async function getAppSettings(db: DbHandle): Promise<AppSettings> {
 			reporting_currency: normalizeCurrency(rows[0].reporting_currency),
 			max_staleness_days: Math.max(0, Number(rows[0].max_staleness_days ?? 7)),
 			conversion_mode: normalizeConversionMode(rows[0].conversion_mode),
+			updated_at: new Date(rows[0].updated_at),
 		};
 	}
 
@@ -246,7 +247,7 @@ export async function getAppSettings(db: DbHandle): Promise<AppSettings> {
 		reporting_currency: DEFAULT_CURRENCY,
 		max_staleness_days: 7,
 		conversion_mode: "strict",
-		updated_at: now,
+		updated_at: new Date(now),
 	};
 }
 

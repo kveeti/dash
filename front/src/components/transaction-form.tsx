@@ -24,7 +24,7 @@ export type TxFormValues = {
 };
 
 export type TxFormDefaults = {
-	date?: string;
+	date?: Date;
 	amount?: number;
 	currency?: string;
 	counter_party?: string;
@@ -89,7 +89,7 @@ export function TransactionForm({
 	}
 
 	const defaultDate = defaultValues?.date
-		? isoToDatetimeLocal(defaultValues.date)
+		? dateToDatetimeLocal(defaultValues.date)
 		: currentDatetimeLocal();
 
 	return (
@@ -183,7 +183,6 @@ function currentDatetimeLocal(): string {
 	return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}T${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 }
 
-function isoToDatetimeLocal(iso: string): string {
-	const d = new Date(iso);
+function dateToDatetimeLocal(d: Date): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }

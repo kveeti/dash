@@ -397,7 +397,9 @@ export async function listTransactions(
 	});
 	params.push(FX_ANCHOR_CURRENCY);
 
-	const rows = await db.query<TransactionRow>(sql, params);
+	const rows = (await db.query<RawTransactionRow>(sql, params)).map(
+		toTransactionRow,
+	);
 
 	const hasMore = rows.length === limit + 1;
 	if (hasMore) rows.pop();
@@ -424,10 +426,10 @@ export async function getOneTransaction(
 		order: "desc",
 		rowSelectSql: TRANSACTION_DETAIL_ROW_SELECT_SQL,
 	});
-	const rows = await db.query<TransactionDetails>(
+	const rows = (await db.query<RawTransactionDetails>(
 		sql,
 		[id, FX_ANCHOR_CURRENCY],
-	);
+	)).map(toTransactionDetails);
 	return rows[0] ?? null;
 }
 
@@ -446,7 +448,7 @@ type TransactionWithConvertedAmount = {
 
 export type TransactionRow = TransactionWithConvertedAmount & {
 	id: string;
-	date: string;
+	date: Date;
 	counter_party: string;
 	category_name: string | null;
 	account_name: string;
@@ -462,7 +464,7 @@ export type TransactionRow = TransactionWithConvertedAmount & {
 
 export type TransactionDetails = TransactionWithConvertedAmount & {
 	id: string;
-	date: string;
+	date: Date;
 	counter_party: string;
 	additional: string | null;
 	notes: string | null;
@@ -568,7 +570,7 @@ export type TransactionLinkSuggestionKind =
 
 export type TransactionLinkSuggestionMember = {
 	id: string;
-	date: string;
+	date: Date;
 	amount: number;
 	currency: string;
 	counter_party: string;
@@ -598,6 +600,30 @@ export type TransactionLinkSuggestionPageResult = {
 	next_cursor: TransactionLinkSuggestionPageCursor | null;
 	scanned_count: number;
 };
+
+type RawTransactionRow = Omit<TransactionRow, "date"> & {
+	date: string;
+};
+
+type RawTransactionDetails = Omit<TransactionDetails, "date"> & {
+	date: string;
+};
+
+function toTransactionRow(row: RawTransactionRow): TransactionRow {
+	return {
+		...row,
+		date: new Date(row.date),
+	};
+}
+
+function toTransactionDetails(
+	row: RawTransactionDetails,
+): TransactionDetails {
+	return {
+		...row,
+		date: new Date(row.date),
+	};
+}
 
 export async function listTransactionFlows(
 	db: DbHandle,
@@ -809,7 +835,7 @@ function getCombinations<T>(items: T[], size: number): T[][] {
 function toSuggestionMember(row: LinkSuggestionTransactionRow): TransactionLinkSuggestionMember {
 	return {
 		id: row.id,
-		date: row.date,
+		date: new Date(row.date),
 		amount: row.amount,
 		currency: row.currency,
 		counter_party: row.counter_party,
@@ -927,8 +953,8 @@ export async function listTransactionLinkSuggestions(
 				"different accounts",
 			],
 			transactions: [
-				{ id: row.base_id, date: row.base_date, amount: row.base_amount, currency: row.base_currency, counter_party: row.base_counter_party, account_name: row.base_account_name },
-				{ id: row.candidate_id, date: row.candidate_date, amount: row.candidate_amount, currency: row.candidate_currency, counter_party: row.candidate_counter_party, account_name: row.candidate_account_name },
+				{ id: row.base_id, date: new Date(row.base_date), amount: row.base_amount, currency: row.base_currency, counter_party: row.base_counter_party, account_name: row.base_account_name },
+				{ id: row.candidate_id, date: new Date(row.candidate_date), amount: row.candidate_amount, currency: row.candidate_currency, counter_party: row.candidate_counter_party, account_name: row.candidate_account_name },
 			],
 			suggested_flows: [{ from_transaction_id: fromId, to_transaction_id: toId, amount: Math.abs(row.base_amount), currency: row.base_currency, kind: "own_transfer" as const }],
 		};
@@ -1092,8 +1118,8 @@ async function getTransferSuggestionsForPrimaryRows(
 				"different accounts",
 			],
 			transactions: [
-				{ id: row.base_id, date: row.base_date, amount: row.base_amount, currency: row.base_currency, counter_party: row.base_counter_party, account_name: row.base_account_name },
-				{ id: row.candidate_id, date: row.candidate_date, amount: row.candidate_amount, currency: row.candidate_currency, counter_party: row.candidate_counter_party, account_name: row.candidate_account_name },
+				{ id: row.base_id, date: new Date(row.base_date), amount: row.base_amount, currency: row.base_currency, counter_party: row.base_counter_party, account_name: row.base_account_name },
+				{ id: row.candidate_id, date: new Date(row.candidate_date), amount: row.candidate_amount, currency: row.candidate_currency, counter_party: row.candidate_counter_party, account_name: row.candidate_account_name },
 			],
 			suggested_flows: [
 				{
@@ -1265,7 +1291,7 @@ async function getRefundSuggestionsForPrimaryRows(
 				transactions: [
 					{
 						id: base.id,
-						date: base.date,
+						date: new Date(base.date),
 						amount: base.amount,
 						currency: base.currency,
 						counter_party: base.counter_party,
@@ -1273,7 +1299,7 @@ async function getRefundSuggestionsForPrimaryRows(
 					},
 					{
 						id: row.candidate_id,
-						date: row.candidate_date,
+						date: new Date(row.candidate_date),
 						amount: row.candidate_amount,
 						currency: row.candidate_currency,
 						counter_party: row.candidate_counter_party,
