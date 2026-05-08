@@ -26,6 +26,8 @@ export type TransactionFilters = {
 	date_to?: string;
 };
 
+const TRANSACTION_SEARCH_BATCH_SIZE = 200;
+
 const TRANSACTION_LIST_BASE_SELECT_SQL = `select
 	t.id,
 	t.date,
@@ -316,6 +318,62 @@ left join currency_meta report_meta
 order by b.date ${order}, b.id ${order}`;
 }
 
+export function buildTransactionFtsQuery(search: string): string | null {
+	const terms = Array.from(search.matchAll(/[\p{L}\p{N}]+/gu), ([term]) =>
+		term.toLocaleLowerCase(),
+	)
+		.filter((term) => term.length > 0)
+		.slice(0, 12);
+
+	if (terms.length === 0) return null;
+	return terms.map((term) => `${term}*`).join(" ");
+}
+
+export async function refreshTransactionSearchDocs(
+	db: DbHandle,
+	txIds: string[],
+) {
+	const uniqueIds = Array.from(new Set(txIds)).filter(Boolean);
+	for (let i = 0; i < uniqueIds.length; i += TRANSACTION_SEARCH_BATCH_SIZE) {
+		const batch = uniqueIds.slice(i, i + TRANSACTION_SEARCH_BATCH_SIZE);
+		const placeholders = batch.map(() => "?").join(", ");
+		await db.exec(
+			`delete from transaction_search_fts
+			where tx_id in (${placeholders})`,
+			batch,
+		);
+		await db.exec(
+			`insert into transaction_search_fts (
+				tx_id, counter_party, additional, notes
+			)
+			select
+				id,
+				counter_party,
+				coalesce(additional, ''),
+				coalesce(notes, '')
+			from transactions
+			where id in (${placeholders}) and _sync_is_deleted = 0`,
+			batch,
+		);
+	}
+}
+
+export async function rebuildTransactionSearchIndex(db: DbHandle) {
+	await db.exec("delete from transaction_search_fts");
+	await db.exec(
+		`insert into transaction_search_fts (
+			tx_id, counter_party, additional, notes
+		)
+		select
+			id,
+			counter_party,
+			coalesce(additional, ''),
+			coalesce(notes, '')
+		from transactions
+		where _sync_is_deleted = 0`,
+	);
+}
+
 export async function listTransactions(
 	db: DbHandle,
 	opts?: {
@@ -333,8 +391,19 @@ export async function listTransactions(
 	const wheres: string[] = ["t._sync_is_deleted = 0"];
 
 	if (opts?.search) {
-		wheres.push("(t.id like ? or t.counter_party like ? or t.additional like ?)");
-		params.push(`%${opts.search}%`, `%${opts.search}%`, `%${opts.search}%`);
+		const ftsQuery = buildTransactionFtsQuery(opts.search);
+		if (ftsQuery) {
+			wheres.push(
+				`t.id in (
+					select tx_id
+					from transaction_search_fts
+					where transaction_search_fts match ?
+				)`,
+			);
+			params.push(ftsQuery);
+		} else {
+			wheres.push("0 = 1");
+		}
 	}
 
 	if (opts?.filters?.category_id) {
@@ -484,25 +553,29 @@ export async function createTransaction(
 		tx.amount,
 		findCurrencyMeta(currencyMeta, currency),
 	);
-	await db.exec(
-		`insert into transactions
-		 (id, created_at, updated_at, date, amount_minor, currency, counter_party, additional, notes, category_id, account_id, _sync_edited_at)
-		 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		[
-			id(),
-			now,
-			now,
-			tx.date,
-			amountMinor,
-			currency,
-			tx.counter_party,
-			tx.additional ?? null,
-			tx.notes ?? null,
-			tx.category_id ?? null,
-			tx.account_id,
-			Date.now(),
-		],
-	);
+	const newTxId = id();
+	await db.withTx(async () => {
+		await db.exec(
+			`insert into transactions
+			 (id, created_at, updated_at, date, amount_minor, currency, counter_party, additional, notes, category_id, account_id, _sync_edited_at)
+			 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			[
+				newTxId,
+				now,
+				now,
+				tx.date,
+				amountMinor,
+				currency,
+				tx.counter_party,
+				tx.additional ?? null,
+				tx.notes ?? null,
+				tx.category_id ?? null,
+				tx.account_id,
+				Date.now(),
+			],
+		);
+		await refreshTransactionSearchDocs(db, [newTxId]);
+	});
 }
 
 export async function updateTransaction(
@@ -514,34 +587,37 @@ export async function updateTransaction(
 	const now = new Date().toISOString();
 	const currency = normalizeCurrency(tx.currency);
 	const meta = findCurrencyMeta(currencyMeta, currency);
-	await db.exec(
-		`update transactions set
-			updated_at = ?,
-			date = ?,
-			amount_minor = ?,
-			currency = ?,
-			counter_party = ?,
-			additional = ?,
-			notes = ?,
-			category_id = ?,
-			account_id = ?,
-			_sync_status = 1,
-			_sync_edited_at = ?
-		where id = ?`,
-		[
-			now,
-			tx.date,
-			parseDecimalToMinorUnits(tx.amount, meta),
-			currency,
-			tx.counter_party,
-			tx.additional ?? null,
-			tx.notes ?? null,
-			tx.category_id ?? null,
-			tx.account_id,
-			Date.now(),
-			txId,
-		],
-	);
+	await db.withTx(async () => {
+		await db.exec(
+			`update transactions set
+				updated_at = ?,
+				date = ?,
+				amount_minor = ?,
+				currency = ?,
+				counter_party = ?,
+				additional = ?,
+				notes = ?,
+				category_id = ?,
+				account_id = ?,
+				_sync_status = 1,
+				_sync_edited_at = ?
+			where id = ?`,
+			[
+				now,
+				tx.date,
+				parseDecimalToMinorUnits(tx.amount, meta),
+				currency,
+				tx.counter_party,
+				tx.additional ?? null,
+				tx.notes ?? null,
+				tx.category_id ?? null,
+				tx.account_id,
+				Date.now(),
+				txId,
+			],
+		);
+		await refreshTransactionSearchDocs(db, [txId]);
+	});
 }
 
 export type { SuggestedTransactionFlow, TransactionFlowKind };

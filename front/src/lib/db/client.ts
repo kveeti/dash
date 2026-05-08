@@ -459,6 +459,15 @@ export function getDb(accountRootKey: Uint8Array<ArrayBuffer>): DbClient {
 				created_at text not null,
 				primary key (kind, primary_transaction_id, candidate_signature)
 			)`,
+
+			`create virtual table if not exists transaction_search_fts using fts5(
+				tx_id unindexed,
+				counter_party,
+				additional,
+				notes,
+				detail=column,
+				tokenize='unicode61 remove_diacritics 2'
+			)`,
 		];
 
 		const versionRows = await query<{ current: number }>(

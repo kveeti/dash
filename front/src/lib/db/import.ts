@@ -8,6 +8,7 @@ import {
 	type CurrencyMeta,
 } from "../currency";
 import { findCurrencyMeta } from "./currencies";
+import { refreshTransactionSearchDocs } from "./transactions";
 
 export type CsvFormat =
 	| "generic"
@@ -552,6 +553,7 @@ export async function importCsv(
 				 values ${placeholders}`,
 				values,
 			);
+			await refreshTransactionSearchDocs(db, txIds);
 
 			for (let j = 0; j < batch.length; j++) {
 				await insertImportKey(
@@ -610,6 +612,7 @@ export async function importLegacyCsvBundle(
 		let accountsImported = 0;
 		let categoriesImported = 0;
 		let transactionsImported = 0;
+		const importedTxIds: string[] = [];
 		const existingAccounts = await db.query<{ id: string; name: string }>(
 			"select id, name from accounts where _sync_is_deleted = 0",
 		);
@@ -755,12 +758,14 @@ export async function importLegacyCsvBundle(
 				);
 				transactionIdMap.set(txId, newTxId);
 				existingTransactionIds.add(newTxId);
+				importedTxIds.push(newTxId);
 				transactionsImported++;
 			} catch (e: unknown) {
 				skipped++;
 				errors.push(`transactions.csv row ${lineNum}: ${getErrorMessage(e)}`);
 			}
 		}
+		await refreshTransactionSearchDocs(db, importedTxIds);
 
 		return {
 			imported: transactionsImported,

@@ -20,6 +20,7 @@ import {
 	validateDirtyPayload,
 	type SyncTableName,
 } from "./sync-schema";
+import { refreshTransactionSearchDocs } from "./db/transactions";
 
 type DirtyEntry = {
 	id: string;
@@ -176,6 +177,7 @@ async function applyIncomingOps({
 
 	const transactions: SqlValue[] = [];
 	const transactionsValues: string[] = [];
+	const transactionIds: string[] = [];
 
 	const transactionImportKeys: SqlValue[] = [];
 	const transactionImportKeysValues: string[] = [];
@@ -235,6 +237,7 @@ async function applyIncomingOps({
 
 			case "transaction": {
 				const entry = record.data;
+				transactionIds.push(record.actualId);
 				transactions.push(
 					/* id */ record.actualId,
 					/* created_at */ entry.created_at,
@@ -374,6 +377,7 @@ async function applyIncomingOps({
 			where excluded._sync_edited_at >= transactions._sync_edited_at;`,
 			transactions,
 		);
+		await refreshTransactionSearchDocs(db, transactionIds);
 	}
 
 	if (transactionImportKeys.length) {
