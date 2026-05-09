@@ -13,6 +13,7 @@ import { queryKeyRoots, queryKeys } from "./queries/query-keys";
 import { normalizeCurrency } from "./currency";
 import { loginWithAccountRootKey } from "./queries/auth";
 import { getUiStorage, idb, uiStorageDefaults } from "./local-storage";
+import { broadcastDbChange, type DbChangeRoot } from "./db-change-broadcast";
 import {
 	CURRENT_PAYLOAD_VERSION,
 	decodeSyncRecord,
@@ -742,17 +743,30 @@ export function useSync() {
 
 	const onEntitiesChanged = useCallback(
 		(types: Set<string>) => {
-			if (types.has("account"))
+			const changedRoots: DbChangeRoot[] = [];
+			if (types.has("account")) {
 				qc.invalidateQueries({ queryKey: queryKeyRoots.accounts });
-			if (types.has("category"))
+				changedRoots.push("accounts");
+			}
+			if (types.has("category")) {
 				qc.invalidateQueries({ queryKey: queryKeyRoots.categories });
+				changedRoots.push("categories");
+			}
 			if (types.has("transaction") || types.has("transaction_flow")) {
 				qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
 				qc.invalidateQueries({ queryKey: queryKeyRoots.transaction });
 				qc.invalidateQueries({ queryKey: queryKeyRoots.transactionFlows });
 				qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinkSuggestions });
 				qc.invalidateQueries({ queryKey: queryKeyRoots.stats });
+				changedRoots.push(
+					"transactions",
+					"transaction",
+					"transactionFlows",
+					"transactionLinkSuggestions",
+					"stats",
+				);
 			}
+			broadcastDbChange(changedRoots);
 		},
 		[qc],
 	);

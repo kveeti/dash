@@ -14,6 +14,7 @@ import {
 	type FxCsvImportResult,
 	type FxRateRow,
 } from "../db/settings";
+import { broadcastDbChange } from "../db-change-broadcast";
 import { queryKeys, queryKeyRoots } from "./query-keys";
 
 export {
@@ -30,6 +31,7 @@ function invalidateConversionDependentQueries(
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transaction });
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transactionFlows });
+	qc.invalidateQueries({ queryKey: queryKeyRoots.stats });
 }
 
 export function useAppSettingsQuery() {
@@ -48,6 +50,7 @@ export function useUpdateReportingCurrencyMutation() {
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeyRoots.settings });
 			invalidateConversionDependentQueries(qc);
+			broadcastDbChange(["settings", "transactions", "transaction", "transactionFlows", "stats"]);
 		},
 	});
 }
@@ -63,6 +66,7 @@ export function useUpdateConversionPolicyMutation() {
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeyRoots.settings });
 			invalidateConversionDependentQueries(qc);
+			broadcastDbChange(["settings", "transactions", "transaction", "transactionFlows", "stats"]);
 		},
 	});
 }
@@ -87,6 +91,7 @@ export function useUpsertFxRateMutation() {
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeyRoots.fxRates });
 			invalidateConversionDependentQueries(qc);
+			broadcastDbChange(["fxRates", "transactions", "transaction", "transactionFlows", "stats"]);
 		},
 	});
 }
@@ -99,6 +104,7 @@ export function useDeleteFxRatesMutation() {
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeyRoots.fxRates });
 			invalidateConversionDependentQueries(qc);
+			broadcastDbChange(["fxRates", "transactions", "transaction", "transactionFlows", "stats"]);
 		},
 	});
 }
@@ -114,6 +120,7 @@ export function useImportFxRatesCsvMutation() {
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: queryKeyRoots.fxRates });
 			invalidateConversionDependentQueries(qc);
+			broadcastDbChange(["fxRates", "transactions", "transaction", "transactionFlows", "stats"]);
 		},
 	});
 }

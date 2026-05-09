@@ -3,11 +3,15 @@ import {
 	QueryClient,
 	QueryClientProvider,
 } from "@tanstack/react-query";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { queryKeyRoots } from "./lib/queries/query-keys";
 import { normalizeCurrency } from "./lib/currency";
 import { I18nProvider as AriaI18nProvider } from 'react-aria-components/I18nProvider';
 import { EncryptedProvider } from "./webauthn-gate";
+import {
+	invalidateDbChangeQueries,
+	listenForDbChanges,
+} from "./lib/db-change-broadcast";
 
 const queryClient = new QueryClient({
 	defaultOptions: {
@@ -29,6 +33,10 @@ const queryClient = new QueryClient({
 });
 
 export function Providers(props: { children: ReactNode }) {
+	useEffect(() => {
+		return listenForDbChanges((roots) => invalidateDbChangeQueries(queryClient, roots));
+	}, []);
+
 	return (
 		<I18nProvider>
 			<QueryClientProvider client={queryClient}>

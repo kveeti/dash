@@ -11,6 +11,7 @@ import {
 	type CategoryOption,
 	type CategoryWithCount,
 } from "../db/categories";
+import { broadcastDbChange } from "../db-change-broadcast";
 import { queryKeys, queryKeyRoots } from "./query-keys";
 
 export type { CategoryOption, CategoryWithCount };
@@ -18,6 +19,7 @@ export { getOrCreateCategoryByName };
 
 function invalidateCategoriesQuery(qc: ReturnType<typeof useQueryClient>) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.categories });
+	broadcastDbChange(["categories"]);
 }
 
 export function useCategoriesQuery(search?: string) {

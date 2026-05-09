@@ -7,6 +7,7 @@ import {
 	type ImportResult,
 	type LegacyBundleTexts,
 } from "../db/import";
+import { broadcastDbChange } from "../db-change-broadcast";
 import { currencyMetaQueryOptions } from "./currencies";
 import { queryKeyRoots } from "./query-keys";
 
@@ -16,6 +17,7 @@ function invalidateImportQueries(qc: ReturnType<typeof useQueryClient>) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
 	qc.invalidateQueries({ queryKey: queryKeyRoots.categories });
 	qc.invalidateQueries({ queryKey: queryKeyRoots.accounts });
+	broadcastDbChange(["transactions", "categories", "accounts", "stats"]);
 }
 
 export function useImportCsvMutation() {
@@ -52,6 +54,7 @@ export function useImportLegacyCsvBundleMutation() {
 		onSuccess: () => {
 			invalidateImportQueries(qc);
 			qc.invalidateQueries({ queryKey: queryKeyRoots.transactionFlows });
+			broadcastDbChange(["transactionFlows", "transactionLinkSuggestions"]);
 		},
 	});
 }

@@ -11,6 +11,7 @@ import {
 	type AccountInput,
 	type AccountWithCount,
 } from "../db/accounts";
+import { broadcastDbChange } from "../db-change-broadcast";
 import { queryKeys, queryKeyRoots } from "./query-keys";
 
 export type { Account, AccountWithCount };
@@ -18,6 +19,7 @@ export { getOrCreateAccountByName };
 
 function invalidateAccountsQuery(qc: ReturnType<typeof useQueryClient>) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.accounts });
+	broadcastDbChange(["accounts"]);
 }
 
 export function useAccountsQuery() {

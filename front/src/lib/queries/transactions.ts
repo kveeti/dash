@@ -34,6 +34,7 @@ import {
 	type TransactionsResult,
 	type TransactionFlowKind,
 } from "../db/transactions";
+import { broadcastDbChange } from "../db-change-broadcast";
 import { currencyMetaQueryOptions } from "./currencies";
 import { queryKeys, queryKeyRoots, type TransactionFilters } from "./query-keys";
 
@@ -53,6 +54,8 @@ export type {
 function invalidateTransactionQueries(qc: ReturnType<typeof useQueryClient>) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transactions });
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transaction });
+	qc.invalidateQueries({ queryKey: queryKeyRoots.stats });
+	broadcastDbChange(["transactions", "transaction", "stats"]);
 }
 
 function invalidateFlowQueries(qc: ReturnType<typeof useQueryClient>) {
@@ -60,6 +63,7 @@ function invalidateFlowQueries(qc: ReturnType<typeof useQueryClient>) {
 	qc.invalidateQueries({ queryKey: queryKeyRoots.transactionLinkSuggestions });
 	qc.invalidateQueries({ queryKey: queryKeyRoots.stats });
 	invalidateTransactionQueries(qc);
+	broadcastDbChange(["transactionFlows", "transactionLinkSuggestions"]);
 }
 
 export function useTransactionsQuery(props: {
