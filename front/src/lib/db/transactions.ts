@@ -1,5 +1,5 @@
 import { id } from "../id";
-import type { DbHandle } from "./client";
+import type { DbHandle, DbSqlHandle } from "./client";
 import { FX_ANCHOR_CURRENCY } from "./settings";
 import {
 	validateTransactionFlowCreate,
@@ -330,7 +330,7 @@ export function buildTransactionFtsQuery(search: string): string | null {
 }
 
 export async function refreshTransactionSearchDocs(
-	db: DbHandle,
+	db: DbSqlHandle,
 	txIds: string[],
 ) {
 	const uniqueIds = Array.from(new Set(txIds)).filter(Boolean);
@@ -554,8 +554,8 @@ export async function createTransaction(
 		findCurrencyMeta(currencyMeta, currency),
 	);
 	const newTxId = id();
-	await db.withTx(async () => {
-		await db.exec(
+	await db.withTx(async (txDb) => {
+		await txDb.exec(
 			`insert into transactions
 			 (id, created_at, updated_at, date, amount_minor, currency, counter_party, additional, notes, category_id, account_id, _sync_edited_at)
 			 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -574,7 +574,7 @@ export async function createTransaction(
 				Date.now(),
 			],
 		);
-		await refreshTransactionSearchDocs(db, [newTxId]);
+		await refreshTransactionSearchDocs(txDb, [newTxId]);
 	});
 }
 
@@ -587,8 +587,8 @@ export async function updateTransaction(
 	const now = new Date().toISOString();
 	const currency = normalizeCurrency(tx.currency);
 	const meta = findCurrencyMeta(currencyMeta, currency);
-	await db.withTx(async () => {
-		await db.exec(
+	await db.withTx(async (txDb) => {
+		await txDb.exec(
 			`update transactions set
 				updated_at = ?,
 				date = ?,
@@ -616,7 +616,7 @@ export async function updateTransaction(
 				txId,
 			],
 		);
-		await refreshTransactionSearchDocs(db, [txId]);
+		await refreshTransactionSearchDocs(txDb, [txId]);
 	});
 }
 
@@ -1699,10 +1699,10 @@ export async function bulkSetTransactionCategory(
 	},
 ) {
 	if (txIds.length === 0) return;
-	await db.withTx(async () => {
+	await db.withTx(async (txDb) => {
 		const now = new Date().toISOString();
 		const placeholders = txIds.map(() => "?").join(", ");
-		await db.exec(
+		await txDb.exec(
 			`update transactions set
 				category_id = ?,
 				updated_at = ?,

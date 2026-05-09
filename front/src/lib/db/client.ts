@@ -1,10 +1,15 @@
 import { DEFAULT_CURRENCY, DEFAULT_CURRENCY_META } from "../currency";
 import { hkdfSha256 } from "../crypto";
 
-export type DbHandle = {
+export type DbSqlHandle = {
 	exec: (sql: string, vars?: any[]) => Promise<any>;
 	query: <T = any>(sql: string, vars?: any[]) => Promise<T[]>;
-	withTx: <T>(fn: () => Promise<T>) => Promise<T>;
+};
+
+export type DbTxHandle = DbSqlHandle;
+
+export type DbHandle = DbSqlHandle & {
+	withTx: <T>(fn: (tx: DbTxHandle) => Promise<T>) => Promise<T>;
 };
 
 export type DbClient = DbHandle & {
@@ -175,32 +180,56 @@ export function sqlite(
 			initResponse.filename,
 		);
 
-		const exec = async (sql: string, vars?: any[]) =>
+		const rawExec = async (sql: string, vars?: any[]) =>
 			await callWorker("exec", { sql, vars });
-		const query = async <T = any>(sql: string, vars?: any[]): Promise<T[]> => {
+		const rawQuery = async <T = any>(sql: string, vars?: any[]): Promise<T[]> => {
 			const rows = await callWorker("query", { sql, vars });
 			return rows as T[];
 		};
+		let queueTail: Promise<unknown> = Promise.resolve();
+		const enqueue = async <T>(op: () => Promise<T>): Promise<T> => {
+			const run = queueTail.then(op, op);
+			queueTail = run.catch(() => undefined);
+			return await run;
+		};
 
-		let txDepth = 0;
 		handle = {
-			exec,
-			query,
-			withTx: async <T>(fn: () => Promise<T>): Promise<T> => {
-				const isOuter = txDepth === 0;
-				txDepth++;
-				if (isOuter) await exec("BEGIN");
-				try {
-					const result = await fn();
-					txDepth--;
-					if (isOuter) await exec("COMMIT");
-					return result;
-				} catch (error) {
-					txDepth--;
-					if (isOuter) await exec("ROLLBACK");
-					throw error;
-				}
-			},
+			exec: async (sql: string, vars?: any[]) =>
+				await enqueue(() => rawExec(sql, vars)),
+			query: async <T = any>(sql: string, vars?: any[]) =>
+				await enqueue(() => rawQuery<T>(sql, vars)),
+			withTx: async <T>(fn: (tx: DbTxHandle) => Promise<T>): Promise<T> =>
+				await enqueue(async () => {
+					let txOpen = true;
+					const assertTxOpen = () => {
+						if (!txOpen) throw new Error("sqlite transaction is no longer active");
+					};
+					const tx: DbTxHandle = {
+						exec: async (sql: string, vars?: any[]) => {
+							assertTxOpen();
+							return await rawExec(sql, vars);
+						},
+						query: async <T = any>(sql: string, vars?: any[]) => {
+							assertTxOpen();
+							return await rawQuery<T>(sql, vars);
+						},
+					};
+					await rawExec("BEGIN");
+					try {
+						const result = await fn(tx);
+						await rawExec("COMMIT");
+						txOpen = false;
+						return result;
+					} catch (error) {
+						try {
+							await rawExec("ROLLBACK");
+						} catch (rollbackError) {
+							console.error("sqlite transaction rollback failed", rollbackError);
+						}
+						txOpen = false;
+						throw error;
+					}
+				}),
 		};
 
 		await migrations(handle);
@@ -227,7 +256,7 @@ export function sqlite(
 			await init();
 			return await handle.exec(sql, vars);
 		},
-		withTx: async <T>(fn: () => Promise<T>): Promise<T> => {
+		withTx: async <T>(fn: (tx: DbTxHandle) => Promise<T>): Promise<T> => {
 			if (closed) throw new Error("sqlite connection is closed");
 			await init();
 			return await handle.withTx(fn);

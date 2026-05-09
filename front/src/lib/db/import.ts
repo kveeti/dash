@@ -1,4 +1,4 @@
-import type { DbHandle } from "./client";
+import type { DbHandle, DbSqlHandle } from "./client";
 import Papa from "papaparse";
 import { id } from "../id";
 import { getOrCreateCategoryByName } from "./categories";
@@ -293,7 +293,7 @@ async function getExistingImportKeys(
 }
 
 async function touchImportKeys(
-	db: DbHandle,
+	db: DbSqlHandle,
 	keyIds: string[],
 	now: string,
 ): Promise<void> {
@@ -317,7 +317,7 @@ async function touchImportKeys(
 }
 
 async function insertImportKey(
-	db: DbHandle,
+	db: DbSqlHandle,
 	identity: ImportKeyIdentity,
 	transactionId: string,
 	now: string,
@@ -520,9 +520,9 @@ export async function importCsv(
 
 	const now = new Date().toISOString();
 	const BATCH = 50;
-	return db.withTx(async () => {
+	return db.withTx(async (txDb) => {
 		await touchImportKeys(
-			db,
+			txDb,
 			dedupedRows.map(({ importKey }) => existingKeys.get(importKey)!.id),
 			now,
 		);
@@ -547,17 +547,17 @@ export async function importCsv(
 				accountId,
 				editedAt,
 			]);
-			await db.exec(
+			await txDb.exec(
 				`insert into transactions
 				 (id, created_at, updated_at, date, amount_minor, currency, counter_party, additional, category_id, account_id, _sync_edited_at)
 				 values ${placeholders}`,
 				values,
 			);
-			await refreshTransactionSearchDocs(db, txIds);
+			await refreshTransactionSearchDocs(txDb, txIds);
 
 			for (let j = 0; j < batch.length; j++) {
 				await insertImportKey(
-					db,
+					txDb,
 					{ ...importKeyIdentity, keyValue: batch[j].importKey },
 					txIds[j],
 					now,
@@ -607,13 +607,13 @@ export async function importLegacyCsvBundle(
 	let skipped = 0;
 	const errors: string[] = [];
 
-	return db.withTx(async () => {
+	return db.withTx(async (txDb) => {
 		const now = new Date().toISOString();
 		let accountsImported = 0;
 		let categoriesImported = 0;
 		let transactionsImported = 0;
 		const importedTxIds: string[] = [];
-		const existingAccounts = await db.query<{ id: string; name: string }>(
+		const existingAccounts = await txDb.query<{ id: string; name: string }>(
 			"select id, name from accounts where _sync_is_deleted = 0",
 		);
 		const existingAccountNames = new Map(existingAccounts.map((a) => [a.name, a.id]));
@@ -638,7 +638,7 @@ export async function importLegacyCsvBundle(
 			const newId = existingAccountIds.has(oldId) ? id() : oldId;
 			const currency = parseCurrency(record.currency, "EUR");
 			const externalId = record.external_id?.trim() || null;
-			await db.exec(
+			await txDb.exec(
 				`insert into accounts (id, created_at, updated_at, name, currency, external_id, _sync_edited_at)
 				values (?, ?, ?, ?, ?, ?, ?)`,
 				[newId, now, now, name, currency, externalId, Date.now()],
@@ -649,7 +649,7 @@ export async function importLegacyCsvBundle(
 			accountsImported++;
 		}
 
-		const existingCategories = await db.query<{ id: string; name: string }>(
+		const existingCategories = await txDb.query<{ id: string; name: string }>(
 			"select id, name from categories where _sync_is_deleted = 0",
 		);
 		const existingCategoryNames = new Map(existingCategories.map((c) => [c.name, c.id]));
@@ -681,7 +681,7 @@ export async function importLegacyCsvBundle(
 			}
 
 			const newId = existingCategoryIds.has(oldId) ? id() : oldId;
-			await db.exec(
+			await txDb.exec(
 				`insert into categories (id, created_at, updated_at, name, is_neutral, _sync_edited_at)
 				values (?, ?, ?, ?, ?, ?)`,
 				[newId, now, now, name, isNeutral, Date.now()],
@@ -692,7 +692,7 @@ export async function importLegacyCsvBundle(
 			categoriesImported++;
 		}
 
-		const existingTransactionRows = await db.query<{ id: string }>(
+		const existingTransactionRows = await txDb.query<{ id: string }>(
 			"select id from transactions",
 		);
 		const existingTransactionIds = new Set(existingTransactionRows.map((t) => t.id));
@@ -736,7 +736,7 @@ export async function importLegacyCsvBundle(
 				);
 
 				const newTxId = existingTransactionIds.has(txId) ? id() : txId;
-				await db.exec(
+				await txDb.exec(
 					`insert into transactions
 					(id, created_at, updated_at, date, amount_minor, currency, counter_party, additional, notes, categorize_on, category_id, account_id, _sync_edited_at)
 					values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -765,7 +765,7 @@ export async function importLegacyCsvBundle(
 				errors.push(`transactions.csv row ${lineNum}: ${getErrorMessage(e)}`);
 			}
 		}
-		await refreshTransactionSearchDocs(db, importedTxIds);
+		await refreshTransactionSearchDocs(txDb, importedTxIds);
 
 		return {
 			imported: transactionsImported,

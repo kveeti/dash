@@ -60,10 +60,10 @@ export async function createAccount(
 	db: DbHandle,
 	account: AccountInput,
 ): Promise<string> {
-	const newId = await db.withTx(async () => {
+	const newId = await db.withTx(async (txDb) => {
 		const newId = id();
 		const now = new Date().toISOString();
-		await db.exec(
+		await txDb.exec(
 			`insert into accounts (id, created_at, updated_at, name, currency, external_id, _sync_edited_at)
 			values (?, ?, ?, ?, ?, ?, ?)`,
 			[
@@ -87,9 +87,9 @@ export async function updateAccount(
 	accountId: string,
 	account: AccountInput,
 ) {
-	await db.withTx(async () => {
+	await db.withTx(async (txDb) => {
 		const now = new Date().toISOString();
-		await db.exec(
+		await txDb.exec(
 			"update accounts set name = ?, currency = ?, external_id = ?, updated_at = ?, _sync_status = 1, _sync_edited_at = ? where id = ?",
 			[
 				account.name,
@@ -107,14 +107,14 @@ export async function deleteAccount(
 	db: DbHandle,
 	accountId: string,
 ): Promise<boolean> {
-	return db.withTx(async () => {
-		const rows = await db.query<{ c: number }>(
+	return db.withTx(async (txDb) => {
+		const rows = await txDb.query<{ c: number }>(
 			"select count(*) as c from transactions where account_id = ? and _sync_is_deleted = 0",
 			[accountId],
 		);
 		if (rows[0].c > 0) return false;
 		const now = new Date().toISOString();
-		await db.exec(
+		await txDb.exec(
 			"update accounts set _sync_is_deleted = 1, updated_at = ?, _sync_status = 1, _sync_edited_at = ? where id = ?",
 			[now, Date.now(), accountId],
 		);

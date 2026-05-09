@@ -191,7 +191,7 @@ export async function importFxRatesCsv({
 	}
 
 	const FX_IMPORT_BATCH_SIZE = 100;
-	await db.withTx(async () => {
+	await db.withTx(async (txDb) => {
 		for (let i = 0; i < inserts.length; i += FX_IMPORT_BATCH_SIZE) {
 			const batch = inserts.slice(i, i + FX_IMPORT_BATCH_SIZE);
 			const placeholders = batch.map(() => "(?, ?, ?)").join(", ");
@@ -200,7 +200,7 @@ export async function importFxRatesCsv({
 				row.currency,
 				row.rateToAnchor,
 			]);
-			await db.exec(
+			await txDb.exec(
 				`insert into fx_rates
 				(rate_date, currency, rate_to_anchor)
 				values ${placeholders}
