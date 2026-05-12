@@ -458,11 +458,11 @@ function SuggestionItem({
 							onClick={() => onOpenTx(candidate.id)}
 							className="truncate hover:underline text-left"
 						>
-							{formatDate(candidate.date)} · {candidate.account_name} ·{" "}
+							{f.longDate.format(candidate.date)} · {candidate.account_name} ·{" "}
 							{candidate.counter_party}
 						</button>
 						<span className="text-gray-10 shrink-0">
-							{formatAmount(candidate.amount, candidate.currency)}
+							{f.amount(candidate.amount, candidate.currency)}
 						</span>
 					</li>
 				))}
