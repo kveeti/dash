@@ -16,6 +16,7 @@ import {
 	type YearStatRow,
 } from "../db/stats";
 import type { ConversionMode } from "../db/settings";
+import type { TransactionFilters } from "../db/transactions";
 
 export type {
 	ConvertedStatTransactionRow,
@@ -30,11 +31,23 @@ type StatsQueryInput = {
 	from: string;
 	to: string;
 	sourceCurrency?: string;
+	search?: string;
+	filters?: TransactionFilters;
 	reportingCurrency?: string;
 	maxStalenessDays?: number;
 	mode?: ConversionMode;
 	enabled?: boolean;
 };
+
+function statsScopeKey(input: StatsQueryInput) {
+	return [
+		input.search ?? "",
+		input.filters?.category_id ?? "",
+		input.filters?.account_id ?? "",
+		input.filters?.currency ?? "",
+		input.filters?.uncategorized ? "1" : "",
+	] as const;
+}
 
 function normalizeStatsQueryInput(input: StatsQueryInput) {
 	const reportingCurrency = input.reportingCurrency
@@ -58,6 +71,7 @@ export function useStatsQuery(input: StatsQueryInput) {
 			input.from,
 			input.to,
 			input.sourceCurrency ?? "",
+			...statsScopeKey(input),
 			reportingCurrency ?? "",
 			maxStalenessDays,
 			mode,
@@ -69,6 +83,8 @@ export function useStatsQuery(input: StatsQueryInput) {
 				from: input.from,
 				to: input.to,
 				sourceCurrency: input.sourceCurrency,
+				search: input.search,
+				filters: input.filters,
 				reportingCurrency: reportingCurrency!,
 				maxStalenessDays,
 				mode,
@@ -96,6 +112,7 @@ export function useYearStatsQuery(input: StatsQueryInput) {
 			input.from,
 			input.to,
 			input.sourceCurrency ?? "",
+			...statsScopeKey(input),
 			reportingCurrency ?? "",
 			maxStalenessDays,
 			mode,
@@ -107,6 +124,8 @@ export function useYearStatsQuery(input: StatsQueryInput) {
 				from: input.from,
 				to: input.to,
 				sourceCurrency: input.sourceCurrency,
+				search: input.search,
+				filters: input.filters,
 				reportingCurrency: reportingCurrency!,
 				maxStalenessDays,
 				mode,
@@ -126,6 +145,7 @@ export function useMonthStatsQuery(input: StatsQueryInput) {
 			input.from,
 			input.to,
 			input.sourceCurrency ?? "",
+			...statsScopeKey(input),
 			reportingCurrency ?? "",
 			maxStalenessDays,
 			mode,
@@ -137,6 +157,8 @@ export function useMonthStatsQuery(input: StatsQueryInput) {
 				from: input.from,
 				to: input.to,
 				sourceCurrency: input.sourceCurrency,
+				search: input.search,
+				filters: input.filters,
 				reportingCurrency: reportingCurrency!,
 				maxStalenessDays,
 				mode,
@@ -156,6 +178,7 @@ export function useConvertedStatsSummaryQuery(input: StatsQueryInput) {
 			input.from,
 			input.to,
 			input.sourceCurrency ?? "",
+			...statsScopeKey(input),
 			reportingCurrency ?? "",
 			maxStalenessDays,
 			mode,
@@ -167,6 +190,8 @@ export function useConvertedStatsSummaryQuery(input: StatsQueryInput) {
 				from: input.from,
 				to: input.to,
 				sourceCurrency: input.sourceCurrency,
+				search: input.search,
+				filters: input.filters,
 				reportingCurrency: reportingCurrency!,
 				maxStalenessDays,
 				mode,
@@ -192,6 +217,7 @@ export function useConvertedStatTransactionsQuery(input: StatsQueryInput & {
 			input.from,
 			input.to,
 			input.sourceCurrency ?? "",
+			...statsScopeKey(input),
 			reportingCurrency ?? "",
 			maxStalenessDays,
 			mode,
@@ -204,6 +230,8 @@ export function useConvertedStatTransactionsQuery(input: StatsQueryInput & {
 				from: input.from,
 				to: input.to,
 				sourceCurrency: input.sourceCurrency,
+				search: input.search,
+				filters: input.filters,
 				reportingCurrency: reportingCurrency!,
 				maxStalenessDays,
 				mode,

@@ -13,6 +13,8 @@ import {
 	type StatsCompareValue,
 	type StatsPeriodValue,
 } from "./stats-page-types";
+import type { TransactionFilters } from "../../lib/queries/query-keys";
+import { FastLink } from "../../components/link";
 
 function formatIsoDate(date: Date) {
 	return date.toISOString().slice(0, 10);
@@ -299,6 +301,9 @@ export function StatsOverviewPanel({
 	queryReportingCurrency,
 	mode,
 	maxStalenessDays,
+	search,
+	filters,
+	scopeParams,
 	period,
 	compare,
 	customFrom,
@@ -311,6 +316,9 @@ export function StatsOverviewPanel({
 	queryReportingCurrency?: string;
 	mode: "strict" | "lenient";
 	maxStalenessDays: number;
+	search?: string;
+	filters?: TransactionFilters;
+	scopeParams: Record<string, string | undefined>;
 	period: StatsPeriodValue;
 	compare: StatsCompareValue;
 	customFrom: string;
@@ -336,10 +344,21 @@ export function StatsOverviewPanel({
 	const comparisonEnabled = compare !== "none" && compareRange != null;
 	const baseLabel = useMemo(() => formatRangeLabel(period, baseRange), [period, baseRange]);
 	const compareLabel = useMemo(() => formatCompareLabel(compare), [compare]);
+	const scopedTransactionHref = useMemo(
+		() =>
+			buildPath("/txs", {
+				...scopeParams,
+				from: baseRange.from,
+				to: baseRange.to,
+			}),
+		[baseRange, scopeParams],
+	);
 
 	const currentMonthStatsQuery = useMonthStatsQuery({
 		from: baseRange.from,
 		to: baseRange.to,
+		search,
+		filters,
 		reportingCurrency: queryReportingCurrency,
 		maxStalenessDays,
 		mode,
@@ -348,6 +367,8 @@ export function StatsOverviewPanel({
 	const currentCategoryStatsQuery = useStatsQuery({
 		from: baseRange.from,
 		to: baseRange.to,
+		search,
+		filters,
 		reportingCurrency: queryReportingCurrency,
 		maxStalenessDays,
 		mode,
@@ -356,6 +377,8 @@ export function StatsOverviewPanel({
 	const currentSummaryQuery = useConvertedStatsSummaryQuery({
 		from: baseRange.from,
 		to: baseRange.to,
+		search,
+		filters,
 		reportingCurrency: queryReportingCurrency,
 		maxStalenessDays,
 		mode,
@@ -365,6 +388,8 @@ export function StatsOverviewPanel({
 	const compareMonthStatsQuery = useMonthStatsQuery({
 		from: compareRange?.from ?? "",
 		to: compareRange?.to ?? "",
+		search,
+		filters,
 		reportingCurrency: queryReportingCurrency,
 		maxStalenessDays,
 		mode,
@@ -373,6 +398,8 @@ export function StatsOverviewPanel({
 	const compareCategoryStatsQuery = useStatsQuery({
 		from: compareRange?.from ?? "",
 		to: compareRange?.to ?? "",
+		search,
+		filters,
 		reportingCurrency: queryReportingCurrency,
 		maxStalenessDays,
 		mode,
@@ -381,6 +408,8 @@ export function StatsOverviewPanel({
 	const compareSummaryQuery = useConvertedStatsSummaryQuery({
 		from: compareRange?.from ?? "",
 		to: compareRange?.to ?? "",
+		search,
+		filters,
 		reportingCurrency: queryReportingCurrency,
 		maxStalenessDays,
 		mode,
@@ -596,6 +625,16 @@ export function StatsOverviewPanel({
 				{comparisonEnabled && compareRange && (
 					<div className="mt-1 text-gray-a12">{f.longDate.format(new Date(compareRange.from))} to {f.longDate.format(new Date(compareRange.to))}</div>
 				)}
+				<div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+					<span className="text-gray-10">current scope</span>
+					<span>{baseLabel}</span>
+					<FastLink
+						href={scopedTransactionHref}
+						className="border border-gray-a4 px-2 py-1 text-gray-11 hover:bg-gray-a2"
+					>
+						view transactions
+					</FastLink>
+				</div>
 			</div>
 
 
@@ -726,6 +765,15 @@ export function StatsOverviewPanel({
 			)}
 		</div>
 	);
+}
+
+function buildPath(path: string, params: Record<string, string | undefined>) {
+	const next = new URLSearchParams();
+	for (const [key, value] of Object.entries(params)) {
+		if (value) next.set(key, value);
+	}
+	const qs = next.toString();
+	return qs ? `${path}?${qs}` : path;
 }
 
 function StatsMetricCard({

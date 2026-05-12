@@ -5,6 +5,15 @@ import { TabsList, TabsPanel, TabsRoot, TabsTab } from "../../components/tabs";
 import { useAppSettingsQuery } from "../../lib/queries/settings";
 import { DesktopYearMonthExplorer } from "./desktop-year-month-explorer";
 import { StatsOverviewPanel } from "./stats-overview-panel";
+import { Input } from "../../components/input";
+import { Select } from "../../components/select";
+import { CategoryCombobox } from "../../components/category-combobox";
+import { PopupCombobox } from "../../components/popup-combobox";
+import { useCategoryOptionsQuery } from "../../lib/queries/categories";
+import { useAccountsQuery } from "../../lib/queries/accounts";
+import { useTransactionCurrenciesQuery } from "../../lib/queries/transactions";
+import { FastLink } from "../../components/link";
+import type { TransactionFilters } from "../../lib/queries/query-keys";
 import {
 	type DateRange,
 	type StatsCompareValue,
@@ -13,7 +22,7 @@ import {
 } from "./stats-page-types";
 
 function parseStatsTabValue(value: string | null): StatsTabValue {
-	return value === "stats-2" ? "stats-2" : "stats-1";
+	return value === "stats-1" ? "stats-1" : "stats-2";
 }
 
 function parseStatsPeriodValue(value: string | null): StatsPeriodValue {
@@ -83,6 +92,11 @@ export function StatsPage() {
 	const activeTab = parseStatsTabValue(searchParams.get("tab"));
 	const period = parseStatsPeriodValue(searchParams.get("period"));
 	const compare = parseStatsCompareValue(searchParams.get("compare"));
+	const q = searchParams.get("q") ?? "";
+	const categoryId = searchParams.get("cat") ?? "";
+	const accountId = searchParams.get("acc") ?? "";
+	const currency = searchParams.get("cur") ?? "";
+	const uncategorized = searchParams.get("uncat") === "1";
 
 	const defaultCustom = useMemo(() => defaultCustomRange(nowUtc), [nowUtc]);
 	const rawCustomFrom = parseIsoDate(searchParams.get("from"))
@@ -104,6 +118,31 @@ export function StatsPage() {
 
 	const yearStats = useTransactionYearsQuery();
 	const yearRows = yearStats.data ?? [];
+	const categories = useCategoryOptionsQuery();
+	const accounts = useAccountsQuery();
+	const currencies = useTransactionCurrenciesQuery();
+
+	const filters: TransactionFilters = {};
+	if (categoryId) filters.category_id = categoryId;
+	if (accountId) filters.account_id = accountId;
+	if (currency) filters.currency = currency;
+	if (uncategorized) filters.uncategorized = true;
+	const activeFilters = Object.keys(filters).length > 0 ? filters : undefined;
+	const scopeParams: Record<string, string | undefined> = {
+		q: q || undefined,
+		cat: categoryId || undefined,
+		acc: accountId || undefined,
+		cur: currency || undefined,
+		uncat: uncategorized ? "1" : undefined,
+	};
+	const hasScope = !!(
+		q ||
+		categoryId ||
+		accountId ||
+		currency ||
+		uncategorized
+	);
+	const transactionsHref = buildPath("/txs", scopeParams);
 
 	const setStatsParams = (updates: Record<string, string | undefined>) => {
 		const params = new URLSearchParams(searchParams);
@@ -150,11 +189,37 @@ export function StatsPage() {
 					</TabsPanel>
 
 				<TabsPanel value="stats-2">
+					<div className="mb-4 border border-gray-a4 p-3">
+						<div className="mb-2 flex items-center justify-between gap-3">
+							<div className="text-xs font-mono text-gray-10">scope</div>
+							<FastLink
+								href={transactionsHref}
+								className="text-xs font-mono text-gray-11 hover:underline"
+							>
+								view matching txs
+							</FastLink>
+						</div>
+						<StatsScopeControls
+							q={q}
+							categoryId={categoryId}
+							accountId={accountId}
+							currency={currency}
+							uncategorized={uncategorized}
+							hasScope={hasScope}
+							categories={categories.data}
+							accounts={accounts.data}
+							currencies={currencies.data}
+							setParams={setStatsParams}
+						/>
+					</div>
 					<StatsOverviewPanel
 						reportingCurrency={reportingCurrency}
 						queryReportingCurrency={settings.data?.reporting_currency}
 						mode={mode}
 						maxStalenessDays={maxStalenessDays}
+							search={q || undefined}
+							filters={activeFilters}
+							scopeParams={scopeParams}
 							period={period}
 							compare={compare}
 							customFrom={customFrom}
@@ -186,5 +251,176 @@ export function StatsPage() {
 					</TabsPanel>
 			</TabsRoot>
 		</div>
+	);
+}
+
+function buildPath(path: string, params: Record<string, string | undefined>) {
+	const next = new URLSearchParams();
+	for (const [key, value] of Object.entries(params)) {
+		if (value) next.set(key, value);
+	}
+	const qs = next.toString();
+	return qs ? `${path}?${qs}` : path;
+}
+
+function StatsScopeControls({
+	q,
+	categoryId,
+	accountId,
+	currency,
+	uncategorized,
+	hasScope,
+	categories,
+	accounts,
+	currencies,
+	setParams,
+}: {
+	q: string;
+	categoryId: string;
+	accountId: string;
+	currency: string;
+	uncategorized: boolean;
+	hasScope: boolean;
+	categories: Array<{ id: string; name: string }> | undefined;
+	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
+	currencies: string[] | undefined;
+	setParams: (updates: Record<string, string | undefined>) => void;
+}) {
+	return (
+		<div className="space-y-2">
+			<Input
+				size="sm"
+				type="text"
+				placeholder="search..."
+				autoComplete="off"
+				value={q}
+				onChange={(e) => setParams({ q: e.currentTarget.value || undefined })}
+			/>
+			<div className="grid gap-2 sm:grid-cols-3">
+				<CategoryCombobox
+					size="sm"
+					className="min-w-0"
+					value={uncategorized ? "__uncat__" : categoryId}
+					onChange={(nextValue) => {
+						if (nextValue === "__uncat__") {
+							setParams({ cat: undefined, uncat: "1" });
+							return;
+						}
+						setParams({ cat: nextValue || undefined, uncat: undefined });
+					}}
+					placeholder="all categories"
+					items={[
+						{ id: "", value: "", label: "all categories" },
+						{ id: "__uncat__", value: "__uncat__", label: "uncategorized" },
+						...(categories?.map((category) => ({
+							id: category.id,
+							value: category.id,
+							label: category.name,
+						})) ?? []),
+					]}
+				/>
+				<AccountFilterCombobox
+					value={accountId}
+					accounts={accounts}
+					onChange={(nextValue) => setParams({ acc: nextValue || undefined })}
+				/>
+				<Select
+					size="sm"
+					className="min-w-0"
+					value={currency}
+					onChange={(e) =>
+						setParams({ cur: e.currentTarget.value || undefined })
+					}
+				>
+					<option value="">all currencies</option>
+					{currencies?.map((currencyCode) => (
+						<option key={currencyCode} value={currencyCode}>
+							{currencyCode}
+						</option>
+					))}
+				</Select>
+			</div>
+			{hasScope && (
+				<button
+					type="button"
+					className="text-xs text-gray-10 hover:text-gray-12 underline"
+					onClick={() =>
+						setParams({
+							q: undefined,
+							cat: undefined,
+							acc: undefined,
+							cur: undefined,
+							uncat: undefined,
+						})
+					}
+				>
+					clear scope
+				</button>
+			)}
+		</div>
+	);
+}
+
+type AccountFilterItem = {
+	value: string;
+	label: string;
+	currency?: string;
+};
+
+function AccountFilterCombobox({
+	value,
+	accounts,
+	onChange,
+}: {
+	value: string;
+	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
+	onChange: (value: string) => void;
+}) {
+	const items = useMemo<AccountFilterItem[]>(
+		() => [
+			{
+				value: "__all__",
+				label: "all accounts",
+			},
+			...(accounts ?? []).map((account) => ({
+				value: account.id,
+				label: account.name,
+				currency: account.currency,
+			})),
+		],
+		[accounts],
+	);
+
+	const selectedItem =
+		items.find((item) => item.value === (value || "__all__")) ?? items[0];
+
+	return (
+		<PopupCombobox
+			items={items}
+			value={selectedItem}
+			onValueChange={(next) => {
+				if (!next || next.value === "__all__") {
+					onChange("");
+					return;
+				}
+				onChange(next.value);
+			}}
+			getItemKey={(item) => item.value}
+			renderItem={(item) => (
+				<div className="flex w-full items-center justify-between gap-2">
+					<span className="truncate">{item.label}</span>
+					{item.currency ? (
+						<span className="shrink-0 text-xs text-gray-10">
+							{item.currency}
+						</span>
+					) : null}
+				</div>
+			)}
+			itemToStringLabel={(item) => item.label}
+			isItemEqualToValue={(item, selected) => item.value === selected.value}
+			placeholder="all accounts"
+			size="sm"
+			className="min-w-0"
+		/>
 	);
 }

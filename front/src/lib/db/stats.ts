@@ -1,6 +1,7 @@
 import { normalizeCurrency } from "../currency";
 import type { DbHandle } from "./client";
 import { FX_ANCHOR_CURRENCY, type ConversionMode } from "./settings";
+import { buildTransactionFtsQuery, type TransactionFilters } from "./transactions";
 
 export type StatRow = {
 	period: string;
@@ -68,17 +69,80 @@ export type ConvertedStatTransactionRow = {
 	converted_amount: number | null;
 };
 
-function buildStatsBaseCteSql(includeSourceCurrencyFilter: boolean) {
-	const sourceCurrencyPredicate = includeSourceCurrencyFilter
-		? "    AND t.currency = ?\n"
-		: "";
+type StatsScope = {
+	search?: string;
+	filters?: TransactionFilters;
+};
+
+function normalizeStatsScope(input: {
+	sourceCurrency?: string;
+	search?: string;
+	filters?: TransactionFilters;
+}): StatsScope {
+	const filters: TransactionFilters = { ...(input.filters ?? {}) };
+	if (input.sourceCurrency?.trim()) {
+		filters.currency = normalizeCurrency(input.sourceCurrency);
+	}
+
+	return {
+		search: input.search?.trim() || undefined,
+		filters: Object.keys(filters).length > 0 ? filters : undefined,
+	};
+}
+
+function buildScopePredicates(scope: StatsScope) {
+	const predicates: string[] = [];
+	const params: Array<string | number> = [];
+	const filters = scope.filters;
+
+	if (scope.search) {
+		const ftsQuery = buildTransactionFtsQuery(scope.search);
+		if (ftsQuery) {
+			predicates.push(`id in (
+      select tx_id
+      from transaction_search_fts
+      where transaction_search_fts match ?
+    )`);
+			params.push(ftsQuery);
+		} else {
+			predicates.push("0 = 1");
+		}
+	}
+
+	if (filters?.category_id) {
+		predicates.push("category_id = ?");
+		params.push(filters.category_id);
+	}
+
+	if (filters?.account_id) {
+		predicates.push("account_id = ?");
+		params.push(filters.account_id);
+	}
+
+	if (filters?.currency) {
+		predicates.push("currency = ?");
+		params.push(filters.currency.toUpperCase());
+	}
+
+	if (filters?.uncategorized) {
+		predicates.push("category_id is null");
+	}
+
+	return {
+		sql: predicates.map((predicate) => `    AND ${predicate}`).join("\n"),
+		params,
+	};
+}
+
+function buildStatsBaseCteSql(scope: StatsScope) {
+	const scopePredicates = buildScopePredicates(scope).sql;
 
 	return `WITH
 in_window AS (
   SELECT id FROM transactions
   WHERE _sync_is_deleted = 0
     AND coalesce(categorize_on, date) BETWEEN ? AND ?
-),
+${scopePredicates ? `${scopePredicates}\n` : ""}),
 relevant_ids AS (
   SELECT id FROM in_window
   UNION
@@ -109,7 +173,7 @@ txs AS (
   LEFT JOIN currency_meta cm ON cm.currency = t.currency
   WHERE t._sync_is_deleted = 0
     AND t.id IN (SELECT id FROM relevant_ids)
-${sourceCurrencyPredicate}),
+),
 allocations AS (
   SELECT
     p.id AS pos_id,
@@ -247,7 +311,7 @@ adjusted AS (
 )`;
 }
 
-function buildConvertedCteSql(mode: ConversionMode, includeSourceCurrencyFilter: boolean) {
+function buildConvertedCteSql(mode: ConversionMode, scope: StatsScope) {
 	const strictTxRateFloor =
 		mode === "strict"
 			? "and r.rate_date >= date(p.eff_date, '-' || ? || ' days')"
@@ -257,7 +321,7 @@ function buildConvertedCteSql(mode: ConversionMode, includeSourceCurrencyFilter:
 			? "and r.rate_date >= date(d.eff_date, '-' || ? || ' days')"
 			: "";
 
-	return `${buildStatsBaseCteSql(includeSourceCurrencyFilter)},
+	return `${buildStatsBaseCteSql(scope)},
 normalized AS (
   SELECT
     id,
@@ -276,6 +340,7 @@ normalized AS (
     abs(amount_minor) * 1.0 / minor_factor AS original_amount
   FROM adjusted
   WHERE amount_minor <> 0
+    AND id IN (SELECT id FROM in_window)
     AND eff_date BETWEEN ? AND ?
 ),
 distinct_pairs AS (
@@ -366,25 +431,27 @@ function buildConvertedParams(input: {
 	from: string;
 	to: string;
 	sourceCurrency?: string;
+	search?: string;
+	filters?: TransactionFilters;
 	reportingCurrency: string;
 	maxStalenessDays: number;
 	mode: ConversionMode;
 	anchorCurrency: string;
 }) {
-	const sourceCurrency = input.sourceCurrency?.trim()
-		? normalizeCurrency(input.sourceCurrency)
-		: null;
 	const reportingCurrency = normalizeCurrency(input.reportingCurrency);
 	const anchorCurrency = normalizeCurrency(input.anchorCurrency);
+	const scope = normalizeStatsScope({
+		sourceCurrency: input.sourceCurrency,
+		search: input.search,
+		filters: input.filters,
+	});
+	const scopePredicates = buildScopePredicates(scope);
 
 	const base: Array<string | number> = [
 		input.from,
 		input.to,
+		...scopePredicates.params,
 	];
-
-	if (sourceCurrency) {
-		base.push(sourceCurrency);
-	}
 
 	base.push(
 		input.from,
@@ -410,7 +477,7 @@ function buildConvertedParams(input: {
 	base.push(reportingCurrency);
 	return {
 		params: base,
-		includeSourceCurrencyFilter: !!sourceCurrency,
+		scope,
 	};
 }
 
@@ -419,6 +486,8 @@ export async function getStats(input: {
 	from: string;
 	to: string;
 	sourceCurrency?: string;
+	search?: string;
+	filters?: TransactionFilters;
 	reportingCurrency: string;
 	maxStalenessDays: number;
 	mode: ConversionMode;
@@ -428,12 +497,14 @@ export async function getStats(input: {
 		from: input.from,
 		to: input.to,
 		sourceCurrency: input.sourceCurrency,
+		search: input.search,
+		filters: input.filters,
 		reportingCurrency: input.reportingCurrency,
 		maxStalenessDays: input.maxStalenessDays,
 		mode: input.mode,
 		anchorCurrency,
 	});
-	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.scope);
 	const sql = `${cteSql}
 select
 	period,
@@ -459,6 +530,8 @@ export async function getYearStats(input: {
 	from: string;
 	to: string;
 	sourceCurrency?: string;
+	search?: string;
+	filters?: TransactionFilters;
 	reportingCurrency: string;
 	maxStalenessDays: number;
 	mode: ConversionMode;
@@ -468,12 +541,14 @@ export async function getYearStats(input: {
 		from: input.from,
 		to: input.to,
 		sourceCurrency: input.sourceCurrency,
+		search: input.search,
+		filters: input.filters,
 		reportingCurrency: input.reportingCurrency,
 		maxStalenessDays: input.maxStalenessDays,
 		mode: input.mode,
 		anchorCurrency,
 	});
-	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.scope);
 	const sql = `${cteSql}
 select
 	substr(period, 1, 4) as year,
@@ -497,6 +572,8 @@ export async function getMonthStats(input: {
 	from: string;
 	to: string;
 	sourceCurrency?: string;
+	search?: string;
+	filters?: TransactionFilters;
 	reportingCurrency: string;
 	maxStalenessDays: number;
 	mode: ConversionMode;
@@ -506,12 +583,14 @@ export async function getMonthStats(input: {
 		from: input.from,
 		to: input.to,
 		sourceCurrency: input.sourceCurrency,
+		search: input.search,
+		filters: input.filters,
 		reportingCurrency: input.reportingCurrency,
 		maxStalenessDays: input.maxStalenessDays,
 		mode: input.mode,
 		anchorCurrency,
 	});
-	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.scope);
 	const sql = `${cteSql}
 select
 	period,
@@ -535,6 +614,8 @@ export async function getConvertedStatsSummary(input: {
 	from: string;
 	to: string;
 	sourceCurrency?: string;
+	search?: string;
+	filters?: TransactionFilters;
 	reportingCurrency: string;
 	maxStalenessDays: number;
 	mode: ConversionMode;
@@ -544,12 +625,14 @@ export async function getConvertedStatsSummary(input: {
 		from: input.from,
 		to: input.to,
 		sourceCurrency: input.sourceCurrency,
+		search: input.search,
+		filters: input.filters,
 		reportingCurrency: input.reportingCurrency,
 		maxStalenessDays: input.maxStalenessDays,
 		mode: input.mode,
 		anchorCurrency,
 	});
-	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.scope);
 
 	const summarySql = `${cteSql}
 select
@@ -634,6 +717,8 @@ export async function getConvertedStatTransactions(input: {
 	from: string;
 	to: string;
 	sourceCurrency?: string;
+	search?: string;
+	filters?: TransactionFilters;
 	reportingCurrency: string;
 	maxStalenessDays: number;
 	mode: ConversionMode;
@@ -644,12 +729,14 @@ export async function getConvertedStatTransactions(input: {
 		from: input.from,
 		to: input.to,
 		sourceCurrency: input.sourceCurrency,
+		search: input.search,
+		filters: input.filters,
 		reportingCurrency: input.reportingCurrency,
 		maxStalenessDays: input.maxStalenessDays,
 		mode: input.mode,
 		anchorCurrency,
 	});
-	const cteSql = buildConvertedCteSql(input.mode, convertedParams.includeSourceCurrencyFilter);
+	const cteSql = buildConvertedCteSql(input.mode, convertedParams.scope);
 	const perCategoryLimit = input.perCategoryLimit
 		? Math.max(1, Math.trunc(input.perCategoryLimit))
 		: null;
@@ -719,4 +806,3 @@ export async function getTransactionYears(db: DbHandle): Promise<TransactionYear
 	group by year
 	order by year desc`);
 }
-
