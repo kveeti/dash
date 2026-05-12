@@ -524,7 +524,7 @@ function FilterControls({
 					<DateRangePickerInput
 						label="date"
 						size="sm"
-						value={dateRange ?? defaultDateRange(new Date())}
+						value={dateRange}
 						showWeekNumbers
 						onChange={(nextRange) =>
 							setParams({ from: nextRange.from, to: nextRange.to })

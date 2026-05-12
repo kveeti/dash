@@ -74,7 +74,7 @@ export function DateRangePickerInput({
 	className,
 }: {
 	label?: string;
-	value: DateRangeChangeValue;
+	value: DateRangeChangeValue | null | undefined;
 	onChange?: (value: DateRangeChangeValue) => void;
 	disabled?: boolean;
 	size?: "sm" | "default";
@@ -462,7 +462,8 @@ function segmentClassName(type: string) {
 		: "data-[placeholder]:text-gray-9 data-[focused]:bg-gray-a6 outline-none px-0.5 -mx-0.5";
 }
 
-function parseDateRangeValue(value: DateRangeChangeValue) {
+function parseDateRangeValue(value: DateRangeChangeValue | null | undefined) {
+	if (!value) return null;
 	try {
 		return {
 			start: parseDate(value.from),
