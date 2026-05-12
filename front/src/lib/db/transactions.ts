@@ -26,6 +26,24 @@ export type TransactionFilters = {
 	date_to?: string;
 };
 
+export type TransactionSort =
+	| "date_desc"
+	| "date_asc"
+	| "amount_desc"
+	| "amount_asc"
+	| "amount_abs_desc"
+	| "amount_abs_asc"
+	| "effective_amount_desc"
+	| "effective_amount_asc"
+	| "effective_amount_abs_desc"
+	| "effective_amount_abs_asc"
+	| "counter_party_asc"
+	| "counter_party_desc"
+	| "category_asc"
+	| "account_asc";
+
+export const DEFAULT_TRANSACTION_SORT: TransactionSort = "date_desc";
+
 const TRANSACTION_SEARCH_BATCH_SIZE = 200;
 
 const TRANSACTION_LIST_BASE_SELECT_SQL = `select
@@ -148,6 +166,41 @@ export type TransactionCursorInput = {
 	right: string | undefined;
 };
 type CursorDirection = "left" | "right" | null;
+type SortDirection = "asc" | "desc";
+
+type TransactionSortClause = {
+	currentExpr: string;
+	cursorExpr: string;
+	direction: SortDirection;
+};
+
+const EFFECTIVE_AMOUNT_MINOR_EXPR = "(t.amount_minor + coalesce(fs.adjustment_minor, 0))";
+const CURSOR_EFFECTIVE_AMOUNT_MINOR_EXPR = `(
+	select ct.amount_minor + coalesce(sum(adj.adjustment_minor), 0)
+	from transactions ct
+	left join (
+		select
+			from_transaction_id as tx_id,
+			case
+				when kind in ('own_transfer', 'currency_exchange') then amount_minor
+				else -amount_minor
+			end as adjustment_minor
+		from transaction_flows
+		where _sync_is_deleted = 0
+		union all
+		select
+			to_transaction_id as tx_id,
+			case
+				when kind = 'currency_exchange' then -to_amount_minor
+				when kind = 'own_transfer' then -amount_minor
+				else amount_minor
+			end as adjustment_minor
+		from transaction_flows
+		where _sync_is_deleted = 0
+	) adj on adj.tx_id = ct.id
+	where ct.id = ?
+	group by ct.id
+)`;
 
 export type TransactionInput = {
 	date: string;
@@ -171,6 +224,277 @@ export function normalizeTransactionCursor(
 		return { right: cursor.right };
 	}
 	return undefined;
+}
+
+export function normalizeTransactionSort(sort?: string): TransactionSort {
+	switch (sort) {
+		case "date_asc":
+		case "amount_desc":
+		case "amount_asc":
+		case "amount_abs_desc":
+		case "amount_abs_asc":
+		case "effective_amount_desc":
+		case "effective_amount_asc":
+		case "effective_amount_abs_desc":
+		case "effective_amount_abs_asc":
+		case "counter_party_asc":
+		case "counter_party_desc":
+		case "category_asc":
+		case "account_asc":
+			return sort;
+		default:
+			return DEFAULT_TRANSACTION_SORT;
+	}
+}
+
+function reverseDirection(direction: SortDirection): SortDirection {
+	return direction === "asc" ? "desc" : "asc";
+}
+
+function getTransactionSortClauses(sort: TransactionSort): TransactionSortClause[] {
+	switch (sort) {
+		case "date_asc":
+			return [
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "asc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "asc" },
+			];
+		case "amount_desc":
+			return [
+				{
+					currentExpr: "t.amount_minor",
+					cursorExpr: "(select ct.amount_minor from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "amount_asc":
+			return [
+				{
+					currentExpr: "t.amount_minor",
+					cursorExpr: "(select ct.amount_minor from transactions ct where ct.id = ?)",
+					direction: "asc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "amount_abs_desc":
+			return [
+				{
+					currentExpr: "abs(t.amount_minor)",
+					cursorExpr: "(select abs(ct.amount_minor) from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "amount_abs_asc":
+			return [
+				{
+					currentExpr: "abs(t.amount_minor)",
+					cursorExpr: "(select abs(ct.amount_minor) from transactions ct where ct.id = ?)",
+					direction: "asc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "effective_amount_desc":
+			return [
+				{
+					currentExpr: EFFECTIVE_AMOUNT_MINOR_EXPR,
+					cursorExpr: CURSOR_EFFECTIVE_AMOUNT_MINOR_EXPR,
+					direction: "desc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "effective_amount_asc":
+			return [
+				{
+					currentExpr: EFFECTIVE_AMOUNT_MINOR_EXPR,
+					cursorExpr: CURSOR_EFFECTIVE_AMOUNT_MINOR_EXPR,
+					direction: "asc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "effective_amount_abs_desc":
+			return [
+				{
+					currentExpr: `abs(${EFFECTIVE_AMOUNT_MINOR_EXPR})`,
+					cursorExpr: `abs(${CURSOR_EFFECTIVE_AMOUNT_MINOR_EXPR})`,
+					direction: "desc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "effective_amount_abs_asc":
+			return [
+				{
+					currentExpr: `abs(${EFFECTIVE_AMOUNT_MINOR_EXPR})`,
+					cursorExpr: `abs(${CURSOR_EFFECTIVE_AMOUNT_MINOR_EXPR})`,
+					direction: "asc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "counter_party_asc":
+			return [
+				{
+					currentExpr: "lower(t.counter_party)",
+					cursorExpr: "(select lower(ct.counter_party) from transactions ct where ct.id = ?)",
+					direction: "asc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "counter_party_desc":
+			return [
+				{
+					currentExpr: "lower(t.counter_party)",
+					cursorExpr: "(select lower(ct.counter_party) from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "category_asc":
+			return [
+				{
+					currentExpr: "coalesce(lower(c.name), '')",
+					cursorExpr:
+						"(select coalesce(lower(cc.name), '') from transactions ct left join categories cc on ct.category_id = cc.id where ct.id = ?)",
+					direction: "asc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		case "account_asc":
+			return [
+				{
+					currentExpr: "coalesce(lower(a.name), '')",
+					cursorExpr:
+						"(select coalesce(lower(ca.name), '') from transactions ct left join accounts ca on ct.account_id = ca.id where ct.id = ?)",
+					direction: "asc",
+				},
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+		default:
+			return [
+				{
+					currentExpr: "t.date",
+					cursorExpr: "(select ct.date from transactions ct where ct.id = ?)",
+					direction: "desc",
+				},
+				{ currentExpr: "t.id", cursorExpr: "?", direction: "desc" },
+			];
+	}
+}
+
+function cursorOperator(direction: SortDirection, after: boolean) {
+	if (after) return direction === "asc" ? ">" : "<";
+	return direction === "asc" ? "<" : ">";
+}
+
+function buildCursorPredicate(
+	clauses: TransactionSortClause[],
+	cursorId: string,
+	after: boolean,
+) {
+	const params: string[] = [];
+	const parts = clauses.map((clause, index) => {
+		const equalParts = clauses.slice(0, index).map((previous) => {
+			params.push(cursorId);
+			return `${previous.currentExpr} = ${previous.cursorExpr}`;
+		});
+		params.push(cursorId);
+		const comparePart = `${clause.currentExpr} ${cursorOperator(
+			clause.direction,
+			after,
+		)} ${clause.cursorExpr}`;
+		return `(${[...equalParts, comparePart].join(" and ")})`;
+	});
+
+	return {
+		sql: `(${parts.join(" or ")})`,
+		params,
+	};
+}
+
+function buildSortedTransactionBaseSelectSql(clauses: TransactionSortClause[]) {
+	const sortSelect = clauses
+		.map((clause, index) => `\t${clause.currentExpr} as sort_${index},`)
+		.join("\n");
+	return TRANSACTION_LIST_BASE_SELECT_SQL.replace("select\n", `select\n${sortSelect}\n`);
+}
+
+function buildSortOrderSql(
+	clauses: TransactionSortClause[],
+	direction: CursorDirection,
+	aliasPrefix = "",
+) {
+	const reverse = direction === "left";
+	return clauses
+		.map((clause, index) => {
+			const queryDirection = reverse
+				? reverseDirection(clause.direction)
+				: clause.direction;
+			return `${aliasPrefix}sort_${index} ${queryDirection}`;
+		})
+		.join(", ");
 }
 
 function resolvePagination({
@@ -212,11 +536,11 @@ function resolvePagination({
 
 function buildConvertedRowsSql({
 	baseSql,
-	order,
+	orderBySql,
 	rowSelectSql,
 }: {
 	baseSql: string;
-	order: "asc" | "desc";
+	orderBySql: string;
 	rowSelectSql: string;
 }) {
 	return `with
@@ -315,7 +639,7 @@ left join reporting_rates rr
 	and rr.max_staleness_days = b.max_staleness_days
 left join currency_meta report_meta
 	on report_meta.currency = b.reporting_currency
-order by b.date ${order}, b.id ${order}`;
+order by ${orderBySql}`;
 }
 
 export function buildTransactionFtsQuery(search: string): string | null {
@@ -381,11 +705,14 @@ export async function listTransactions(
 		filters?: TransactionFilters;
 		limit?: number;
 		cursor?: TransactionCursor;
+		sort?: TransactionSort;
 	},
 ): Promise<TransactionsResult> {
 	const limit = opts?.limit ?? DEFAULT_TRANSACTIONS_LIMIT;
+	const sort = normalizeTransactionSort(opts?.sort);
+	const sortClauses = getTransactionSortClauses(sort);
 
-	let baseSql = TRANSACTION_LIST_BASE_SELECT_SQL;
+	let baseSql = buildSortedTransactionBaseSelectSql(sortClauses);
 
 	const params: Array<string | number> = [];
 	const wheres: string[] = ["t._sync_is_deleted = 0"];
@@ -440,28 +767,26 @@ export async function listTransactions(
 		if ("left" in opts.cursor) {
 			direction = "left";
 			const cursorId = opts.cursor.left;
-			wheres.push(
-				"(t.date > (select date from transactions where id = ?) or (t.date = (select date from transactions where id = ?) and t.id > ?))",
-			);
-			params.push(cursorId, cursorId, cursorId);
+			const cursorPredicate = buildCursorPredicate(sortClauses, cursorId, false);
+			wheres.push(cursorPredicate.sql);
+			params.push(...cursorPredicate.params);
 		} else {
 			direction = "right";
 			const cursorId = opts.cursor.right;
-			wheres.push(
-				"(t.date < (select date from transactions where id = ?) or (t.date = (select date from transactions where id = ?) and t.id < ?))",
-			);
-			params.push(cursorId, cursorId, cursorId);
+			const cursorPredicate = buildCursorPredicate(sortClauses, cursorId, true);
+			wheres.push(cursorPredicate.sql);
+			params.push(...cursorPredicate.params);
 		}
 	}
 
 	baseSql += " where " + wheres.join(" and ");
 
-	const order = direction === "left" ? "asc" : "desc";
-	baseSql += ` order by t.date ${order}, t.id ${order} limit ?`;
+	const baseOrderBySql = buildSortOrderSql(sortClauses, direction);
+	baseSql += ` order by ${baseOrderBySql} limit ?`;
 	params.push(limit + 1);
 	const sql = buildConvertedRowsSql({
 		baseSql,
-		order,
+		orderBySql: buildSortOrderSql(sortClauses, direction, "b."),
 		rowSelectSql: TRANSACTION_LIST_ROW_SELECT_SQL,
 	});
 	params.push(FX_ANCHOR_CURRENCY);
@@ -492,7 +817,7 @@ export async function getOneTransaction(
 	limit 1`;
 	const sql = buildConvertedRowsSql({
 		baseSql,
-		order: "desc",
+		orderBySql: "b.date desc, b.id desc",
 		rowSelectSql: TRANSACTION_DETAIL_ROW_SELECT_SQL,
 	});
 	const rows = (await db.query<RawTransactionDetails>(

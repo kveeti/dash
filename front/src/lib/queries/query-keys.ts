@@ -1,4 +1,4 @@
-import type { TransactionFilters } from "../db/transactions";
+import type { TransactionFilters, TransactionSort } from "../db/transactions";
 
 export type { TransactionFilters };
 
@@ -31,10 +31,16 @@ export const queryKeys = {
 	auth: () => queryKeyRoots.auth,
 	accounts: () => queryKeyRoots.accounts,
 	categories: (search?: string) => [...queryKeyRoots.categories, search] as const,
-	transactions: (search: string | undefined, filters?: TransactionFilters, cursor?: TransactionCursorKey) =>
+	transactions: (
+		search: string | undefined,
+		filters?: TransactionFilters,
+		cursor?: TransactionCursorKey,
+		sort?: TransactionSort,
+	) =>
 		[
 			...queryKeyRoots.transactions,
 			search,
+			sort,
 			filters?.category_id,
 			filters?.account_id,
 			filters?.currency,

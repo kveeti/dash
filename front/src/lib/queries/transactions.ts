@@ -21,6 +21,7 @@ import {
 	listTransactionLinkSuggestions,
 	listTransactions,
 	normalizeTransactionCursor,
+	normalizeTransactionSort,
 	updateTransaction,
 	type SuggestedTransactionFlow,
 	type TransactionCursorInput,
@@ -31,6 +32,7 @@ import {
 	type TransactionLinkSuggestionKind,
 	type TransactionLinkSuggestionPageResult,
 	type TransactionRow,
+	type TransactionSort,
 	type TransactionsResult,
 	type TransactionFlowKind,
 } from "../db/transactions";
@@ -48,6 +50,7 @@ export type {
 	TransactionLinkSuggestionKind,
 	TransactionLinkSuggestionPageResult,
 	TransactionRow,
+	TransactionSort,
 	TransactionsResult,
 };
 
@@ -70,15 +73,18 @@ export function useTransactionsQuery(props: {
 	search: string | undefined;
 	filters?: TransactionFilters;
 	cursor?: TransactionCursorInput;
+	sort?: TransactionSort;
 }) {
 	const { db } = useEncrypted();
 	const cursor = normalizeTransactionCursor(props.cursor);
+	const sort = normalizeTransactionSort(props.sort);
 
 	return useQuery({
-		queryKey: queryKeys.transactions(props.search, props.filters, cursor),
+		queryKey: queryKeys.transactions(props.search, props.filters, cursor, sort),
 		queryFn: () =>
 			listTransactions(db, {
 				cursor,
+				sort,
 				search: props.search,
 				filters: props.filters,
 				limit: DEFAULT_TRANSACTIONS_LIMIT,

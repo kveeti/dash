@@ -5,6 +5,7 @@ import {
 	useBulkSetCategoryMutation,
 	useTransactionCurrenciesQuery,
 	type TransactionRow,
+	type TransactionSort,
 } from "../../lib/queries/transactions";
 import { useCategoryOptionsQuery } from "../../lib/queries/categories";
 import { useAccountsQuery } from "../../lib/queries/accounts";
@@ -18,13 +19,14 @@ import {
 	useState,
 	type Ref,
 } from "react";
-import { Button } from "../../components/button";
+import { Button, buttonStyles } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { CategoryCombobox } from "../../components/category-combobox";
 import { PopupCombobox } from "../../components/popup-combobox";
 import { DateRangePickerInput } from "../../components/date-picker";
 import { useTransactionWindows } from "../../components/transaction-windows";
+import { FastLink } from "../../components/link";
 
 type DateRangeFilter = {
 	from: string;
@@ -47,13 +49,38 @@ function normalizeDateRange(from: string, to: string): DateRangeFilter | undefin
 	return from <= to ? { from, to } : { from: to, to: from };
 }
 
-function defaultDateRange(now: Date): DateRangeFilter {
-	return {
-		from: formatIsoDate(
-			new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
-		),
-		to: formatIsoDate(now),
-	};
+function buildPath(path: string, params: Record<string, string | undefined>) {
+	const next = new URLSearchParams();
+	for (const [key, value] of Object.entries(params)) {
+		if (value) next.set(key, value);
+	}
+	const qs = next.toString();
+	return qs ? `${path}?${qs}` : path;
+}
+
+function parseTransactionSort(value: string | null): TransactionSort {
+	switch (value) {
+		case "date_asc":
+		case "amount_desc":
+		case "amount_asc":
+		case "amount_abs_desc":
+		case "amount_abs_asc":
+		case "effective_amount_desc":
+		case "effective_amount_asc":
+		case "effective_amount_abs_desc":
+		case "effective_amount_abs_asc":
+		case "counter_party_asc":
+		case "counter_party_desc":
+		case "category_asc":
+		case "account_asc":
+			return value;
+		default:
+			return "date_desc";
+	}
+}
+
+function isDateSort(sort: TransactionSort) {
+	return sort === "date_desc" || sort === "date_asc";
 }
 
 function useFilterParams() {
@@ -66,6 +93,7 @@ function useFilterParams() {
 	const categoryId = searchParams.get("cat") ?? "";
 	const accountId = searchParams.get("acc") ?? "";
 	const currency = searchParams.get("cur") ?? "";
+	const sort = parseTransactionSort(searchParams.get("sort"));
 	const uncategorized = searchParams.get("uncat") === "1";
 	const dateRange = normalizeDateRange(
 		searchParams.get("from") ?? "",
@@ -87,6 +115,7 @@ function useFilterParams() {
 		categoryId ||
 		accountId ||
 		currency ||
+		sort !== "date_desc" ||
 		uncategorized ||
 		dateRange
 	);
@@ -98,6 +127,7 @@ function useFilterParams() {
 			...(categoryId && { cat: categoryId }),
 			...(accountId && { acc: accountId }),
 			...(currency && { cur: currency }),
+			...(sort !== "date_desc" && { sort }),
 			...(uncategorized && { uncat: "1" }),
 			...(dateRange && { from: dateRange.from, to: dateRange.to }),
 		};
@@ -118,6 +148,7 @@ function useFilterParams() {
 		cat: categoryId || undefined,
 		acc: accountId || undefined,
 		cur: currency || undefined,
+		sort: sort === "date_desc" ? undefined : sort,
 		uncat: uncategorized ? "1" : undefined,
 		from: dateRange?.from,
 		to: dateRange?.to,
@@ -130,6 +161,7 @@ function useFilterParams() {
 		categoryId,
 		accountId,
 		currency,
+		sort,
 		uncategorized,
 		dateRange,
 		filters,
@@ -204,6 +236,7 @@ export function TransactionsPage() {
 		categoryId,
 		accountId,
 		currency,
+		sort,
 		uncategorized,
 		dateRange,
 		filters,
@@ -214,6 +247,7 @@ export function TransactionsPage() {
 
 	const transactionsQuery = useTransactionsQuery({
 		cursor: { left, right },
+		sort,
 		search: q || undefined,
 		filters: Object.keys(filters).length > 0 ? filters : undefined,
 	});
@@ -228,24 +262,40 @@ export function TransactionsPage() {
 	const { openTransaction } = useTransactionWindows();
 	const scrolledForCursor = useRef<string | null>(null);
 	const [showFilters, setShowFilters] = useState(hasFilters);
+	const dateSorted = isDateSort(sort);
+	const statsHref = buildPath("/stats", {
+		tab: "stats-2",
+		...(dateRange ? { period: "custom", from: dateRange.from, to: dateRange.to } : {}),
+		...Object.fromEntries(
+			Object.entries(filterSearchParams).filter(([key]) => key !== "sort"),
+		),
+	});
 
 	let currentDay: string | null = null;
 
 	return (
 		<>
-			<div className="w-full max-w-[35rem] mx-auto pt-4 sm:pt-14 pb-114">
+			<div className="w-full max-w-[30rem] mx-auto pt-4 sm:pt-14 pb-114">
 				<div className="flex items-center justify-between">
 					<h1 className="font-medium text-2xl font-cool">transactions</h1>
-					<button
-						type="button"
-						className={
-							"hidden sm:block text-xs px-2 py-1 hover:bg-gray-a3" +
-							(showFilters || hasFilters ? " text-gray-12" : " text-gray-10")
-						}
-						onClick={() => setShowFilters((v) => !v)}
-					>
-						{hasFilters ? "filters (on)" : "filters"}
-					</button>
+					<div className="hidden sm:flex items-center gap-2">
+						<FastLink
+							href={statsHref}
+							className={buttonStyles({ variant: "ghost", size: "sm" })}
+						>
+							stats
+						</FastLink>
+						<button
+							type="button"
+							className={
+								"text-xs px-2 py-1 hover:bg-gray-a3" +
+								(showFilters || hasFilters ? " text-gray-12" : " text-gray-10")
+							}
+							onClick={() => setShowFilters((v) => !v)}
+						>
+							{hasFilters ? "filters (on)" : "filters"}
+						</button>
+					</div>
 				</div>
 
 				{showFilters && (
@@ -255,6 +305,7 @@ export function TransactionsPage() {
 							categoryId={categoryId}
 							accountId={accountId}
 							currency={currency}
+							sort={sort}
 							uncategorized={uncategorized}
 							dateRange={dateRange}
 							hasFilters={hasFilters}
@@ -269,7 +320,7 @@ export function TransactionsPage() {
 				<ul className="mt-4">
 					{transactionsQuery.data?.transactions.map((tx, i) => {
 						const day = f.weekdayShortDate.format(tx.date);
-						const dayChanged = day !== currentDay;
+						const dayChanged = dateSorted && day !== currentDay;
 						currentDay = day;
 
 						const isSelected = selection.selectedIds.has(tx.id);
@@ -288,7 +339,8 @@ export function TransactionsPage() {
 									selecting={selection.isSelecting}
 									onSelect={() => selection.toggle(tx.id)}
 									onClick={() => openTransaction(tx.id)}
-									ref={(elem) => {
+									showInlineDate={!dateSorted}
+									liRef={(elem) => {
 										const cursorKey = left ?? right;
 										if (
 											!elem ||
@@ -345,10 +397,12 @@ export function TransactionsPage() {
 				showFilters={showFilters}
 				setShowFilters={setShowFilters}
 				hasFilters={hasFilters}
+				statsHref={statsHref}
 				q={q}
 				categoryId={categoryId}
 				accountId={accountId}
 				currency={currency}
+				sort={sort}
 				uncategorized={uncategorized}
 				dateRange={dateRange}
 				categories={categories.data}
@@ -395,71 +449,85 @@ function useLongPress(callback: () => void, ms = 500) {
 	};
 }
 
-function TxRow(props: {
+function TxRow({
+	tx,
+	selected,
+	selecting,
+	showInlineDate,
+	onSelect,
+	onClick,
+	liRef,
+}: {
 	tx: TransactionRow;
 	selected: boolean;
 	selecting: boolean;
+	showInlineDate: boolean;
 	onSelect: () => void;
 	onClick: () => void;
-	ref: Ref<HTMLLIElement>;
+	liRef: Ref<HTMLLIElement>;
 }) {
 	const { f } = useI18n();
-	const amountDisplay = resolveAmountDisplay(props.tx);
+	const amountDisplay = resolveAmountDisplay(tx);
 	const isIncome = amountDisplay.amount > 0;
-	const flowLabel = resolveFlowLabel(props.tx);
+	const flowLabel = resolveFlowLabel(tx);
 	const hasEffectiveAmount =
-		props.tx.effective_original_amount_minor !== props.tx.original_amount_minor;
+		tx.effective_original_amount_minor !== tx.original_amount_minor;
 
 	const longPress = useLongPress(() => {
-		props.onSelect();
+		onSelect();
 	});
 
 	return (
-		<li ref={props.ref} className="scroll-mt-17">
+		<li ref={liRef} className="scroll-mt-17">
 			<div
 				className={
 					"flex items-center justify-between gap-3 hover:bg-gray-a3 px-3 py-2 select-none" +
-					(props.selected ? " bg-gray-a3" : "")
+					(selected ? " bg-gray-a3" : "")
 				}
 				onClick={() => {
 					if (longPress.didFire.current) return;
-					if (props.selecting) {
-						props.onSelect();
+					if (selecting) {
+						onSelect();
 					} else {
-						props.onClick();
+						onClick();
 					}
 				}}
 				onContextMenu={(e) => {
 					e.preventDefault();
-					props.onSelect();
+					onSelect();
 				}}
 				onTouchStart={longPress.onTouchStart}
 				onTouchEnd={longPress.onTouchEnd}
 				onTouchMove={longPress.onTouchMove}
 			>
-				{props.selecting && (
+				{selecting && (
 					<input
 						type="checkbox"
-						checked={props.selected}
-						onChange={props.onSelect}
+						checked={selected}
+						onChange={onSelect}
 						onClick={(e) => e.stopPropagation()}
 						className="shrink-0"
 					/>
 				)}
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
-						<span className="truncate">{props.tx.counter_party}</span>
+						<span className="truncate">{tx.counter_party}</span>
 					</div>
 					<div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs">
+						{showInlineDate && (
+							<span className="shrink-0 text-gray-10">
+								{f.shortDate.format(tx.date)}
+							</span>
+						)}
 						{flowLabel && (
 							<span className="shrink-0 border border-gray-a4 px-1.25 text-[11px] leading-4 text-gray-a11">
 								{flowLabel}
 							</span>
 						)}
-						{props.tx.category_name && (
-							<span className="truncate">{props.tx.category_name}</span>
+						{tx.category_name && (
+							<span className="truncate">{tx.category_name}</span>
 						)}
-						<span className="truncate text-gray-11">{props.tx.account_name}</span>
+						<span className="truncate text-gray-11">{tx.account_name}</span>
 					</div>
 				</div>
 				<div className="text-right">
@@ -475,7 +543,7 @@ function TxRow(props: {
 					)}
 					{hasEffectiveAmount && (
 						<div className="text-[11px] text-gray-11 leading-tight text-right">
-							net {f.amount(props.tx.effective_amount, props.tx.currency)}
+							net {f.amount(tx.effective_amount, tx.currency)}
 						</div>
 					)}
 				</div>
@@ -489,6 +557,7 @@ function FilterControls({
 	categoryId,
 	accountId,
 	currency,
+	sort,
 	uncategorized,
 	dateRange,
 	hasFilters,
@@ -501,6 +570,7 @@ function FilterControls({
 	categoryId: string;
 	accountId: string;
 	currency: string;
+	sort: TransactionSort;
 	uncategorized: boolean;
 	dateRange: DateRangeFilter | undefined;
 	hasFilters: boolean;
@@ -542,6 +612,13 @@ function FilterControls({
 				)}
 			</div>
 			<div className="flex gap-2">
+				<AccountFilterCombobox
+					value={accountId}
+					accounts={accounts}
+					onChange={(nextValue) =>
+						setParams({ acc: nextValue || undefined })
+					}
+				/>
 				<CategoryCombobox
 					size="sm"
 					className="flex-1 min-w-0"
@@ -564,16 +641,11 @@ function FilterControls({
 						})) ?? []),
 					]}
 				/>
-				<AccountFilterCombobox
-					value={accountId}
-					accounts={accounts}
-					onChange={(nextValue) =>
-						setParams({ acc: nextValue || undefined })
-					}
-				/>
+			</div>
+
+			<div className="flex gap-2">
 				<Select
 					size="sm"
-					className="flex-1 min-w-0"
 					value={currency}
 					onChange={(e) =>
 						setParams({ cur: e.currentTarget.value || undefined })
@@ -586,6 +658,34 @@ function FilterControls({
 						</option>
 					))}
 				</Select>
+
+				<Select
+					size="sm"
+					value={sort}
+					onChange={(e) =>
+						setParams({
+							sort:
+								e.currentTarget.value === "date_desc"
+									? undefined
+									: e.currentTarget.value,
+						})
+					}
+				>
+					<option value="date_desc">newest first</option>
+					<option value="date_asc">oldest first</option>
+					<option value="effective_amount_abs_desc">largest effective amount</option>
+					<option value="effective_amount_abs_asc">smallest effective amount</option>
+					<option value="effective_amount_desc">effective income to expense</option>
+					<option value="effective_amount_asc">effective expense to income</option>
+					<option value="amount_abs_desc">largest amount</option>
+					<option value="amount_abs_asc">smallest amount</option>
+					<option value="amount_desc">income to expense</option>
+					<option value="amount_asc">expense to income</option>
+					<option value="counter_party_asc">counterparty A-Z</option>
+					<option value="counter_party_desc">counterparty Z-A</option>
+					<option value="category_asc">category A-Z</option>
+					<option value="account_asc">account A-Z</option>
+				</Select>
 			</div>
 			{hasFilters && (
 				<button
@@ -597,6 +697,7 @@ function FilterControls({
 							cat: undefined,
 							acc: undefined,
 							cur: undefined,
+							sort: undefined,
 							uncat: undefined,
 							from: undefined,
 							to: undefined,
@@ -678,10 +779,12 @@ function MobileFilterBar({
 	showFilters,
 	setShowFilters,
 	hasFilters,
+	statsHref,
 	q,
 	categoryId,
 	accountId,
 	currency,
+	sort,
 	uncategorized,
 	dateRange,
 	categories,
@@ -692,10 +795,12 @@ function MobileFilterBar({
 	showFilters: boolean;
 	setShowFilters: (v: boolean) => void;
 	hasFilters: boolean;
+	statsHref: string;
 	q: string;
 	categoryId: string;
 	accountId: string;
 	currency: string;
+	sort: TransactionSort;
 	uncategorized: boolean;
 	dateRange: DateRangeFilter | undefined;
 	categories: Array<{ id: string; name: string }> | undefined;
@@ -713,6 +818,7 @@ function MobileFilterBar({
 							categoryId={categoryId}
 							accountId={accountId}
 							currency={currency}
+							sort={sort}
 							uncategorized={uncategorized}
 							dateRange={dateRange}
 							hasFilters={hasFilters}
@@ -733,6 +839,12 @@ function MobileFilterBar({
 				>
 					{hasFilters ? "filters (on)" : "filters"}
 				</button>
+				<FastLink
+					href={statsHref}
+					className="block w-full border-x border-b border-gray-a4 bg-gray-2 px-3 py-2 text-xs text-gray-11"
+				>
+					stats for scope
+				</FastLink>
 			</div>
 		</div>
 	);
