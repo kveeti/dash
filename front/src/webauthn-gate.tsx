@@ -275,6 +275,7 @@ async function setupFromMnemonic(words: string): Promise<Uint8Array<ArrayBuffer>
 			accountRootKey,
 			prfKey,
 		);
+		await provisionLocalDatabase(accountRootKey);
 		await idb.uiStorage.put({
 			...uiStorageDefaults,
 			wrapped_account_root_key: wrappedAccountRootKey,
@@ -284,5 +285,14 @@ async function setupFromMnemonic(words: string): Promise<Uint8Array<ArrayBuffer>
 		return accountRootKey;
 	} finally {
 		bip39Seed.fill(0);
+	}
+}
+
+async function provisionLocalDatabase(accountRootKey: Uint8Array<ArrayBuffer>) {
+	const db = getDb(accountRootKey);
+	try {
+		await db.ensureCreated();
+	} finally {
+		await db.close();
 	}
 }

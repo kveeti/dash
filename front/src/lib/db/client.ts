@@ -13,6 +13,7 @@ export type DbHandle = DbSqlHandle & {
 };
 
 export type DbClient = DbHandle & {
+	ensureCreated: () => Promise<void>;
 	close: () => Promise<void>;
 };
 
@@ -246,6 +247,10 @@ export function sqlite(
 	};
 
 	return {
+		ensureCreated: async () => {
+			if (closed) throw new Error("sqlite connection is closed");
+			await init();
+		},
 		query: async <T = any>(sql: string, vars?: any[]): Promise<T[]> => {
 			if (closed) throw new Error("sqlite connection is closed");
 			await init();
