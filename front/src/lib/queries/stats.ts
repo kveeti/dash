@@ -46,6 +46,7 @@ function statsScopeKey(input: StatsQueryInput) {
 		input.filters?.account_id ?? "",
 		input.filters?.currency ?? "",
 		input.filters?.uncategorized ? "1" : "",
+		input.filters?.tag_ids?.join(",") ?? "",
 	] as const;
 }
 

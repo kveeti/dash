@@ -128,6 +128,22 @@ function buildScopePredicates(scope: StatsScope) {
 		predicates.push("category_id is null");
 	}
 
+	if (filters?.tag_ids?.length) {
+		const tagIds = Array.from(new Set(filters.tag_ids)).filter(Boolean);
+		if (tagIds.length) {
+			predicates.push(`exists (
+      select 1
+      from transaction_tags tt
+      join tags tag on tag.id = tt.tag_id
+      where tt.transaction_id = transactions.id
+        and tt._sync_is_deleted = 0
+        and tag._sync_is_deleted = 0
+        and tt.tag_id in (${tagIds.map(() => "?").join(", ")})
+    )`);
+			params.push(...tagIds);
+		}
+	}
+
 	return {
 		sql: predicates.map((predicate) => `    AND ${predicate}`).join("\n"),
 		params,

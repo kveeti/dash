@@ -8,6 +8,7 @@ export const dbChangeRoots = [
 	"transaction",
 	"transactionFlows",
 	"transactionLinkSuggestions",
+	"tags",
 	"stats",
 	"settings",
 	"fxRates",

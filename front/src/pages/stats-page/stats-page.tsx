@@ -12,8 +12,14 @@ import { PopupCombobox } from "../../components/popup-combobox";
 import { useCategoryOptionsQuery } from "../../lib/queries/categories";
 import { useAccountsQuery } from "../../lib/queries/accounts";
 import { useTransactionCurrenciesQuery } from "../../lib/queries/transactions";
+import { useTagOptionsQuery } from "../../lib/queries/tags";
 import { FastLink } from "../../components/link";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
+import { TagMultiCombobox } from "../../components/tag-combobox";
+import {
+	formatStringArrayParam,
+	parseStringArrayParam,
+} from "../../lib/string-array-param";
 import {
 	type DateRange,
 	type StatsCompareValue,
@@ -96,6 +102,7 @@ export function StatsPage() {
 	const categoryId = searchParams.get("cat") ?? "";
 	const accountId = searchParams.get("acc") ?? "";
 	const currency = searchParams.get("cur") ?? "";
+	const tagIds = parseStringArrayParam(searchParams.get("tags"));
 	const uncategorized = searchParams.get("uncat") === "1";
 
 	const defaultCustom = useMemo(() => defaultCustomRange(nowUtc), [nowUtc]);
@@ -121,11 +128,13 @@ export function StatsPage() {
 	const categories = useCategoryOptionsQuery();
 	const accounts = useAccountsQuery();
 	const currencies = useTransactionCurrenciesQuery();
+	const tags = useTagOptionsQuery();
 
 	const filters: TransactionFilters = {};
 	if (categoryId) filters.category_id = categoryId;
 	if (accountId) filters.account_id = accountId;
 	if (currency) filters.currency = currency;
+	if (tagIds.length) filters.tag_ids = tagIds;
 	if (uncategorized) filters.uncategorized = true;
 	const activeFilters = Object.keys(filters).length > 0 ? filters : undefined;
 	const scopeParams: Record<string, string | undefined> = {
@@ -133,6 +142,7 @@ export function StatsPage() {
 		cat: categoryId || undefined,
 		acc: accountId || undefined,
 		cur: currency || undefined,
+		tags: formatStringArrayParam(tagIds),
 		uncat: uncategorized ? "1" : undefined,
 	};
 	const hasScope = !!(
@@ -140,6 +150,7 @@ export function StatsPage() {
 		categoryId ||
 		accountId ||
 		currency ||
+		tagIds.length ||
 		uncategorized
 	);
 	const transactionsHref = buildPath("/txs", scopeParams);
@@ -204,11 +215,13 @@ export function StatsPage() {
 							categoryId={categoryId}
 							accountId={accountId}
 							currency={currency}
+							tagIds={tagIds}
 							uncategorized={uncategorized}
 							hasScope={hasScope}
 							categories={categories.data}
 							accounts={accounts.data}
 							currencies={currencies.data}
+							tags={tags.data}
 							setParams={setStatsParams}
 						/>
 					</div>
@@ -268,22 +281,26 @@ function StatsScopeControls({
 	categoryId,
 	accountId,
 	currency,
+	tagIds,
 	uncategorized,
 	hasScope,
 	categories,
 	accounts,
 	currencies,
+	tags,
 	setParams,
 }: {
 	q: string;
 	categoryId: string;
 	accountId: string;
 	currency: string;
+	tagIds: string[];
 	uncategorized: boolean;
 	hasScope: boolean;
 	categories: Array<{ id: string; name: string }> | undefined;
 	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
 	currencies: string[] | undefined;
+	tags: Array<{ id: string; name: string }> | undefined;
 	setParams: (updates: Record<string, string | undefined>) => void;
 }) {
 	return (
@@ -340,6 +357,17 @@ function StatsScopeControls({
 					))}
 				</Select>
 			</div>
+			<div>
+				<TagMultiCombobox
+					items={tags ?? []}
+					value={tagIds}
+					onChange={(nextTagIds) =>
+						setParams({ tags: formatStringArrayParam(nextTagIds) })
+					}
+					placeholder="filter by tag..."
+					size="sm"
+				/>
+			</div>
 			{hasScope && (
 				<button
 					type="button"
@@ -350,6 +378,7 @@ function StatsScopeControls({
 							cat: undefined,
 							acc: undefined,
 							cur: undefined,
+							tags: undefined,
 							uncat: undefined,
 						})
 					}

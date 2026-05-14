@@ -14,6 +14,7 @@ import {
 	type CurrencyMeta,
 } from "../currency";
 import { findCurrencyMeta } from "./currencies";
+import type { TransactionTag } from "./tags";
 
 export const DEFAULT_TRANSACTIONS_LIMIT = 50;
 
@@ -24,6 +25,7 @@ export type TransactionFilters = {
 	uncategorized?: boolean;
 	date_from?: string;
 	date_to?: string;
+	tag_ids?: string[];
 };
 
 export type TransactionSort =
@@ -538,11 +540,20 @@ function buildConvertedRowsSql({
 	baseSql,
 	orderBySql,
 	rowSelectSql,
+	sortColumnCount = 0,
 }: {
 	baseSql: string;
 	orderBySql: string;
 	rowSelectSql: string;
+	sortColumnCount?: number;
 }) {
+	const sortColumnSelectSql = Array.from(
+		{ length: sortColumnCount },
+		(_, index) => `	b.sort_${index}`,
+	).join(",\n");
+
+	// Tags are joined after base_rows so cursoring and limits apply to
+	// transactions first, not to the expanded transaction/tag rowset.
 	return `with
 base_rows as (
 	${baseSql}
@@ -588,7 +599,7 @@ distinct_dates as (
 		max_staleness_days
 	from base_rows
 ),
-	reporting_rates as (
+reporting_rates as (
 	select
 		d.eff_date,
 		d.reporting_currency,
@@ -610,9 +621,10 @@ distinct_dates as (
 			)
 		end as reporting_rate_to_anchor
 	from distinct_dates d
-)
-select
-${rowSelectSql},
+),
+converted_rows as (
+	select
+${rowSelectSql}${sortColumnSelectSql ? `,\n${sortColumnSelectSql}` : ""},
 	b.reporting_currency as converted_currency,
 	case
 		when b.original_currency = b.reporting_currency then b.original_amount
@@ -625,21 +637,35 @@ ${rowSelectSql},
 			* coalesce(report_meta.minor_factor, 100)
 		) as integer) * 1.0 / coalesce(report_meta.minor_factor, 100)
 	end as converted_amount
-from base_rows b
-left join tx_rates tx
-	on tx.original_currency = b.original_currency
-	and tx.eff_date = b.eff_date
-	and tx.reporting_currency = b.reporting_currency
-	and tx.conversion_mode = b.conversion_mode
-	and tx.max_staleness_days = b.max_staleness_days
-left join reporting_rates rr
-	on rr.eff_date = b.eff_date
-	and rr.reporting_currency = b.reporting_currency
-	and rr.conversion_mode = b.conversion_mode
-	and rr.max_staleness_days = b.max_staleness_days
-left join currency_meta report_meta
-	on report_meta.currency = b.reporting_currency
-order by ${orderBySql}`;
+	from base_rows b
+	left join tx_rates tx
+		on tx.original_currency = b.original_currency
+		and tx.eff_date = b.eff_date
+		and tx.reporting_currency = b.reporting_currency
+		and tx.conversion_mode = b.conversion_mode
+		and tx.max_staleness_days = b.max_staleness_days
+	left join reporting_rates rr
+		on rr.eff_date = b.eff_date
+		and rr.reporting_currency = b.reporting_currency
+		and rr.conversion_mode = b.conversion_mode
+		and rr.max_staleness_days = b.max_staleness_days
+	left join currency_meta report_meta
+		on report_meta.currency = b.reporting_currency
+)
+select
+${rowSelectSql},
+	b.converted_currency,
+	b.converted_amount,
+	tag.id as tag_id,
+	tag.name as tag_name
+from converted_rows b
+left join transaction_tags tt
+	on tt.transaction_id = b.id
+	and tt._sync_is_deleted = 0
+left join tags tag
+	on tag.id = tt.tag_id
+	and tag._sync_is_deleted = 0
+order by ${orderBySql}, lower(tag.name) asc, tag.id asc`;
 }
 
 export function buildTransactionFtsQuery(search: string): string | null {
@@ -762,6 +788,23 @@ export async function listTransactions(
 		params.push(opts.filters.date_to);
 	}
 
+	if (opts?.filters?.tag_ids?.length) {
+		const tagIds = Array.from(new Set(opts.filters.tag_ids)).filter(Boolean);
+		if (tagIds.length) {
+			wheres.push(
+				`t.id in (
+					select tt.transaction_id
+					from transaction_tags tt
+					join tags tag on tag.id = tt.tag_id
+					where tt._sync_is_deleted = 0
+						and tag._sync_is_deleted = 0
+						and tt.tag_id in (${tagIds.map(() => "?").join(", ")})
+				)`,
+			);
+			params.push(...tagIds);
+		}
+	}
+
 	let direction: CursorDirection = null;
 	if (opts?.cursor) {
 		if ("left" in opts.cursor) {
@@ -788,11 +831,12 @@ export async function listTransactions(
 		baseSql,
 		orderBySql: buildSortOrderSql(sortClauses, direction, "b."),
 		rowSelectSql: TRANSACTION_LIST_ROW_SELECT_SQL,
+		sortColumnCount: sortClauses.length,
 	});
 	params.push(FX_ANCHOR_CURRENCY);
 
-	const rows = (await db.query<RawTransactionRow>(sql, params)).map(
-		toTransactionRow,
+	const rows = foldTransactionRows(
+		await db.query<RawTransactionRowWithTag>(sql, params),
 	);
 
 	const hasMore = rows.length === limit + 1;
@@ -820,11 +864,11 @@ export async function getOneTransaction(
 		orderBySql: "b.date desc, b.id desc",
 		rowSelectSql: TRANSACTION_DETAIL_ROW_SELECT_SQL,
 	});
-	const rows = (await db.query<RawTransactionDetails>(
+	const rows = await db.query<RawTransactionDetailsWithTag>(
 		sql,
 		[id, FX_ANCHOR_CURRENCY],
-	)).map(toTransactionDetails);
-	return rows[0] ?? null;
+	);
+	return foldTransactionDetails(rows);
 }
 
 export type TransactionsResult = {
@@ -854,6 +898,7 @@ export type TransactionRow = TransactionWithConvertedAmount & {
 	has_transfer: number;
 	has_allocation: number;
 	has_refund: number;
+	tags: TransactionTag[];
 };
 
 export type TransactionDetails = TransactionWithConvertedAmount & {
@@ -865,6 +910,7 @@ export type TransactionDetails = TransactionWithConvertedAmount & {
 	category_id: string | null;
 	account_id: string;
 	account_name: string;
+	tags: TransactionTag[];
 };
 
 export async function createTransaction(
@@ -1002,18 +1048,42 @@ export type TransactionLinkSuggestionPageResult = {
 	scanned_count: number;
 };
 
-type RawTransactionRow = Omit<TransactionRow, "date"> & {
+type JoinedTagColumns = {
+	tag_id: string | null;
+	tag_name: string | null;
+};
+
+type RawTransactionRow = Omit<TransactionRow, "date" | "tags"> & {
 	date: string;
 };
 
-type RawTransactionDetails = Omit<TransactionDetails, "date"> & {
+type RawTransactionDetails = Omit<TransactionDetails, "date" | "tags"> & {
 	date: string;
 };
+
+type RawTransactionRowWithTag = RawTransactionRow & JoinedTagColumns;
+type RawTransactionDetailsWithTag = RawTransactionDetails & JoinedTagColumns;
 
 function toTransactionRow(row: RawTransactionRow): TransactionRow {
 	return {
-		...row,
+		id: row.id,
 		date: new Date(row.date),
+		amount: row.amount,
+		currency: row.currency,
+		converted_amount: row.converted_amount,
+		converted_currency: row.converted_currency,
+		counter_party: row.counter_party,
+		category_name: row.category_name,
+		account_name: row.account_name,
+		original_amount_minor: row.original_amount_minor,
+		effective_original_amount_minor: row.effective_original_amount_minor,
+		effective_amount: row.effective_amount,
+		flow_count: row.flow_count,
+		has_exchange: row.has_exchange,
+		has_transfer: row.has_transfer,
+		has_allocation: row.has_allocation,
+		has_refund: row.has_refund,
+		tags: [],
 	};
 }
 
@@ -1021,9 +1091,59 @@ function toTransactionDetails(
 	row: RawTransactionDetails,
 ): TransactionDetails {
 	return {
-		...row,
+		id: row.id,
 		date: new Date(row.date),
+		amount: row.amount,
+		currency: row.currency,
+		converted_amount: row.converted_amount,
+		converted_currency: row.converted_currency,
+		counter_party: row.counter_party,
+		additional: row.additional,
+		notes: row.notes,
+		category_id: row.category_id,
+		account_id: row.account_id,
+		account_name: row.account_name,
+		tags: [],
 	};
+}
+
+function appendJoinedTag(
+	tags: TransactionTag[],
+	row: JoinedTagColumns,
+) {
+	if (!row.tag_id || !row.tag_name) return;
+	if (tags.some((tag) => tag.id === row.tag_id)) return;
+	tags.push({ id: row.tag_id, name: row.tag_name });
+}
+
+function foldTransactionRows(rows: RawTransactionRowWithTag[]): TransactionRow[] {
+	const transactions: TransactionRow[] = [];
+	const byId = new Map<string, TransactionRow>();
+
+	for (const row of rows) {
+		let transaction = byId.get(row.id);
+		if (!transaction) {
+			transaction = toTransactionRow(row);
+			transactions.push(transaction);
+			byId.set(transaction.id, transaction);
+		}
+		appendJoinedTag(transaction.tags, row);
+	}
+
+	return transactions;
+}
+
+function foldTransactionDetails(
+	rows: RawTransactionDetailsWithTag[],
+): TransactionDetails | null {
+	let transaction: TransactionDetails | null = null;
+
+	for (const row of rows) {
+		if (!transaction) transaction = toTransactionDetails(row);
+		appendJoinedTag(transaction.tags, row);
+	}
+
+	return transaction;
 }
 
 export async function listTransactionFlows(

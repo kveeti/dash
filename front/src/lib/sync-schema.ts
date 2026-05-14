@@ -5,14 +5,18 @@ export type SyncRecordType =
 	| "account"
 	| "transaction"
 	| "transaction_import_key"
-	| "transaction_flow";
+	| "transaction_flow"
+	| "tag"
+	| "transaction_tag";
 
 export type SyncTableName =
 	| "categories"
 	| "accounts"
 	| "transactions"
 	| "transaction_import_keys"
-	| "transaction_flows";
+	| "transaction_flows"
+	| "tags"
+	| "transaction_tags";
 
 export type ParsedSyncRecordId = {
 	recordType: SyncRecordType;
@@ -79,6 +83,19 @@ export type TransactionFlowSyncData = {
 	notes: string | null;
 };
 
+export type TagSyncData = {
+	created_at: string;
+	updated_at: string | null;
+	name: string;
+};
+
+export type TransactionTagSyncData = {
+	transaction_id: string;
+	tag_id: string;
+	created_at: string;
+	updated_at: string | null;
+};
+
 export type DecodedSyncRecord =
 	| { recordType: "account"; actualId: string; data: AccountSyncData }
 	| { recordType: "category"; actualId: string; data: CategorySyncData }
@@ -92,6 +109,12 @@ export type DecodedSyncRecord =
 			recordType: "transaction_flow";
 			actualId: string;
 			data: TransactionFlowSyncData;
+	  }
+	| { recordType: "tag"; actualId: string; data: TagSyncData }
+	| {
+			recordType: "transaction_tag";
+			actualId: string;
+			data: TransactionTagSyncData;
 	  };
 
 export type SyncAcceptErrorKind =
@@ -124,8 +147,10 @@ type SupportedPayloadVersion = {
 		account: SyncSchema<AccountSyncData>;
 		category: SyncSchema<CategorySyncData>;
 		transaction: SyncSchema<TransactionSyncData>;
-		transaction_import_key: SyncSchema<TransactionImportKeySyncData>;
-		transaction_flow: SyncSchema<TransactionFlowSyncData>;
+			transaction_import_key: SyncSchema<TransactionImportKeySyncData>;
+			transaction_flow: SyncSchema<TransactionFlowSyncData>;
+			tag: SyncSchema<TagSyncData>;
+			transaction_tag: SyncSchema<TransactionTagSyncData>;
 	};
 };
 
@@ -162,6 +187,14 @@ export function parseSyncRecordId(recordId: string): ParsedSyncRecordId {
 			return {
 				recordType: recordTypeRaw,
 				tableName: "transaction_flows",
+				actualId,
+			};
+		case "tag":
+			return { recordType: recordTypeRaw, tableName: "tags", actualId };
+		case "transaction_tag":
+			return {
+				recordType: recordTypeRaw,
+				tableName: "transaction_tags",
 				actualId,
 			};
 		default:
@@ -446,6 +479,41 @@ const transactionFlowV1: SyncSchema<TransactionFlowSyncData> = {
 	},
 };
 
+const tagV1: SyncSchema<TagSyncData> = {
+	decode(input) {
+		const o = shape(input, "tag", [
+			"created_at",
+			"updated_at",
+			"name",
+		]);
+		return {
+			created_at: string(o.created_at, "tag.created_at"),
+			updated_at: nullableString(o.updated_at, "tag.updated_at"),
+			name: string(o.name, "tag.name"),
+		};
+	},
+};
+
+const transactionTagV1: SyncSchema<TransactionTagSyncData> = {
+	decode(input) {
+		const o = shape(input, "transaction_tag", [
+			"transaction_id",
+			"tag_id",
+			"created_at",
+			"updated_at",
+		]);
+		return {
+			transaction_id: string(
+				o.transaction_id,
+				"transaction_tag.transaction_id",
+			),
+			tag_id: string(o.tag_id, "transaction_tag.tag_id"),
+			created_at: string(o.created_at, "transaction_tag.created_at"),
+			updated_at: nullableString(o.updated_at, "transaction_tag.updated_at"),
+		};
+	},
+};
+
 const payloadVersions: Record<number, PayloadVersionEntry> = {
 	1: {
 		status: "supported",
@@ -455,6 +523,8 @@ const payloadVersions: Record<number, PayloadVersionEntry> = {
 			transaction: transactionV1,
 			transaction_import_key: transactionImportKeyV1,
 			transaction_flow: transactionFlowV1,
+			tag: tagV1,
+			transaction_tag: transactionTagV1,
 		},
 	},
 };

@@ -90,3 +90,37 @@ describe("transaction flow sync schema", () => {
 		);
 	});
 });
+
+describe("tag sync schema", () => {
+	test("accepts tag payloads", () => {
+		const decoded = decodeSyncRecord({
+			pv: CURRENT_PAYLOAD_VERSION,
+			id: "tag:tag-id",
+			d: {
+				created_at: "2026-05-14T00:00:00.000Z",
+				updated_at: null,
+				name: "Japan 2026",
+			},
+		});
+
+		expect(decoded.recordType).toBe("tag");
+		expect(decoded.data.name).toBe("Japan 2026");
+	});
+
+	test("accepts transaction tag payloads", () => {
+		const decoded = decodeSyncRecord({
+			pv: CURRENT_PAYLOAD_VERSION,
+			id: "transaction_tag:tx-id_tag-id",
+			d: {
+				transaction_id: "tx-id",
+				tag_id: "tag-id",
+				created_at: "2026-05-14T00:00:00.000Z",
+				updated_at: null,
+			},
+		});
+
+		expect(decoded.recordType).toBe("transaction_tag");
+		expect(decoded.data.transaction_id).toBe("tx-id");
+		expect(decoded.data.tag_id).toBe("tag-id");
+	});
+});

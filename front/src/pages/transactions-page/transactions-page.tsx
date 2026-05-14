@@ -9,6 +9,11 @@ import {
 } from "../../lib/queries/transactions";
 import { useCategoryOptionsQuery } from "../../lib/queries/categories";
 import { useAccountsQuery } from "../../lib/queries/accounts";
+import {
+	useBulkAddTransactionTagMutation,
+	useBulkRemoveTransactionTagMutation,
+	useTagOptionsQuery,
+} from "../../lib/queries/tags";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
 import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
@@ -27,6 +32,14 @@ import { PopupCombobox } from "../../components/popup-combobox";
 import { DateRangePickerInput } from "../../components/date-picker";
 import { useTransactionWindows } from "../../components/transaction-windows";
 import { FastLink } from "../../components/link";
+import {
+	formatStringArrayParam,
+	parseStringArrayParam,
+} from "../../lib/string-array-param";
+import {
+	TagChips,
+	TagMultiCombobox,
+} from "../../components/tag-combobox";
 
 type DateRangeFilter = {
 	from: string;
@@ -93,6 +106,7 @@ function useFilterParams() {
 	const categoryId = searchParams.get("cat") ?? "";
 	const accountId = searchParams.get("acc") ?? "";
 	const currency = searchParams.get("cur") ?? "";
+	const tagIds = parseStringArrayParam(searchParams.get("tags"));
 	const sort = parseTransactionSort(searchParams.get("sort"));
 	const uncategorized = searchParams.get("uncat") === "1";
 	const dateRange = normalizeDateRange(
@@ -104,6 +118,7 @@ function useFilterParams() {
 	if (categoryId) filters.category_id = categoryId;
 	if (accountId) filters.account_id = accountId;
 	if (currency) filters.currency = currency;
+	if (tagIds.length) filters.tag_ids = tagIds;
 	if (uncategorized) filters.uncategorized = true;
 	if (dateRange) {
 		filters.date_from = dateRange.from;
@@ -115,6 +130,7 @@ function useFilterParams() {
 		categoryId ||
 		accountId ||
 		currency ||
+		tagIds.length ||
 		sort !== "date_desc" ||
 		uncategorized ||
 		dateRange
@@ -127,6 +143,7 @@ function useFilterParams() {
 			...(categoryId && { cat: categoryId }),
 			...(accountId && { acc: accountId }),
 			...(currency && { cur: currency }),
+			...(tagIds.length && { tags: formatStringArrayParam(tagIds) }),
 			...(sort !== "date_desc" && { sort }),
 			...(uncategorized && { uncat: "1" }),
 			...(dateRange && { from: dateRange.from, to: dateRange.to }),
@@ -148,6 +165,7 @@ function useFilterParams() {
 		cat: categoryId || undefined,
 		acc: accountId || undefined,
 		cur: currency || undefined,
+		tags: formatStringArrayParam(tagIds),
 		sort: sort === "date_desc" ? undefined : sort,
 		uncat: uncategorized ? "1" : undefined,
 		from: dateRange?.from,
@@ -161,6 +179,7 @@ function useFilterParams() {
 		categoryId,
 		accountId,
 		currency,
+		tagIds,
 		sort,
 		uncategorized,
 		dateRange,
@@ -236,6 +255,7 @@ export function TransactionsPage() {
 		categoryId,
 		accountId,
 		currency,
+		tagIds,
 		sort,
 		uncategorized,
 		dateRange,
@@ -257,6 +277,7 @@ export function TransactionsPage() {
 	const categories = useCategoryOptionsQuery();
 	const accounts = useAccountsQuery();
 	const currencies = useTransactionCurrenciesQuery();
+	const tags = useTagOptionsQuery();
 
 	const selection = useSelection();
 	const { openTransaction } = useTransactionWindows();
@@ -305,6 +326,7 @@ export function TransactionsPage() {
 							categoryId={categoryId}
 							accountId={accountId}
 							currency={currency}
+							tagIds={tagIds}
 							sort={sort}
 							uncategorized={uncategorized}
 							dateRange={dateRange}
@@ -312,6 +334,7 @@ export function TransactionsPage() {
 							categories={categories.data}
 							accounts={accounts.data}
 							currencies={currencies.data}
+							tags={tags.data}
 							setParams={setParams}
 						/>
 					</div>
@@ -402,12 +425,14 @@ export function TransactionsPage() {
 				categoryId={categoryId}
 				accountId={accountId}
 				currency={currency}
+				tagIds={tagIds}
 				sort={sort}
 				uncategorized={uncategorized}
 				dateRange={dateRange}
 				categories={categories.data}
 				accounts={accounts.data}
 				currencies={currencies.data}
+				tags={tags.data}
 				setParams={setParams}
 			/>
 
@@ -529,6 +554,11 @@ function TxRow({
 						)}
 						<span className="truncate text-gray-11">{tx.account_name}</span>
 					</div>
+					{tx.tags.length > 0 && (
+						<div className="mt-1">
+							<TagChips tags={tx.tags} />
+						</div>
+					)}
 				</div>
 				<div className="text-right">
 					<span
@@ -557,6 +587,7 @@ function FilterControls({
 	categoryId,
 	accountId,
 	currency,
+	tagIds,
 	sort,
 	uncategorized,
 	dateRange,
@@ -564,12 +595,14 @@ function FilterControls({
 	categories,
 	accounts,
 	currencies,
+	tags,
 	setParams,
 }: {
 	q: string;
 	categoryId: string;
 	accountId: string;
 	currency: string;
+	tagIds: string[];
 	sort: TransactionSort;
 	uncategorized: boolean;
 	dateRange: DateRangeFilter | undefined;
@@ -577,6 +610,7 @@ function FilterControls({
 	categories: Array<{ id: string; name: string }> | undefined;
 	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
 	currencies: string[] | undefined;
+	tags: Array<{ id: string; name: string }> | undefined;
 	setParams: (updates: Record<string, string | undefined>) => void;
 }) {
 	return (
@@ -643,6 +677,18 @@ function FilterControls({
 				/>
 			</div>
 
+			<div>
+				<TagMultiCombobox
+					items={tags ?? []}
+					value={tagIds}
+					onChange={(nextTagIds) =>
+						setParams({ tags: formatStringArrayParam(nextTagIds) })
+					}
+					placeholder="filter by tag..."
+					size="sm"
+				/>
+			</div>
+
 			<div className="flex gap-2">
 				<Select
 					size="sm"
@@ -697,6 +743,7 @@ function FilterControls({
 							cat: undefined,
 							acc: undefined,
 							cur: undefined,
+							tags: undefined,
 							sort: undefined,
 							uncat: undefined,
 							from: undefined,
@@ -784,12 +831,14 @@ function MobileFilterBar({
 	categoryId,
 	accountId,
 	currency,
+	tagIds,
 	sort,
 	uncategorized,
 	dateRange,
 	categories,
 	accounts,
 	currencies,
+	tags,
 	setParams,
 }: {
 	showFilters: boolean;
@@ -800,12 +849,14 @@ function MobileFilterBar({
 	categoryId: string;
 	accountId: string;
 	currency: string;
+	tagIds: string[];
 	sort: TransactionSort;
 	uncategorized: boolean;
 	dateRange: DateRangeFilter | undefined;
 	categories: Array<{ id: string; name: string }> | undefined;
 	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
 	currencies: string[] | undefined;
+	tags: Array<{ id: string; name: string }> | undefined;
 	setParams: (updates: Record<string, string | undefined>) => void;
 }) {
 	return (
@@ -818,6 +869,7 @@ function MobileFilterBar({
 							categoryId={categoryId}
 							accountId={accountId}
 							currency={currency}
+							tagIds={tagIds}
 							sort={sort}
 							uncategorized={uncategorized}
 							dateRange={dateRange}
@@ -825,6 +877,7 @@ function MobileFilterBar({
 							categories={categories}
 							accounts={accounts}
 							currencies={currencies}
+							tags={tags}
 							setParams={setParams}
 						/>
 					</div>
@@ -858,8 +911,12 @@ function BulkEditBar({
 	onClear: () => void;
 }) {
 	const categories = useCategoryOptionsQuery();
+	const tags = useTagOptionsQuery();
 	const bulkSetCategory = useBulkSetCategoryMutation();
+	const bulkAddTag = useBulkAddTransactionTagMutation();
+	const bulkRemoveTag = useBulkRemoveTransactionTagMutation();
 	const [categoryId, setCategoryId] = useState("");
+	const [tagIds, setTagIds] = useState<string[]>([]);
 
 	async function handleApply() {
 		await bulkSetCategory.mutateAsync({
@@ -869,10 +926,39 @@ function BulkEditBar({
 		onClear();
 	}
 
+	async function handleAddTag() {
+		if (!tagIds.length) return;
+		await Promise.all(
+			tagIds.map((tagId) =>
+				bulkAddTag.mutateAsync({
+					txIds: [...selectedIds],
+					tagId,
+				}),
+			),
+		);
+		setTagIds([]);
+		onClear();
+	}
+
+	async function handleRemoveTag() {
+		if (!tagIds.length) return;
+		await Promise.all(
+			tagIds.map((tagId) =>
+				bulkRemoveTag.mutateAsync({
+					txIds: [...selectedIds],
+					tagId,
+				}),
+			),
+		);
+		setTagIds([]);
+		onClear();
+	}
+
 	return (
 		<div className="fixed bottom-20 left-0 right-0 sm:bottom-0 z-30">
-			<div className="mx-auto max-w-[35rem] border border-gray-a4 bg-gray-2 px-4 py-3 shadow-lg flex items-center gap-3">
-				<span className="text-sm shrink-0">{selectedIds.size} selected</span>
+			<div className="mx-auto max-w-[35rem] border border-gray-a4 bg-gray-2 px-4 py-3 shadow-lg space-y-2">
+				<div className="flex items-center gap-3">
+					<span className="text-sm shrink-0">{selectedIds.size} selected</span>
 
 					<CategoryCombobox
 						size="sm"
@@ -890,16 +976,45 @@ function BulkEditBar({
 						}
 					/>
 
-				<Button
-					size="sm"
-					onClick={handleApply}
-					disabled={bulkSetCategory.isPending}
-				>
-					apply
-				</Button>
-				<Button size="sm" variant="ghost" onClick={onClear}>
-					cancel
-				</Button>
+					<Button
+						size="sm"
+						onClick={handleApply}
+						disabled={bulkSetCategory.isPending}
+					>
+						apply
+					</Button>
+					<Button size="sm" variant="ghost" onClick={onClear}>
+						cancel
+					</Button>
+				</div>
+				<div className="flex items-center gap-2">
+					<div className="min-w-0 flex-1">
+						<TagMultiCombobox
+							items={tags.data ?? []}
+							value={tagIds}
+							onChange={setTagIds}
+							placeholder="select tags..."
+							size="sm"
+							creatable
+						/>
+					</div>
+					<Button
+						size="sm"
+						variant="ghost"
+						onClick={handleAddTag}
+						disabled={!tagIds.length || bulkAddTag.isPending}
+					>
+						add tags
+					</Button>
+					<Button
+						size="sm"
+						variant="ghost"
+						onClick={handleRemoveTag}
+						disabled={!tagIds.length || bulkRemoveTag.isPending}
+					>
+						remove
+					</Button>
+				</div>
 			</div>
 		</div>
 	);

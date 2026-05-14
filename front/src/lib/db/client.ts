@@ -497,6 +497,41 @@ export function getDb(accountRootKey: Uint8Array<ArrayBuffer>): DbClient {
 				detail=column,
 				tokenize='unicode61 remove_diacritics 2'
 			)`,
+
+			`create table if not exists tags (
+				id text primary key not null,
+				created_at text not null,
+				updated_at text,
+				name text not null,
+
+				_sync_edited_at integer not null default 0,
+				_sync_is_deleted integer default 0,
+				_sync_status integer default 1
+			)`,
+
+			`create index if not exists idx_tags_name_active
+				on tags(lower(name))
+				where _sync_is_deleted = 0`,
+
+			`create table if not exists transaction_tags (
+				id text primary key not null,
+				transaction_id text not null,
+				tag_id text not null,
+				created_at text not null,
+				updated_at text,
+
+				_sync_edited_at integer not null default 0,
+				_sync_is_deleted integer default 0,
+				_sync_status integer default 1
+			)`,
+
+			`create index if not exists idx_transaction_tags_tx_active
+				on transaction_tags(transaction_id)
+				where _sync_is_deleted = 0`,
+
+			`create index if not exists idx_transaction_tags_tag_active
+				on transaction_tags(tag_id)
+				where _sync_is_deleted = 0`,
 		];
 
 		const versionRows = await query<{ current: number }>(

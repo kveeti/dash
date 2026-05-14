@@ -12,6 +12,7 @@ import { resolveAmountDisplay } from "./selected-tx-flow-logic";
 import { SelectedTxHeader } from "./selected-tx-header";
 import { SelectedTxLinksPanel } from "./selected-tx-links-panel";
 import { SelectedTxCopyIdButton } from "./selected-tx-copy-id-button";
+import { SelectedTxTagsPanel } from "./selected-tx-tags-panel";
 
 export function SelectedTxWindow({
 	txId,
@@ -74,6 +75,8 @@ export function SelectedTxWindow({
 						{showLinking ? "hide links" : "links"}
 					</button>
 				</div>
+
+				<SelectedTxTagsPanel tx={tx} txId={txId} />
 
 				<SelectedTxEditPanel
 					open={editing}
