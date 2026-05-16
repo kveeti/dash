@@ -518,12 +518,12 @@ function TxRow({
 					"flex items-center justify-between gap-3 hover:bg-gray-a3 px-3 py-2 select-none" +
 					(selected ? " bg-gray-a3" : "")
 				}
-				onClick={() => {
+				onClick={(event) => {
 					if (longPress.didFire.current) return;
 					if (selecting) {
 						onSelect();
 					} else {
-						onClick(e);
+						onClick(event);
 					}
 				}}
 				onContextMenu={(e) => {
