@@ -12,7 +12,8 @@ import {
 } from "../lib/queries/accounts";
 import { DEFAULT_CURRENCY, normalizeCurrency } from "../lib/currency";
 import { useCurrencyMetaQuery } from "../lib/queries/currencies";
-import { PopupCombobox } from "./popup-combobox";
+import { Combobox } from "./combobox";
+import { IconChevronsUpDown } from "./icons/chevrons-up-down";
 import { Select } from "./select";
 import { Input } from "./input";
 
@@ -54,8 +55,11 @@ export function AccountSelectCreate({
 	const hiddenAccountIdRef = useRef<HTMLInputElement | null>(null);
 	const createInputRef = useRef<HTMLInputElement | null>(null);
 
-	const accountRows = accounts.data ?? [];
-	const currencyCodes = currencyMeta.data?.map((meta) => meta.currency) ?? [createFormDefaults.currency];
+	const accountRows = useMemo(() => accounts.data ?? [], [accounts.data]);
+	const currencyCodes =
+		currencyMeta.data?.map((meta) => meta.currency) ?? [
+			createFormDefaults.currency,
+		];
 
 	const selectedItem = useMemo<AccountItem | null>(() => {
 		const account = accountRows.find((row) => row.id === selectedAccountValue);
@@ -160,7 +164,7 @@ export function AccountSelectCreate({
 				value={selectedAccountValue}
 				readOnly
 			/>
-			<PopupCombobox
+			<Combobox.Root
 				items={baseItems}
 				value={selectedItem}
 				onValueChange={(next) => {
@@ -171,47 +175,75 @@ export function AccountSelectCreate({
 					const account = accountRows.find((row) => row.id === next.value) ?? null;
 					handleSelectAccount(account);
 				}}
-				getItemKey={(item) => item.value}
 				itemToStringLabel={(item) => item.label}
 				isItemEqualToValue={(item, selected) => item.value === selected.value}
-				creatable={{
-					createItem: (rawQuery) => ({
-						value: `create:${rawQuery.toLocaleLowerCase()}`,
-						label: `Create "${rawQuery}"`,
-						creatable: rawQuery,
-					}),
-					isCreateItem: (item) => Boolean(item.creatable),
-					isExistingItemMatch: (item, normalizedQuery) =>
-						item.label.trim().toLocaleLowerCase() === normalizedQuery,
-					onCreateRequest: openCreateDialog,
-					getCreateQuery: (item) => item.creatable ?? "",
+				create={{
+					getItem: ({ items, normalizedInputValue, trimmedInputValue }) => {
+						if (!trimmedInputValue) return null;
+
+						const hasExactMatch = items.some(
+							(item) =>
+								item.label.trim().toLocaleLowerCase() === normalizedInputValue,
+						);
+						if (hasExactMatch) return null;
+
+						return {
+							value: `create:${trimmedInputValue.toLocaleLowerCase()}`,
+							label: `Create "${trimmedInputValue}"`,
+							creatable: trimmedInputValue,
+						};
+					},
+					isItem: (item) => Boolean(item.creatable),
+					onRequest: openCreateDialog,
+					getQuery: (item) => item.creatable ?? "",
 				}}
-				renderItem={(item) => (
-					item.creatable ? (
-						<div className="flex w-full items-center justify-between gap-2">
-							<span className="truncate">Create "{item.creatable}"</span>
-							<span className="text-xs text-gray-10">new</span>
-						</div>
-					) : (
-						<div className="flex w-full items-center justify-between gap-2">
-							<span className="truncate">{item.label}</span>
-							<span className="shrink-0 text-xs text-gray-10">
-								{item.currency}
-							</span>
-						</div>
-					)
-				)}
 				required={required}
 				disabled={disabled}
-				placeholder={"select account..."}
-				inputPlaceholder="search accounts..."
-				size="default"
-				emptyState={(
-					<p className="h-8 flex items-center px-3 text-gray-10">
-						No accounts found.
-					</p>
-				)}
-			/>
+				autoHighlight
+			>
+				<Combobox.Trigger<AccountItem, AccountItem | null>
+					className="focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 data-[disabled]:opacity-60 flex h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden border pl-3 pr-2.5 text-sm"
+				>
+					{({ selectedValue }) => (
+						<>
+							<span className="truncate text-gray-12">
+								{selectedValue?.label ?? (
+									<span className="text-gray-10">select account...</span>
+								)}
+							</span>
+							<Combobox.Icon className="text-gray-10 flex shrink-0">
+								<IconChevronsUpDown />
+							</Combobox.Icon>
+						</>
+					)}
+				</Combobox.Trigger>
+				<Combobox.Content
+					searchPlaceholder="search accounts..."
+					empty="No accounts found."
+				>
+					<Combobox.List<AccountItem>>
+						{(item) => (
+							<Combobox.Item key={item.value} value={item}>
+								{item.creatable ? (
+									<div className="flex w-full items-center justify-between gap-2">
+										<span className="truncate">
+											Create "{item.creatable}"
+										</span>
+										<span className="text-xs text-gray-10">new</span>
+									</div>
+								) : (
+									<div className="flex w-full items-center justify-between gap-2">
+										<span className="truncate">{item.label}</span>
+										<span className="shrink-0 text-xs text-gray-10">
+											{item.currency}
+										</span>
+									</div>
+								)}
+							</Combobox.Item>
+						)}
+					</Combobox.List>
+				</Combobox.Content>
+			</Combobox.Root>
 
 			<Dialog.Root open={openDialog} onOpenChange={setOpenDialog}>
 				<Dialog.Portal>

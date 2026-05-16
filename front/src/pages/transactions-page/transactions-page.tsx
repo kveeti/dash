@@ -28,7 +28,8 @@ import { Button, buttonStyles } from "../../components/button";
 import { Input } from "../../components/input";
 import { Select } from "../../components/select";
 import { CategoryCombobox } from "../../components/category-combobox";
-import { PopupCombobox } from "../../components/popup-combobox";
+import { Combobox } from "../../components/combobox";
+import { IconChevronsUpDown } from "../../components/icons/chevrons-up-down";
 import { DateRangePickerInput } from "../../components/date-picker";
 import { useTransactionWindows } from "../../components/transaction-windows";
 import { FastLink } from "../../components/link";
@@ -792,7 +793,7 @@ function AccountFilterCombobox({
 		items.find((item) => item.value === (value || "__all__")) ?? items[0];
 
 	return (
-		<PopupCombobox
+		<Combobox.Root
 			items={items}
 			value={selectedItem}
 			onValueChange={(next) => {
@@ -802,23 +803,45 @@ function AccountFilterCombobox({
 				}
 				onChange(next.value);
 			}}
-				getItemKey={(item) => item.value}
-				renderItem={(item) => (
-					<div className="flex w-full items-center justify-between gap-2">
-						<span className="truncate">{item.label}</span>
-						{item.currency ? (
-							<span className="shrink-0 text-xs text-gray-10">
-								{item.currency}
-							</span>
-						) : null}
-					</div>
-				)}
 			itemToStringLabel={(item) => item.label}
 			isItemEqualToValue={(item, selected) => item.value === selected.value}
-			placeholder="all accounts"
-			size="sm"
-			className="flex-1 min-w-0"
-		/>
+			autoHighlight
+		>
+			<Combobox.Trigger<AccountFilterItem, AccountFilterItem | null>
+				className="focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 data-[disabled]:opacity-60 flex h-8 flex-1 min-w-0 items-center justify-between gap-2 overflow-hidden border pl-2.5 pr-2 text-sm"
+			>
+				{({ selectedValue }) => (
+					<>
+						<span className="truncate text-gray-12">
+							{selectedValue?.label ?? "all accounts"}
+						</span>
+						<Combobox.Icon className="text-gray-10 flex shrink-0">
+							<IconChevronsUpDown />
+						</Combobox.Icon>
+					</>
+				)}
+			</Combobox.Trigger>
+			<Combobox.Content
+				searchPlaceholder="search accounts..."
+				empty="No accounts found."
+				size="sm"
+			>
+				<Combobox.List<AccountFilterItem>>
+					{(item) => (
+						<Combobox.Item key={item.value} value={item} size="sm">
+							<div className="flex w-full items-center justify-between gap-2">
+								<span className="truncate">{item.label}</span>
+								{item.currency ? (
+									<span className="shrink-0 text-xs text-gray-10">
+										{item.currency}
+									</span>
+								) : null}
+							</div>
+						</Combobox.Item>
+					)}
+				</Combobox.List>
+			</Combobox.Content>
+		</Combobox.Root>
 	);
 }
 

@@ -1,4 +1,5 @@
-import { PopupCombobox } from "./popup-combobox";
+import { Combobox } from "./combobox";
+import { IconChevronsUpDown } from "./icons/chevrons-up-down";
 import { useCreateCategoryMutation } from "../lib/queries/categories";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -61,87 +62,130 @@ export function CategoryCombobox({
 	}, [items, optimisticDisplay, value]);
 
 	const root = (
-		<PopupCombobox
+		<Combobox.Root
 			items={items}
 			value={selectedItem}
 			onValueChange={(next) => {
 				setOptimisticDisplay(null);
 				onChange(next?.id ?? "");
 			}}
-			getItemKey={(item) => item.id}
-			renderItem={(item) => (
-				item.creatable ? (
-					<div className="flex w-full items-center justify-between gap-2">
-						<span className="truncate">Create "{item.creatable}"</span>
-						<span className="text-xs text-gray-10">new</span>
-					</div>
-				) : (
-					<span className="truncate">{item.label}</span>
-				)
-			)}
 			itemToStringLabel={(item) => item.label}
 			isItemEqualToValue={(item, selected) => item.id === selected.id}
-			creatable={creatable ? {
-				createItem: (rawQuery) => ({
-					id: `create:${rawQuery.toLocaleLowerCase()}`,
-					value: `create:${rawQuery.toLocaleLowerCase()}`,
-					label: `Create "${rawQuery}"`,
-					creatable: rawQuery,
-				}),
-				isCreateItem: (item) => Boolean(item.creatable),
-				isExistingItemMatch: (item, normalizedQuery) =>
-					item.label.trim().toLocaleLowerCase() === normalizedQuery,
-				onCreateRequest: async (rawQuery) => {
-					if (creatingRef.current) return;
+			create={
+				creatable
+					? {
+							getItem: ({
+								items,
+								normalizedInputValue,
+								trimmedInputValue,
+							}) => {
+								if (!trimmedInputValue) return null;
 
-					const name = rawQuery.trim();
-					if (!name) return;
+								const hasExactMatch = items.some(
+									(item) =>
+										item.label.trim().toLocaleLowerCase() ===
+										normalizedInputValue,
+								);
+								if (hasExactMatch) return null;
 
-					const existing = items.find(
-						(item) => item.label.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
-					);
-					if (existing) {
-						setOptimisticDisplay(existing);
-						onChange(existing.id);
-						return;
-					}
+								return {
+									id: `create:${trimmedInputValue.toLocaleLowerCase()}`,
+									value: `create:${trimmedInputValue.toLocaleLowerCase()}`,
+									label: `Create "${trimmedInputValue}"`,
+									creatable: trimmedInputValue,
+								};
+							},
+							isItem: (item) => Boolean(item.creatable),
+							onRequest: async (rawQuery) => {
+								if (creatingRef.current) return;
 
-					creatingRef.current = true;
-					setOptimisticDisplay({
-						id: "__creating__",
-						value: "__creating__",
-						label: name,
-					});
-					try {
-						const newId = await createCategory.mutateAsync({
-							name,
-							is_neutral: false,
-						});
-						setOptimisticDisplay({
-							id: newId,
-							value: newId,
-							label: name,
-						});
-						onChange(newId);
-					} finally {
-						creatingRef.current = false;
-					}
-				},
-				getCreateQuery: (item) => item.creatable ?? "",
-			} : undefined}
+								const name = rawQuery.trim();
+								if (!name) return;
+
+								const existing = items.find(
+									(item) =>
+										item.label.trim().toLocaleLowerCase() ===
+										name.toLocaleLowerCase(),
+								);
+								if (existing) {
+									setOptimisticDisplay(existing);
+									onChange(existing.id);
+									return;
+								}
+
+								creatingRef.current = true;
+								setOptimisticDisplay({
+									id: "__creating__",
+									value: "__creating__",
+									label: name,
+								});
+								try {
+									const newId = await createCategory.mutateAsync({
+										name,
+										is_neutral: false,
+									});
+									setOptimisticDisplay({
+										id: newId,
+										value: newId,
+										label: name,
+									});
+									onChange(newId);
+								} finally {
+									creatingRef.current = false;
+								}
+							},
+							getQuery: (item) => item.creatable ?? "",
+						}
+					: undefined
+			}
 			name={name}
 			required={required}
 			disabled={disabled}
-			placeholder={"select category..."}
-			inputPlaceholder={"search categories..."}
-			size={size}
-			className={className}
-			emptyState={(
-				<p className="p-2 text-gray-10">
-					No categories found.
-				</p>
-			)}
-		/>
+			autoHighlight
+		>
+			<Combobox.Trigger<CategoryComboboxItem, CategoryComboboxItem | null>
+				className={
+					"focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 data-[disabled]:opacity-60 flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden border " +
+					(size === "sm"
+						? "h-8 pl-2.5 pr-2 text-sm"
+						: "h-10 pl-3 pr-2.5 text-sm") +
+					(className ? ` ${className}` : "")
+				}
+			>
+				{({ selectedValue }) => (
+					<>
+						<span className="truncate text-gray-12">
+							{selectedValue?.label ?? (
+								<span className="text-gray-10">select category...</span>
+							)}
+						</span>
+						<Combobox.Icon className="text-gray-10 flex shrink-0">
+							<IconChevronsUpDown />
+						</Combobox.Icon>
+					</>
+				)}
+			</Combobox.Trigger>
+			<Combobox.Content
+				searchPlaceholder="search categories..."
+				empty="No categories found."
+				size={size}
+			>
+				<Combobox.List<CategoryComboboxItem>>
+					{(item) => (
+						<Combobox.Item key={item.id} value={item} size={size}>
+							{item.creatable ? (
+								<div className="flex w-full items-center justify-between gap-2">
+									<span className="truncate">Create "{item.creatable}"</span>
+									<span className="text-xs text-gray-10">new</span>
+								</div>
+							) : (
+								<span className="min-w-0 flex-1 truncate">{item.label}</span>
+							)}
+						</Combobox.Item>
+					)}
+				</Combobox.List>
+			</Combobox.Content>
+		</Combobox.Root>
 	);
 
 	if (!label) return root;

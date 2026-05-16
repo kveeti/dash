@@ -13,7 +13,8 @@ import {
 	useTransactionsQuery,
 } from "../lib/queries/transactions";
 import { Button } from "./button";
-import { PopupCombobox } from "./popup-combobox";
+import { Combobox } from "./combobox";
+import { IconChevronsUpDown } from "./icons/chevrons-up-down";
 import { Select } from "./select";
 import {
 	getAvailableFlowAmount,
@@ -200,39 +201,61 @@ export function SelectedTxCreateFlowForm({
 					/>
 				)}
 				<div className="flex gap-1">
-					<PopupCombobox
+					<Combobox.Root
 						items={flowTargetItems}
 						value={flowTarget}
 						onValueChange={setFlowTarget}
 						onInputValueChange={setFlowTargetSearch}
-						getItemKey={(item) => item.id}
-						renderItem={(item) => (
-							<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-								<div className="min-w-0">
-									<p className="truncate">{item.counter_party}</p>
-									<p className="truncate text-xs text-gray-10">
-										{formatTargetDate(item.date)} · {item.account_name}
-									</p>
-								</div>
-								<span className="shrink-0 text-xs text-gray-10">
-									{f.amount(item.amount, item.currency)}
-								</span>
-							</div>
-						)}
 						itemToStringLabel={(item) =>
 							`${item.counter_party} ${item.account_name} ${formatTargetDate(item.date)} ${f.amount(item.amount, item.currency)}`
 						}
 						isItemEqualToValue={(item, selected) => item.id === selected.id}
-						placeholder="target transaction"
-						inputPlaceholder="search transactions..."
-						emptyState={
-							<p className="px-2 py-3 text-sm text-gray-10">
-								no transactions found
-							</p>
-						}
-						size="sm"
-						className="flex-1"
-					/>
+						autoHighlight
+					>
+						<Combobox.Trigger<FlowTargetItem, FlowTargetItem | null>
+							className="focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 data-[disabled]:opacity-60 flex h-8 flex-1 min-w-0 items-center justify-between gap-2 overflow-hidden border pl-2.5 pr-2 text-sm"
+						>
+							{({ selectedValue }) => (
+								<>
+									<span className="truncate text-gray-12">
+										{selectedValue ? (
+											selectedValue.counter_party
+										) : (
+											<span className="text-gray-10">
+												target transaction
+											</span>
+										)}
+									</span>
+									<Combobox.Icon className="text-gray-10 flex shrink-0">
+										<IconChevronsUpDown />
+									</Combobox.Icon>
+								</>
+							)}
+						</Combobox.Trigger>
+						<Combobox.Content
+							searchPlaceholder="search transactions..."
+							empty="no transactions found"
+							size="sm"
+						>
+							<Combobox.List<FlowTargetItem>>
+								{(item) => (
+									<Combobox.Item key={item.id} value={item} size="sm">
+										<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+											<div className="min-w-0">
+												<p className="truncate">{item.counter_party}</p>
+												<p className="truncate text-xs text-gray-10">
+													{formatTargetDate(item.date)} · {item.account_name}
+												</p>
+											</div>
+											<span className="shrink-0 text-xs text-gray-10">
+												{f.amount(item.amount, item.currency)}
+											</span>
+										</div>
+									</Combobox.Item>
+								)}
+							</Combobox.List>
+						</Combobox.Content>
+					</Combobox.Root>
 					<Button
 						type="submit"
 						size="sm"

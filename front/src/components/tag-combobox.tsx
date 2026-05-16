@@ -1,9 +1,10 @@
 import type { MouseEvent } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCreateTagMutation } from "../lib/queries/tags";
+import { Combobox } from "./combobox";
+import { IconCheck } from "./icons/check";
 import { IconCross } from "./icons/cross";
 import { IconPlus } from "./icons/plus";
-import { PopupCombobox, PopupComboboxTrigger } from "./popup-combobox";
 
 type TagItem = {
 	id: string;
@@ -40,19 +41,20 @@ function TagMultiComboboxTrigger({
 	};
 
 	return (
-		<PopupComboboxTrigger<TagItem[]>
+		<Combobox.Trigger<TagItem, TagItem[]>
 			nativeButton={false}
-			size={size}
+			render={<div />}
 			className={
-				"flex !h-auto w-full min-w-0 items-center gap-1.5 py-1 " +
+				"focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 data-[disabled]:opacity-60 flex h-auto w-full min-w-0 items-center gap-1.5 overflow-hidden border py-1 " +
+				(size === "sm" ? "px-2 text-sm" : "px-3 text-sm") +
 				(className ? ` ${className}` : "")
 			}
 		>
-			{(selectedItems) => (
+			{({ selectedValue }) => (
 				<>
 					<div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-						{selectedItems.length ? (
-							selectedItems.map((tag) => (
+						{selectedValue.length ? (
+							selectedValue.map((tag) => (
 								<button
 									key={tag.id}
 									type="button"
@@ -78,7 +80,7 @@ function TagMultiComboboxTrigger({
 					</span>
 				</>
 			)}
-		</PopupComboboxTrigger>
+		</Combobox.Trigger>
 	);
 }
 
@@ -90,7 +92,7 @@ export function TagMultiCombobox({
 	size = "default",
 	className,
 	disabled = false,
-	creatable = false,
+	creatable = true,
 }: {
 	items: TagItem[];
 	value: string[];
@@ -129,36 +131,38 @@ export function TagMultiCombobox({
 	}, [items, optimisticItems.length, value]);
 
 	return (
-		<PopupCombobox
+		<Combobox.Root
 			multiple
 			items={displayItems}
 			value={selectedItems}
 			onValueChange={(next) => onChange(next.map((item) => item.id))}
-			getItemKey={(item) => item.id}
-			renderItem={(item) =>
-				item.creatable ? (
-					<div className="flex w-full items-center justify-between gap-2">
-						<span className="truncate">Create "{item.creatable}"</span>
-						<span className="text-xs text-gray-10">new</span>
-					</div>
-				) : (
-					<span className="truncate">{item.name}</span>
-				)
-			}
 			itemToStringLabel={(item) => item.name}
 			isItemEqualToValue={(item, selected) => item.id === selected.id}
-			creatable={
+			create={
 				creatable
 					? {
-							createItem: (rawQuery) => ({
-								id: `create:${rawQuery.toLocaleLowerCase()}`,
-								name: `Create "${rawQuery}"`,
-								creatable: rawQuery,
-							}),
-							isCreateItem: (item) => Boolean(item.creatable),
-							isExistingItemMatch: (item, normalizedQuery) =>
-								item.name.trim().toLocaleLowerCase() === normalizedQuery,
-							onCreateRequest: async (rawQuery) => {
+							getItem: ({
+								items,
+								normalizedInputValue,
+								trimmedInputValue,
+							}) => {
+								if (!trimmedInputValue) return null;
+
+								const hasExactMatch = items.some(
+									(item) =>
+										item.name.trim().toLocaleLowerCase() ===
+										normalizedInputValue,
+								);
+								if (hasExactMatch) return null;
+
+								return {
+									id: `create:${trimmedInputValue.toLocaleLowerCase()}`,
+									name: `Create "${trimmedInputValue}"`,
+									creatable: trimmedInputValue,
+								};
+							},
+							isItem: (item) => Boolean(item.creatable),
+							onRequest: async (rawQuery) => {
 								if (creatingRef.current) return;
 
 								const name = rawQuery.trim();
@@ -183,15 +187,12 @@ export function TagMultiCombobox({
 									creatingRef.current = false;
 								}
 							},
-							getCreateQuery: (item) => item.creatable ?? "",
+							getQuery: (item) => item.creatable ?? "",
 						}
 					: undefined
 			}
-			placeholder={placeholder}
-			inputPlaceholder="search tags..."
-			size={size}
 			disabled={disabled}
-			emptyState={<p className="p-2 text-gray-10">No tags found.</p>}
+			autoHighlight
 		>
 			<TagMultiComboboxTrigger
 				className={className}
@@ -200,7 +201,44 @@ export function TagMultiCombobox({
 				placeholder={placeholder}
 				size={size}
 			/>
-		</PopupCombobox>
+			<Combobox.Content
+				searchPlaceholder="search tags..."
+				empty="No tags found."
+				size={size}
+			>
+				<Combobox.List<TagItem>>
+					{(item, index, context) => {
+						const selected =
+							Array.isArray(context.value) &&
+							context.value.some((selectedItem) => selectedItem.id === item.id);
+
+						return (
+							<Combobox.Item key={item.id} value={item} size={size} index={index}>
+								{!context.isCreateItem(item) && (
+									<span
+										data-combobox-keep-open
+										className="-my-2 -ml-2 mr-0 flex size-9 shrink-0 items-center justify-center text-gray-11"
+										aria-hidden
+									>
+										<span className="border-gray-a5 bg-gray-1 flex size-4 items-center justify-center border">
+											{selected && <IconCheck />}
+										</span>
+									</span>
+								)}
+								{item.creatable ? (
+									<div className="flex w-full items-center justify-between gap-2">
+										<span className="truncate">Create "{item.creatable}"</span>
+										<span className="text-xs text-gray-10">new</span>
+									</div>
+								) : (
+									<span className="truncate">{item.name}</span>
+								)}
+							</Combobox.Item>
+						);
+					}}
+				</Combobox.List>
+			</Combobox.Content>
+		</Combobox.Root>
 	);
 }
 
