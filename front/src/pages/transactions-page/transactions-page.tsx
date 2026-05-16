@@ -22,6 +22,7 @@ import {
 	useMemo,
 	useRef,
 	useState,
+	type MouseEvent,
 	type Ref,
 } from "react";
 import { Button, buttonStyles } from "../../components/button";
@@ -41,6 +42,7 @@ import {
 	TagChips,
 	TagMultiCombobox,
 } from "../../components/tag-combobox";
+import { CurrencyMultiCombobox } from "../../components/currency-multi-combobox";
 
 type DateRangeFilter = {
 	from: string;
@@ -106,7 +108,7 @@ function useFilterParams() {
 	const q = searchParams.get("q") ?? "";
 	const categoryId = searchParams.get("cat") ?? "";
 	const accountId = searchParams.get("acc") ?? "";
-	const currency = searchParams.get("cur") ?? "";
+	const currencyIds = parseStringArrayParam(searchParams.get("cur"));
 	const tagIds = parseStringArrayParam(searchParams.get("tags"));
 	const sort = parseTransactionSort(searchParams.get("sort"));
 	const uncategorized = searchParams.get("uncat") === "1";
@@ -118,7 +120,7 @@ function useFilterParams() {
 	const filters: TransactionFilters = {};
 	if (categoryId) filters.category_id = categoryId;
 	if (accountId) filters.account_id = accountId;
-	if (currency) filters.currency = currency;
+	if (currencyIds.length) filters.currencies = currencyIds;
 	if (tagIds.length) filters.tag_ids = tagIds;
 	if (uncategorized) filters.uncategorized = true;
 	if (dateRange) {
@@ -130,7 +132,7 @@ function useFilterParams() {
 		q ||
 		categoryId ||
 		accountId ||
-		currency ||
+		currencyIds.length ||
 		tagIds.length ||
 		sort !== "date_desc" ||
 		uncategorized ||
@@ -143,7 +145,7 @@ function useFilterParams() {
 			...(q && { q }),
 			...(categoryId && { cat: categoryId }),
 			...(accountId && { acc: accountId }),
-			...(currency && { cur: currency }),
+			...(currencyIds.length && { cur: formatStringArrayParam(currencyIds) }),
 			...(tagIds.length && { tags: formatStringArrayParam(tagIds) }),
 			...(sort !== "date_desc" && { sort }),
 			...(uncategorized && { uncat: "1" }),
@@ -165,7 +167,7 @@ function useFilterParams() {
 		q: q || undefined,
 		cat: categoryId || undefined,
 		acc: accountId || undefined,
-		cur: currency || undefined,
+		cur: formatStringArrayParam(currencyIds),
 		tags: formatStringArrayParam(tagIds),
 		sort: sort === "date_desc" ? undefined : sort,
 		uncat: uncategorized ? "1" : undefined,
@@ -179,7 +181,7 @@ function useFilterParams() {
 		q,
 		categoryId,
 		accountId,
-		currency,
+		currencyIds,
 		tagIds,
 		sort,
 		uncategorized,
@@ -255,7 +257,7 @@ export function TransactionsPage() {
 		q,
 		categoryId,
 		accountId,
-		currency,
+		currencyIds,
 		tagIds,
 		sort,
 		uncategorized,
@@ -326,7 +328,7 @@ export function TransactionsPage() {
 							q={q}
 							categoryId={categoryId}
 							accountId={accountId}
-							currency={currency}
+							currencyIds={currencyIds}
 							tagIds={tagIds}
 							sort={sort}
 							uncategorized={uncategorized}
@@ -362,7 +364,13 @@ export function TransactionsPage() {
 									selected={isSelected}
 									selecting={selection.isSelecting}
 									onSelect={() => selection.toggle(tx.id)}
-									onClick={() => openTransaction(tx.id)}
+									onClick={(event) => {
+										const rect = event.currentTarget.getBoundingClientRect();
+										openTransaction(tx.id, {
+											top: rect.top,
+											right: rect.right,
+										});
+									}}
 									showInlineDate={!dateSorted}
 									liRef={(elem) => {
 										const cursorKey = left ?? right;
@@ -425,7 +433,7 @@ export function TransactionsPage() {
 				q={q}
 				categoryId={categoryId}
 				accountId={accountId}
-				currency={currency}
+				currencyIds={currencyIds}
 				tagIds={tagIds}
 				sort={sort}
 				uncategorized={uncategorized}
@@ -489,7 +497,7 @@ function TxRow({
 	selecting: boolean;
 	showInlineDate: boolean;
 	onSelect: () => void;
-	onClick: () => void;
+	onClick: (event: MouseEvent<HTMLDivElement>) => void;
 	liRef: Ref<HTMLLIElement>;
 }) {
 	const { f } = useI18n();
@@ -515,7 +523,7 @@ function TxRow({
 					if (selecting) {
 						onSelect();
 					} else {
-						onClick();
+						onClick(e);
 					}
 				}}
 				onContextMenu={(e) => {
@@ -587,7 +595,7 @@ function FilterControls({
 	q,
 	categoryId,
 	accountId,
-	currency,
+	currencyIds,
 	tagIds,
 	sort,
 	uncategorized,
@@ -602,7 +610,7 @@ function FilterControls({
 	q: string;
 	categoryId: string;
 	accountId: string;
-	currency: string;
+	currencyIds: string[];
 	tagIds: string[];
 	sort: TransactionSort;
 	uncategorized: boolean;
@@ -691,20 +699,15 @@ function FilterControls({
 			</div>
 
 			<div className="flex gap-2">
-				<Select
-					size="sm"
-					value={currency}
-					onChange={(e) =>
-						setParams({ cur: e.currentTarget.value || undefined })
+				<CurrencyMultiCombobox
+					currencies={currencies}
+					value={currencyIds}
+					onChange={(nextCurrencyIds) =>
+						setParams({ cur: formatStringArrayParam(nextCurrencyIds) })
 					}
-				>
-					<option value="">all currencies</option>
-					{currencies?.map((currencyCode) => (
-						<option key={currencyCode} value={currencyCode}>
-							{currencyCode}
-						</option>
-					))}
-				</Select>
+					placeholder="all currencies"
+					size="sm"
+				/>
 
 				<Select
 					size="sm"
@@ -853,7 +856,7 @@ function MobileFilterBar({
 	q,
 	categoryId,
 	accountId,
-	currency,
+	currencyIds,
 	tagIds,
 	sort,
 	uncategorized,
@@ -871,7 +874,7 @@ function MobileFilterBar({
 	q: string;
 	categoryId: string;
 	accountId: string;
-	currency: string;
+	currencyIds: string[];
 	tagIds: string[];
 	sort: TransactionSort;
 	uncategorized: boolean;
@@ -891,7 +894,7 @@ function MobileFilterBar({
 							q={q}
 							categoryId={categoryId}
 							accountId={accountId}
-							currency={currency}
+							currencyIds={currencyIds}
 							tagIds={tagIds}
 							sort={sort}
 							uncategorized={uncategorized}
@@ -942,6 +945,7 @@ function BulkEditBar({
 	const [tagIds, setTagIds] = useState<string[]>([]);
 
 	async function handleApply() {
+		if (bulkSetCategory.isPending) return;
 		await bulkSetCategory.mutateAsync({
 			txIds: [...selectedIds],
 			categoryId: categoryId || null,
@@ -950,6 +954,7 @@ function BulkEditBar({
 	}
 
 	async function handleAddTag() {
+		if (bulkAddTag.isPending) return;
 		if (!tagIds.length) return;
 		await Promise.all(
 			tagIds.map((tagId) =>
@@ -964,6 +969,7 @@ function BulkEditBar({
 	}
 
 	async function handleRemoveTag() {
+		if (bulkRemoveTag.isPending) return;
 		if (!tagIds.length) return;
 		await Promise.all(
 			tagIds.map((tagId) =>
@@ -1002,7 +1008,6 @@ function BulkEditBar({
 					<Button
 						size="sm"
 						onClick={handleApply}
-						disabled={bulkSetCategory.isPending}
 					>
 						apply
 					</Button>
@@ -1025,7 +1030,7 @@ function BulkEditBar({
 						size="sm"
 						variant="ghost"
 						onClick={handleAddTag}
-						disabled={!tagIds.length || bulkAddTag.isPending}
+						disabled={!tagIds.length}
 					>
 						add tags
 					</Button>
@@ -1033,7 +1038,7 @@ function BulkEditBar({
 						size="sm"
 						variant="ghost"
 						onClick={handleRemoveTag}
-						disabled={!tagIds.length || bulkRemoveTag.isPending}
+						disabled={!tagIds.length}
 					>
 						remove
 					</Button>

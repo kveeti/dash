@@ -170,7 +170,6 @@ export function DesktopYearMonthExplorer({
 		reportingCurrency: queryReportingCurrency,
 		maxStalenessDays,
 		mode,
-		perCategoryLimit: 12,
 		enabled: !!selectedMonthRange && !!queryReportingCurrency,
 	});
 	const detailTransactions = detailTransactionsQuery.data ?? [];
@@ -413,7 +412,6 @@ function BucketSection({
 						<div className="mt-1 space-y-1">
 							{bucketTransactions
 								.filter((tx) => tx.cat_name === row.cat_name)
-								.slice(0, 12)
 								.map((tx) => {
 									const convertedAmount = tx.converted_amount;
 									const originalAmount = tx.original_amount;
@@ -425,7 +423,13 @@ function BucketSection({
 											type="button"
 											key={tx.id}
 											className="flex w-full items-center justify-between pl-2 text-left text-[11px] hover:bg-gray-a2"
-											onClick={() => openTransaction(tx.id)}
+											onClick={(event) => {
+												const rect = event.currentTarget.getBoundingClientRect();
+												openTransaction(tx.id, {
+													top: rect.top,
+													right: rect.right,
+												});
+											}}
 										>
 											<span className="text-gray-10">{tx.counter_party}</span>
 											<span className="text-right">

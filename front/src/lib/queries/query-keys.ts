@@ -45,6 +45,7 @@ export const queryKeys = {
 			filters?.category_id,
 			filters?.account_id,
 			filters?.currency,
+			filters?.currencies?.join(",") ?? "",
 			filters?.uncategorized,
 			filters?.date_from,
 			filters?.date_to,

@@ -6,7 +6,6 @@ import { useAppSettingsQuery } from "../../lib/queries/settings";
 import { DesktopYearMonthExplorer } from "./desktop-year-month-explorer";
 import { StatsOverviewPanel } from "./stats-overview-panel";
 import { Input } from "../../components/input";
-import { Select } from "../../components/select";
 import { CategoryCombobox } from "../../components/category-combobox";
 import { Combobox } from "../../components/combobox";
 import { IconChevronsUpDown } from "../../components/icons/chevrons-up-down";
@@ -17,6 +16,7 @@ import { useTagOptionsQuery } from "../../lib/queries/tags";
 import { FastLink } from "../../components/link";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
 import { TagMultiCombobox } from "../../components/tag-combobox";
+import { CurrencyMultiCombobox } from "../../components/currency-multi-combobox";
 import {
 	formatStringArrayParam,
 	parseStringArrayParam,
@@ -102,7 +102,7 @@ export function StatsPage() {
 	const q = searchParams.get("q") ?? "";
 	const categoryId = searchParams.get("cat") ?? "";
 	const accountId = searchParams.get("acc") ?? "";
-	const currency = searchParams.get("cur") ?? "";
+	const currencyIds = parseStringArrayParam(searchParams.get("cur"));
 	const tagIds = parseStringArrayParam(searchParams.get("tags"));
 	const uncategorized = searchParams.get("uncat") === "1";
 
@@ -134,7 +134,7 @@ export function StatsPage() {
 	const filters: TransactionFilters = {};
 	if (categoryId) filters.category_id = categoryId;
 	if (accountId) filters.account_id = accountId;
-	if (currency) filters.currency = currency;
+	if (currencyIds.length) filters.currencies = currencyIds;
 	if (tagIds.length) filters.tag_ids = tagIds;
 	if (uncategorized) filters.uncategorized = true;
 	const activeFilters = Object.keys(filters).length > 0 ? filters : undefined;
@@ -142,7 +142,7 @@ export function StatsPage() {
 		q: q || undefined,
 		cat: categoryId || undefined,
 		acc: accountId || undefined,
-		cur: currency || undefined,
+		cur: formatStringArrayParam(currencyIds),
 		tags: formatStringArrayParam(tagIds),
 		uncat: uncategorized ? "1" : undefined,
 	};
@@ -150,7 +150,7 @@ export function StatsPage() {
 		q ||
 		categoryId ||
 		accountId ||
-		currency ||
+		currencyIds.length ||
 		tagIds.length ||
 		uncategorized
 	);
@@ -215,7 +215,7 @@ export function StatsPage() {
 							q={q}
 							categoryId={categoryId}
 							accountId={accountId}
-							currency={currency}
+							currencyIds={currencyIds}
 							tagIds={tagIds}
 							uncategorized={uncategorized}
 							hasScope={hasScope}
@@ -281,7 +281,7 @@ function StatsScopeControls({
 	q,
 	categoryId,
 	accountId,
-	currency,
+	currencyIds,
 	tagIds,
 	uncategorized,
 	hasScope,
@@ -294,7 +294,7 @@ function StatsScopeControls({
 	q: string;
 	categoryId: string;
 	accountId: string;
-	currency: string;
+	currencyIds: string[];
 	tagIds: string[];
 	uncategorized: boolean;
 	hasScope: boolean;
@@ -342,21 +342,15 @@ function StatsScopeControls({
 					accounts={accounts}
 					onChange={(nextValue) => setParams({ acc: nextValue || undefined })}
 				/>
-				<Select
-					size="sm"
-					className="min-w-0"
-					value={currency}
-					onChange={(e) =>
-						setParams({ cur: e.currentTarget.value || undefined })
+				<CurrencyMultiCombobox
+					currencies={currencies}
+					value={currencyIds}
+					onChange={(nextCurrencyIds) =>
+						setParams({ cur: formatStringArrayParam(nextCurrencyIds) })
 					}
-				>
-					<option value="">all currencies</option>
-					{currencies?.map((currencyCode) => (
-						<option key={currencyCode} value={currencyCode}>
-							{currencyCode}
-						</option>
-					))}
-				</Select>
+					placeholder="all currencies"
+					size="sm"
+				/>
 			</div>
 			<div>
 				<TagMultiCombobox

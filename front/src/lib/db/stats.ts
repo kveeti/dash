@@ -1,7 +1,11 @@
 import { normalizeCurrency } from "../currency";
 import type { DbHandle } from "./client";
 import { FX_ANCHOR_CURRENCY, type ConversionMode } from "./settings";
-import { buildTransactionFtsQuery, type TransactionFilters } from "./transactions";
+import {
+	buildTransactionFtsQuery,
+	escapeSqlLike,
+	type TransactionFilters,
+} from "./transactions";
 
 export type StatRow = {
 	period: string;
@@ -96,16 +100,19 @@ function buildScopePredicates(scope: StatsScope) {
 	const filters = scope.filters;
 
 	if (scope.search) {
+		const idLike = `%${escapeSqlLike(scope.search)}%`;
 		const ftsQuery = buildTransactionFtsQuery(scope.search);
 		if (ftsQuery) {
-			predicates.push(`id in (
+			predicates.push(`(lower(id) like lower(?) escape '\\' or id in (
       select tx_id
       from transaction_search_fts
       where transaction_search_fts match ?
-    )`);
+    ))`);
+			params.push(idLike);
 			params.push(ftsQuery);
 		} else {
-			predicates.push("0 = 1");
+			predicates.push("lower(id) like lower(?) escape '\\'");
+			params.push(idLike);
 		}
 	}
 
@@ -122,6 +129,16 @@ function buildScopePredicates(scope: StatsScope) {
 	if (filters?.currency) {
 		predicates.push("currency = ?");
 		params.push(filters.currency.toUpperCase());
+	}
+
+	if (filters?.currencies?.length) {
+		const currencies = Array.from(new Set(filters.currencies))
+			.filter(Boolean)
+			.map((currency) => currency.toUpperCase());
+		if (currencies.length) {
+			predicates.push(`currency in (${currencies.map(() => "?").join(", ")})`);
+			params.push(...currencies);
+		}
 	}
 
 	if (filters?.uncategorized) {
