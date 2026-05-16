@@ -68,6 +68,7 @@ export function TransactionForm({
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault();
+		if (isSubmitting) return;
 		const data = new FormData(e.currentTarget);
 
 		const accountId = (data.get("account_id") as string) || "";
@@ -159,7 +160,6 @@ export function TransactionForm({
 				<AccountSelectCreate
 					name="account_id"
 					defaultValue={defaultValues?.account_id}
-					disabled={isSubmitting}
 					defaultCreateCurrency={currency}
 					onChange={(account) => {
 						if (!account) return;

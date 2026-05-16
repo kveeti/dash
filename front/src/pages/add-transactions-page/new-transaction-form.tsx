@@ -9,6 +9,7 @@ export function NewTransactionForm() {
 		<TransactionForm
 			isSubmitting={createTransaction.isPending}
 			onSubmit={async (values) => {
+				if (createTransaction.isPending) return;
 				await createTransaction.mutateAsync(values);
 			}}
 			actions={(
@@ -16,7 +17,6 @@ export function NewTransactionForm() {
 					type="submit"
 					className="px-6"
 					isLoading={createTransaction.isPending}
-					disabled={createTransaction.isPending}
 				>
 					add
 				</Button>

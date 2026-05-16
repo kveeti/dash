@@ -203,6 +203,7 @@ function CurrencySection() {
 				className="space-y-2"
 				onSubmit={async (event) => {
 					event.preventDefault();
+					if (updateReportingCurrency.isPending) return;
 					const data = new FormData(event.currentTarget);
 					const nextReportingCurrency = normalizeCurrency(
 						String(data.get("reporting_currency") ?? ""),
@@ -226,7 +227,6 @@ function CurrencySection() {
 				<Button
 					type="submit"
 					isLoading={updateReportingCurrency.isPending}
-					disabled={updateReportingCurrency.isPending}
 				>
 					save reporting currency
 				</Button>
@@ -237,6 +237,7 @@ function CurrencySection() {
 				className="space-y-2 border border-gray-a4 p-3"
 				onSubmit={async (event) => {
 					event.preventDefault();
+					if (updateConversionPolicy.isPending) return;
 					const data = new FormData(event.currentTarget);
 					const conversionMode = String(data.get("conversion_mode"));
 					const maxStalenessDays = Number(data.get("max_staleness_days"));
@@ -277,7 +278,6 @@ function CurrencySection() {
 				<Button
 					type="submit"
 					isLoading={updateConversionPolicy.isPending}
-					disabled={updateConversionPolicy.isPending}
 				>
 					save conversion policy
 				</Button>
@@ -309,8 +309,9 @@ function CurrencySection() {
 						type="button"
 						variant="outline"
 						isLoading={deleteFxRates.isPending}
-						disabled={deleteFxRates.isPending || !fxRates.data?.length}
+						disabled={!fxRates.data?.length}
 						onClick={async () => {
+							if (deleteFxRates.isPending) return;
 							const ok = window.confirm("Delete all stored FX rates?");
 							if (!ok) return;
 							await deleteFxRates.mutateAsync();
@@ -357,6 +358,7 @@ function AddFxRateForm({
 			className="space-y-2 border border-gray-a4 p-3"
 			onSubmit={async (event) => {
 				event.preventDefault();
+				if (pending) return;
 				const data = new FormData(event.currentTarget);
 				await onAdd({
 					rateDate: String(data.get("rateDate")),
@@ -389,7 +391,7 @@ function AddFxRateForm({
 				placeholder={`${FX_ANCHOR_CURRENCY} per 1 currency`}
 				required
 			/>
-			<Button type="submit" isLoading={pending} disabled={pending}>
+			<Button type="submit" isLoading={pending}>
 				save FX rate
 			</Button>
 		</form>
@@ -431,6 +433,7 @@ function ImportFxRatesCsvForm({
 			className="space-y-2 border border-gray-a4 p-3"
 			onSubmit={async (event) => {
 				event.preventDefault();
+				if (pending) return;
 				if (!fileText) return;
 				const data = new FormData(event.currentTarget);
 				const againstCurrency = normalizeCurrency(
@@ -476,7 +479,7 @@ function ImportFxRatesCsvForm({
 				<Input type="file" accept=".csv,.txt" className="w-full p-2" onChange={handleFile} />
 				{fileName && <p className="text-xs text-gray-10 mt-1">{fileName}</p>}
 			</div>
-			<Button type="submit" isLoading={pending} disabled={pending || !fileText}>
+			<Button type="submit" isLoading={pending} disabled={!fileText}>
 				import fx rates csv
 			</Button>
 			{result && (

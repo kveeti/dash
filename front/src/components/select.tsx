@@ -57,26 +57,62 @@ export function Select({
 	const firstEnabledValue = items.find((item) => !item.disabled)?.value;
 	const resolvedDefaultValue =
 		defaultValue !== undefined ? defaultValue : firstEnabledValue;
+	const [uncontrolledValue, setUncontrolledValue] = React.useState(
+		resolvedDefaultValue ?? "",
+	);
+	const currentValue = value !== undefined ? value : uncontrolledValue;
+	React.useEffect(() => {
+		if (value !== undefined || defaultValue !== undefined || uncontrolledValue) return;
+		if (resolvedDefaultValue !== undefined) setUncontrolledValue(resolvedDefaultValue);
+	}, [defaultValue, resolvedDefaultValue, uncontrolledValue, value]);
 	const triggerClass =
 		"w-full focus border-gray-6 bg-gray-1 border flex min-w-0 items-center justify-between gap-2 select-none text-gray-12 data-[popup-open]:bg-gray-2 " +
 		sizes[size].trigger +
 		(className ? ` ${className}` : "");
 
-	const root = (
+	const emitChange = (next: string) => {
+		if (value === undefined) setUncontrolledValue(next);
+		onChange?.({
+			currentTarget: { value: next },
+			target: { value: next },
+		});
+	};
+
+	const control = (
+		<>
+			{name ? (
+				<input type="hidden" name={name} value={currentValue} readOnly />
+			) : null}
+			<select
+				className={
+					"hidden w-full appearance-auto max-sm:block " +
+					triggerClass.replace("data-[popup-open]:bg-gray-2", "")
+				}
+				required={required}
+				disabled={disabled}
+				value={currentValue}
+				onChange={(event) => emitChange(event.currentTarget.value)}
+			>
+				{items.map((item) => (
+					<option
+						key={item.value}
+						value={item.value}
+						disabled={item.disabled}
+					>
+						{stringifyOptionLabel(item.label)}
+					</option>
+				))}
+			</select>
+			<div className="max-sm:hidden">
 		<BaseSelect.Root
 			items={items}
-			name={name}
 			required={required}
 			disabled={disabled}
-			{...(value !== undefined ? { value } : { defaultValue: resolvedDefaultValue })}
+			value={currentValue}
 			onValueChange={(next) => {
-				onChange?.({
-					currentTarget: { value: next ?? "" },
-					target: { value: next ?? "" },
-				});
+				emitChange(next ?? "");
 			}}
 		>
-			{label ? <BaseSelect.Label className="text-gray-11 mb-1 block text-xs">{label}</BaseSelect.Label> : null}
 			<BaseSelect.Trigger className={triggerClass}>
 				<div className="min-w-0 flex-1 overflow-hidden text-left">
 					<BaseSelect.Value
@@ -118,11 +154,18 @@ export function Select({
 				</BaseSelect.Positioner>
 			</BaseSelect.Portal>
 		</BaseSelect.Root>
+			</div>
+		</>
 	);
 
-	if (!label) return root;
+	if (!label) return control;
 
-	return <div>{root}</div>;
+	return (
+		<div>
+			<label className="text-gray-11 mb-1 block text-xs">{label}</label>
+			{control}
+		</div>
+	);
 }
 
 function flattenOptions(children: React.ReactNode): OptionItem[] {
@@ -162,6 +205,12 @@ function flattenOptions(children: React.ReactNode): OptionItem[] {
 function stringifyOptionValue(value: unknown): string {
 	if (value == null) return "";
 	return String(value);
+}
+
+function stringifyOptionLabel(label: React.ReactNode): string {
+	if (typeof label === "string" || typeof label === "number") return String(label);
+	if (Array.isArray(label)) return label.map(stringifyOptionLabel).join("");
+	return "";
 }
 
 function CheckIcon(props: React.ComponentProps<"svg">) {

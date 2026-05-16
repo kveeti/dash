@@ -78,6 +78,7 @@ function StandardImportForm({
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		if (importCsvMutation.isPending) return;
 		const data = new FormData(event.currentTarget);
 		const file = data.get("csv_file");
 		if (!(file instanceof File) || file.size === 0) return;
@@ -110,10 +111,7 @@ function StandardImportForm({
 
 	return (
 		<form className="space-y-4" onSubmit={handleSubmit}>
-			<AccountSelectCreate
-				name="account_id"
-				disabled={importCsvMutation.isPending}
-			/>
+			<AccountSelectCreate name="account_id" />
 
 			<div>
 				<label className="text-gray-11 mb-1 block text-xs">csv file</label>
@@ -130,7 +128,6 @@ function StandardImportForm({
 				type="submit"
 				className="w-full"
 				isLoading={importCsvMutation.isPending}
-				disabled={importCsvMutation.isPending}
 			>
 				import
 			</Button>
@@ -147,6 +144,7 @@ function LegacyImportForm({
 
 	async function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		if (importLegacyBundleMutation.isPending) return;
 		const data = new FormData(event.currentTarget);
 		const files = Object.fromEntries(
 			LEGACY_FILE_FIELDS.map(({ key }) => [key, data.get(key)]),
@@ -201,7 +199,6 @@ function LegacyImportForm({
 				type="submit"
 				className="w-full"
 				isLoading={importLegacyBundleMutation.isPending}
-				disabled={importLegacyBundleMutation.isPending}
 			>
 				import
 			</Button>

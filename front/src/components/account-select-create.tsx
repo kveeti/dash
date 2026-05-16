@@ -286,7 +286,6 @@ export function AccountSelectCreate({
 								name="account-currency"
 								defaultValue={createFormDefaults.currency}
 								className="w-full"
-								disabled={createAccount.isPending}
 							>
 								{currencyCodes.map((code) => (
 									<option key={code} value={code}>
@@ -304,7 +303,6 @@ export function AccountSelectCreate({
 								<button
 									type="submit"
 									className="focus border-gray-6 bg-gray-1 h-8 border px-3 text-xs"
-									disabled={createAccount.isPending}
 								>
 									create
 								</button>

@@ -105,6 +105,7 @@ export function SelectedTxCreateFlowForm({
 
 	async function handleCreateFlow(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
+		if (createFlowMutation.isPending) return;
 		const target = targetTxQuery.data;
 		if (!target || target.id === txId) return;
 		const formData = new FormData(e.currentTarget);
@@ -259,7 +260,7 @@ export function SelectedTxCreateFlowForm({
 					<Button
 						type="submit"
 						size="sm"
-						disabled={!canCreateFlow || createFlowMutation.isPending}
+						disabled={!canCreateFlow}
 					>
 						create
 					</Button>

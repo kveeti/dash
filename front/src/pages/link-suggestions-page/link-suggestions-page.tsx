@@ -99,6 +99,7 @@ export function LinkSuggestionsPage() {
 	}
 
 	function loadOlder() {
+		if (isMutating) return;
 		if (!suggestionsQuery.hasNextPage) return;
 		setManualScanUntilCount(totalScannedCount + AUTO_SCAN_MAX_TRANSACTIONS);
 	}
@@ -153,12 +154,14 @@ export function LinkSuggestionsPage() {
 	}, [shouldContinueAutoScan, suggestionsQuery]);
 
 	async function acceptSuggestion(suggestion: TransactionLinkSuggestion) {
+		if (isMutating) return;
 		for (const flow of suggestion.suggested_flows) {
 			await createFlowMutation.mutateAsync(flow);
 		}
 	}
 
 	function dismissSuggestion(suggestion: TransactionLinkSuggestion) {
+		if (isMutating) return;
 		dismissMutation.mutate({
 			kind: suggestion.kind,
 			primaryTransactionId: suggestion.primary_transaction_id,
@@ -212,7 +215,6 @@ export function LinkSuggestionsPage() {
 			<ScanStatus
 				autoScanStoppedAtLimit={autoScanStoppedAtLimit}
 				hasNextPage={suggestionsQuery.hasNextPage}
-				isMutating={isMutating}
 				isScanning={isScanning}
 				manualScanStoppedAtLimit={manualScanStoppedAtLimit}
 				nextCursorExists={!!nextCursor}
@@ -271,7 +273,6 @@ function PaginationFooter({
 function ScanStatus({
 	autoScanStoppedAtLimit,
 	hasNextPage,
-	isMutating,
 	isScanning,
 	manualScanStoppedAtLimit,
 	nextCursorExists,
@@ -281,7 +282,6 @@ function ScanStatus({
 }: {
 	autoScanStoppedAtLimit: boolean;
 	hasNextPage: boolean;
-	isMutating: boolean;
 	isScanning: boolean;
 	manualScanStoppedAtLimit: boolean;
 	nextCursorExists: boolean;
@@ -312,7 +312,7 @@ function ScanStatus({
 						size="sm"
 						variant="ghost"
 						onClick={onLoadOlder}
-						disabled={!hasNextPage || isMutating}
+						disabled={!hasNextPage}
 					>
 						{autoScanStoppedAtLimit || manualScanStoppedAtLimit
 							? "continue scan"
@@ -434,7 +434,6 @@ function SuggestionItem({
 					<Button
 						size="sm"
 						onClick={() => onAccept(suggestion)}
-						disabled={isMutating}
 						isLoading={isCreatePending}
 					>
 						link
@@ -443,7 +442,7 @@ function SuggestionItem({
 						size="sm"
 						variant="ghost"
 						onClick={() => onDismiss(suggestion)}
-						disabled={isMutating}
+						aria-busy={isMutating}
 					>
 						dismiss
 					</Button>

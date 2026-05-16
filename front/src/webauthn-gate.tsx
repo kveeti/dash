@@ -114,8 +114,10 @@ function UnlockScreen(props: {
 				</div>
 				<Button
 					isLoading={unlock.isPending}
-					disabled={unlock.isPending}
-					onClick={() => unlock.mutate()}
+					onClick={() => {
+						if (unlock.isPending) return;
+						unlock.mutate();
+					}}
 				>
 					Unlock with passkey
 				</Button>
