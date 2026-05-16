@@ -1,16 +1,21 @@
 import type { MouseEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { useCreateTagMutation } from "../lib/queries/tags";
 import { Combobox } from "./combobox";
 import { IconCheck } from "./icons/check";
 import { IconCross } from "./icons/cross";
 import { IconPlus } from "./icons/plus";
+import { useTransientOptions } from "./use-transient-options";
 
 type TagItem = {
 	id: string;
 	name: string;
 	creatable?: string;
 };
+
+function tagItemKey(item: TagItem) {
+	return item.id;
+}
 
 function TagMultiComboboxTrigger({
 	className,
@@ -105,14 +110,12 @@ export function TagMultiCombobox({
 }) {
 	const createTag = useCreateTagMutation();
 	const creatingRef = useRef(false);
-	const [optimisticItems, setOptimisticItems] = useState<TagItem[]>([]);
-	const displayItems = useMemo(() => {
-		const existingIds = new Set(items.map((item) => item.id));
-		return [
-			...items,
-			...optimisticItems.filter((item) => !existingIds.has(item.id)),
-		];
-	}, [items, optimisticItems]);
+	const keepTransientItem = useCallback(
+		(item: TagItem) => value.includes(item.id),
+		[value],
+	);
+	const tagOptions = useTransientOptions(items, tagItemKey, keepTransientItem);
+	const displayItems = tagOptions.options;
 	const selectedItems = useMemo(
 		() => displayItems.filter((item) => value.includes(item.id)),
 		[displayItems, value],
@@ -121,14 +124,6 @@ export function TagMultiCombobox({
 		Array.from(new Set([...value, nextId]));
 	const removeValue = (tagId: string) =>
 		onChange(value.filter((selectedId) => selectedId !== tagId));
-
-	useEffect(() => {
-		if (!optimisticItems.length) return;
-		const resolvedIds = new Set(items.map((item) => item.id));
-		setOptimisticItems((prev) =>
-			prev.filter((item) => value.includes(item.id) && !resolvedIds.has(item.id)),
-		);
-	}, [items, optimisticItems.length, value]);
 
 	return (
 		<Combobox.Root
@@ -181,7 +176,7 @@ export function TagMultiCombobox({
 								creatingRef.current = true;
 								try {
 									const newId = await createTag.mutateAsync(name);
-									setOptimisticItems((prev) => [...prev, { id: newId, name }]);
+									tagOptions.add({ id: newId, name });
 									await onChange(uniqueNextValue(newId));
 								} finally {
 									creatingRef.current = false;

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
 	useAddTransactionTagMutation,
 	useRemoveTransactionTagMutation,
@@ -6,6 +5,7 @@ import {
 } from "../lib/queries/tags";
 import type { TransactionDetails } from "../lib/queries/transactions";
 import { TagMultiCombobox } from "./tag-combobox";
+import { usePendingDisplayValue } from "./use-pending-display-value";
 
 function sameIds(a: string[], b: string[]) {
 	if (a.length !== b.length) return false;
@@ -25,33 +25,28 @@ export function SelectedTxTagsPanel({
 	const tags = useTagOptionsQuery();
 	const addTag = useAddTransactionTagMutation();
 	const removeTag = useRemoveTransactionTagMutation();
-	const [pendingTagIds, setPendingTagIds] = useState<string[] | null>(null);
 	const persistedTagIds = tx.tags.map((tag) => tag.id);
-	const pendingResolved = pendingTagIds && sameIds(pendingTagIds, persistedTagIds);
-	const tagIds = pendingTagIds && !pendingResolved ? pendingTagIds : persistedTagIds;
+	const tagIds = usePendingDisplayValue(persistedTagIds, sameIds);
 
 	return (
 		<div className={unpadded ? "" : "px-3"}>
 			<TagMultiCombobox
 				items={tags.data ?? []}
-				value={tagIds}
+				value={tagIds.value}
 				onChange={async (nextTagIds) => {
-					setPendingTagIds(nextTagIds);
-					const previous = new Set(tagIds);
-					const next = new Set(nextTagIds);
-					const added = nextTagIds.filter((tagId) => !previous.has(tagId));
-					const removed = tagIds.filter((tagId) => !next.has(tagId));
-					try {
+					const currentTagIds = tagIds.value;
+					await tagIds.run(nextTagIds, async () => {
+						const previous = new Set(currentTagIds);
+						const next = new Set(nextTagIds);
+						const added = nextTagIds.filter((tagId) => !previous.has(tagId));
+						const removed = currentTagIds.filter((tagId) => !next.has(tagId));
 						await Promise.all([
 							...added.map((tagId) => addTag.mutateAsync({ txId, tagId })),
 							...removed.map((tagId) =>
 								removeTag.mutateAsync({ txId, tagId }),
 							),
 						]);
-					} catch (error) {
-						setPendingTagIds(null);
-						throw error;
-					}
+					});
 				}}
 				placeholder="tags..."
 				size="sm"

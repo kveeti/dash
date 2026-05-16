@@ -1,7 +1,8 @@
 import { Combobox } from "./combobox";
 import { IconChevronsUpDown } from "./icons/chevrons-up-down";
 import { useCreateCategoryMutation } from "../lib/queries/categories";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
+import { useTransientOptions } from "./use-transient-options";
 
 export type CategoryComboboxItem = {
 	id: string;
@@ -9,6 +10,10 @@ export type CategoryComboboxItem = {
 	label: string;
 	creatable?: string;
 };
+
+function categoryItemKey(item: CategoryComboboxItem) {
+	return item.id;
+}
 
 export function CategoryCombobox({
 	items,
@@ -37,38 +42,24 @@ export function CategoryCombobox({
 }) {
 	const createCategory = useCreateCategoryMutation();
 	const creatingRef = useRef(false);
-	const [optimisticDisplay, setOptimisticDisplay] = useState<CategoryComboboxItem | null>(null);
+	const keepTransientItem = useCallback(
+		(item: CategoryComboboxItem) => item.id === value,
+		[value],
+	);
+	const categoryOptions = useTransientOptions(
+		items,
+		categoryItemKey,
+		keepTransientItem,
+	);
 	const selectedItem = useMemo(() => {
-		const found = items.find((item) => item.id === value);
-		if (found) return found;
-
-		if (optimisticDisplay) {
-			if (optimisticDisplay.id === value) return optimisticDisplay;
-			if (!value && creatingRef.current) return optimisticDisplay;
-		}
-
-		return null;
-	}, [items, optimisticDisplay, value]);
-
-	useEffect(() => {
-		if (!optimisticDisplay) return;
-		if (!value && !creatingRef.current) {
-			setOptimisticDisplay(null);
-			return;
-		}
-
-		const hasResolvedItem = items.some((item) => item.id === value);
-		if (hasResolvedItem) {
-			setOptimisticDisplay(null);
-		}
-	}, [items, optimisticDisplay, value]);
+		return categoryOptions.options.find((item) => item.id === value) ?? null;
+	}, [categoryOptions.options, value]);
 
 	const root = (
 		<Combobox.Root
-			items={items}
+			items={categoryOptions.options}
 			value={selectedItem}
 			onValueChange={(next) => {
-				setOptimisticDisplay(null);
 				onChange(next?.id ?? "");
 			}}
 			itemToStringLabel={(item) => item.label}
@@ -104,29 +95,23 @@ export function CategoryCombobox({
 								const name = rawQuery.trim();
 								if (!name) return;
 
-								const existing = items.find(
+								const existing = categoryOptions.options.find(
 									(item) =>
 										item.label.trim().toLocaleLowerCase() ===
 										name.toLocaleLowerCase(),
 								);
 								if (existing) {
-									setOptimisticDisplay(existing);
 									onChange(existing.id);
 									return;
 								}
 
 								creatingRef.current = true;
-								setOptimisticDisplay({
-									id: "__creating__",
-									value: "__creating__",
-									label: name,
-								});
 								try {
 									const newId = await createCategory.mutateAsync({
 										name,
 										is_neutral: false,
 									});
-									setOptimisticDisplay({
+									categoryOptions.add({
 										id: newId,
 										value: newId,
 										label: name,

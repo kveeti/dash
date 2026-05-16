@@ -1,5 +1,6 @@
 import { Dialog } from "@base-ui/react/dialog";
 import {
+	useCallback,
 	useMemo,
 	useRef,
 	useState,
@@ -16,13 +17,19 @@ import { Combobox } from "./combobox";
 import { IconChevronsUpDown } from "./icons/chevrons-up-down";
 import { Select } from "./select";
 import { Input } from "./input";
+import { useTransientOptions } from "./use-transient-options";
 
 type AccountItem = {
 	value: string;
 	label: string;
 	currency?: string;
+	account?: Account;
 	creatable?: string;
 };
+
+function accountItemKey(item: AccountItem) {
+	return item.value;
+}
 
 export function AccountSelectCreate({
 	defaultValue,
@@ -60,28 +67,40 @@ export function AccountSelectCreate({
 		currencyMeta.data?.map((meta) => meta.currency) ?? [
 			createFormDefaults.currency,
 		];
+	const baseItems = useMemo(
+		() =>
+			accountRows.map<AccountItem>((account) => ({
+				value: account.id,
+				label: account.name,
+				currency: account.currency,
+				account,
+			})),
+		[accountRows],
+	);
+	const keepTransientItem = useCallback(
+		(item: AccountItem) => item.value === selectedAccountValue,
+		[selectedAccountValue],
+	);
+	const accountOptions = useTransientOptions(
+		baseItems,
+		accountItemKey,
+		keepTransientItem,
+	);
 
 	const selectedItem = useMemo<AccountItem | null>(() => {
-		const account = accountRows.find((row) => row.id === selectedAccountValue);
-		if (!account) {
-			if (!selectedAccountValue) return null;
-			return {
-				value: selectedAccountValue,
-				label: selectedAccountValue,
-			};
+		const account = accountOptions.options.find(
+			(item) => item.value === selectedAccountValue,
+		);
+		if (account) {
+			return account;
 		}
-		return {
-			value: account.id,
-			label: account.name,
-			currency: account.currency,
-		};
-	}, [accountRows, selectedAccountValue]);
 
-	const baseItems = accountRows.map<AccountItem>((account) => ({
-		value: account.id,
-		label: account.name,
-		currency: account.currency,
-	}));
+		if (!selectedAccountValue) return null;
+		return {
+			value: selectedAccountValue,
+			label: selectedAccountValue,
+		};
+	}, [accountOptions.options, selectedAccountValue]);
 
 	function handleSelectAccount(account: Account | null) {
 		const nextId = account?.id ?? "";
@@ -138,6 +157,12 @@ export function AccountSelectCreate({
 			currency,
 			external_id: externalId,
 		};
+		accountOptions.add({
+			value: accountId,
+			label: accountName,
+			currency,
+			account: created,
+		});
 
 		handleSelectAccount(created);
 		setOpenDialog(false);
@@ -165,15 +190,14 @@ export function AccountSelectCreate({
 				readOnly
 			/>
 			<Combobox.Root
-				items={baseItems}
+				items={accountOptions.options}
 				value={selectedItem}
 				onValueChange={(next) => {
 					if (!next) {
 						handleSelectAccount(null);
 						return;
 					}
-					const account = accountRows.find((row) => row.id === next.value) ?? null;
-					handleSelectAccount(account);
+					handleSelectAccount(next.account ?? null);
 				}}
 				itemToStringLabel={(item) => item.label}
 				isItemEqualToValue={(item, selected) => item.value === selected.value}
