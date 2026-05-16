@@ -22,6 +22,7 @@ export type TransactionFilters = {
 	category_id?: string;
 	account_id?: string;
 	currency?: string;
+	currencies?: string[];
 	uncategorized?: boolean;
 	date_from?: string;
 	date_to?: string;
@@ -119,6 +120,7 @@ const TRANSACTION_DETAIL_BASE_SELECT_SQL = `select
 	t.counter_party,
 	t.additional,
 	t.notes,
+	t.categorize_on,
 	t.category_id,
 	t.account_id,
 	coalesce(a.name, '') as account_name,
@@ -158,6 +160,7 @@ const TRANSACTION_DETAIL_ROW_SELECT_SQL = `	b.id,
 	b.counter_party,
 	b.additional,
 	b.notes,
+	b.categorize_on,
 	b.category_id,
 	b.account_id,
 	b.account_name`;
@@ -211,6 +214,7 @@ export type TransactionInput = {
 	counter_party: string;
 	additional?: string;
 	notes?: string;
+	categorize_on?: string | null;
 	category_id?: string;
 	account_id: string;
 };
@@ -679,6 +683,10 @@ export function buildTransactionFtsQuery(search: string): string | null {
 	return terms.map((term) => `${term}*`).join(" ");
 }
 
+export function escapeSqlLike(value: string) {
+	return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
 export async function refreshTransactionSearchDocs(
 	db: DbSqlHandle,
 	txIds: string[],
@@ -744,18 +752,22 @@ export async function listTransactions(
 	const wheres: string[] = ["t._sync_is_deleted = 0"];
 
 	if (opts?.search) {
+		const idLike = `%${escapeSqlLike(opts.search.trim())}%`;
 		const ftsQuery = buildTransactionFtsQuery(opts.search);
 		if (ftsQuery) {
 			wheres.push(
-				`t.id in (
+				`(lower(t.id) like lower(?) escape '\\'
+					or t.id in (
 					select tx_id
 					from transaction_search_fts
 					where transaction_search_fts match ?
-				)`,
+				))`,
 			);
+			params.push(idLike);
 			params.push(ftsQuery);
 		} else {
-			wheres.push("0 = 1");
+			wheres.push("lower(t.id) like lower(?) escape '\\'");
+			params.push(idLike);
 		}
 	}
 
@@ -772,6 +784,16 @@ export async function listTransactions(
 	if (opts?.filters?.currency) {
 		wheres.push("t.currency = ?");
 		params.push(opts.filters.currency.toUpperCase());
+	}
+
+	if (opts?.filters?.currencies?.length) {
+		const currencies = Array.from(new Set(opts.filters.currencies))
+			.filter(Boolean)
+			.map((currency) => currency.toUpperCase());
+		if (currencies.length) {
+			wheres.push(`t.currency in (${currencies.map(() => "?").join(", ")})`);
+			params.push(...currencies);
+		}
 	}
 
 	if (opts?.filters?.uncategorized) {
@@ -907,6 +929,7 @@ export type TransactionDetails = TransactionWithConvertedAmount & {
 	counter_party: string;
 	additional: string | null;
 	notes: string | null;
+	categorize_on: string | null;
 	category_id: string | null;
 	account_id: string;
 	account_name: string;
@@ -968,6 +991,7 @@ export async function updateTransaction(
 				counter_party = ?,
 				additional = ?,
 				notes = ?,
+				categorize_on = ?,
 				category_id = ?,
 				account_id = ?,
 				_sync_status = 1,
@@ -981,6 +1005,7 @@ export async function updateTransaction(
 				tx.counter_party,
 				tx.additional ?? null,
 				tx.notes ?? null,
+				tx.categorize_on || null,
 				tx.category_id ?? null,
 				tx.account_id,
 				Date.now(),
@@ -989,6 +1014,40 @@ export async function updateTransaction(
 		);
 		await refreshTransactionSearchDocs(txDb, [txId]);
 	});
+}
+
+export async function updateTransactionQuickEdit(
+	db: DbHandle,
+	txId: string,
+	input: {
+		category_id?: string | null;
+		categorize_on?: string | null;
+	},
+) {
+	const assignments: string[] = [];
+	const params: Array<string | number | null> = [];
+
+	if ("category_id" in input) {
+		assignments.push("category_id = ?");
+		params.push(input.category_id || null);
+	}
+
+	if ("categorize_on" in input) {
+		assignments.push("categorize_on = ?");
+		params.push(input.categorize_on || null);
+	}
+
+	if (!assignments.length) return;
+
+	await db.exec(
+		`update transactions set
+			${assignments.join(",\n\t\t\t")},
+			updated_at = ?,
+			_sync_status = 1,
+			_sync_edited_at = ?
+		where id = ?`,
+		[...params, new Date().toISOString(), Date.now(), txId],
+	);
 }
 
 export type { SuggestedTransactionFlow, TransactionFlowKind };
@@ -1100,6 +1159,7 @@ function toTransactionDetails(
 		counter_party: row.counter_party,
 		additional: row.additional,
 		notes: row.notes,
+		categorize_on: row.categorize_on,
 		category_id: row.category_id,
 		account_id: row.account_id,
 		account_name: row.account_name,

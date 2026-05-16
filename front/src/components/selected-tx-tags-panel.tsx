@@ -16,9 +16,11 @@ function sameIds(a: string[], b: string[]) {
 export function SelectedTxTagsPanel({
 	tx,
 	txId,
+	unpadded = false,
 }: {
 	tx: TransactionDetails;
 	txId: string;
+	unpadded?: boolean;
 }) {
 	const tags = useTagOptionsQuery();
 	const addTag = useAddTransactionTagMutation();
@@ -29,7 +31,7 @@ export function SelectedTxTagsPanel({
 	const tagIds = pendingTagIds && !pendingResolved ? pendingTagIds : persistedTagIds;
 
 	return (
-		<div className="px-3">
+		<div className={unpadded ? "" : "px-3"}>
 			<TagMultiCombobox
 				items={tags.data ?? []}
 				value={tagIds}

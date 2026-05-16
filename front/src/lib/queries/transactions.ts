@@ -23,6 +23,7 @@ import {
 	normalizeTransactionCursor,
 	normalizeTransactionSort,
 	updateTransaction,
+	updateTransactionQuickEdit,
 	type SuggestedTransactionFlow,
 	type TransactionCursorInput,
 	type TransactionDetails,
@@ -128,6 +129,24 @@ export function useUpdateTransactionMutation() {
 			qc
 				.ensureQueryData(currencyMetaQueryOptions(db))
 				.then((currencyMeta) => updateTransaction(db, txId, tx, currencyMeta)),
+		onSuccess: () => invalidateTransactionQueries(qc),
+	});
+}
+
+export function useUpdateTransactionQuickEditMutation() {
+	const { db } = useEncrypted();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({
+			txId,
+			patch,
+		}: {
+			txId: string;
+			patch: {
+				category_id?: string | null;
+				categorize_on?: string | null;
+			};
+		}) => updateTransactionQuickEdit(db, txId, patch),
 		onSuccess: () => invalidateTransactionQueries(qc),
 	});
 }

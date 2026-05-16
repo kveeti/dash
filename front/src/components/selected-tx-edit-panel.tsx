@@ -41,7 +41,11 @@ export function SelectedTxEditPanel({
 							}}
 							isSubmitting={updateTransaction.isPending}
 							onSubmit={async (values) => {
-								await updateTransaction.mutateAsync({ txId, tx: values });
+								if (updateTransaction.isPending) return;
+								await updateTransaction.mutateAsync({
+									txId,
+									tx: { ...values, categorize_on: tx.categorize_on },
+								});
 								onClose();
 							}}
 							actions={
@@ -49,7 +53,6 @@ export function SelectedTxEditPanel({
 									<Button
 										type="button"
 										variant="ghost"
-										disabled={updateTransaction.isPending}
 										onClick={onClose}
 									>
 										cancel
@@ -57,7 +60,6 @@ export function SelectedTxEditPanel({
 									<Button
 										type="submit"
 										isLoading={updateTransaction.isPending}
-										disabled={updateTransaction.isPending}
 									>
 										save
 									</Button>

@@ -15,6 +15,7 @@ import { SelectedTxCreateFlowForm } from "./selected-tx-create-flow-form";
 import { SelectedTxFlowList } from "./selected-tx-flow-list";
 import { SelectedTxFlowSummary } from "./selected-tx-flow-summary";
 import { SelectedTxLinkSuggestions } from "./selected-tx-link-suggestions";
+import type { TransactionWindowOrigin } from "./transaction-windows";
 
 export function SelectedTxLinksPanel({
 	open,
@@ -25,7 +26,7 @@ export function SelectedTxLinksPanel({
 	open: boolean;
 	tx: TransactionDetails;
 	txId: string;
-	onOpenTransaction: (txId: string) => void;
+	onOpenTransaction: (txId: string, origin?: TransactionWindowOrigin) => void;
 }) {
 	const flowsQuery = useTransactionFlowsQuery(txId);
 	const linkSuggestionsQuery = useTransactionLinkSuggestionsQuery(txId);
@@ -36,12 +37,14 @@ export function SelectedTxLinksPanel({
 	async function acceptLinkSuggestion(
 		flows: SuggestedTransactionFlow[],
 	) {
+		if (createFlowMutation.isPending) return;
 		for (const flow of flows) {
 			await createFlowMutation.mutateAsync(flow);
 		}
 	}
 
 	function dismissLinkSuggestion(suggestion: TransactionLinkSuggestion) {
+		if (dismissLinkSuggestionMutation.isPending) return;
 		dismissLinkSuggestionMutation.mutate({
 			kind: suggestion.kind,
 			primaryTransactionId: suggestion.primary_transaction_id,

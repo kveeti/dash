@@ -1,5 +1,6 @@
 import { useI18n } from "../providers";
 import type { TransactionFlow } from "../lib/queries/transactions";
+import type { TransactionWindowOrigin } from "./transaction-windows";
 
 export function SelectedTxFlowList({
 	flows,
@@ -8,7 +9,7 @@ export function SelectedTxFlowList({
 }: {
 	flows: TransactionFlow[] | undefined;
 	onDeleteFlow: (flowId: string) => void;
-	onOpenTransaction: (txId: string) => void;
+	onOpenTransaction: (txId: string, origin?: TransactionWindowOrigin) => void;
 }) {
 	const { f } = useI18n();
 
@@ -38,7 +39,13 @@ export function SelectedTxFlowList({
 						<button
 							type="button"
 							className="min-w-0 truncate text-left hover:underline"
-							onClick={() => onOpenTransaction(flow.other_transaction_id)}
+							onClick={(event) => {
+								const rect = event.currentTarget.getBoundingClientRect();
+								onOpenTransaction(flow.other_transaction_id, {
+									top: rect.top,
+									right: rect.right,
+								});
+							}}
 						>
 							{flow.direction === "incoming" ? "from" : "to"}{" "}
 							{flow.other_counter_party}

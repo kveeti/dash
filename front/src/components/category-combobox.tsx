@@ -21,6 +21,7 @@ export function CategoryCombobox({
 	size = "default",
 	className,
 	creatable = false,
+	placeholder = "select category...",
 }: {
 	items: CategoryComboboxItem[];
 	value: string;
@@ -32,6 +33,7 @@ export function CategoryCombobox({
 	size?: "sm" | "default";
 	className?: string;
 	creatable?: boolean;
+	placeholder?: string;
 }) {
 	const createCategory = useCreateCategoryMutation();
 	const creatingRef = useRef(false);
@@ -156,7 +158,7 @@ export function CategoryCombobox({
 					<>
 						<span className="truncate text-gray-12">
 							{selectedValue?.label ?? (
-								<span className="text-gray-10">select category...</span>
+								<span className="text-gray-10">{placeholder}</span>
 							)}
 						</span>
 						<Combobox.Icon className="text-gray-10 flex shrink-0">

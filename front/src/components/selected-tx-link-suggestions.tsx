@@ -4,6 +4,7 @@ import type {
 	TransactionLinkSuggestion,
 } from "../lib/queries/transactions";
 import { Button } from "./button";
+import type { TransactionWindowOrigin } from "./transaction-windows";
 
 export function SelectedTxLinkSuggestions({
 	isAccepting,
@@ -17,7 +18,7 @@ export function SelectedTxLinkSuggestions({
 	isDismissing: boolean;
 	onAccept: (flows: SuggestedTransactionFlow[]) => void;
 	onDismiss: (suggestion: TransactionLinkSuggestion) => void;
-	onOpenTransaction: (txId: string) => void;
+	onOpenTransaction: (txId: string, origin?: TransactionWindowOrigin) => void;
 	suggestions: TransactionLinkSuggestion[] | undefined;
 }) {
 	const { f } = useI18n();
@@ -44,7 +45,14 @@ export function SelectedTxLinkSuggestions({
 												<button
 													type="button"
 													className="max-w-full truncate text-left hover:text-gray-12 hover:underline"
-													onClick={() => onOpenTransaction(candidate.id)}
+													onClick={(event) => {
+														const rect =
+															event.currentTarget.getBoundingClientRect();
+														onOpenTransaction(candidate.id, {
+															top: rect.top,
+															right: rect.right,
+														});
+													}}
 												>
 													{candidate.counter_party}{" "}
 													{f.amount(candidate.amount, candidate.currency)}
@@ -57,7 +65,7 @@ export function SelectedTxLinkSuggestions({
 									<Button
 										size="sm"
 										onClick={() => onAccept(suggestion.suggested_flows)}
-										disabled={isAccepting}
+										aria-busy={isAccepting}
 									>
 										link
 									</Button>
@@ -65,7 +73,7 @@ export function SelectedTxLinkSuggestions({
 										size="sm"
 										variant="ghost"
 										onClick={() => onDismiss(suggestion)}
-										disabled={isDismissing}
+										aria-busy={isDismissing}
 									>
 										dismiss
 									</Button>
