@@ -5,7 +5,7 @@ import {
 	type DateValue,
 } from "@internationalized/date";
 import { useCalendarGrid } from "react-aria";
-import { useContext } from "react";
+import { useContext, type CSSProperties } from "react";
 import {
 	Button,
 	Calendar,
@@ -127,25 +127,26 @@ export function DateRangePickerInput({
 					<IconCalendar />
 				</Button>
 			</Group>
-			<Popover className="z-50 border border-gray-a4 bg-gray-1 p-0 shadow-lg cursor-default">
-				<Dialog className="outline-none">
-					<AriaRangeCalendar className="cursor-default">
-						<header className="mb-2 flex items-center justify-between px-1 pt-1">
+			<Popover className="z-50 border border-gray-a4 bg-gray-1 p-0 shadow-lg cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
+				<Dialog className="outline-none max-sm:w-full">
+					<AriaRangeCalendar className="cursor-default max-sm:w-full">
+						<header className="mb-2 flex items-center justify-between px-1 pt-1 max-sm:mb-3 max-sm:px-2 max-sm:pt-2">
 							<Button
 								slot="previous"
-								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none"
+								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none max-sm:size-11"
 							>
 								<IconChevronLeft />
 							</Button>
 							<Heading className="text-xs text-gray-11 font-mono text-center" />
 							<Button
 								slot="next"
-								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none"
+								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none max-sm:size-11"
 							>
 								<IconChevronRight />
 							</Button>
 						</header>
 						<RangeCalendarGrid showWeekNumbers={showWeekNumbers} />
+						<CalendarBottomNav />
 					</AriaRangeCalendar>
 				</Dialog>
 			</Popover>
@@ -231,25 +232,26 @@ function DatePickerInputBase({
 					<IconCalendar />
 				</Button>
 			</Group>
-			<Popover className="z-50 border border-gray-a4 bg-gray-1 p-0 shadow-lg cursor-default">
-				<Dialog className="outline-none">
-					<Calendar className="cursor-default">
-						<header className="mb-2 flex items-center justify-between px-1 pt-1">
+			<Popover className="z-50 border border-gray-a4 bg-gray-1 p-0 shadow-lg cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
+				<Dialog className="outline-none max-sm:w-full">
+					<Calendar className="cursor-default max-sm:w-full">
+						<header className="mb-2 flex items-center justify-between px-1 pt-1 max-sm:mb-3 max-sm:px-2 max-sm:pt-2">
 							<Button
 								slot="previous"
-								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none"
+								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none max-sm:size-11"
 							>
 								<IconChevronLeft />
 							</Button>
 							<Heading className="text-xs text-gray-11 font-mono text-center" />
 							<Button
 								slot="next"
-								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none"
+								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none max-sm:size-11"
 							>
 								<IconChevronRight />
 							</Button>
 						</header>
 						<SingleCalendarGrid showWeekNumbers={showWeekNumbers} />
+						<CalendarBottomNav />
 					</Calendar>
 				</Dialog>
 			</Popover>
@@ -269,6 +271,25 @@ function SingleCalendarGrid({ showWeekNumbers }: { showWeekNumbers: boolean }) {
 	);
 }
 
+function CalendarBottomNav() {
+	return (
+		<div className="hidden max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:px-2 max-sm:pb-2 max-sm:pt-3">
+			<Button
+				slot="previous"
+				className="focus bg-gray-1 hover:bg-gray-a2 flex h-11 items-center justify-center text-gray-11 outline-none"
+			>
+				<IconChevronLeft />
+			</Button>
+			<Button
+				slot="next"
+				className="focus bg-gray-1 hover:bg-gray-a2 flex h-11 items-center justify-center text-gray-11 outline-none"
+			>
+				<IconChevronRight />
+			</Button>
+		</div>
+	);
+}
+
 function WeekNumberCalendarTable({
 	state,
 	showWeekNumbers,
@@ -284,18 +305,27 @@ function WeekNumberCalendarTable({
 		state,
 	);
 	const gridStartDate = startOfWeekDateValue(state.visibleRange.start, locale);
+	const mobileColumnCount = showWeekNumbers ? 8 : 7;
+	const mobileCellSize = `calc((100vw - 2rem - 2px) / ${mobileColumnCount})`;
+	const mobileCellStyle = {
+		"--date-picker-mobile-cell-size": mobileCellSize,
+	} as CSSProperties;
 
 	return (
-		<table {...gridProps} className="border-spacing-0">
+		<table
+			{...gridProps}
+			className="border-spacing-0 max-sm:w-full max-sm:table-fixed"
+			style={mobileCellStyle}
+		>
 			<thead {...headerProps}>
 				<tr>
 					{showWeekNumbers ? (
-						<th className="w-8 h-6 text-center text-[11px] text-gray-10 font-normal">Wk</th>
+						<th className="w-8 h-6 text-center text-[11px] text-gray-10 font-normal max-sm:w-auto max-sm:h-8">Wk</th>
 					) : null}
 					{weekDays.map((day, index) => (
 						<th
 							key={index}
-							className="w-8 h-6 text-center text-[11px] text-gray-10 font-normal"
+							className="w-8 h-6 text-center text-[11px] text-gray-10 font-normal max-sm:w-auto max-sm:h-8"
 						>
 							{day}
 						</th>
@@ -314,7 +344,7 @@ function WeekNumberCalendarTable({
 					return (
 						<tr key={weekIndex}>
 							{showWeekNumbers ? (
-								<td className="w-8 h-8 p-0 text-center text-[11px] text-gray-9 font-mono select-none cursor-default">
+								<td className="w-8 h-8 p-0 text-center text-[11px] text-gray-9 font-mono select-none cursor-default max-sm:w-auto max-sm:h-[var(--date-picker-mobile-cell-size)]">
 									{weekNumber}
 								</td>
 							) : null}
@@ -325,7 +355,7 @@ function WeekNumberCalendarTable({
 											key={dayIndex}
 											date={date}
 											className={({ isSelected, isDisabled, isOutsideVisibleRange }) =>
-												"group w-8 h-8 p-0 cursor-default select-none outline-none " +
+												"group w-8 h-8 p-0 cursor-default select-none outline-none max-sm:w-auto max-sm:h-[var(--date-picker-mobile-cell-size)] " +
 												(isOutsideVisibleRange ? "text-gray-9 " : "text-gray-12 ") +
 												(isDisabled ? "opacity-40 " : "hover:bg-gray-a2 ") +
 												(isSelected ? "bg-gray-a2 " : "")
@@ -340,7 +370,7 @@ function WeekNumberCalendarTable({
 											}) => (
 												<span
 													className={
-														"w-8 h-8 flex items-center justify-center text-center leading-none cursor-default select-none " +
+														"w-8 h-8 flex items-center justify-center text-center leading-none cursor-default select-none max-sm:size-full " +
 														(isDisabled ? "opacity-40 " : "") +
 														(
 															isSelected && (isSelectionStart || isSelectionEnd)
@@ -361,7 +391,7 @@ function WeekNumberCalendarTable({
 										key={dayIndex}
 										date={date}
 										className={({ isSelected, isDisabled, isOutsideVisibleRange }) =>
-											"w-8 h-8 !cursor-default select-none flex items-center justify-center text-sm text-center leading-none outline-none forced-color-adjust-none [-webkit-tap-highlight-color:transparent] " +
+											"w-8 h-8 !cursor-default select-none flex items-center justify-center text-sm text-center leading-none outline-none forced-color-adjust-none [-webkit-tap-highlight-color:transparent] max-sm:w-auto max-sm:h-[var(--date-picker-mobile-cell-size)] " +
 											(isOutsideVisibleRange ? "text-gray-9 " : "text-gray-12 ") +
 											(isDisabled
 												? "opacity-40 text-gray-9 "
