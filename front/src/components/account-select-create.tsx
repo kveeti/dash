@@ -17,6 +17,7 @@ import { Combobox } from "./combobox";
 import { IconChevronsUpDown } from "./icons/chevrons-up-down";
 import { Select } from "./select";
 import { Input } from "./input";
+import { buttonStyles } from "./button";
 import { useTransientOptions } from "./use-transient-options";
 
 type AccountItem = {
@@ -181,7 +182,7 @@ export function AccountSelectCreate({
 
 	return (
 		<div>
-			<label className="text-gray-11 mb-1 block text-xs">{label}</label>
+			<label className="field-label">{label}</label>
 			<input
 				ref={hiddenAccountIdRef}
 				type="hidden"
@@ -226,7 +227,7 @@ export function AccountSelectCreate({
 				autoHighlight
 			>
 				<Combobox.Trigger<AccountItem, AccountItem | null>
-					className="focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 data-[disabled]:opacity-60 flex h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden border pl-3 pr-2.5 text-sm"
+					className="focus field-trigger data-[disabled]:opacity-60 flex h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-3 pr-2.5 text-sm"
 				>
 					{({ selectedValue }) => (
 						<>
@@ -271,10 +272,10 @@ export function AccountSelectCreate({
 
 			<Dialog.Root open={openDialog} onOpenChange={setOpenDialog}>
 				<Dialog.Portal>
-					<Dialog.Backdrop className="data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 opacity-50 transition-opacity duration-100 ease-[cubic-bezier(0.43,0.07,0.59,0.94)] bg-gray-10 dark:bg-[black] supports-[-webkit-touch-callout:none]:absolute fixed inset-0" />
+					<Dialog.Backdrop className="data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 transition-opacity duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] bg-gray-a6 dark:bg-black-a7 supports-[-webkit-touch-callout:none]:absolute fixed inset-0" />
 					<Dialog.Popup
 						initialFocus={createInputRef}
-						className="duration-100 ease-[cubic-bezier(0.43,0.07,0.59,0.94)] data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[ending-style]:scale-95 data-[ending-style]:opacity-0 transition-all bg-gray-1 border-gray-a5 fixed top-1/2 left-1/2 w-[24rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 border p-4"
+						className="duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.985] data-[ending-style]:opacity-0 transition-all bg-gray-1 border-gray-a5 fixed top-1/2 left-1/2 w-[24rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 border p-5 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)]"
 					>
 						<Dialog.Title className="text-base font-medium">
 							Create new account
@@ -289,7 +290,6 @@ export function AccountSelectCreate({
 						>
 							<Input
 								ref={createInputRef}
-								className="focus border-gray-6 bg-gray-1 h-10 w-full border px-3 outline-none"
 								defaultValue={createFormDefaults.name}
 								onKeyDownCapture={(event) => {
 									if (event.key === "Enter") event.stopPropagation();
@@ -299,7 +299,6 @@ export function AccountSelectCreate({
 								required
 							/>
 							<Input
-								className="focus border-gray-6 bg-gray-1 h-10 w-full border px-3 outline-none"
 								defaultValue={createFormDefaults.externalId}
 								placeholder="optional, e.g. IBAN"
 								name="account-external-id"
@@ -320,13 +319,13 @@ export function AccountSelectCreate({
 							<div className="flex justify-end gap-2">
 								<Dialog.Close
 									type="button"
-									className="focus border-gray-6 bg-gray-1 h-8 border px-3 text-xs"
+									className={buttonStyles({ variant: "outline", size: "sm" })}
 								>
 									cancel
 								</Dialog.Close>
 								<button
 									type="submit"
-									className="focus border-gray-6 bg-gray-1 h-8 border px-3 text-xs"
+									className={buttonStyles({ variant: "primary", size: "sm" })}
 								>
 									create
 								</button>

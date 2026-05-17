@@ -114,7 +114,7 @@ function StandardImportForm({
 			<AccountSelectCreate name="account_id" />
 
 			<div>
-				<label className="text-gray-11 mb-1 block text-xs">csv file</label>
+				<label className="field-label">csv file</label>
 				<Input
 					name="csv_file"
 					type="file"

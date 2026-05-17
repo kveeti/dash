@@ -1,10 +1,10 @@
 import type { TextareaHTMLAttributes } from "react";
 
-const base = "focus border-gray-6 bg-gray-1 border px-3 py-2";
+const base = "field w-full";
 
 const sizes = {
-	sm: "text-sm px-2 py-1",
-	default: "",
+	sm: "text-sm px-2.5 py-1.5",
+	default: "px-3 py-2",
 };
 
 export function Textarea({
@@ -23,7 +23,7 @@ export function Textarea({
 
 	return (
 		<div>
-			<label className="text-gray-11 mb-1 block text-xs">{label}</label>
+			<label className="field-label">{label}</label>
 			<textarea {...props} className={cls} />
 		</div>
 	);

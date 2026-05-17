@@ -17,6 +17,11 @@
 	--spacing: 0.25rem;
 	--font-*: initial;
 
+	--animate-dash-overlay-in: dash-overlay-in 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	--animate-dash-overlay-out: dash-overlay-out 140ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+	--animate-dash-dialog-in: dash-dialog-in 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	--animate-dash-dialog-out: dash-dialog-out 160ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+
 	--font-normal: geist, "Geist", monospace;
 	--font-mono: jbmono, "JetBrains Mono", "JetBrains Mono Nerd Font", jbmonofb, monospace;
 	--font-cool: crimsonprovar, "Crimson Pro", crimsonprovarfb, serif;

@@ -59,7 +59,7 @@ export function CurrencyMultiCombobox({
 				nativeButton={false}
 				render={<div />}
 				className={
-					"focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 flex h-auto w-full min-w-0 items-center gap-1.5 overflow-hidden border py-1 " +
+					"focus field-trigger flex h-auto w-full min-w-0 items-center gap-1.5 overflow-hidden py-1 " +
 					(size === "sm" ? "px-2 text-sm" : "px-3 text-sm") +
 					(className ? ` ${className}` : "")
 				}

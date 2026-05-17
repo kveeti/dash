@@ -10,13 +10,23 @@ export const Close = _Dialog.Close;
 export function Content(props: ComponentProps<typeof _Dialog.Content> & { overlay?: boolean }) {
 	return (
 		<_Dialog.Portal>
-			{props.overlay !== false && <_Dialog.Overlay className="bg-gray-a4 dark:bg-black-a5 fixed inset-0 backdrop-blur-xs" />}
+			{props.overlay !== false && (
+				<_Dialog.Overlay
+					className={
+						"fixed inset-0 bg-gray-a6 dark:bg-black-a7" +
+						" data-[state=open]:animate-dash-overlay-in" +
+						" data-[state=closed]:animate-dash-overlay-out"
+					}
+				/>
+			)}
 			<_Dialog.Content
 				{...props}
 				className={
-					"bg-gray-1 border-gray-a5 fixed top-[50%] left-[50%] max-h-[85vh] w-[90vw] max-w-[24rem] transform-[translate(-50%,_-50%)] border p-4 outline-none" +
+					"bg-gray-1 border-gray-a5 fixed top-[50%] left-[50%] max-h-[85vh] w-[90vw] max-w-[24rem] transform-[translate(-50%,_-50%)] border p-5 outline-none shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)]" +
+					" data-[state=open]:animate-dash-dialog-in" +
+					" data-[state=closed]:animate-dash-dialog-out" +
 					" " +
-					props.className
+					(props.className ?? "")
 				}
 			/>
 		</_Dialog.Portal>

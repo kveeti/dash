@@ -158,6 +158,7 @@ export function TransactionForm({
 					className="w-full"
 				/>
 				<AccountSelectCreate
+					label="account"
 					name="account_id"
 					defaultValue={defaultValues?.account_id}
 					defaultCreateCurrency={currency}

@@ -66,7 +66,7 @@ export function Select({
 		if (resolvedDefaultValue !== undefined) setUncontrolledValue(resolvedDefaultValue);
 	}, [defaultValue, resolvedDefaultValue, uncontrolledValue, value]);
 	const triggerClass =
-		"w-full focus border-gray-6 bg-gray-1 border flex min-w-0 items-center justify-between gap-2 select-none text-gray-12 data-[popup-open]:bg-gray-2 " +
+		"w-full focus field-trigger flex min-w-0 items-center justify-between gap-2 select-none " +
 		sizes[size].trigger +
 		(className ? ` ${className}` : "");
 
@@ -162,7 +162,7 @@ export function Select({
 
 	return (
 		<div>
-			<label className="text-gray-11 mb-1 block text-xs">{label}</label>
+			<label className="field-label">{label}</label>
 			{control}
 		</div>
 	);

@@ -2,12 +2,12 @@ import type { ButtonHTMLAttributes } from "react";
 import { ConditionalSpinner } from "./spinner";
 
 const base =
-	"focus relative text-xs inline-flex shrink-0 items-center justify-center whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-40";
+	"focus relative text-xs inline-flex shrink-0 items-center justify-center whitespace-nowrap select-none disabled:pointer-events-none disabled:opacity-40 transition-[background-color,color,border-color,opacity] duration-150 ease-out";
 
 const variants = {
-	primary: "bg-gray-12 text-gray-1 font-bold",
-	outline: "border-gray-a5 border",
-	ghost: "text-gray-11 hover:bg-gray-a3",
+	primary: "bg-gray-12 text-gray-1 font-bold hover:bg-gray-11",
+	outline: "border-gray-a5 border hover:bg-gray-a3 hover:border-gray-a7",
+	ghost: "text-gray-11 hover:bg-gray-a3 hover:text-gray-12",
 	destructive: "text-red-11 hover:bg-red-a3",
 };
 

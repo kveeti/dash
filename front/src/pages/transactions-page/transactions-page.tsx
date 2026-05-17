@@ -914,7 +914,7 @@ function AccountFilterCombobox({
 			autoHighlight
 		>
 			<Combobox.Trigger<AccountFilterItem, AccountFilterItem | null>
-				className="focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 data-[disabled]:opacity-60 flex h-8 flex-1 min-w-0 items-center justify-between gap-2 overflow-hidden border pl-2.5 pr-2 text-sm"
+				className="focus field-trigger data-[disabled]:opacity-60 flex h-8 flex-1 min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm"
 			>
 				{({ selectedValue }) => (
 					<>

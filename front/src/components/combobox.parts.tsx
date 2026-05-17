@@ -1,5 +1,4 @@
 import { Combobox as BaseCombobox } from "@base-ui/react/combobox";
-import { ScrollArea } from "@base-ui/react/scroll-area";
 import type {
 	ComboboxRootChangeEventDetails,
 	ComboboxRootHighlightEventDetails,
@@ -42,8 +41,8 @@ function shouldDelayMobileSelectionClose() {
 
 function getInputClass(size: ComboboxSize) {
 	return cx(
-		"bg-gray-1 w-full border-b border-gray-a3 outline-none max-sm:bg-white dark:max-sm:bg-gray-2",
-		size === "sm" ? "h-8 px-2 text-sm" : "h-10 px-3 text-sm",
+		"bg-gray-1 w-full shrink-0 border-b border-gray-a3 outline-none max-sm:bg-white dark:max-sm:bg-gray-2 px-2",
+		size === "sm" ? "h-8 text-sm" : "h-10 text-sm",
 	);
 }
 
@@ -450,23 +449,16 @@ export function List<TItem = unknown>({
 	const context = useCombobox<TItem>();
 
 	return (
-		<ScrollArea.Root className="relative max-h-[14rem] min-h-0 overflow-hidden max-sm:max-h-none max-sm:flex-1">
-			<ScrollArea.Viewport className="max-h-[inherit] min-h-0 overscroll-contain max-sm:h-full">
-				<ScrollArea.Content style={{ minWidth: "100%" }}>
-					<BaseCombobox.List
-						{...props}
-						className={cx("m-0 p-0", className)}
-					>
-						{typeof children === "function"
-							? (item: TItem, index: number) => children(item, index, context)
-							: children}
-					</BaseCombobox.List>
-				</ScrollArea.Content>
-			</ScrollArea.Viewport>
-			<ScrollArea.Scrollbar className="flex w-1.5 justify-center bg-transparent p-px opacity-0 transition-opacity duration-100 data-[hovering]:opacity-100 data-[scrolling]:opacity-100">
-				<ScrollArea.Thumb className="bg-gray-a7 w-1 rounded-full" />
-			</ScrollArea.Scrollbar>
-		</ScrollArea.Root>
+		<div className="combobox-list-scroll max-h-[14rem] min-h-0 overflow-y-auto overscroll-contain max-sm:max-h-none max-sm:flex-1">
+			<BaseCombobox.List
+				{...props}
+				className={cx("m-0 p-0", className)}
+			>
+				{typeof children === "function"
+					? (item: TItem, index: number) => children(item, index, context)
+					: children}
+			</BaseCombobox.List>
+		</div>
 	);
 }
 

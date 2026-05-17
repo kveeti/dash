@@ -132,7 +132,7 @@ export function CategoryCombobox({
 		>
 			<Combobox.Trigger<CategoryComboboxItem, CategoryComboboxItem | null>
 				className={
-					"focus border-gray-6 bg-gray-1 data-[popup-open]:bg-gray-a2 data-[disabled]:opacity-60 flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden border " +
+					"focus field-trigger data-[disabled]:opacity-60 flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden " +
 					(size === "sm"
 						? "h-8 pl-2.5 pr-2 text-sm"
 						: "h-10 pl-3 pr-2.5 text-sm") +
@@ -166,7 +166,9 @@ export function CategoryCombobox({
 									<span className="text-xs text-gray-10">new</span>
 								</div>
 							) : (
-								<span className="min-w-0 flex-1 truncate">{item.label}</span>
+								<div className="flex w-full items-center justify-between gap-2">
+									<span className="truncate">{item.label}</span>
+								</div>
 							)}
 						</Combobox.Item>
 					)}
@@ -179,7 +181,7 @@ export function CategoryCombobox({
 
 	return (
 		<div>
-			<label className="text-gray-11 mb-1 block text-xs">{label}</label>
+			<label className="field-label">{label}</label>
 			{root}
 		</div>
 	);

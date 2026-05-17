@@ -87,7 +87,7 @@ export function DateRangePickerInput({
 		<AriaDateRangePicker
 			value={parsedRange}
 			isDisabled={disabled}
-			className="flex flex-col gap-1"
+			className="flex flex-col"
 			onChange={(next) => {
 				if (!next?.start || !next?.end) return;
 				onChange?.({
@@ -96,10 +96,10 @@ export function DateRangePickerInput({
 				});
 			}}
 		>
-			{label ? <Label className="text-gray-11 text-xs">{label}</Label> : null}
+			{label ? <Label className="field-label">{label}</Label> : null}
 			<Group
 				className={
-					"focus border-gray-6 bg-gray-1 border flex items-center data-[disabled]:opacity-60 " +
+					"focus field-trigger flex items-center data-[disabled]:opacity-60 " +
 					(size === "sm" ? "h-8 text-xs" : "h-10 text-sm") +
 					(className ? ` ${className}` : "")
 				}
@@ -204,7 +204,7 @@ function DatePickerInputBase({
 			granularity={granularity}
 			isDisabled={disabled}
 			isRequired={required}
-			className="flex flex-col gap-1"
+			className="flex flex-col"
 			onChange={(nextValue) => {
 				onChange?.({
 					currentTarget: { value: nextValue?.toString() ?? "" },
@@ -212,10 +212,10 @@ function DatePickerInputBase({
 				});
 			}}
 		>
-			{label ? <Label className="text-gray-11 text-xs">{label}</Label> : null}
+			{label ? <Label className="field-label">{label}</Label> : null}
 			<Group
 				className={
-					"focus border-gray-6 bg-gray-1 border flex items-center data-[disabled]:opacity-60 " +
+					"focus field-trigger flex items-center data-[disabled]:opacity-60 " +
 					(size === "sm" ? "h-8 text-xs" : "h-10 text-sm") +
 					(className ? ` ${className}` : "")
 				}
