@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEncrypted } from "../../encrypted-context";
 import { normalizeCurrency } from "../currency";
 import {
@@ -79,6 +79,7 @@ export function useStatsQuery(input: StatsQueryInput) {
 			mode,
 		],
 		enabled: !!reportingCurrency && (input.enabled ?? true),
+		placeholderData: keepPreviousData,
 		queryFn: () =>
 			getStats({
 				db,
@@ -153,6 +154,7 @@ export function useMonthStatsQuery(input: StatsQueryInput) {
 			mode,
 		],
 		enabled: !!reportingCurrency && (input.enabled ?? true),
+		placeholderData: keepPreviousData,
 		queryFn: () =>
 			getMonthStats({
 				db,
@@ -186,6 +188,7 @@ export function useConvertedStatsSummaryQuery(input: StatsQueryInput) {
 			mode,
 		],
 		enabled: !!reportingCurrency && (input.enabled ?? true),
+		placeholderData: keepPreviousData,
 		queryFn: () =>
 			getConvertedStatsSummary({
 				db,

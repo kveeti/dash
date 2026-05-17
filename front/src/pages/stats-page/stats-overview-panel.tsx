@@ -10,11 +10,15 @@ import {
 } from "../../lib/queries/stats";
 import {
 	type DateRange,
+	type StatsAmountMode,
 	type StatsCompareValue,
 	type StatsPeriodValue,
 } from "./stats-page-types";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
 import { FastLink } from "../../components/link";
+import { IconChevronLeft } from "../../components/icons/chevron-left";
+import { IconChevronRight } from "../../components/icons/chevron-right";
+import { Spinner } from "../../components/spinner";
 
 function formatIsoDate(date: Date) {
 	return date.toISOString().slice(0, 10);
@@ -54,6 +58,19 @@ function addYears(date: Date, years: number) {
 	);
 }
 
+function addMonths(date: Date, months: number) {
+	const targetMonth = date.getUTCMonth() + months;
+	const targetFirst = new Date(Date.UTC(date.getUTCFullYear(), targetMonth, 1));
+	const lastDay = endOfMonth(targetFirst).getUTCDate();
+	return new Date(
+		Date.UTC(
+			targetFirst.getUTCFullYear(),
+			targetFirst.getUTCMonth(),
+			Math.min(date.getUTCDate(), lastDay),
+		),
+	);
+}
+
 function startOfMonth(date: Date) {
 	return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
@@ -78,6 +95,39 @@ function normalizeCustomRange(from: string, to: string): DateRange {
 	return { from: to, to: from };
 }
 
+function detectWholeMonth(range: DateRange): { year: number; month: number } | null {
+	const fromDate = parseIsoDate(range.from);
+	const toDate = parseIsoDate(range.to);
+	if (!fromDate || !toDate) return null;
+	if (fromDate.getUTCDate() !== 1) return null;
+	if (fromDate.getUTCFullYear() !== toDate.getUTCFullYear()) return null;
+	if (fromDate.getUTCMonth() !== toDate.getUTCMonth()) return null;
+	if (toDate.getUTCDate() !== endOfMonth(fromDate).getUTCDate()) return null;
+	return { year: fromDate.getUTCFullYear(), month: fromDate.getUTCMonth() };
+}
+
+function detectWholeYear(range: DateRange): { year: number } | null {
+	const fromDate = parseIsoDate(range.from);
+	const toDate = parseIsoDate(range.to);
+	if (!fromDate || !toDate) return null;
+	if (fromDate.getUTCMonth() !== 0 || fromDate.getUTCDate() !== 1) return null;
+	if (toDate.getUTCMonth() !== 11 || toDate.getUTCDate() !== 31) return null;
+	if (fromDate.getUTCFullYear() !== toDate.getUTCFullYear()) return null;
+	return { year: fromDate.getUTCFullYear() };
+}
+
+function rangeDayCount(range: DateRange) {
+	const fromDate = parseIsoDate(range.from);
+	const toDate = parseIsoDate(range.to);
+	if (!fromDate || !toDate || fromDate > toDate) return 1;
+	return Math.max(
+		1,
+		Math.floor(
+			(toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000),
+		) + 1,
+	);
+}
+
 function resolveBaseRange(
 	period: StatsPeriodValue,
 	customRange: DateRange,
@@ -88,12 +138,11 @@ function resolveBaseRange(
 	}
 
 	const monthStart = startOfMonth(now);
-	const monthEnd = endOfMonth(now);
 	const lastMonthRef = new Date(
 		Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
 	);
 	if (period === "this-month") {
-		return { from: formatIsoDate(monthStart), to: formatIsoDate(monthEnd) };
+		return { from: formatIsoDate(monthStart), to: formatIsoDate(now) };
 	}
 	if (period === "last-month") {
 		return {
@@ -101,10 +150,25 @@ function resolveBaseRange(
 			to: formatIsoDate(endOfMonth(lastMonthRef)),
 		};
 	}
+	if (period === "last-7-days") {
+		return { from: formatIsoDate(addDays(now, -6)), to: formatIsoDate(now) };
+	}
+	if (period === "last-30-days") {
+		return { from: formatIsoDate(addDays(now, -29)), to: formatIsoDate(now) };
+	}
+	if (period === "last-90-days") {
+		return { from: formatIsoDate(addDays(now, -89)), to: formatIsoDate(now) };
+	}
+	if (period === "last-12-months") {
+		return {
+			from: formatIsoDate(addDays(addMonths(now, -12), 1)),
+			to: formatIsoDate(now),
+		};
+	}
 	if (period === "this-year") {
 		return {
 			from: formatIsoDate(startOfYear(now)),
-			to: formatIsoDate(endOfYear(now)),
+			to: formatIsoDate(now),
 		};
 	}
 	const lastYearRef = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
@@ -130,6 +194,21 @@ function resolveCompareRange(
 		};
 	}
 
+	const wholeYear = detectWholeYear(baseRange);
+	if (wholeYear) {
+		const y = wholeYear.year - 1;
+		return { from: `${y}-01-01`, to: `${y}-12-31` };
+	}
+	const wholeMonth = detectWholeMonth(baseRange);
+	if (wholeMonth) {
+		const prevFirst = new Date(Date.UTC(wholeMonth.year, wholeMonth.month - 1, 1));
+		const lastDay = endOfMonth(prevFirst).getUTCDate();
+		return {
+			from: formatIsoDate(prevFirst),
+			to: formatIsoDate(new Date(Date.UTC(prevFirst.getUTCFullYear(), prevFirst.getUTCMonth(), lastDay))),
+		};
+	}
+
 	const spanDays =
 		Math.floor(
 			(toDate.getTime() - fromDate.getTime()) / (24 * 60 * 60 * 1000),
@@ -140,14 +219,6 @@ function resolveCompareRange(
 		from: formatIsoDate(previousFrom),
 		to: formatIsoDate(previousTo),
 	};
-}
-
-function formatRangeLabel(period: StatsPeriodValue, range: DateRange) {
-	if (period === "this-month") return "this month";
-	if (period === "last-month") return "last month";
-	if (period === "this-year") return "this year";
-	if (period === "last-year") return "last year";
-	return `${range.from} to ${range.to}`;
 }
 
 function formatCompareLabel(compare: StatsCompareValue) {
@@ -292,8 +363,39 @@ function formatSignedAmount(
 	return formatted;
 }
 
+function valueForAmountMode(value: number, mode: StatsAmountMode, dayCount: number) {
+	if (mode === "per-day") return value / dayCount;
+	return value;
+}
+
+function valueCategoryDeltaForAmountMode(
+	row: CategoryDelta,
+	mode: StatsAmountMode,
+	currentDayCount: number,
+	previousDayCount: number,
+): CategoryDelta {
+	const currentAmount = valueForAmountMode(row.currentAmount, mode, currentDayCount);
+	const previousAmount = valueForAmountMode(row.previousAmount, mode, previousDayCount);
+	return {
+		...row,
+		currentAmount,
+		previousAmount,
+		deltaAmount: currentAmount - previousAmount,
+	};
+}
+
+function amountModeSuffix(mode: StatsAmountMode) {
+	return mode === "per-day" ? "/day" : "";
+}
+
 function displayCategoryName(catName: string) {
 	return catName === "__uncategorized__" ? "uncategorized" : catName;
+}
+
+function directionOf(value: number): "up" | "down" | "flat" {
+	if (value > 0) return "up";
+	if (value < 0) return "down";
+	return "flat";
 }
 
 export function StatsOverviewPanel({
@@ -306,10 +408,12 @@ export function StatsOverviewPanel({
 	scopeParams,
 	period,
 	compare,
+	amountMode,
 	customFrom,
 	customTo,
 	onPeriodChange,
 	onCompareChange,
+	onAmountModeChange,
 	onCustomRangeChange,
 }: {
 	reportingCurrency: string;
@@ -321,10 +425,12 @@ export function StatsOverviewPanel({
 	scopeParams: Record<string, string | undefined>;
 	period: StatsPeriodValue;
 	compare: StatsCompareValue;
+	amountMode: StatsAmountMode;
 	customFrom: string;
 	customTo: string;
 	onPeriodChange: (value: StatsPeriodValue) => void;
 	onCompareChange: (value: StatsCompareValue) => void;
+	onAmountModeChange: (value: StatsAmountMode) => void;
 	onCustomRangeChange: (from: string, to: string) => void;
 }) {
 	const { f } = useI18n();
@@ -341,8 +447,12 @@ export function StatsOverviewPanel({
 		() => resolveCompareRange(baseRange, compare),
 		[baseRange, compare],
 	);
+	const baseDayCount = useMemo(() => rangeDayCount(baseRange), [baseRange]);
+	const compareDayCount = useMemo(
+		() => (compareRange ? rangeDayCount(compareRange) : 1),
+		[compareRange],
+	);
 	const comparisonEnabled = compare !== "none" && compareRange != null;
-	const baseLabel = useMemo(() => formatRangeLabel(period, baseRange), [period, baseRange]);
 	const compareLabel = useMemo(() => formatCompareLabel(compare), [compare]);
 	const scopedTransactionHref = useMemo(
 		() =>
@@ -353,6 +463,43 @@ export function StatsOverviewPanel({
 			}),
 		[baseRange, scopeParams],
 	);
+	const scopedUncategorizedHref = useMemo(
+		() =>
+			buildPath("/txs", {
+				...scopeParams,
+				cat: undefined,
+				uncat: "1",
+				from: baseRange.from,
+				to: baseRange.to,
+			}),
+		[baseRange, scopeParams],
+	);
+	const shiftRange = (direction: -1 | 1) => {
+		const wholeYear = detectWholeYear(baseRange);
+		if (wholeYear) {
+			const y = wholeYear.year + direction;
+			onCustomRangeChange(`${y}-01-01`, `${y}-12-31`);
+			return;
+		}
+		const wholeMonth = detectWholeMonth(baseRange);
+		if (wholeMonth) {
+			const nextFirst = new Date(Date.UTC(wholeMonth.year, wholeMonth.month + direction, 1));
+			const lastDay = endOfMonth(nextFirst).getUTCDate();
+			onCustomRangeChange(
+				formatIsoDate(nextFirst),
+				formatIsoDate(new Date(Date.UTC(nextFirst.getUTCFullYear(), nextFirst.getUTCMonth(), lastDay))),
+			);
+			return;
+		}
+		const fromDate = parseIsoDate(baseRange.from);
+		const toDate = parseIsoDate(baseRange.to);
+		if (!fromDate || !toDate) return;
+		const spanDays = rangeDayCount(baseRange);
+		onCustomRangeChange(
+			formatIsoDate(addDays(fromDate, direction * spanDays)),
+			formatIsoDate(addDays(toDate, direction * spanDays)),
+		);
+	};
 
 	const currentMonthStatsQuery = useMonthStatsQuery({
 		from: baseRange.from,
@@ -462,38 +609,66 @@ export function StatsOverviewPanel({
 		() => summarizeCategoryDelta(currentCategoryTotals, compareCategoryTotals, "i"),
 		[currentCategoryTotals, compareCategoryTotals],
 	);
+	const displayExpenseDeltas = useMemo(
+		() =>
+			expenseDeltas
+				.map((row) =>
+					valueCategoryDeltaForAmountMode(
+						row,
+						amountMode,
+						baseDayCount,
+						compareDayCount,
+					)
+				)
+				.sort((a, b) => Math.abs(b.deltaAmount) - Math.abs(a.deltaAmount)),
+		[amountMode, baseDayCount, compareDayCount, expenseDeltas],
+	);
+	const displayIncomeDeltas = useMemo(
+		() =>
+			incomeDeltas
+				.map((row) =>
+					valueCategoryDeltaForAmountMode(
+						row,
+						amountMode,
+						baseDayCount,
+						compareDayCount,
+					)
+				)
+				.sort((a, b) => Math.abs(b.deltaAmount) - Math.abs(a.deltaAmount)),
+		[amountMode, baseDayCount, compareDayCount, incomeDeltas],
+	);
 
 	const expenseIncrease = useMemo(
 		() =>
-			expenseDeltas
+			displayExpenseDeltas
 				.filter((row) => row.deltaAmount > 0)
 				.sort((a, b) => b.deltaAmount - a.deltaAmount)
 				.slice(0, 5),
-		[expenseDeltas],
+		[displayExpenseDeltas],
 	);
 	const expenseDecrease = useMemo(
 		() =>
-			expenseDeltas
+			displayExpenseDeltas
 				.filter((row) => row.deltaAmount < 0)
 				.sort((a, b) => a.deltaAmount - b.deltaAmount)
 				.slice(0, 5),
-		[expenseDeltas],
+		[displayExpenseDeltas],
 	);
 	const incomeIncrease = useMemo(
 		() =>
-			incomeDeltas
+			displayIncomeDeltas
 				.filter((row) => row.deltaAmount > 0)
 				.sort((a, b) => b.deltaAmount - a.deltaAmount)
 				.slice(0, 5),
-		[incomeDeltas],
+		[displayIncomeDeltas],
 	);
 	const incomeDecrease = useMemo(
 		() =>
-			incomeDeltas
+			displayIncomeDeltas
 				.filter((row) => row.deltaAmount < 0)
 				.sort((a, b) => a.deltaAmount - b.deltaAmount)
 				.slice(0, 5),
-		[incomeDeltas],
+		[displayIncomeDeltas],
 	);
 
 	const topCurrentExpense = useMemo(
@@ -531,7 +706,6 @@ export function StatsOverviewPanel({
 		compareSummary.total_count
 		: 0;
 	const currentCoverageAmountRatio = currentSummary?.coverage_amount_ratio ?? 1;
-	const compareCoverageAmountRatio = compareSummary?.coverage_amount_ratio ?? 1;
 	const currentUncategorizedRatio = currentTotals.txCount > 0
 		? currentTotals.uncategorizedCount / currentTotals.txCount
 		: 0;
@@ -539,29 +713,67 @@ export function StatsOverviewPanel({
 		? compareTotals.uncategorizedCount / compareTotals.txCount
 		: 0;
 
-	const isCurrentLoading =
-		currentMonthStatsQuery.isLoading ||
-		currentCategoryStatsQuery.isLoading ||
-		currentSummaryQuery.isLoading;
-	const isCompareLoading = comparisonEnabled &&
-		(compareMonthStatsQuery.isLoading ||
-			compareCategoryStatsQuery.isLoading ||
-			compareSummaryQuery.isLoading);
-	const isLoading = isCurrentLoading || isCompareLoading;
+	const isFetching =
+		currentMonthStatsQuery.isFetching ||
+		currentCategoryStatsQuery.isFetching ||
+		currentSummaryQuery.isFetching ||
+		(comparisonEnabled &&
+			(compareMonthStatsQuery.isFetching ||
+				compareCategoryStatsQuery.isFetching ||
+				compareSummaryQuery.isFetching));
+	const hasAnyData =
+		currentMonthStatsQuery.data != null ||
+		currentCategoryStatsQuery.data != null ||
+		currentSummaryQuery.data != null;
 
-	const incomeDeltaAmount = currentTotals.income - compareTotals.income;
-	const expenseDeltaAmount = currentTotals.expense - compareTotals.expense;
-	const netDeltaAmount = currentTotals.net - compareTotals.net;
+	const currentIncomeValue = valueForAmountMode(currentTotals.income, amountMode, baseDayCount);
+	const currentExpenseValue = valueForAmountMode(currentTotals.expense, amountMode, baseDayCount);
+	const currentNetValue = valueForAmountMode(currentTotals.net, amountMode, baseDayCount);
+	const compareIncomeValue = valueForAmountMode(compareTotals.income, amountMode, compareDayCount);
+	const compareExpenseValue = valueForAmountMode(compareTotals.expense, amountMode, compareDayCount);
+	const compareNetValue = valueForAmountMode(compareTotals.net, amountMode, compareDayCount);
+	const incomeDeltaValue = currentIncomeValue - compareIncomeValue;
+	const expenseDeltaValue = currentExpenseValue - compareExpenseValue;
+	const netDeltaValue = currentNetValue - compareNetValue;
+	const suffix = amountModeSuffix(amountMode);
 
 	return (
 		<div className="space-y-4">
-			<div className="border border-gray-a4 p-3 space-y-3">
-				<div>
-					<div className="mb-1 text-xs text-gray-10 font-mono">period</div>
-					<div className="inline-flex flex-wrap border border-gray-a4 bg-gray-1 p-1 text-xs font-mono">
+			<div className="space-y-2">
+				<div className="bg-gray-3 px-3 py-1.5 flex items-center justify-between gap-3 text-xs font-medium">
+					<div className="flex items-baseline gap-2 min-w-0">
+						<span className="text-gray-10 font-normal font-mono truncate">
+							{f.longDate.format(new Date(baseRange.from))} – {f.longDate.format(new Date(baseRange.to))} · {baseDayCount}d
+						</span>
+					</div>
+					<div className="flex items-center gap-2 shrink-0">
+						<span
+							aria-hidden={!isFetching}
+							className={
+								"text-gray-10 transition-opacity " +
+								(isFetching ? "opacity-100" : "opacity-0")
+							}
+						>
+							<Spinner />
+						</span>
+						<FastLink
+							href={scopedTransactionHref}
+							className="text-xs font-mono font-normal text-gray-11 hover:text-gray-12 hover:underline"
+						>
+							view transactions →
+						</FastLink>
+					</div>
+				</div>
+
+				<div className="px-3 space-y-2">
+					<div className="flex flex-wrap items-center gap-1.5 text-xs font-mono">
 						{([
 							["this-month", "this month"],
 							["last-month", "last month"],
+							["last-7-days", "7d"],
+							["last-30-days", "30d"],
+							["last-90-days", "90d"],
+							["last-12-months", "12mo"],
 							["this-year", "this year"],
 							["last-year", "last year"],
 						] as const).map(([value, label]) => {
@@ -572,10 +784,10 @@ export function StatsOverviewPanel({
 									type="button"
 									onClick={() => onPeriodChange(value)}
 									className={
-										"px-2 py-1 transition-colors " +
+										"px-2 py-0.5 transition-colors " +
 										(isActive
-											? "bg-gray-a3 text-gray-12"
-											: "text-gray-10 hover:bg-gray-a2")
+											? "bg-gray-a4 text-gray-12"
+											: "text-gray-11 hover:bg-gray-a3")
 									}
 								>
 									{label}
@@ -583,62 +795,102 @@ export function StatsOverviewPanel({
 							);
 						})}
 					</div>
-				</div>
 
-				<div className="text-xs font-mono w-max">
-					<DateRangePickerInput
-						size="sm"
-						value={baseRange}
-						showWeekNumbers
-						onChange={(nextRange) => onCustomRangeChange(nextRange.from, nextRange.to)}
-					/>
-				</div>
-
-				<div>
-					<div className="mb-1 text-xs text-gray-10 font-mono">compare to</div>
-					<div className="inline-flex flex-wrap border border-gray-a4 bg-gray-1 p-1 text-xs font-mono">
-						{([
-							["previous", "previous period"],
-							["year-over-year", "same period last year"],
-							["none", "none"],
-						] as const).map(([value, label]) => {
-							const isActive = value === compare;
-							return (
+					<div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+						<div className="flex items-center gap-1 min-w-0">
+							<div className="inline-flex text-xs font-mono shrink-0">
 								<button
-									key={value}
 									type="button"
-									onClick={() => onCompareChange(value)}
-									className={
-										"px-2 py-1 transition-colors " +
-										(isActive
-											? "bg-gray-a3 text-gray-12"
-											: "text-gray-10 hover:bg-gray-a2")
-									}
+									aria-label="previous period"
+									title="previous period"
+									onClick={() => shiftRange(-1)}
+									className="grid size-7 place-items-center text-gray-11 hover:bg-gray-a3 hover:text-gray-12"
 								>
-									{label}
+									<IconChevronLeft />
 								</button>
-							);
-						})}
-					</div>
-				</div>
+								<button
+									type="button"
+									aria-label="next period"
+									title="next period"
+									onClick={() => shiftRange(1)}
+									className="grid size-7 place-items-center text-gray-11 hover:bg-gray-a3 hover:text-gray-12"
+								>
+									<IconChevronRight />
+								</button>
+							</div>
+							<div className="text-xs font-mono flex-1 min-w-0 sm:w-max sm:flex-none">
+								<DateRangePickerInput
+									size="sm"
+									value={baseRange}
+									showWeekNumbers
+									onChange={(nextRange) => onCustomRangeChange(nextRange.from, nextRange.to)}
+								/>
+							</div>
+						</div>
 
-				{comparisonEnabled && compareRange && (
-					<div className="mt-1 text-gray-a12">{f.longDate.format(new Date(compareRange.from))} to {f.longDate.format(new Date(compareRange.to))}</div>
-				)}
-				<div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-					<span className="text-gray-10">current scope</span>
-					<span>{baseLabel}</span>
-					<FastLink
-						href={scopedTransactionHref}
-						className="border border-gray-a4 px-2 py-1 text-gray-11 hover:bg-gray-a2"
-					>
-						view transactions
-					</FastLink>
+						<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs font-mono sm:ml-auto">
+							<div className="inline-flex items-center gap-1.5">
+								<span className="text-gray-10">amounts</span>
+								{([
+									["total", "total"],
+									["per-day", "/day"],
+								] as const).map(([value, label]) => {
+									const isActive = value === amountMode;
+									return (
+										<button
+											key={value}
+											type="button"
+											onClick={() => onAmountModeChange(value)}
+											className={
+												"px-1.5 py-0.5 transition-colors " +
+												(isActive
+													? "bg-gray-a4 text-gray-12"
+													: "text-gray-11 hover:bg-gray-a3")
+											}
+										>
+											{label}
+										</button>
+									);
+								})}
+							</div>
+							<div className="inline-flex items-center gap-1.5">
+								<span className="text-gray-10">vs</span>
+								{([
+									["previous", "prev"],
+									["year-over-year", "yoy"],
+									["none", "off"],
+								] as const).map(([value, label]) => {
+									const isActive = value === compare;
+									return (
+										<button
+											key={value}
+											type="button"
+											onClick={() => onCompareChange(value)}
+											className={
+												"px-1.5 py-0.5 transition-colors " +
+												(isActive
+													? "bg-gray-a4 text-gray-12"
+													: "text-gray-11 hover:bg-gray-a3")
+											}
+										>
+											{label}
+										</button>
+									);
+								})}
+							</div>
+						</div>
+					</div>
+
+					{comparisonEnabled && compareRange && (
+						<div className="text-[11px] font-mono text-gray-10">
+							compare to <span className="text-gray-11">{compareLabel}</span>
+							<span className="ml-1">({f.longDate.format(new Date(compareRange.from))} – {f.longDate.format(new Date(compareRange.to))})</span>
+						</div>
+					)}
 				</div>
 			</div>
 
 
-			{isLoading && <p className="text-xs text-gray-10">loading stats 2...</p>}
 			{currentMonthStatsQuery.isError && (
 				<pre className="text-xs text-red-11 whitespace-pre-wrap">
 					{String(currentMonthStatsQuery.error)}
@@ -670,99 +922,129 @@ export function StatsOverviewPanel({
 				</pre>
 			)}
 
-			<div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+			<div
+				className={
+					"space-y-4 transition-opacity duration-200 " +
+					(isFetching && hasAnyData ? "opacity-60" : "")
+				}
+			>
+			<div className="grid gap-px bg-gray-3 md:grid-cols-2 xl:grid-cols-4">
 				<StatsMetricCard
 					label="income"
-					value={f.amount(currentTotals.income, reportingCurrency)}
-					subvalue={`${currentTotals.txCount} tx`}
+					tone="income"
+					value={`${f.amount(currentIncomeValue, reportingCurrency)}${suffix}`}
+					subvalue={`${currentTotals.txCount} tx · ${baseDayCount}d`}
 					delta={comparisonEnabled
-						? `${formatSignedAmount(incomeDeltaAmount, f.amount, reportingCurrency)} (${formatSignedPercent(percentDelta(currentTotals.income, compareTotals.income))})`
+						? `${formatSignedAmount(incomeDeltaValue, f.amount, reportingCurrency)}${suffix} (${formatSignedPercent(percentDelta(currentIncomeValue, compareIncomeValue))})`
 						: undefined}
+					deltaDirection={comparisonEnabled ? directionOf(incomeDeltaValue) : undefined}
 				/>
 				<StatsMetricCard
 					label="expense"
-					value={f.amount(currentTotals.expense, reportingCurrency)}
-					subvalue={`${currentTotals.txCount} tx`}
+					tone="expense"
+					value={`${f.amount(currentExpenseValue, reportingCurrency)}${suffix}`}
+					subvalue={`${currentTotals.txCount} tx · ${baseDayCount}d`}
 					delta={comparisonEnabled
-						? `${formatSignedAmount(expenseDeltaAmount, f.amount, reportingCurrency)} (${formatSignedPercent(percentDelta(currentTotals.expense, compareTotals.expense))})`
+						? `${formatSignedAmount(expenseDeltaValue, f.amount, reportingCurrency)}${suffix} (${formatSignedPercent(percentDelta(currentExpenseValue, compareExpenseValue))})`
 						: undefined}
+					deltaDirection={comparisonEnabled ? directionOf(expenseDeltaValue) : undefined}
 				/>
 				<StatsMetricCard
 					label="net"
-					value={f.amount(currentTotals.net, reportingCurrency)}
-					subvalue={`${currentTotals.unconvertedCount} unconverted tx`}
+					tone="neutral"
+					value={`${f.amount(currentNetValue, reportingCurrency)}${suffix}`}
+					valueAccent={currentNetValue > 0 ? "good" : undefined}
+					subvalue={`${currentTotals.unconvertedCount} unconverted tx · ${baseDayCount}d`}
 					delta={comparisonEnabled
-						? `${formatSignedAmount(netDeltaAmount, f.amount, reportingCurrency)} (${formatSignedPercent(percentDelta(currentTotals.net, compareTotals.net))})`
+						? `${formatSignedAmount(netDeltaValue, f.amount, reportingCurrency)}${suffix} (${formatSignedPercent(percentDelta(currentNetValue, compareNetValue))})`
 						: undefined}
+					deltaDirection={comparisonEnabled ? directionOf(netDeltaValue) : undefined}
 				/>
 				<StatsMetricCard
 					label="savings rate"
+					tone="neutral"
 					value={currentSavingsRate == null ? "n/a" : `${(currentSavingsRate * 100).toFixed(1)}%`}
-					subvalue={`${f.amount(currentTotals.net, reportingCurrency)} net`}
-					delta={comparisonEnabled
+					subvalue={`${f.amount(currentNetValue, reportingCurrency)}${suffix} net`}
+					delta={comparisonEnabled && savingsRateDelta != null
 						? `${formatSignedNumber(savingsRateDelta, 1, "pp")} vs ${compareLabel}`
 						: undefined}
+					deltaDirection={comparisonEnabled && savingsRateDelta != null ? directionOf(savingsRateDelta) : undefined}
 				/>
 			</div>
 
-			<div className="grid gap-3 md:grid-cols-3">
-				<StatsMetricCard
-					label="uncategorized tx"
-					value={`${(currentUncategorizedRatio * 100).toFixed(1)}%`}
-					subvalue={`${currentTotals.uncategorizedCount}/${currentTotals.txCount} tx`}
-					delta={comparisonEnabled
-						? `${formatSignedNumber((currentUncategorizedRatio - compareUncategorizedRatio) * 100, 1, "pp")} vs ${compareLabel}`
-						: undefined}
-				/>
-				<StatsMetricCard
-					label="missing FX rate"
-					value={`${(currentMissingFxRatio * 100).toFixed(1)}%`}
-					subvalue={`${(currentSummary?.total_count ?? 0) - (currentSummary?.converted_count ?? 0)}/${currentSummary?.total_count ?? 0} tx`}
-					delta={comparisonEnabled
-						? `${formatSignedNumber((currentMissingFxRatio - compareMissingFxRatio) * 100, 1, "pp")} vs ${compareLabel}`
-						: undefined}
-				/>
-				<StatsMetricCard
-					label="amount coverage"
-					value={`${(currentCoverageAmountRatio * 100).toFixed(1)}%`}
-					subvalue={`mode ${mode}, stale ${maxStalenessDays}d`}
-					delta={comparisonEnabled
-						? `${formatSignedNumber((currentCoverageAmountRatio - compareCoverageAmountRatio) * 100, 1, "pp")} vs ${compareLabel}`
-						: undefined}
-				/>
+			<div className="flex flex-wrap gap-x-6 gap-y-1 px-3 py-2 bg-gray-2 text-[11px] font-mono text-gray-10">
+				<FastLink
+					href={scopedUncategorizedHref}
+					className="hover:underline hover:[&_*]:text-gray-12"
+				>
+					<span className="text-gray-11">{(currentUncategorizedRatio * 100).toFixed(1)}%</span>
+					{" "}<span className="text-gray-10">uncategorized</span>
+					{" "}<span className="text-gray-10">({currentTotals.uncategorizedCount}/{currentTotals.txCount})</span>
+					{comparisonEnabled && (
+						<span className="ml-1 text-gray-10">
+							{formatSignedNumber((currentUncategorizedRatio - compareUncategorizedRatio) * 100, 1, "pp")} vs {compareLabel}
+						</span>
+					)}
+				</FastLink>
+				<span>
+					<span className="text-gray-11">{(currentMissingFxRatio * 100).toFixed(1)}%</span>
+					{" "}missing FX
+					{" "}<span className="text-gray-10">({(currentSummary?.total_count ?? 0) - (currentSummary?.converted_count ?? 0)}/{currentSummary?.total_count ?? 0})</span>
+					{comparisonEnabled && (
+						<span className="ml-1 text-gray-10">
+							{formatSignedNumber((currentMissingFxRatio - compareMissingFxRatio) * 100, 1, "pp")} vs {compareLabel}
+						</span>
+					)}
+				</span>
+				<span>
+					<span className="text-gray-11">{(currentCoverageAmountRatio * 100).toFixed(1)}%</span>
+					{" "}amount coverage
+					{" "}<span className="text-gray-10">({mode}, stale {maxStalenessDays}d)</span>
+				</span>
 			</div>
 
 			{comparisonEnabled ? (
-				<div className="grid gap-4 lg:grid-cols-2">
+				<div className="grid gap-3 lg:grid-cols-2">
 					<CategoryDeltaPanel
 						title="expense category deltas"
 						increases={expenseIncrease}
 						decreases={expenseDecrease}
 						reportingCurrency={reportingCurrency}
+						amountSuffix={suffix}
+						bucket="e"
 					/>
 					<CategoryDeltaPanel
 						title="income category deltas"
 						increases={incomeIncrease}
 						decreases={incomeDecrease}
 						reportingCurrency={reportingCurrency}
+						amountSuffix={suffix}
+						bucket="i"
 					/>
 				</div>
 			) : (
-				<div className="grid gap-4 lg:grid-cols-2">
+				<div className="grid gap-3 lg:grid-cols-2">
 					<CurrentCategoryPanel
 						title="top expense categories"
 						rows={topCurrentExpense}
 						totalAmount={totalCurrentExpense}
 						reportingCurrency={reportingCurrency}
+						amountMode={amountMode}
+						dayCount={baseDayCount}
+						amountSuffix={suffix}
 					/>
 					<CurrentCategoryPanel
 						title="top income categories"
 						rows={topCurrentIncome}
 						totalAmount={totalCurrentIncome}
 						reportingCurrency={reportingCurrency}
+						amountMode={amountMode}
+						dayCount={baseDayCount}
+						amountSuffix={suffix}
 					/>
 				</div>
 			)}
+			</div>
 		</div>
 	);
 }
@@ -781,18 +1063,36 @@ function StatsMetricCard({
 	value,
 	subvalue,
 	delta,
+	deltaDirection,
+	tone,
+	valueAccent,
 }: {
 	label: string;
 	value: string;
 	subvalue: string;
 	delta?: string;
+	deltaDirection?: "up" | "down" | "flat" | null;
+	tone?: "income" | "expense" | "neutral";
+	valueAccent?: "good";
 }) {
+	const valueColor = valueAccent === "good" ? "text-green-11" : "text-gray-12";
+	const arrowColor = deltaDirection === "up"
+		? tone === "expense" ? "text-orange-11" : "text-green-11"
+		: deltaDirection === "down"
+			? tone === "expense" ? "text-green-11" : "text-orange-11"
+			: "text-gray-10";
+	const arrow = deltaDirection === "up" ? "↑" : deltaDirection === "down" ? "↓" : "·";
 	return (
-		<div className="border border-gray-a4 p-3">
+		<div className="bg-gray-2 px-3 py-2.5">
 			<div className="text-[11px] font-mono text-gray-10">{label}</div>
-			<div className="mt-1 text-sm text-gray-12">{value}</div>
-			<div className="mt-1 text-[11px] font-mono text-gray-10">{subvalue}</div>
-			{delta && <div className="mt-1 text-[11px] font-mono text-gray-10">{delta}</div>}
+			<div className={`mt-1 text-base font-medium ${valueColor}`}>{value}</div>
+			<div className="mt-0.5 text-[11px] font-mono text-gray-10">{subvalue}</div>
+			{delta && (
+				<div className="mt-1 text-[11px] font-mono text-gray-10">
+					{deltaDirection ? <span className={`mr-0.5 ${arrowColor}`}>{arrow}</span> : null}
+					{delta}
+				</div>
+			)}
 		</div>
 	);
 }
@@ -802,52 +1102,90 @@ function CategoryDeltaPanel({
 	increases,
 	decreases,
 	reportingCurrency,
+	amountSuffix,
+	bucket,
 }: {
 	title: string;
 	increases: CategoryDelta[];
 	decreases: CategoryDelta[];
 	reportingCurrency: string;
+	amountSuffix: string;
+	bucket: "i" | "e";
+}) {
+	return (
+		<div>
+			<div className="bg-gray-3 px-3 py-1.5 text-xs font-medium text-gray-12">{title}</div>
+			<div className="grid gap-x-6 gap-y-3 px-3 py-2 sm:grid-cols-2">
+				<DeltaColumn
+					direction="up"
+					rows={increases}
+					reportingCurrency={reportingCurrency}
+					amountSuffix={amountSuffix}
+					bucket={bucket}
+				/>
+				<DeltaColumn
+					direction="down"
+					rows={decreases}
+					reportingCurrency={reportingCurrency}
+					amountSuffix={amountSuffix}
+					bucket={bucket}
+				/>
+			</div>
+		</div>
+	);
+}
+
+function DeltaColumn({
+	direction,
+	rows,
+	reportingCurrency,
+	amountSuffix,
+	bucket,
+}: {
+	direction: "up" | "down";
+	rows: CategoryDelta[];
+	reportingCurrency: string;
+	amountSuffix: string;
+	bucket: "i" | "e";
 }) {
 	const { f } = useI18n();
-
+	const baseColor = "text-gray-12";
+	const headingColor = bucket === "e"
+		? direction === "up" ? "text-orange-11" : "text-green-11"
+		: direction === "up" ? "text-green-11" : "text-orange-11";
+	const arrow = direction === "up" ? "↑" : "↓";
+	const label = direction === "up" ? "increases" : "decreases";
 	return (
-		<div className="border border-gray-a4">
-			<div className="border-b border-gray-a4 px-3 py-2 text-xs font-mono text-gray-10">{title}</div>
-			<div className="p-3 grid gap-4 md:grid-cols-2">
-				<div>
-					<div className="mb-2 text-[11px] font-mono text-gray-10">biggest increases</div>
-					<div className="space-y-2">
-						{increases.length === 0 && <p className="text-xs text-gray-10">none</p>}
-						{increases.map((row) => (
-							<div key={`inc:${row.catName}`} className="text-xs font-mono">
-								<div className="flex items-center justify-between gap-2">
-									<span className="truncate text-gray-12">{displayCategoryName(row.catName)}</span>
-									<span className="text-gray-12">{f.amount(row.currentAmount, reportingCurrency)}</span>
+		<div>
+			<div className="mb-1 text-xs text-gray-11">
+				<span className={headingColor}>{arrow}</span> {label}
+			</div>
+			<div>
+				{rows.length === 0 && <p className="text-xs text-gray-10">none</p>}
+				{rows.map((row) => {
+					const isUp = row.deltaAmount > 0;
+					const deltaColor = bucket === "e"
+						? isUp ? "text-orange-11" : "text-green-11"
+						: isUp ? "text-green-11" : "text-orange-11";
+					return (
+						<div
+							key={`${bucket}:${row.catName}`}
+							className="flex items-baseline justify-between gap-2 py-1 text-xs font-mono"
+						>
+							<span className="truncate text-gray-12">{displayCategoryName(row.catName)}</span>
+							<div className="shrink-0 text-right">
+								<div className={baseColor}>
+									{f.amount(row.currentAmount, reportingCurrency)}{amountSuffix}
 								</div>
 								<div className="text-[11px] text-gray-10">
-									{formatSignedAmount(row.deltaAmount, f.amount, reportingCurrency)}
+									<span className={deltaColor}>{isUp ? "↑" : "↓"}</span>
+									{" "}
+									{formatSignedAmount(row.deltaAmount, f.amount, reportingCurrency)}{amountSuffix}
 								</div>
 							</div>
-						))}
-					</div>
-				</div>
-				<div>
-					<div className="mb-2 text-[11px] font-mono text-gray-10">biggest decreases</div>
-					<div className="space-y-2">
-						{decreases.length === 0 && <p className="text-xs text-gray-10">none</p>}
-						{decreases.map((row) => (
-							<div key={`dec:${row.catName}`} className="text-xs font-mono">
-								<div className="flex items-center justify-between gap-2">
-									<span className="truncate text-gray-12">{displayCategoryName(row.catName)}</span>
-									<span className="text-gray-12">{f.amount(row.currentAmount, reportingCurrency)}</span>
-								</div>
-								<div className="text-[11px] text-gray-10">
-									{formatSignedAmount(row.deltaAmount, f.amount, reportingCurrency)}
-								</div>
-							</div>
-						))}
-					</div>
-				</div>
+						</div>
+					);
+				})}
 			</div>
 		</div>
 	);
@@ -858,35 +1196,49 @@ function CurrentCategoryPanel({
 	rows,
 	totalAmount,
 	reportingCurrency,
+	amountMode,
+	dayCount,
+	amountSuffix,
 }: {
 	title: string;
 	rows: CategoryTotal[];
 	totalAmount: number;
 	reportingCurrency: string;
+	amountMode: StatsAmountMode;
+	dayCount: number;
+	amountSuffix: string;
 }) {
 	const { f } = useI18n();
 
 	return (
-		<div className="border border-gray-a4">
-			<div className="border-b border-gray-a4 px-3 py-2 text-xs font-mono text-gray-10">{title}</div>
-			<div className="space-y-3 p-3">
+		<div>
+			<div className="bg-gray-3 px-3 py-1.5 text-xs font-medium text-gray-12">{title}</div>
+			<div className="px-3 py-2">
 				{rows.length === 0 && <p className="text-xs text-gray-10">no data</p>}
 				{rows.map((row) => {
 					const share = totalAmount > 0 ? row.amount / totalAmount : 0;
+					const displayAmount = valueForAmountMode(row.amount, amountMode, dayCount);
 					return (
-						<div key={`${row.bucket}:${row.catName}`} className="space-y-1">
-							<div className="flex items-center justify-between gap-2 text-xs font-mono">
+						<div
+							key={`${row.bucket}:${row.catName}`}
+							className="-mx-1 px-1 py-1.5 hover:bg-gray-a3"
+						>
+							<div className="flex items-baseline justify-between gap-2 text-xs font-mono">
 								<span className="truncate text-gray-12">{displayCategoryName(row.catName)}</span>
-								<span className="shrink-0">{f.amount(row.amount, reportingCurrency)}</span>
+								<span className="shrink-0 text-gray-12">
+									{f.amount(displayAmount, reportingCurrency)}{amountSuffix}
+								</span>
 							</div>
-							<div className="h-1.5 w-full bg-gray-a3">
-								<div
-									className="h-full bg-gray-9"
-									style={{ width: `${Math.max(share * 100, share > 0 ? 3 : 0)}%` }}
-								/>
-							</div>
-							<div className="text-[11px] font-mono text-gray-10">
-								{row.txCount} tx · {(share * 100).toFixed(1)}%
+							<div className="mt-1 flex items-center gap-2">
+								<div className="h-1 flex-1 bg-gray-a3">
+									<div
+										className="h-full bg-gray-9"
+										style={{ width: `${Math.max(share * 100, share > 0 ? 3 : 0)}%` }}
+									/>
+								</div>
+								<div className="shrink-0 text-[11px] font-mono text-gray-10 tabular-nums">
+									{(share * 100).toFixed(0)}% · {row.txCount} tx
+								</div>
 							</div>
 						</div>
 					);

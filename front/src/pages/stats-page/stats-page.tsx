@@ -22,6 +22,7 @@ import {
 	parseStringArrayParam,
 } from "../../lib/string-array-param";
 import {
+	type StatsAmountMode,
 	type DateRange,
 	type StatsCompareValue,
 	type StatsPeriodValue,
@@ -36,6 +37,10 @@ function parseStatsPeriodValue(value: string | null): StatsPeriodValue {
 	if (
 		value === "this-month" ||
 		value === "last-month" ||
+		value === "last-7-days" ||
+		value === "last-30-days" ||
+		value === "last-90-days" ||
+		value === "last-12-months" ||
 		value === "this-year" ||
 		value === "last-year" ||
 		value === "custom"
@@ -43,6 +48,10 @@ function parseStatsPeriodValue(value: string | null): StatsPeriodValue {
 		return value;
 	}
 	return "this-month";
+}
+
+function parseStatsAmountMode(value: string | null): StatsAmountMode {
+	return value === "per-day" ? "per-day" : "total";
 }
 
 function parseStatsCompareValue(value: string | null): StatsCompareValue {
@@ -99,6 +108,7 @@ export function StatsPage() {
 	const activeTab = parseStatsTabValue(searchParams.get("tab"));
 	const period = parseStatsPeriodValue(searchParams.get("period"));
 	const compare = parseStatsCompareValue(searchParams.get("compare"));
+	const amountMode = parseStatsAmountMode(searchParams.get("amount"));
 	const q = searchParams.get("q") ?? "";
 	const categoryId = searchParams.get("cat") ?? "";
 	const accountId = searchParams.get("acc") ?? "";
@@ -201,14 +211,16 @@ export function StatsPage() {
 					</TabsPanel>
 
 				<TabsPanel value="stats-2">
-					<div className="mb-4 border border-gray-a4 p-3">
-						<div className="mb-2 flex items-center justify-between gap-3">
-							<div className="text-xs font-mono text-gray-10">scope</div>
+					<div className="mb-4 space-y-2">
+						<div className="flex items-center justify-between gap-3">
+							<div className="text-xs font-mono text-gray-11">
+								{hasScope ? "scope" : "scope (all transactions)"}
+							</div>
 							<FastLink
 								href={transactionsHref}
-								className="text-xs font-mono text-gray-11 hover:underline"
+								className="text-xs font-mono text-gray-11 hover:text-gray-12 hover:underline"
 							>
-								view matching txs
+								view matching txs →
 							</FastLink>
 						</div>
 						<StatsScopeControls
@@ -231,37 +243,41 @@ export function StatsPage() {
 						queryReportingCurrency={settings.data?.reporting_currency}
 						mode={mode}
 						maxStalenessDays={maxStalenessDays}
-							search={q || undefined}
-							filters={activeFilters}
-							scopeParams={scopeParams}
-							period={period}
-							compare={compare}
-							customFrom={customFrom}
-							customTo={customTo}
-							onPeriodChange={(value) => {
-								if (value === "custom") {
-									setStatsParams({
-										period: value,
-										from: customFrom,
-										to: customTo,
-									});
-									return;
-								}
+						search={q || undefined}
+						filters={activeFilters}
+						scopeParams={scopeParams}
+						period={period}
+						compare={compare}
+						amountMode={amountMode}
+						customFrom={customFrom}
+						customTo={customTo}
+						onPeriodChange={(value) => {
+							if (value === "custom") {
 								setStatsParams({
 									period: value,
-									from: undefined,
-									to: undefined,
+									from: customFrom,
+									to: customTo,
 								});
-							}}
-							onCompareChange={(value) => setStatsParams({ compare: value })}
-							onCustomRangeChange={(from, to) =>
-								setStatsParams({
-									period: "custom",
-									from,
-									to,
-								})
+								return;
 							}
-						/>
+							setStatsParams({
+								period: value,
+								from: undefined,
+								to: undefined,
+							});
+						}}
+						onCompareChange={(value) => setStatsParams({ compare: value })}
+						onAmountModeChange={(value) =>
+							setStatsParams({ amount: value === "per-day" ? value : undefined })
+						}
+						onCustomRangeChange={(from, to) =>
+							setStatsParams({
+								period: "custom",
+								from,
+								to,
+							})
+						}
+					/>
 					</TabsPanel>
 			</TabsRoot>
 		</div>
