@@ -57,6 +57,7 @@ const TRANSACTION_LIST_BASE_SELECT_SQL = `select
 	t.counter_party,
 	c.name as category_name,
 	a.name as account_name,
+	a.code as account_code,
 	coalesce(fs.flow_count, 0) as flow_count,
 	coalesce(fs.has_exchange, 0) as has_exchange,
 	coalesce(fs.has_transfer, 0) as has_transfer,
@@ -144,6 +145,7 @@ const TRANSACTION_LIST_ROW_SELECT_SQL = `	b.id,
 	b.counter_party,
 	b.category_name,
 	b.account_name,
+	b.account_code,
 	b.original_amount_minor,
 	b.effective_original_amount_minor,
 	b.effective_amount,
@@ -912,6 +914,7 @@ export type TransactionRow = TransactionWithConvertedAmount & {
 	counter_party: string;
 	category_name: string | null;
 	account_name: string;
+	account_code: string;
 	original_amount_minor: number;
 	effective_original_amount_minor: number;
 	effective_amount: number;
@@ -1134,6 +1137,7 @@ function toTransactionRow(row: RawTransactionRow): TransactionRow {
 		counter_party: row.counter_party,
 		category_name: row.category_name,
 		account_name: row.account_name,
+		account_code: row.account_code,
 		original_amount_minor: row.original_amount_minor,
 		effective_original_amount_minor: row.effective_original_amount_minor,
 		effective_amount: row.effective_amount,
@@ -1353,6 +1357,10 @@ type RefundPairRow = {
 	candidate_counter_party: string;
 	candidate_account_name: string;
 	candidate_available_amount: number;
+	date_gap_days: number;
+};
+type RefundCandidateBaseRow = LinkSuggestionTransactionRow & {
+	remaining_amount: number;
 	date_gap_days: number;
 };
 type FlowAmountByBaseRow = {
@@ -1924,7 +1932,11 @@ async function getRefundLinkSuggestions(
 		[txId],
 	);
 	const base = baseRows[0];
-	if (!base || base.amount >= 0) return [];
+	if (!base) return [];
+	if (base.amount > 0) {
+		return getRefundLinkSuggestionsForPositiveCandidate(db, txId, formatAmount);
+	}
+	if (base.amount >= 0) return [];
 
 	const incomingFlowRows = await db.query<FlowAmountTotalRow>(
 		`select sum(f.amount_minor) * 1.0 / coalesce(cm.minor_factor, 100) as total
@@ -2023,6 +2035,135 @@ async function getRefundLinkSuggestions(
 				suggested_flows: buildGroupSuggestedFlows({ kind: "refund_group", base, group, remainingAmount }),
 			});
 		}
+	}
+
+	return suggestions.sort((a, b) => b.score - a.score).slice(0, 6);
+}
+
+async function getRefundLinkSuggestionsForPositiveCandidate(
+	db: DbHandle,
+	txId: string,
+	formatAmount: AmountFormatter,
+): Promise<TransactionLinkSuggestion[]> {
+	const candidateRows = await db.query<AvailableLinkSuggestionTransactionRow>(
+		`select
+			c.id,
+			c.date,
+			c.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
+			c.currency,
+			c.counter_party,
+			coalesce(a.name, '') as account_name,
+			(c.amount_minor - coalesce((
+				select sum(f.amount_minor)
+				from transaction_flows f
+				where f.from_transaction_id = c.id
+					and f._sync_is_deleted = 0
+					and f.currency = c.currency
+					and f.kind in ('allocation', 'refund', 'own_transfer')
+			), 0)) * 1.0 / coalesce(cm.minor_factor, 100) as available_amount
+		from transactions c
+		left join accounts a on a.id = c.account_id
+		left join currency_meta cm on cm.currency = c.currency
+		where c.id = ?
+			and c._sync_is_deleted = 0
+			and c.amount_minor > 0
+		limit 1`,
+		[txId],
+	);
+	const candidate = candidateRows[0];
+	if (!candidate || candidate.available_amount <= 0) return [];
+
+	const candidateSignature = sortedCandidateSignature([candidate.id]);
+	const baseRows = await db.query<RefundCandidateBaseRow>(
+		`select
+			b.id,
+			b.date,
+			b.amount_minor * 1.0 / coalesce(cm.minor_factor, 100) as amount,
+			b.currency,
+			b.counter_party,
+			coalesce(a.name, '') as account_name,
+			(abs(b.amount_minor) - coalesce(u.total_minor, 0)) * 1.0 / coalesce(cm.minor_factor, 100) as remaining_amount,
+			julianday(date(?)) - julianday(date(b.date)) as date_gap_days
+		from transactions b
+		left join accounts a on a.id = b.account_id
+		left join currency_meta cm on cm.currency = b.currency
+		left join (
+			select
+				f.to_transaction_id as base_id,
+				f.currency,
+				sum(f.amount_minor) as total_minor
+			from transaction_flows f
+			where f._sync_is_deleted = 0
+				and f.kind in ('allocation', 'refund')
+			group by f.to_transaction_id, f.currency
+		) u on u.base_id = b.id and u.currency = b.currency
+		where b.id <> ?
+			and b._sync_is_deleted = 0
+			and b.currency = ?
+			and b.amount_minor < 0
+			and julianday(date(?)) - julianday(date(b.date)) between 0 and 45
+			and not exists (
+				select 1 from transaction_flows f
+				where f._sync_is_deleted = 0
+					and f.from_transaction_id = ?
+					and f.to_transaction_id = b.id
+					and f.kind in ('allocation', 'refund')
+			)
+			and not exists (
+				select 1 from transaction_link_suggestion_dismissals d
+				where d.kind = 'refund_group'
+					and d.primary_transaction_id = b.id
+					and d.candidate_signature = ?
+			)
+		order by date_gap_days asc, b.date desc, b.id desc
+		limit 24`,
+		[
+			candidate.date,
+			candidate.id,
+			candidate.currency,
+			candidate.date,
+			candidate.id,
+			candidateSignature,
+		],
+	);
+
+	const suggestions: TransactionLinkSuggestion[] = [];
+	for (const base of baseRows
+		.filter((row) => row.remaining_amount > 0)
+		.filter((row) => countTokenOverlap(row.counter_party, candidate.counter_party) > 0)
+		.slice(0, 12)) {
+		const coverage = candidate.available_amount / base.remaining_amount;
+		if (coverage < 0.15 || coverage > 1.05) continue;
+		const overlap = countTokenOverlap(base.counter_party, candidate.counter_party);
+		const avgGap = Math.max(0, base.date_gap_days);
+		const exactish = Math.abs(coverage - 1) <= 0.02;
+		const score = 60 + Math.min(22, coverage * 22) + Math.min(18, overlap * 6) + (exactish ? 15 : 0) - avgGap / 3;
+		if (score < REFUND_SUGGESTION_MIN_SCORE) continue;
+		const suggestedAmount = Math.min(candidate.available_amount, base.remaining_amount);
+		suggestions.push({
+			id: `refund_group:${base.id}:${candidateSignature}`,
+			kind: "refund_group",
+			transaction_ids: [base.id, candidate.id],
+			primary_transaction_id: base.id,
+			score,
+			confidence: suggestionConfidence(score),
+			reason: "possible refund",
+			evidence: [
+				"later incoming payment",
+				`${formatAmount(suggestedAmount, base.currency)} of ${formatAmount(base.remaining_amount, base.currency)} remaining`,
+				"counterparty text overlap",
+			],
+			transactions: [base, candidate].map(toSuggestionMember),
+			suggested_flows: [
+				{
+					from_transaction_id: candidate.id,
+					to_transaction_id: base.id,
+					amount: suggestedAmount,
+					currency: base.currency,
+					kind: "refund",
+				},
+			],
+		});
 	}
 
 	return suggestions.sort((a, b) => b.score - a.score).slice(0, 6);

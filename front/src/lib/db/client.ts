@@ -343,6 +343,7 @@ export function getDb(accountRootKey: Uint8Array<ArrayBuffer>): DbClient {
 				name text not null unique,
 				currency text not null default 'EUR',
 				external_id text,
+				code text not null,
 				created_at text not null,
 				updated_at text,
 
@@ -350,6 +351,10 @@ export function getDb(accountRootKey: Uint8Array<ArrayBuffer>): DbClient {
 				_sync_is_deleted integer default 0,
 				_sync_status integer default 1
 			)`,
+
+			`create unique index if not exists idx_accounts_code_active
+				on accounts(code)
+				where _sync_is_deleted = 0`,
 
 			`create table if not exists transactions (
 				id text primary key not null,

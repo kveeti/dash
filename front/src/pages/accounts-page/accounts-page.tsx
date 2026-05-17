@@ -19,6 +19,7 @@ import {
 } from "../../lib/queries/accounts";
 import { DEFAULT_CURRENCY } from "../../lib/currency";
 import { useCurrencyMetaQuery } from "../../lib/queries/currencies";
+import { generateAccountCode } from "../../lib/account-code";
 
 export function AccountsPage() {
 	const [search, setSearch] = useState("");
@@ -59,19 +60,32 @@ function CreateAccountForm() {
 	const createAccount = useCreateAccountMutation();
 	const currencyMeta = useCurrencyMetaQuery();
 	const currencyCodes = currencyMeta.data?.map((meta) => meta.currency) ?? [DEFAULT_CURRENCY];
+	const [name, setName] = useState("");
 
 	async function handleSubmit(e: FormEvent<HTMLFormElement>) {
 		e.preventDefault();
 		const form = e.currentTarget;
 		const data = new FormData(form);
 
-		const name = (data.get("name") as string).trim();
-		if (!name) return;
+		const submittedName = (data.get("name") as string).trim();
+		if (!submittedName) return;
 
 		const currency = (data.get("currency") as string) || DEFAULT_CURRENCY;
 		const externalId = (data.get("external_id") as string | null)?.trim() || null;
-		await createAccount.mutateAsync({ name, currency, external_id: externalId });
+		const submittedCode = (data.get("code") as string).trim() || null;
+		try {
+			await createAccount.mutateAsync({
+				name: submittedName,
+				currency,
+				external_id: externalId,
+				code: submittedCode,
+			});
+		} catch (err) {
+			alert(err instanceof Error ? err.message : "could not create account");
+			return;
+		}
 		form.reset();
+		setName("");
 		(form.name as unknown as HTMLInputElement | undefined)?.focus();
 	}
 
@@ -81,7 +95,17 @@ function CreateAccountForm() {
 				<legend className="font-medium text-xs">new account</legend>
 
 				<div className="flex flex-col gap-3 w-full mr-2 -mt-0.5">
-					<Input id="name" label="name" name="name" type="text" className="flex-1" required />
+					<Input
+						id="name"
+						label="name"
+						name="name"
+						type="text"
+						className="flex-1"
+						value={name}
+						onChange={(e) => setName(e.currentTarget.value)}
+						required
+					/>
+					<AccountCodeInput key={name} sourceName={name} />
 					<Input
 						label="external id (optional)"
 						name="external_id"
@@ -90,9 +114,9 @@ function CreateAccountForm() {
 						placeholder="e.g. IBAN"
 					/>
 					<Select label="currency" name="currency" defaultValue={DEFAULT_CURRENCY}>
-						{currencyCodes.map((code) => (
-							<option key={code} value={code}>
-								{code}
+						{currencyCodes.map((c) => (
+							<option key={c} value={c}>
+								{c}
 							</option>
 						))}
 					</Select>
@@ -104,8 +128,27 @@ function CreateAccountForm() {
 	);
 }
 
+function AccountCodeInput({ sourceName }: { sourceName: string }) {
+	const [value, setValue] = useState("");
+
+	return (
+		<Input
+			label="code (3 chars, leave blank to auto-generate)"
+			name="code"
+			type="text"
+			className="flex-1 font-mono uppercase"
+			maxLength={3}
+			value={value}
+			placeholder={generateAccountCode(sourceName || "")}
+			onChange={(e) => setValue(e.currentTarget.value.toUpperCase())}
+		/>
+	);
+}
+
 function AccountRow({ account }: { account: AccountWithCount }) {
-	const [editing, setEditing] = useState<"name" | "external_id" | "currency" | boolean>(false);
+	const [editing, setEditing] = useState<
+		"name" | "external_id" | "currency" | "code" | boolean
+	>(false);
 	const updateAccount = useUpdateAccountMutation();
 	const currencyMeta = useCurrencyMetaQuery();
 	const currencyCodes = currencyMeta.data?.map((meta) => meta.currency) ?? [account.currency];
@@ -120,12 +163,19 @@ function AccountRow({ account }: { account: AccountWithCount }) {
 
 		const currency = (data.get("currency") as string) || DEFAULT_CURRENCY;
 		const externalId = (data.get("external_id") as string | null)?.trim() || null;
-		await updateAccount.mutateAsync({
-			id: account.id,
-			name,
-			currency,
-			external_id: externalId,
-		});
+		const code = (data.get("code") as string).trim() || null;
+		try {
+			await updateAccount.mutateAsync({
+				id: account.id,
+				name,
+				currency,
+				external_id: externalId,
+				code,
+			});
+		} catch (err) {
+			alert(err instanceof Error ? err.message : "could not save account");
+			return;
+		}
 		setEditing(false);
 	}
 
@@ -142,6 +192,15 @@ function AccountRow({ account }: { account: AccountWithCount }) {
 							className="flex-1"
 							required
 							defaultValue={account.name}
+						/>
+						<Input
+							autoFocus={editing === "code"}
+							label="code (3 chars, shown in tx list)"
+							name="code"
+							type="text"
+							className="flex-1 font-mono uppercase"
+							maxLength={3}
+							defaultValue={account.code}
 						/>
 						<Input
 							autoFocus={editing === "external_id"}
@@ -185,6 +244,19 @@ function AccountRow({ account }: { account: AccountWithCount }) {
 							{account.name}
 						</button>
 						<div className="flex gap-0.5 items-center">
+							<button
+								title="edit code"
+								className="contents cursor-pointer"
+								onClick={() => {
+									setEditing("code");
+								}}
+							>
+								<span className="font-mono text-xs text-gray-11 tabular-nums">
+									{account.code}
+								</span>
+								<IconDividerVertical className="text-gray-10" />
+							</button>
+
 							<span className="text-gray-10 text-xs">{account.tx_count} tx</span>
 
 							<button

@@ -38,10 +38,7 @@ import {
 	formatStringArrayParam,
 	parseStringArrayParam,
 } from "../../lib/string-array-param";
-import {
-	TagChips,
-	TagMultiCombobox,
-} from "../../components/tag-combobox";
+import { TagMultiCombobox } from "../../components/tag-combobox";
 import { CurrencyMultiCombobox } from "../../components/currency-multi-combobox";
 
 type DateRangeFilter = {
@@ -212,43 +209,6 @@ function useSelection() {
 	return { selectedIds, toggle, clear, isSelecting: selectedIds.size > 0 };
 }
 
-function resolveAmountDisplay(
-	tx: {
-		amount: number;
-		currency: string;
-		converted_amount: number | null;
-		converted_currency: string;
-	},
-) {
-	if (tx.converted_amount == null) {
-		return {
-			amount: tx.amount,
-			currency: tx.currency,
-			original: null as { amount: number; currency: string } | null,
-		};
-	}
-
-	const convertedCurrency = tx.converted_currency;
-	const wasConverted = tx.currency !== convertedCurrency;
-
-	return {
-		amount: tx.converted_amount,
-		currency: convertedCurrency,
-		original: wasConverted
-			? { amount: tx.amount, currency: tx.currency }
-			: null,
-	};
-}
-
-function resolveFlowLabel(tx: TransactionRow) {
-	if (!tx.flow_count) return null;
-	if (tx.flow_count > 1) return `${tx.flow_count} links`;
-	if (tx.has_exchange) return "exchange";
-	if (tx.has_transfer) return "transfer";
-	if (tx.has_refund) return "refund";
-	if (tx.has_allocation) return "allocated";
-	return "linked";
-}
 
 export function TransactionsPage() {
 	const {
@@ -287,6 +247,8 @@ export function TransactionsPage() {
 	const scrolledForCursor = useRef<string | null>(null);
 	const [showFilters, setShowFilters] = useState(hasFilters);
 	const dateSorted = isDateSort(sort);
+	const hideAccount = !!accountId || accounts.data?.length === 1;
+	const hideCategory = !!categoryId;
 	const statsHref = buildPath("/stats", {
 		tab: "stats-2",
 		...(dateRange ? { period: "custom", from: dateRange.from, to: dateRange.to } : {}),
@@ -372,6 +334,8 @@ export function TransactionsPage() {
 										});
 									}}
 									showInlineDate={!dateSorted}
+									hideAccount={!!hideAccount}
+									hideCategory={hideCategory}
 									liRef={(elem) => {
 										const cursorKey = left ?? right;
 										if (
@@ -483,11 +447,97 @@ function useLongPress(callback: () => void, ms = 500) {
 	};
 }
 
+type FlowSymbol = { symbol: string; label: string };
+
+function resolveFlowSymbol(tx: TransactionRow): FlowSymbol | null {
+	if (!tx.flow_count) return null;
+
+	const pickSymbol = (): FlowSymbol => {
+		if (tx.has_exchange) return { symbol: "⇄", label: "exchange" };
+		if (tx.has_transfer) return { symbol: "→", label: "transfer" };
+		if (tx.has_refund) return { symbol: "↩", label: "refund" };
+		if (tx.has_allocation) return { symbol: "÷", label: "allocation" };
+		return { symbol: "·", label: "linked" };
+	};
+
+	const base = pickSymbol();
+	if (tx.flow_count === 1) return base;
+	return {
+		symbol: `${base.symbol}${tx.flow_count}`,
+		label: `${tx.flow_count} links`,
+	};
+}
+
+type AmountDisplay = {
+	primary: { amount: number; currency: string } | null;
+	isIncome: boolean;
+	strikePrimary: boolean;
+	struckGross: { amount: number; currency: string } | null;
+	originalHint: { amount: number; currency: string } | null;
+};
+
+function resolveAmountDisplay(tx: TransactionRow): AmountDisplay {
+	const wasConverted =
+		tx.converted_amount != null && tx.currency !== tx.converted_currency;
+	const wasModified =
+		tx.effective_original_amount_minor !== tx.original_amount_minor;
+
+	const displayCurrency = wasConverted ? tx.converted_currency : tx.currency;
+	const displayGross = wasConverted
+		? (tx.converted_amount as number)
+		: tx.amount;
+
+	let displayEffective: number;
+	if (wasConverted && tx.amount !== 0) {
+		const ratio = tx.effective_amount / tx.amount;
+		displayEffective = (tx.converted_amount as number) * ratio;
+	} else {
+		displayEffective = tx.effective_amount;
+	}
+
+	const fullyNullified = wasModified && tx.effective_amount === 0;
+	const isPositiveExchange = !!tx.has_exchange && tx.amount > 0;
+
+	// For positive exchange (inflow side), the converted amount is misleading —
+	// it's just the same amount expressed in the reporting currency. Show the
+	// original currency amount as primary (struck) so the user sees what was
+	// actually received in the exchange.
+	if (isPositiveExchange) {
+		return {
+			primary: { amount: tx.amount, currency: tx.currency },
+			isIncome: false,
+			strikePrimary: true,
+			struckGross: null,
+			originalHint: null,
+		};
+	}
+
+	const referenceForSign = fullyNullified ? displayGross : displayEffective;
+
+	return {
+		primary: fullyNullified
+			? null
+			: { amount: displayEffective, currency: displayCurrency },
+		isIncome: referenceForSign > 0,
+		strikePrimary: false,
+		struckGross: wasModified
+			? { amount: displayGross, currency: displayCurrency }
+			: null,
+		originalHint: wasConverted
+			? { amount: tx.amount, currency: tx.currency }
+			: null,
+	};
+}
+
+const VISIBLE_TAG_LIMIT = 2;
+
 function TxRow({
 	tx,
 	selected,
 	selecting,
 	showInlineDate,
+	hideAccount,
+	hideCategory,
 	onSelect,
 	onClick,
 	liRef,
@@ -496,16 +546,17 @@ function TxRow({
 	selected: boolean;
 	selecting: boolean;
 	showInlineDate: boolean;
+	hideAccount: boolean;
+	hideCategory: boolean;
 	onSelect: () => void;
 	onClick: (event: MouseEvent<HTMLDivElement>) => void;
 	liRef: Ref<HTMLLIElement>;
 }) {
 	const { f } = useI18n();
 	const amountDisplay = resolveAmountDisplay(tx);
-	const isIncome = amountDisplay.amount > 0;
-	const flowLabel = resolveFlowLabel(tx);
-	const hasEffectiveAmount =
-		tx.effective_original_amount_minor !== tx.original_amount_minor;
+	const flowSymbol = resolveFlowSymbol(tx);
+	const visibleTags = tx.tags.slice(0, VISIBLE_TAG_LIMIT);
+	const overflowTagCount = tx.tags.length - visibleTags.length;
 
 	const longPress = useLongPress(() => {
 		onSelect();
@@ -515,7 +566,7 @@ function TxRow({
 		<li ref={liRef} className="scroll-mt-17">
 			<div
 				className={
-					"flex items-center justify-between gap-3 hover:bg-gray-a3 px-3 py-2 select-none" +
+					"flex items-start justify-between gap-3 hover:bg-gray-a3 px-3 py-2 select-none" +
 					(selected ? " bg-gray-a3" : "")
 				}
 				onClick={(event) => {
@@ -545,46 +596,98 @@ function TxRow({
 				)}
 				<div className="min-w-0 flex-1">
 					<div className="flex items-baseline gap-2">
-						<span className="truncate">{tx.counter_party}</span>
-					</div>
-					<div className="mt-0.5 flex min-w-0 items-center gap-2 text-xs">
 						{showInlineDate && (
-							<span className="shrink-0 text-gray-10">
+							<span className="shrink-0 text-xs text-gray-10 tabular-nums">
 								{f.shortDate.format(tx.date)}
 							</span>
 						)}
-						{flowLabel && (
-							<span className="shrink-0 border border-gray-a4 px-1.25 text-[11px] leading-4 text-gray-a11">
-								{flowLabel}
+						<span className="truncate font-medium">{tx.counter_party}</span>
+					</div>
+					<div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs">
+						{!hideCategory && tx.category_name && (
+							<span className="truncate text-gray-12">
+								{tx.category_name}
 							</span>
 						)}
-						{tx.category_name && (
-							<span className="truncate">{tx.category_name}</span>
+						{!hideCategory && tx.category_name && !hideAccount && (
+							<span className="shrink-0 text-gray-8">·</span>
 						)}
-						<span className="truncate text-gray-11">{tx.account_name}</span>
+						{!hideAccount && (
+							<span
+								className="shrink-0 font-mono text-gray-10 tabular-nums"
+								title={tx.account_name}
+							>
+								{tx.account_code}
+							</span>
+						)}
+						{visibleTags.length > 0 && (
+							<div className="ml-1 flex min-w-0 items-center gap-1">
+								{visibleTags.map((tag) => (
+									<span key={tag.id} className="shrink-0 text-gray-11">
+										<span className="text-gray-8">#</span>
+										{tag.name}
+									</span>
+								))}
+								{overflowTagCount > 0 && (
+									<span className="shrink-0 text-gray-10">
+										+{overflowTagCount}
+									</span>
+								)}
+							</div>
+						)}
 					</div>
-					{tx.tags.length > 0 && (
-						<div className="mt-1">
-							<TagChips tags={tx.tags} />
-						</div>
-					)}
 				</div>
-				<div className="text-right">
-					<span
-						className={`shrink-0 text-sm ${isIncome ? "text-green-11" : ""}`}
-					>
-						{f.amount(amountDisplay.amount, amountDisplay.currency)}
-					</span>
-					{amountDisplay.original && (
-						<div className="text-[11px] text-gray-11 leading-tight text-right">
-							({f.amount(amountDisplay.original.amount, amountDisplay.original.currency)})
-						</div>
-					)}
-					{hasEffectiveAmount && (
-						<div className="text-[11px] text-gray-11 leading-tight text-right">
-							net {f.amount(tx.effective_amount, tx.currency)}
-						</div>
-					)}
+				<div className="shrink-0">
+					<div className="flex items-baseline justify-end gap-1.5">
+						{flowSymbol && (
+							<span
+								className="text-xs text-gray-10"
+								title={flowSymbol.label}
+							>
+								{flowSymbol.symbol}
+							</span>
+						)}
+						{amountDisplay.struckGross && (
+							<span className="text-sm text-gray-10 line-through">
+								{f.amount(
+									amountDisplay.struckGross.amount,
+									amountDisplay.struckGross.currency,
+								)}
+							</span>
+						)}
+						{amountDisplay.originalHint && (
+							<span
+								className={
+									"text-[11px] text-gray-10" +
+									(amountDisplay.struckGross ? " line-through" : "")
+								}
+							>
+								(
+								{f.amount(
+									amountDisplay.originalHint.amount,
+									amountDisplay.originalHint.currency,
+								)}
+								)
+							</span>
+						)}
+						{amountDisplay.primary && (
+							<span
+								className={
+									"text-sm" +
+									(amountDisplay.strikePrimary
+										? " text-gray-10 line-through"
+										: amountDisplay.isIncome
+											? " text-green-11"
+											: "")
+								}
+							>
+								{f.amount(
+									amountDisplay.primary.amount,
+									amountDisplay.primary.currency,
+								)}
+							</span>
+						)}
+					</div>
 				</div>
 			</div>
 		</li>

@@ -1,6 +1,10 @@
 import type { DbHandle, DbSqlHandle } from "./client";
 import Papa from "papaparse";
 import { id } from "../id";
+import {
+	ensureUniqueAccountCode,
+	generateAccountCode,
+} from "../account-code";
 import { getOrCreateCategoryByName } from "./categories";
 import {
 	parseCurrency,
@@ -613,11 +617,16 @@ export async function importLegacyCsvBundle(
 		let categoriesImported = 0;
 		let transactionsImported = 0;
 		const importedTxIds: string[] = [];
-		const existingAccounts = await txDb.query<{ id: string; name: string }>(
-			"select id, name from accounts where _sync_is_deleted = 0",
+		const existingAccounts = await txDb.query<{
+			id: string;
+			name: string;
+			code: string;
+		}>("select id, name, code from accounts where _sync_is_deleted = 0");
+		const existingAccountNames = new Map(
+			existingAccounts.map((a) => [a.name, a.id]),
 		);
-		const existingAccountNames = new Map(existingAccounts.map((a) => [a.name, a.id]));
 		const existingAccountIds = new Set(existingAccounts.map((a) => a.id));
+		const takenCodes = new Set(existingAccounts.map((a) => a.code));
 		const accountIdMap = new Map<string, string>();
 
 		for (const { lineNum, record } of accountsTable.rows) {
@@ -638,10 +647,15 @@ export async function importLegacyCsvBundle(
 			const newId = existingAccountIds.has(oldId) ? id() : oldId;
 			const currency = parseCurrency(record.currency, "EUR");
 			const externalId = record.external_id?.trim() || null;
+			const code = ensureUniqueAccountCode(
+				generateAccountCode(name),
+				takenCodes,
+			);
+			takenCodes.add(code);
 			await txDb.exec(
-				`insert into accounts (id, created_at, updated_at, name, currency, external_id, _sync_edited_at)
-				values (?, ?, ?, ?, ?, ?, ?)`,
-				[newId, now, now, name, currency, externalId, Date.now()],
+				`insert into accounts (id, created_at, updated_at, name, currency, external_id, code, _sync_edited_at)
+				values (?, ?, ?, ?, ?, ?, ?, ?)`,
+				[newId, now, now, name, currency, externalId, code, Date.now()],
 			);
 			accountIdMap.set(oldId, newId);
 			existingAccountNames.set(name, newId);

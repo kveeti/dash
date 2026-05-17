@@ -36,6 +36,7 @@ export type AccountSyncData = {
 	name: string;
 	currency: string;
 	external_id: string | null;
+	code: string;
 };
 
 export type CategorySyncData = {
@@ -325,6 +326,7 @@ const accountV1: SyncSchema<AccountSyncData> = {
 			"name",
 			"currency",
 			"external_id",
+			"code",
 		]);
 		return {
 			created_at: string(o.created_at, "account.created_at"),
@@ -332,6 +334,7 @@ const accountV1: SyncSchema<AccountSyncData> = {
 			name: string(o.name, "account.name"),
 			currency: string(o.currency, "account.currency"),
 			external_id: nullableString(o.external_id, "account.external_id"),
+			code: string(o.code, "account.code"),
 		};
 	},
 };
