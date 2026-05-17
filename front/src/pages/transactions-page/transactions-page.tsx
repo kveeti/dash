@@ -27,7 +27,6 @@ import {
 } from "react";
 import { Button, buttonStyles } from "../../components/button";
 import { Input } from "../../components/input";
-import { Select } from "../../components/select";
 import { CategoryCombobox } from "../../components/category-combobox";
 import { Combobox } from "../../components/combobox";
 import { IconChevronsUpDown } from "../../components/icons/chevrons-up-down";
@@ -40,6 +39,12 @@ import {
 } from "../../lib/string-array-param";
 import { TagMultiCombobox } from "../../components/tag-combobox";
 import { CurrencyMultiCombobox } from "../../components/currency-multi-combobox";
+import {
+	TransactionFilterMenu,
+	buildFilterChips,
+	FilterChip,
+	SortMenu,
+} from "../../components/transaction-filter-menu";
 
 type DateRangeFilter = {
 	from: string;
@@ -259,6 +264,20 @@ export function TransactionsPage() {
 
 	let currentDay: string | null = null;
 
+	const chips = buildFilterChips({
+		q,
+		categoryId,
+		accountId,
+		currencyIds,
+		tagIds,
+		uncategorized,
+		dateRange,
+		categories: categories.data,
+		accounts: accounts.data,
+		tags: tags.data,
+		setParams,
+	});
+
 	return (
 		<>
 			<div className="w-full max-w-[720px] mx-auto px-4 sm:px-6 pt-2 pb-32">
@@ -291,6 +310,29 @@ export function TransactionsPage() {
 					</div>
 				</div>
 
+				<div className="hidden sm:flex mt-3 flex-wrap items-center gap-1.5">
+					<TransactionFilterMenu
+						categoryId={categoryId}
+						accountId={accountId}
+						currencyIds={currencyIds}
+						tagIds={tagIds}
+						uncategorized={uncategorized}
+						dateRange={dateRange}
+						categories={categories.data}
+						accounts={accounts.data}
+						currencies={currencies.data}
+						tags={tags.data}
+						setParams={setParams}
+						onRequestCustomDate={() => setShowFilters(true)}
+					/>
+					{chips.map((chip) => (
+						<FilterChip key={chip.key} chip={chip} />
+					))}
+					<div className="ml-auto">
+						<SortMenu sort={sort} setParams={setParams} />
+					</div>
+				</div>
+
 				{showFilters && (
 					<div className="hidden sm:block mt-3 space-y-2">
 						<FilterControls
@@ -299,7 +341,6 @@ export function TransactionsPage() {
 							accountId={accountId}
 							currencyIds={currencyIds}
 							tagIds={tagIds}
-							sort={sort}
 							uncategorized={uncategorized}
 							dateRange={dateRange}
 							hasFilters={hasFilters}
@@ -406,7 +447,6 @@ export function TransactionsPage() {
 				accountId={accountId}
 				currencyIds={currencyIds}
 				tagIds={tagIds}
-				sort={sort}
 				uncategorized={uncategorized}
 				dateRange={dateRange}
 				categories={categories.data}
@@ -707,7 +747,6 @@ function FilterControls({
 	accountId,
 	currencyIds,
 	tagIds,
-	sort,
 	uncategorized,
 	dateRange,
 	hasFilters,
@@ -722,7 +761,6 @@ function FilterControls({
 	accountId: string;
 	currencyIds: string[];
 	tagIds: string[];
-	sort: TransactionSort;
 	uncategorized: boolean;
 	dateRange: DateRangeFilter | undefined;
 	hasFilters: boolean;
@@ -808,7 +846,7 @@ function FilterControls({
 				/>
 			</div>
 
-			<div className="flex gap-2">
+			<div>
 				<CurrencyMultiCombobox
 					currencies={currencies}
 					value={currencyIds}
@@ -818,34 +856,6 @@ function FilterControls({
 					placeholder="all currencies"
 					size="sm"
 				/>
-
-				<Select
-					size="sm"
-					value={sort}
-					onChange={(e) =>
-						setParams({
-							sort:
-								e.currentTarget.value === "date_desc"
-									? undefined
-									: e.currentTarget.value,
-						})
-					}
-				>
-					<option value="date_desc">newest first</option>
-					<option value="date_asc">oldest first</option>
-					<option value="effective_amount_abs_desc">largest effective amount</option>
-					<option value="effective_amount_abs_asc">smallest effective amount</option>
-					<option value="effective_amount_desc">effective income to expense</option>
-					<option value="effective_amount_asc">effective expense to income</option>
-					<option value="amount_abs_desc">largest amount</option>
-					<option value="amount_abs_asc">smallest amount</option>
-					<option value="amount_desc">income to expense</option>
-					<option value="amount_asc">expense to income</option>
-					<option value="counter_party_asc">counterparty A-Z</option>
-					<option value="counter_party_desc">counterparty Z-A</option>
-					<option value="category_asc">category A-Z</option>
-					<option value="account_asc">account A-Z</option>
-				</Select>
 			</div>
 			{hasFilters && (
 				<button
@@ -858,7 +868,6 @@ function FilterControls({
 							acc: undefined,
 							cur: undefined,
 							tags: undefined,
-							sort: undefined,
 							uncat: undefined,
 							from: undefined,
 							to: undefined,
@@ -968,7 +977,6 @@ function MobileFilterBar({
 	accountId,
 	currencyIds,
 	tagIds,
-	sort,
 	uncategorized,
 	dateRange,
 	categories,
@@ -986,7 +994,6 @@ function MobileFilterBar({
 	accountId: string;
 	currencyIds: string[];
 	tagIds: string[];
-	sort: TransactionSort;
 	uncategorized: boolean;
 	dateRange: DateRangeFilter | undefined;
 	categories: Array<{ id: string; name: string }> | undefined;
@@ -1006,7 +1013,6 @@ function MobileFilterBar({
 							accountId={accountId}
 							currencyIds={currencyIds}
 							tagIds={tagIds}
-							sort={sort}
 							uncategorized={uncategorized}
 							dateRange={dateRange}
 							hasFilters={hasFilters}

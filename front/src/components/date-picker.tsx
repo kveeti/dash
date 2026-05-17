@@ -154,6 +154,48 @@ export function DateRangePickerInput({
 	);
 }
 
+export function DateRangeDialog({
+	value,
+	onChange,
+	onOpenChange,
+	showWeekNumbers = true,
+}: {
+	value: DateRangeChangeValue | undefined;
+	onChange: (value: DateRangeChangeValue) => void;
+	onOpenChange: (open: boolean) => void;
+	showWeekNumbers?: boolean;
+}) {
+	const parsedRange = parseDateRangeValue(value);
+	return (
+		<AriaRangeCalendar
+			value={parsedRange}
+			className="cursor-default"
+			onChange={(next) => {
+				if (!next?.start || !next?.end) return;
+				onChange({ from: next.start.toString(), to: next.end.toString() });
+				onOpenChange(false);
+			}}
+		>
+			<header className="mb-2 flex items-center justify-between px-1 pt-1">
+				<Button
+					slot="previous"
+					className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none"
+				>
+					<IconChevronLeft />
+				</Button>
+				<Heading className="text-xs text-gray-11 font-mono text-center" />
+				<Button
+					slot="next"
+					className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none"
+				>
+					<IconChevronRight />
+				</Button>
+			</header>
+			<RangeCalendarGrid showWeekNumbers={showWeekNumbers} />
+		</AriaRangeCalendar>
+	);
+}
+
 function RangeCalendarGrid({ showWeekNumbers }: { showWeekNumbers: boolean }) {
 	const state = useContext(RangeCalendarStateContext);
 	if (!state) return null;
