@@ -80,6 +80,7 @@ export function SelectedTxLinksPanel({
 							onAccept={acceptLinkSuggestion}
 							onDismiss={dismissLinkSuggestion}
 							onOpenTransaction={onOpenTransaction}
+							selectedTxId={txId}
 							suggestions={linkSuggestionsQuery.data}
 						/>
 

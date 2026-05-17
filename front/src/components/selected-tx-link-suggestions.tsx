@@ -12,6 +12,7 @@ export function SelectedTxLinkSuggestions({
 	onAccept,
 	onDismiss,
 	onOpenTransaction,
+	selectedTxId,
 	suggestions,
 }: {
 	isAccepting: boolean;
@@ -19,6 +20,7 @@ export function SelectedTxLinkSuggestions({
 	onAccept: (flows: SuggestedTransactionFlow[]) => void;
 	onDismiss: (suggestion: TransactionLinkSuggestion) => void;
 	onOpenTransaction: (txId: string, origin?: TransactionWindowOrigin) => void;
+	selectedTxId: string;
 	suggestions: TransactionLinkSuggestion[] | undefined;
 }) {
 	const { f } = useI18n();
@@ -31,7 +33,7 @@ export function SelectedTxLinkSuggestions({
 			<ul className="space-y-2">
 				{suggestions.map((suggestion) => {
 					const candidates = suggestion.transactions.filter(
-						(item) => item.id !== suggestion.primary_transaction_id,
+						(item) => item.id !== selectedTxId,
 					);
 					if (candidates.length === 0) return null;
 					return (
