@@ -208,7 +208,7 @@ export function SelectedTxCreateFlowForm({
 						onValueChange={setFlowTarget}
 						onInputValueChange={setFlowTargetSearch}
 						itemToStringLabel={(item) =>
-							`${item.counter_party} ${item.account_name} ${formatTargetDate(item.date)} ${f.amount(item.amount, item.currency)}`
+							`${item.id} ${item.counter_party} ${item.account_name} ${formatTargetDate(item.date)} ${f.amount(item.amount, item.currency)}`
 						}
 						isItemEqualToValue={(item, selected) => item.id === selected.id}
 						autoHighlight
