@@ -2,13 +2,13 @@
 @import "./theme.css";
 
 @utility field {
-	@apply bg-gray-2 border border-gray-a4 text-gray-12 hover:border-gray-a6 transition-[background-color,border-color] duration-150 ease-out;
+	@apply bg-transparent border border-gray-a4 rounded-md text-gray-12 hover:border-gray-a6 transition-[background-color,border-color] duration-150 ease-out;
 	&::placeholder {
 		@apply text-gray-9;
 	}
 	&:focus,
 	&:focus-visible {
-		@apply border-gray-a8 bg-gray-1 outline-none;
+		@apply border-gray-a8 outline-none;
 	}
 }
 
@@ -30,14 +30,35 @@
 }
 
 @utility field-label {
-	@apply text-gray-10 mb-1.5 block text-[10px] font-mono uppercase tracking-[0.08em];
+	@apply text-gray-10 mb-1.5 block text-[10px] uppercase tracking-[0.06em] font-medium;
 }
 
 @utility field-trigger {
-	@apply bg-gray-2 border border-gray-a4 text-gray-12 hover:border-gray-a6 transition-[background-color,border-color] duration-150 ease-out;
+	@apply bg-transparent border border-gray-a4 rounded-md text-gray-12 hover:border-gray-a6 transition-[background-color,border-color] duration-150 ease-out;
 	&[data-popup-open] {
-		@apply border-gray-a8 bg-gray-1;
+		@apply border-gray-a8;
 	}
+}
+
+@utility hairline-b {
+	@apply border-b border-gray-a3;
+}
+
+@utility hairline-t {
+	@apply border-t border-gray-a3;
+}
+
+@utility num {
+	font-variant-numeric: tabular-nums;
+	font-feature-settings: "tnum";
+}
+
+@utility surface {
+	@apply bg-gray-1 border border-gray-a4 rounded-md;
+}
+
+@utility kbd-key {
+	@apply inline-flex items-center justify-center h-5 min-w-5 px-1 rounded border border-gray-a4 bg-gray-a2 text-[10px] text-gray-11 font-mono;
 }
 
 @font-face {
@@ -86,7 +107,10 @@
 }
 
 body {
-	@apply relative bg-gray-1 text-gray-12 text-sm font-normal;
+	@apply relative bg-gray-1 text-gray-12 text-[13px] font-normal antialiased;
+	font-feature-settings: "ss01", "cv11";
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 @keyframes dash-overlay-in {

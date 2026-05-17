@@ -41,15 +41,15 @@ function shouldDelayMobileSelectionClose() {
 
 function getInputClass(size: ComboboxSize) {
 	return cx(
-		"bg-gray-1 w-full shrink-0 border-b border-gray-a3 outline-none max-sm:bg-white dark:max-sm:bg-gray-2 px-2",
-		size === "sm" ? "h-8 text-sm" : "h-10 text-sm",
+		"bg-gray-1 w-full shrink-0 border-b border-gray-a3 outline-none max-sm:bg-white dark:max-sm:bg-gray-2 px-2.5",
+		size === "sm" ? "h-8 text-[12px]" : "h-9 text-[13px]",
 	);
 }
 
 function getItemClass(size: ComboboxSize) {
 	return cx(
-		"data-[highlighted]:bg-gray-a3 hover:bg-gray-a3 flex cursor-default items-center outline-none select-none",
-		size === "sm" ? "min-h-8 px-2 py-1 text-sm" : "min-h-8 px-2 py-1 text-sm",
+		"data-[highlighted]:bg-gray-a3 hover:bg-gray-a3 flex cursor-default items-center outline-none select-none rounded-sm",
+		size === "sm" ? "min-h-7 px-2 py-1 text-[12px] mx-1" : "min-h-8 px-2 py-1 text-[13px] mx-1",
 	);
 }
 
@@ -403,7 +403,7 @@ export function Content<TItem = unknown>({
 				<BaseCombobox.Popup
 					{...props}
 					className={cx(
-						"bg-gray-1 border-gray-a3 w-[var(--anchor-width)] max-h-[20rem] origin-[var(--transform-origin)] border shadow-lg will-change-[scale,opacity] max-sm:origin-center",
+						"bg-gray-1 border-gray-a4 w-[var(--anchor-width)] max-h-[20rem] origin-[var(--transform-origin)] border rounded-md shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)] will-change-[scale,opacity] max-sm:origin-center max-sm:rounded-lg",
 						"scale-100 opacity-100 transition-[scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)]",
 						"data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0",
 						"data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0",

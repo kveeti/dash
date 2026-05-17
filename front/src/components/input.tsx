@@ -1,10 +1,10 @@
 import type { InputHTMLAttributes } from "react";
 
-const base = "field w-full";
+const base = "field w-full text-[13px]";
 
 const sizes = {
-	sm: "h-8 text-sm px-2.5",
-	default: "h-10 px-3",
+	sm: "h-7 text-[12px] px-2.5",
+	default: "h-8 px-2.5",
 };
 
 export function Input({

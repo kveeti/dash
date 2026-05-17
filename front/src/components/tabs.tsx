@@ -16,7 +16,7 @@ export function TabsList(props: ComponentProps<typeof BaseTabs.List>) {
 		<BaseTabs.List
 			{...rest}
 			className={cx(
-				"inline-flex items-center gap-2 border border-gray-a4 bg-gray-1 p-1",
+				"relative inline-flex items-center gap-1 border-b border-gray-a3",
 				className,
 			)}
 		/>
@@ -29,7 +29,7 @@ export function TabsTab(props: ComponentProps<typeof BaseTabs.Tab>) {
 		<BaseTabs.Tab
 			{...rest}
 			className={cx(
-				"border border-transparent px-3 py-1 text-xs font-mono text-gray-11 outline-none transition-colors data-[active]:border-gray-8 data-[active]:bg-gray-a3 data-[active]:text-gray-12",
+				"relative h-8 px-3 text-[13px] text-gray-11 outline-none transition-colors hover:text-gray-12 data-[active]:text-gray-12 after:absolute after:left-0 after:right-0 after:-bottom-px after:h-px after:bg-transparent data-[active]:after:bg-gray-12 focus-visible:bg-gray-a3 rounded-t-md",
 				className,
 			)}
 		/>
@@ -38,5 +38,5 @@ export function TabsTab(props: ComponentProps<typeof BaseTabs.Tab>) {
 
 export function TabsPanel(props: ComponentProps<typeof BaseTabs.Panel>) {
 	const { className, ...rest } = props;
-	return <BaseTabs.Panel {...rest} className={cx("pt-4", className)} />;
+	return <BaseTabs.Panel {...rest} className={cx("pt-6", className)} />;
 }

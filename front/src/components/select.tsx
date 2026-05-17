@@ -19,12 +19,12 @@ type OptionItem = {
 
 const sizes = {
 	sm: {
-		trigger: "h-8 pl-2.5 pr-2 text-sm",
-		item: "py-1.5 text-sm",
+		trigger: "h-7 pl-2.5 pr-2 text-[12px]",
+		item: "h-7 text-[12px]",
 	},
 	default: {
-		trigger: "h-10 pl-3 pr-2.5 text-base",
-		item: "py-2 text-sm",
+		trigger: "h-8 pl-2.5 pr-2 text-[13px]",
+		item: "h-8 text-[13px]",
 	},
 };
 
@@ -126,8 +126,8 @@ export function Select({
 			</BaseSelect.Trigger>
 
 			<BaseSelect.Portal>
-				<BaseSelect.Positioner className="outline-hidden select-none z-50">
-					<BaseSelect.Popup className="group min-w-[var(--anchor-width)] origin-[var(--transform-origin)] bg-gray-1 text-gray-12 shadow-lg outline-1 outline-gray-4 transition-[transform,scale,opacity] data-[ending-style]:scale-90 data-[ending-style]:opacity-0 data-[side=none]:min-w-[calc(var(--anchor-width)+1rem)] data-[side=none]:data-[ending-style]:transition-none data-[starting-style]:scale-90 data-[starting-style]:opacity-0 data-[side=none]:data-[starting-style]:scale-100 data-[side=none]:data-[starting-style]:opacity-100 data-[side=none]:data-[starting-style]:transition-none">
+				<BaseSelect.Positioner className="outline-hidden select-none z-50" sideOffset={4}>
+					<BaseSelect.Popup className="group min-w-[var(--anchor-width)] origin-[var(--transform-origin)] bg-gray-1 text-gray-12 rounded-md border border-gray-a4 p-1 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)] transition-[transform,scale,opacity] data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[side=none]:min-w-[calc(var(--anchor-width)+1rem)] data-[side=none]:data-[ending-style]:transition-none data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[side=none]:data-[starting-style]:scale-100 data-[side=none]:data-[starting-style]:opacity-100 data-[side=none]:data-[starting-style]:transition-none">
 						<BaseSelect.ScrollUpArrow className="top-0 z-[1] flex h-4 w-full cursor-default items-center justify-center bg-gray-1 text-center text-xs before:absolute data-[side=none]:before:top-[-100%] before:left-0 before:h-full before:w-full before:content-['']" />
 						<BaseSelect.List className="relative scroll-py-6 overflow-y-auto max-h-[var(--available-height)] z-20">
 							{items.map((item) => (
@@ -136,7 +136,7 @@ export function Select({
 									value={item.value}
 									disabled={item.disabled}
 									className={
-										"h-10 data-[disabled]:text-gray-9 data-[disabled]:cursor-not-allowed grid cursor-default grid-cols-[0.75rem_1fr] items-center gap-2 pr-4 pl-2.5 leading-4 outline-hidden select-none group-data-[side=none]:pr-12 data-[highlighted]:relative data-[highlighted]:z-0 data-[highlighted]:text-gray-12 data-[highlighted]:before:absolute data-[highlighted]:before:inset-x-0 data-[highlighted]:before:inset-y-0 data-[highlighted]:before:z-[-1] data-[highlighted]:before:bg-gray-a3 pointer-coarse:text-[0.925rem] " +
+										"rounded-sm data-[disabled]:text-gray-9 data-[disabled]:cursor-not-allowed grid cursor-default grid-cols-[0.75rem_1fr] items-center gap-2 pr-4 pl-2.5 leading-4 outline-hidden select-none group-data-[side=none]:pr-12 data-[highlighted]:relative data-[highlighted]:z-0 data-[highlighted]:text-gray-12 data-[highlighted]:before:absolute data-[highlighted]:before:inset-x-0 data-[highlighted]:before:inset-y-0 data-[highlighted]:before:z-[-1] data-[highlighted]:before:rounded-sm data-[highlighted]:before:bg-gray-a3 " +
 										sizes[size].item
 									}
 								>

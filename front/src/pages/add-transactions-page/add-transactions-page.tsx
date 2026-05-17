@@ -3,17 +3,36 @@ import { NewTransactionForm } from "./new-transaction-form";
 
 export function AddTransactionsPage() {
 	return (
-		<div className="space-y-10 max-w-120 w-full mx-auto pt-10">
-			<h1 className="font-medium text-2xl font-cool">Add transactions</h1>
+		<div className="mx-auto w-full max-w-[720px] px-4 sm:px-6 pt-2 pb-16">
+			<h1 className="text-[15px] font-medium tracking-[-0.005em]">Import</h1>
+			<p className="text-[12px] text-gray-10 mt-0.5">
+				Add transactions via CSV upload or one by one.
+			</p>
 
-			<div>
-				<h2 className="font-bold mb-2">Import from CSV</h2>
-				<ImportTransactionsCSV />
-			</div>
+			<div className="mt-8 space-y-8">
+				<section>
+					<header className="mb-3">
+						<h2 className="text-[13px] font-medium text-gray-12">From CSV</h2>
+						<p className="text-[11px] text-gray-10 mt-0.5">
+							Bank exports and legacy bundles. Duplicates are detected and skipped automatically.
+						</p>
+					</header>
+					<div className="surface p-5">
+						<ImportTransactionsCSV />
+					</div>
+				</section>
 
-			<div>
-				<h2 className="font-bold mb-2">Add manually</h2>
-				<NewTransactionForm />
+				<section>
+					<header className="mb-3">
+						<h2 className="text-[13px] font-medium text-gray-12">Manual entry</h2>
+						<p className="text-[11px] text-gray-10 mt-0.5">
+							Add a single transaction.
+						</p>
+					</header>
+					<div className="surface p-5">
+						<NewTransactionForm />
+					</div>
+				</section>
 			</div>
 		</div>
 	);

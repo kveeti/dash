@@ -1,4 +1,4 @@
-export type StatsTabValue = "stats-1" | "stats-2";
+export type StatsTabValue = "stats-1" | "stats-2" | "canvas";
 
 export type StatsPeriodValue =
 	| "this-month"

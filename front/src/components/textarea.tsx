@@ -1,10 +1,10 @@
 import type { TextareaHTMLAttributes } from "react";
 
-const base = "field w-full";
+const base = "field w-full text-[13px]";
 
 const sizes = {
-	sm: "text-sm px-2.5 py-1.5",
-	default: "px-3 py-2",
+	sm: "text-[12px] px-2.5 py-1.5",
+	default: "px-2.5 py-2",
 };
 
 export function Textarea({

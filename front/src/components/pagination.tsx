@@ -22,7 +22,7 @@ export function PaginationLink({
 	children: ReactNode;
 }) {
 	let cls =
-		"bg-gray-1 border-gray-5 focus rounded-full border shadow-lg select-none aria-disabled:opacity-40 aria-disabled:cursor-not-allowed";
+		"bg-gray-1 border-gray-a4 focus rounded-md border select-none hover:border-gray-a6 hover:bg-gray-a2 transition-colors aria-disabled:opacity-40 aria-disabled:cursor-not-allowed text-gray-11 hover:text-gray-12";
 	if (className) cls += " " + className;
 
 	return (
@@ -37,11 +37,11 @@ export function PaginationNext({ className, href }: { className?: string; href?:
 		<PaginationLink
 			href={href}
 			className={
-				"relative flex items-center justify-center py-2 ps-3 pe-2 before:absolute before:-inset-y-2 before:-right-2 before:left-0 before:content-['']" +
+				"relative flex h-8 items-center justify-center px-2.5 text-[12px] before:absolute before:-inset-y-2 before:-right-2 before:left-0 before:content-['']" +
 				(className ? " " + className : "")
 			}
 		>
-			<span className="me-1 text-xs">next</span>
+			<span className="me-1">Next</span>
 			<IconChevronRight />
 		</PaginationLink>
 	);
@@ -52,12 +52,12 @@ export function PaginationPrev({ className, href }: { className?: string; href?:
 		<PaginationLink
 			href={href}
 			className={
-				"relative flex items-center justify-center py-2 ps-2 pe-3 before:absolute before:-inset-y-2 before:right-0 before:-left-2 before:content-['']" +
+				"relative flex h-8 items-center justify-center px-2.5 text-[12px] before:absolute before:-inset-y-2 before:right-0 before:-left-2 before:content-['']" +
 				(className ? " " + className : "")
 			}
 		>
 			<IconChevronLeft />
-			<span className="ms-1 text-xs">prev</span>
+			<span className="ms-1">Prev</span>
 		</PaginationLink>
 	);
 }

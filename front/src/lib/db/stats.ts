@@ -65,6 +65,7 @@ export type ConvertedStatsSummary = {
 
 export type ConvertedStatTransactionRow = {
 	id: string;
+	eff_date: string;
 	bucket: string;
 	cat_name: string;
 	counter_party: string;
@@ -778,6 +779,7 @@ export async function getConvertedStatTransactions(input: {
 		? `${cteSql}
 	select
 		id,
+		eff_date,
 		bucket,
 		cat_name,
 		counter_party,
@@ -812,6 +814,7 @@ export async function getConvertedStatTransactions(input: {
 	)
 	select
 		id,
+		eff_date,
 		bucket,
 		cat_name,
 		counter_party,

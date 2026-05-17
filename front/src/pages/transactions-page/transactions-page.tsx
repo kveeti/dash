@@ -261,25 +261,32 @@ export function TransactionsPage() {
 
 	return (
 		<>
-			<div className="w-full max-w-[30rem] mx-auto pt-4 sm:pt-14 pb-114">
+			<div className="w-full max-w-[720px] mx-auto px-4 sm:px-6 pt-2 pb-32">
 				<div className="flex items-center justify-between">
-					<h1 className="font-medium text-2xl font-cool">transactions</h1>
-					<div className="hidden sm:flex items-center gap-2">
+					<div>
+						<h1 className="text-[15px] font-medium tracking-[-0.005em]">Transactions</h1>
+						<p className="text-[11px] text-gray-10 mt-0.5">
+							{hasFilters ? "Filtered view" : "All transactions"}
+						</p>
+					</div>
+					<div className="hidden sm:flex items-center gap-1.5">
 						<FastLink
 							href={statsHref}
 							className={buttonStyles({ variant: "ghost", size: "sm" })}
 						>
-							stats
+							Stats
 						</FastLink>
 						<button
 							type="button"
 							className={
-								"text-xs px-2 py-1 hover:bg-gray-a3" +
-								(showFilters || hasFilters ? " text-gray-12" : " text-gray-10")
+								"focus h-7 rounded-md px-2.5 text-[12px] transition-colors " +
+								(showFilters || hasFilters
+									? "bg-gray-a3 text-gray-12"
+									: "text-gray-11 hover:text-gray-12 hover:bg-gray-a2")
 							}
 							onClick={() => setShowFilters((v) => !v)}
 						>
-							{hasFilters ? "filters (on)" : "filters"}
+							{hasFilters ? "Filters · on" : "Filters"}
 						</button>
 					</div>
 				</div>
@@ -316,7 +323,7 @@ export function TransactionsPage() {
 						return (
 							<Fragment key={tx.id}>
 								{dayChanged && (
-									<div className="sticky top-0 sm:top-10 bg-gray-3 text-xs font-medium py-1.5 px-3 scroll-mt-0 sm:scroll-mt-10">
+									<div className="sticky top-12 z-10 bg-gray-1/95 backdrop-blur supports-[backdrop-filter]:bg-gray-1/80 text-[10px] uppercase tracking-[0.06em] font-medium text-gray-10 py-1.5 scroll-mt-12 border-b border-gray-a3">
 										{currentDay}
 									</div>
 								)}
@@ -563,10 +570,10 @@ function TxRow({
 	});
 
 	return (
-		<li ref={liRef} className="scroll-mt-17">
+		<li ref={liRef} className="scroll-mt-17 border-b border-gray-a3 last:border-b-0">
 			<div
 				className={
-					"flex items-start justify-between gap-3 hover:bg-gray-a3 px-3 py-2 select-none" +
+					"flex items-start justify-between gap-3 hover:bg-gray-a2 px-2 py-2.5 select-none transition-colors" +
 					(selected ? " bg-gray-a3" : "")
 				}
 				onClick={(event) => {
@@ -1087,10 +1094,10 @@ function BulkEditBar({
 	}
 
 	return (
-		<div className="fixed bottom-20 left-0 right-0 sm:bottom-0 z-30">
-			<div className="mx-auto max-w-[35rem] border border-gray-a4 bg-gray-2 px-4 py-3 shadow-lg space-y-2">
-				<div className="flex items-center gap-3">
-					<span className="text-sm shrink-0">{selectedIds.size} selected</span>
+		<div className="fixed bottom-4 left-0 right-0 z-30 px-4">
+			<div className="mx-auto max-w-[35rem] rounded-lg border border-gray-a4 bg-gray-1 px-3 py-2.5 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.2),0_4px_12px_-4px_rgba(0,0,0,0.08)] dark:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6),0_4px_12px_-4px_rgba(0,0,0,0.4)] space-y-2">
+				<div className="flex items-center gap-2">
+					<span className="text-[12px] shrink-0 text-gray-11 num">{selectedIds.size} selected</span>
 
 					<CategoryCombobox
 						size="sm"

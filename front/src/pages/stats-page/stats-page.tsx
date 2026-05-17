@@ -5,6 +5,7 @@ import { TabsList, TabsPanel, TabsRoot, TabsTab } from "../../components/tabs";
 import { useAppSettingsQuery } from "../../lib/queries/settings";
 import { DesktopYearMonthExplorer } from "./desktop-year-month-explorer";
 import { StatsOverviewPanel } from "./stats-overview-panel";
+import { StatsCanvas } from "./stats-canvas";
 import { Input } from "../../components/input";
 import { CategoryCombobox } from "../../components/category-combobox";
 import { Combobox } from "../../components/combobox";
@@ -30,7 +31,9 @@ import {
 } from "./stats-page-types";
 
 function parseStatsTabValue(value: string | null): StatsTabValue {
-	return value === "stats-1" ? "stats-1" : "stats-2";
+	if (value === "stats-1") return "stats-1";
+	if (value === "canvas") return "canvas";
+	return "stats-2";
 }
 
 function parseStatsPeriodValue(value: string | null): StatsPeriodValue {
@@ -177,8 +180,8 @@ export function StatsPage() {
 	};
 
 	return (
-		<div className="w-full mx-auto max-w-[900px] mt-14 px-4">
-			<h1 className="font-medium text-2xl font-cool mb-4">stats</h1>
+		<div className="w-full mx-auto max-w-[1120px] px-4 sm:px-6">
+			<h1 className="text-[15px] font-medium tracking-[-0.005em] mb-6 mt-2">Stats</h1>
 
 			{(settings.isLoading || yearStats.isLoading) && (
 				<p className="text-sm text-gray-10">loading...</p>
@@ -189,16 +192,82 @@ export function StatsPage() {
 
 			<TabsRoot
 				value={activeTab}
-					onValueChange={(value) => {
-						if (value === "stats-1" || value === "stats-2") {
-							setStatsParams({ tab: value });
+				onValueChange={(value) => {
+					if (
+						value === "stats-1" ||
+						value === "stats-2" ||
+						value === "canvas"
+					) {
+						setStatsParams({ tab: value === "stats-2" ? undefined : value });
 					}
 				}}
 			>
 				<TabsList aria-label="stats versions">
-					<TabsTab value="stats-1">stats 1</TabsTab>
-					<TabsTab value="stats-2">stats 2</TabsTab>
+					<TabsTab value="canvas">Canvas</TabsTab>
+					<TabsTab value="stats-2">Overview</TabsTab>
+					<TabsTab value="stats-1">Year explorer</TabsTab>
 				</TabsList>
+
+					<TabsPanel value="canvas">
+						<div className="mb-6 space-y-2">
+							<div className="flex items-center justify-between gap-3">
+								<div className="text-[11px] uppercase tracking-[0.06em] font-medium text-gray-10">
+									{hasScope ? "Scope" : "Scope · all transactions"}
+								</div>
+								<FastLink
+									href={transactionsHref}
+									className="text-[12px] text-gray-11 hover:text-gray-12 hover:underline"
+								>
+									View matching txs →
+								</FastLink>
+							</div>
+							<StatsScopeControls
+								q={q}
+								categoryId={categoryId}
+								accountId={accountId}
+								currencyIds={currencyIds}
+								tagIds={tagIds}
+								uncategorized={uncategorized}
+								hasScope={hasScope}
+								categories={categories.data}
+								accounts={accounts.data}
+								currencies={currencies.data}
+								tags={tags.data}
+								setParams={setStatsParams}
+							/>
+						</div>
+						<StatsCanvas
+							reportingCurrency={reportingCurrency}
+							queryReportingCurrency={settings.data?.reporting_currency}
+							mode={mode}
+							maxStalenessDays={maxStalenessDays}
+							search={q || undefined}
+							filters={activeFilters}
+							scopeParams={scopeParams}
+							period={period}
+							compare={compare}
+							customFrom={customFrom}
+							customTo={customTo}
+							onPeriodChange={(value) => {
+								if (value === "custom") {
+									setStatsParams({
+										period: value,
+										from: customFrom,
+										to: customTo,
+									});
+									return;
+								}
+								setStatsParams({
+									period: value,
+									from: undefined,
+									to: undefined,
+								});
+							}}
+							onCompareChange={(value) =>
+								setStatsParams({ compare: value })
+							}
+						/>
+					</TabsPanel>
 
 					<TabsPanel value="stats-1">
 						<DesktopYearMonthExplorer
