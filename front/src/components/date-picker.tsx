@@ -122,24 +122,24 @@ export function DateRangePickerInput({
 						)}
 					</DateInput>
 				</div>
-				<Button className="focus border-l border-gray-a4 hover:bg-gray-a2 h-full w-8 cursor-default flex items-center justify-center text-gray-10">
+				<Button className="focus border-l border-gray-a3 hover:bg-gray-a2 h-full w-8 cursor-default flex items-center justify-center text-gray-10">
 					<IconCalendar />
 				</Button>
 			</Group>
-			<Popover className="z-50 border border-gray-a3 bg-gray-1 dark:bg-gray-3 p-0 shadow-lg cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
+			<Popover className="z-50 rounded-lg border border-gray-a3 bg-gray-1 dark:bg-gray-3 p-2 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)] cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
 				<Dialog className="outline-none max-sm:w-full">
 					<AriaRangeCalendar className="cursor-default max-sm:w-full">
-						<header className="mb-2 flex items-center justify-between px-1 pt-1 max-sm:mb-3 max-sm:px-2 max-sm:pt-2">
+						<header className="mb-2 flex items-center gap-1 max-sm:mb-3 max-sm:px-2 max-sm:pt-2">
+							<Heading className="text-[12px] text-gray-12 font-mono flex-1 px-1" />
 							<Button
 								slot="previous"
-								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none max-sm:size-11"
+								className="hover:bg-gray-a3 rounded-sm size-6 flex items-center justify-center outline-none text-gray-11 max-sm:size-11"
 							>
 								<IconChevronLeft />
 							</Button>
-							<Heading className="text-xs text-gray-11 font-mono text-center" />
 							<Button
 								slot="next"
-								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none max-sm:size-11"
+								className="hover:bg-gray-a3 rounded-sm size-6 flex items-center justify-center outline-none text-gray-11 max-sm:size-11"
 							>
 								<IconChevronRight />
 							</Button>
@@ -175,14 +175,14 @@ export function DateRangeDialog({
 				onOpenChange(false);
 			}}
 		>
-			<header className="mb-2 flex items-center justify-between gap-2">
+			<header className="mb-2 flex items-center gap-1">
+				<Heading className="text-[12px] text-gray-12 flex-1 px-1" />
 				<Button
 					slot="previous"
 					className="hover:bg-gray-a3 rounded-sm size-6 flex items-center justify-center outline-none text-gray-11"
 				>
 					<IconChevronLeft />
 				</Button>
-				<Heading className="text-[12px] text-gray-12 font-mono text-center flex-1" />
 				<Button
 					slot="next"
 					className="hover:bg-gray-a3 rounded-sm size-6 flex items-center justify-center outline-none text-gray-11"
@@ -268,24 +268,24 @@ function DatePickerInputBase({
 						/>
 					)}
 				</DateInput>
-				<Button className="border-l border-gray-a4 hover:bg-gray-a2 w-9 h-9 cursor-default flex items-center justify-center text-gray-10 outline-none">
+				<Button className="border-l border-gray-a3 hover:bg-gray-a2 w-9 h-9 cursor-default flex items-center justify-center text-gray-10 outline-none">
 					<IconCalendar />
 				</Button>
 			</Group>
-			<Popover className="z-50 border border-gray-a3 bg-gray-1 dark:bg-gray-3 p-0 shadow-lg cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
+			<Popover className="z-50 rounded-lg border border-gray-a3 bg-gray-1 dark:bg-gray-3 p-2 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)] cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
 				<Dialog className="outline-none max-sm:w-full">
 					<Calendar className="cursor-default max-sm:w-full">
-						<header className="mb-2 flex items-center justify-between px-1 pt-1 max-sm:mb-3 max-sm:px-2 max-sm:pt-2">
+						<header className="mb-2 flex items-center gap-1 max-sm:mb-3 max-sm:px-2 max-sm:pt-2">
+							<Heading className="text-[12px] text-gray-12 flex-1 px-1" />
 							<Button
 								slot="previous"
-								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none max-sm:size-11"
+								className="hover:bg-gray-a3 rounded-sm size-6 flex items-center justify-center outline-none text-gray-11 max-sm:size-11"
 							>
 								<IconChevronLeft />
 							</Button>
-							<Heading className="text-xs text-gray-11 font-mono text-center" />
 							<Button
 								slot="next"
-								className="hover:bg-gray-a2 h-7 w-7 flex items-center justify-center outline-none max-sm:size-11"
+								className="hover:bg-gray-a3 rounded-sm size-6 flex items-center justify-center outline-none text-gray-11 max-sm:size-11"
 							>
 								<IconChevronRight />
 							</Button>
@@ -360,12 +360,12 @@ function WeekNumberCalendarTable({
 			<thead {...headerProps}>
 				<tr>
 					{showWeekNumbers ? (
-						<th className="w-8 h-6 text-center text-[11px] text-gray-10 font-normal max-sm:w-auto max-sm:h-8">Wk</th>
+						<th className="w-8 h-7 text-center text-[11px] text-gray-10 font-normal border-b border-r border-gray-a3 max-sm:w-auto max-sm:h-9">Wk</th>
 					) : null}
 					{weekDays.map((day, index) => (
 						<th
 							key={index}
-							className="w-8 h-6 text-center text-[11px] text-gray-10 font-normal max-sm:w-auto max-sm:h-8"
+							className="w-8 h-7 text-center text-[11px] text-gray-10 font-normal border-b border-gray-a3 max-sm:w-auto max-sm:h-9"
 						>
 							{day}
 						</th>
@@ -384,7 +384,7 @@ function WeekNumberCalendarTable({
 					return (
 						<tr key={weekIndex}>
 							{showWeekNumbers ? (
-								<td className="w-8 h-8 p-0 text-center text-[11px] text-gray-9 font-mono select-none cursor-default max-sm:w-auto max-sm:h-[var(--date-picker-mobile-cell-size)]">
+								<td className="w-8 h-8 p-0 text-center text-[11px] text-gray-9 select-none cursor-default border-r border-gray-a3 max-sm:w-auto max-sm:h-[var(--date-picker-mobile-cell-size)]">
 									{weekNumber}
 								</td>
 							) : null}
@@ -394,11 +394,13 @@ function WeekNumberCalendarTable({
 										<CalendarCell
 											key={dayIndex}
 											date={date}
-											className={({ isSelected, isDisabled, isOutsideVisibleRange }) =>
+											className={({ isSelected, isDisabled, isOutsideVisibleRange, isSelectionStart, isSelectionEnd }) =>
 												"group w-8 h-8 p-0 cursor-default select-none outline-none max-sm:w-auto max-sm:h-[var(--date-picker-mobile-cell-size)] " +
 												(isOutsideVisibleRange ? "text-gray-9 " : "text-gray-12 ") +
 												(isDisabled ? "opacity-40 " : "hover:bg-gray-a2 ") +
-												(isSelected ? "bg-gray-a2 " : "")
+												(isSelected ? "bg-gray-a2 " : "") +
+												(isSelectionStart ? "rounded-l-sm " : "") +
+												(isSelectionEnd ? "rounded-r-sm " : "")
 											}
 										>
 											{({
@@ -414,7 +416,7 @@ function WeekNumberCalendarTable({
 														(isDisabled ? "opacity-40 " : "") +
 														(
 															isSelected && (isSelectionStart || isSelectionEnd)
-																? "bg-gray-a3 "
+																? "bg-gray-a3 rounded-sm "
 																: ""
 														)
 													}
@@ -431,7 +433,7 @@ function WeekNumberCalendarTable({
 										key={dayIndex}
 										date={date}
 										className={({ isSelected, isDisabled, isOutsideVisibleRange }) =>
-											"w-8 h-8 !cursor-default select-none flex items-center justify-center text-sm text-center leading-none outline-none forced-color-adjust-none [-webkit-tap-highlight-color:transparent] max-sm:w-auto max-sm:h-[var(--date-picker-mobile-cell-size)] " +
+											"w-8 h-8 !cursor-default rounded-sm select-none flex items-center justify-center text-sm text-center leading-none outline-none forced-color-adjust-none [-webkit-tap-highlight-color:transparent] max-sm:w-auto max-sm:h-[var(--date-picker-mobile-cell-size)] " +
 											(isOutsideVisibleRange ? "text-gray-9 " : "text-gray-12 ") +
 											(isDisabled
 												? "opacity-40 text-gray-9 "
