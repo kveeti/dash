@@ -86,7 +86,7 @@ export function ReviewPage() {
 		return (
 			<div className="mx-auto max-w-[640px] px-4 sm:px-6">
 				<Header skippedCount={skippedCount} totalRemaining={totalRemaining} />
-				<div className="surface mt-8 flex flex-col items-center gap-4 px-6 py-16 text-center">
+				<div className="surface surface-bleed mt-8 flex flex-col items-center gap-4 px-3 sm:px-4 py-16 text-center">
 					<div className="size-10 rounded-full bg-gray-a3 flex items-center justify-center text-gray-12">
 						✓
 					</div>
@@ -125,7 +125,7 @@ export function ReviewPage() {
 
 			<article
 				key={current.id}
-				className="surface mt-6 px-6 py-6 space-y-6"
+				className="surface surface-bleed mt-6 px-3 sm:px-4 py-6 space-y-6"
 			>
 				<TxIdentity tx={current} fAmount={f.amount} />
 

@@ -227,7 +227,7 @@ export function AccountSelectCreate({
 				autoHighlight
 			>
 				<Combobox.Trigger<AccountItem, AccountItem | null>
-					className="focus field-trigger data-[disabled]:opacity-60 flex h-10 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-3 pr-2.5 text-sm"
+					className="focus field-trigger data-[disabled]:opacity-60 flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-3 pr-2.5 text-sm"
 				>
 					{({ selectedValue }) => (
 						<>
@@ -275,7 +275,7 @@ export function AccountSelectCreate({
 					<Dialog.Backdrop className="data-[ending-style]:opacity-0 data-[starting-style]:opacity-0 transition-opacity duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] bg-gray-a6 dark:bg-black-a7 supports-[-webkit-touch-callout:none]:absolute fixed inset-0" />
 					<Dialog.Popup
 						initialFocus={createInputRef}
-						className="duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.985] data-[ending-style]:opacity-0 transition-all bg-gray-1 border-gray-a5 fixed top-1/2 left-1/2 w-[24rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 border p-5 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)]"
+						className="duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.985] data-[ending-style]:opacity-0 transition-all bg-gray-1 dark:bg-gray-3 border-gray-a3 fixed top-1/2 left-1/2 w-[24rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 border p-5 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)]"
 					>
 						<Dialog.Title className="text-base font-medium">
 							Create new account

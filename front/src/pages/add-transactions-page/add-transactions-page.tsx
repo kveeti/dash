@@ -17,7 +17,7 @@ export function AddTransactionsPage() {
 							Bank exports and legacy bundles. Duplicates are detected and skipped automatically.
 						</p>
 					</header>
-					<div className="surface p-5">
+					<div className="surface surface-bleed px-3 sm:px-4 py-5">
 						<ImportTransactionsCSV />
 					</div>
 				</section>
@@ -29,7 +29,7 @@ export function AddTransactionsPage() {
 							Add a single transaction.
 						</p>
 					</header>
-					<div className="surface p-5">
+					<div className="surface surface-bleed px-3 sm:px-4 py-5">
 						<NewTransactionForm />
 					</div>
 				</section>

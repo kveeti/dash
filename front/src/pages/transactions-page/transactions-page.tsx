@@ -930,7 +930,7 @@ function AccountFilterCombobox({
 			autoHighlight
 		>
 			<Combobox.Trigger<AccountFilterItem, AccountFilterItem | null>
-				className="focus field-trigger data-[disabled]:opacity-60 flex h-8 flex-1 min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm"
+				className="focus field-trigger data-[disabled]:opacity-60 flex h-9 flex-1 min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm"
 			>
 				{({ selectedValue }) => (
 					<>
@@ -1002,26 +1002,73 @@ function MobileFilterBar({
 	tags: Array<{ id: string; name: string }> | undefined;
 	setParams: (updates: Record<string, string | undefined>) => void;
 }) {
+	const chips = buildFilterChips({
+		q,
+		categoryId,
+		accountId,
+		currencyIds,
+		tagIds,
+		uncategorized,
+		dateRange,
+		categories,
+		accounts,
+		tags,
+		setParams,
+	});
+
 	return (
 		<div className="fixed bottom-10 left-0 right-0 z-40 sm:hidden">
 			<div className="mx-auto max-w-[35rem] px-3">
 				{showFilters && (
-					<div className="border border-b-0 border-gray-a4 bg-gray-2 px-3 py-3">
-						<FilterControls
-							q={q}
-							categoryId={categoryId}
-							accountId={accountId}
-							currencyIds={currencyIds}
-							tagIds={tagIds}
-							uncategorized={uncategorized}
-							dateRange={dateRange}
-							hasFilters={hasFilters}
-							categories={categories}
-							accounts={accounts}
-							currencies={currencies}
-							tags={tags}
-							setParams={setParams}
+					<div className="space-y-2 border border-b-0 border-gray-a4 bg-gray-2 px-3 py-3">
+						<Input
+							size="sm"
+							type="text"
+							placeholder="search..."
+							autoComplete="off"
+							value={q}
+							onChange={(e) =>
+								setParams({ q: e.currentTarget.value || undefined })
+							}
 						/>
+						<div className="flex flex-wrap items-center gap-1.5">
+							<TransactionFilterMenu
+								categoryId={categoryId}
+								accountId={accountId}
+								currencyIds={currencyIds}
+								tagIds={tagIds}
+								uncategorized={uncategorized}
+								dateRange={dateRange}
+								categories={categories}
+								accounts={accounts}
+								currencies={currencies}
+								tags={tags}
+								setParams={setParams}
+							/>
+							{chips.map((chip) => (
+								<FilterChip key={chip.key} chip={chip} />
+							))}
+						</div>
+						{hasFilters && (
+							<button
+								type="button"
+								className="text-xs text-gray-10 hover:text-gray-12 underline"
+								onClick={() =>
+									setParams({
+										q: undefined,
+										cat: undefined,
+										acc: undefined,
+										cur: undefined,
+										tags: undefined,
+										uncat: undefined,
+										from: undefined,
+										to: undefined,
+									})
+								}
+							>
+								clear all
+							</button>
+						)}
 					</div>
 				)}
 				<button

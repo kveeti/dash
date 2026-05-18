@@ -587,7 +587,7 @@ function CashflowStrip(props: {
 	);
 	const condensed = props.granularity === "day" && props.buckets.length > 31;
 	return (
-		<section className="surface p-5">
+		<section className="surface surface-bleed px-3 sm:px-4 py-5">
 			<header className="mb-4 flex items-end justify-between">
 				<div>
 					<h2 className="text-[13px] font-medium text-gray-12">Cashflow</h2>
@@ -650,7 +650,7 @@ function CategoryList(props: {
 }) {
 	const max = Math.max(1, ...props.rows.map((r) => r.amount));
 	return (
-		<section className="surface p-5">
+		<section className="surface surface-bleed px-3 sm:px-4 py-5">
 			<header className="mb-4 flex items-end justify-between">
 				<h2 className="text-[13px] font-medium text-gray-12">Top categories</h2>
 				<span className="text-[11px] text-gray-10">By expense</span>
@@ -700,7 +700,7 @@ function CounterpartyList(props: {
 	hasCompare: boolean;
 }) {
 	return (
-		<section className="surface p-5">
+		<section className="surface surface-bleed px-3 sm:px-4 py-5">
 			<header className="mb-4 flex items-end justify-between">
 				<h2 className="text-[13px] font-medium text-gray-12">Top counterparties</h2>
 				<span className="text-[11px] text-gray-10">By expense</span>
@@ -743,7 +743,7 @@ function CurrencyMix(props: {
 }) {
 	if (props.rows.length === 0) return null;
 	return (
-		<section className="surface p-5">
+		<section className="surface surface-bleed px-3 sm:px-4 py-5">
 			<header className="mb-4 flex items-end justify-between">
 				<h2 className="text-[13px] font-medium text-gray-12">Currency exposure</h2>
 				<span className="text-[11px] text-gray-10">

@@ -132,10 +132,7 @@ export function CategoryCombobox({
 		>
 			<Combobox.Trigger<CategoryComboboxItem, CategoryComboboxItem | null>
 				className={
-					"focus field-trigger data-[disabled]:opacity-60 flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden " +
-					(size === "sm"
-						? "h-8 pl-2.5 pr-2 text-sm"
-						: "h-10 pl-3 pr-2.5 text-sm") +
+					"focus field-trigger data-[disabled]:opacity-60 flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm" +
 					(className ? ` ${className}` : "")
 				}
 			>

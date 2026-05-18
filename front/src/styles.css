@@ -2,13 +2,13 @@
 @import "./theme.css";
 
 @utility field {
-	@apply bg-transparent border border-gray-a4 rounded-md text-gray-12 hover:border-gray-a6 transition-[background-color,border-color] duration-150 ease-out;
+	@apply bg-gray-a2 border border-gray-a3 rounded-md text-gray-12 hover:bg-gray-a3 hover:border-gray-a5 transition-[background-color,border-color] duration-150 ease-out;
 	&::placeholder {
 		@apply text-gray-9;
 	}
 	&:focus,
 	&:focus-visible {
-		@apply border-gray-a8 outline-none;
+		@apply border-gray-a7 outline-none;
 	}
 }
 
@@ -29,14 +29,27 @@
 	}
 }
 
+.scrollbar-hidden {
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.scrollbar-hidden::-webkit-scrollbar {
+	display: none;
+}
+
+.nested-menu-scroll {
+	max-height: 16.375rem;
+}
+
 @utility field-label {
 	@apply text-gray-10 mb-1.5 block text-[10px] uppercase tracking-[0.06em] font-medium;
 }
 
 @utility field-trigger {
-	@apply bg-transparent border border-gray-a4 rounded-md text-gray-12 hover:border-gray-a6 transition-[background-color,border-color] duration-150 ease-out;
+	@apply bg-gray-a2 border border-gray-a3 rounded-md text-gray-12 hover:bg-gray-a3 hover:border-gray-a5 transition-[background-color,border-color] duration-150 ease-out;
 	&[data-popup-open] {
-		@apply border-gray-a8;
+		@apply bg-gray-a3 border-gray-a6;
 	}
 }
 
@@ -54,7 +67,11 @@
 }
 
 @utility surface {
-	@apply bg-gray-1 border border-gray-a4 rounded-md;
+	@apply bg-gray-2 dark:bg-gray-2 border border-gray-a2 rounded-lg;
+}
+
+@utility surface-bleed {
+	@apply -mx-3 sm:-mx-4;
 }
 
 @utility kbd-key {
@@ -145,6 +162,41 @@ body {
 	}
 }
 
+@keyframes dash-menu-in {
+	from {
+		opacity: 0;
+		transform: scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes dash-menu-out {
+	from {
+		opacity: 1;
+		transform: scale(1);
+	}
+	to {
+		opacity: 0;
+		transform: scale(0.98);
+	}
+}
+
+.dash-root-menu {
+	opacity: 0;
+	transform: scale(0.98);
+}
+
+.dash-root-menu[data-enter] {
+	animation: dash-menu-in 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.dash-root-menu[data-leave] {
+	animation: dash-menu-out 120ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
 @media (prefers-reduced-motion: reduce) {
 	@keyframes dash-dialog-in {
 		from { opacity: 0; transform: translate(-50%, -50%); }
@@ -153,6 +205,20 @@ body {
 	@keyframes dash-dialog-out {
 		from { opacity: 1; transform: translate(-50%, -50%); }
 		to { opacity: 0; transform: translate(-50%, -50%); }
+	}
+	@keyframes dash-menu-in {
+		from { opacity: 0; transform: none; }
+		to { opacity: 1; transform: none; }
+	}
+	@keyframes dash-menu-out {
+		from { opacity: 1; transform: none; }
+		to { opacity: 0; transform: none; }
+	}
+	.dash-root-menu[data-enter] {
+		animation: dash-menu-in 1ms linear forwards;
+	}
+	.dash-root-menu[data-leave] {
+		animation: dash-menu-out 1ms linear forwards;
 	}
 }
 
@@ -327,18 +393,20 @@ html {
 		--green-a11: hsla(131, 100%, 77%, 0.8);
 		--green-a12: hsla(120, 100%, 90%, 0.94);
 
-		--gray-1: #111111;
-		--gray-2: #191919;
-		--gray-3: #222222;
-		--gray-4: #2a2a2a;
-		--gray-5: #313131;
-		--gray-6: #3a3a3a;
-		--gray-7: #484848;
-		--gray-8: #606060;
-		--gray-9: #6e6e6e;
-		--gray-10: #7b7b7b;
-		--gray-11: #b4b4b4;
-		--gray-12: #eeeeee;
+		/* Warm neutral ramp — perceptual lightness via OKLCH,
+		   faint brown undertone (hue ~60°, chroma very low). */
+		--gray-1: oklch(0.19 0.002 60);
+		--gray-2: oklch(0.215 0.003 60);
+		--gray-3: oklch(0.235 0.003 60);
+		--gray-4: oklch(0.31 0.004 60);
+		--gray-5: oklch(0.35 0.004 60);
+		--gray-6: oklch(0.40 0.005 60);
+		--gray-7: oklch(0.47 0.005 60);
+		--gray-8: oklch(0.56 0.005 60);
+		--gray-9: oklch(0.64 0.005 60);
+		--gray-10: oklch(0.69 0.004 60);
+		--gray-11: oklch(0.82 0.004 60);
+		--gray-12: oklch(0.96 0.003 60);
 
 		--gray-a1: #00000000;
 		--gray-a2: #ffffff09;
