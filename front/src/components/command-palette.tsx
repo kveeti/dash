@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import { Dialog } from "@base-ui/react/dialog";
-import { ScrollArea } from "@base-ui/react/scroll-area";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEncrypted } from "../encrypted-context";
 import { useI18n } from "../providers";
@@ -238,7 +237,7 @@ export function CommandPalette() {
 			<Dialog.Portal>
 								<Dialog.Viewport className="fixed inset-0 flex items-start justify-center overflow-hidden px-2 pt-[14vh] pb-2">
 					<Dialog.Popup
-						className="bg-gray-2 border-gray-a3 rounded-lg flex max-h-[min(36rem,calc(100dvh-5rem))] w-[calc(100vw-1rem)] max-w-[30rem] origin-top flex-col overflow-hidden border shadow-[0_24px_64px_-12px_rgba(0,0,0,0.2),0_4px_12px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_4px_12px_-4px_rgba(0,0,0,0.4)] transition-[transform,scale,opacity] duration-120 ease-[cubic-bezier(0.43,0.07,0.59,0.94)] data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0"
+						className="bg-gray-2 border-gray-a5 rounded-lg flex max-h-[min(36rem,calc(100dvh-5rem))] w-[calc(100vw-1rem)] max-w-[30rem] origin-center flex-col overflow-hidden border shadow-[0_24px_64px_-12px_rgba(0,0,0,0.2),0_4px_12px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_4px_12px_-4px_rgba(0,0,0,0.4)] transition-[transform,scale,opacity] duration-240 ease-[cubic-bezier(0.05,0.95,0.15,1)] data-[ending-style]:duration-100 data-[ending-style]:ease-in data-[ending-style]:scale-[0.95] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0"
 						aria-label="Command palette"
 					>
 						<Autocomplete.Root
@@ -252,19 +251,17 @@ export function CommandPalette() {
 							keepHighlight
 						>
 							<Autocomplete.Input
-								className="border-gray-a3 w-full border-0 border-b bg-transparent h-11 px-4 text-[13px] outline-none placeholder:text-gray-9"
+								className="border-gray-a2 w-full border-0 border-b bg-transparent h-11 px-4 text-[13px] outline-none placeholder:text-gray-9"
 								placeholder="Type a command or search…"
 							/>
 							<Dialog.Close className="sr-only">Close</Dialog.Close>
 
-							<ScrollArea.Root className="relative flex max-h-[min(60dvh,24rem)] min-h-0 flex-[0_1_auto] overflow-hidden">
-								<ScrollArea.Viewport className="min-h-0 flex-1 overscroll-contain [--command-palette-scroll-fade:3rem] [mask-image:linear-gradient(to_bottom,transparent_0,black_min(var(--command-palette-scroll-fade),var(--scroll-area-overflow-y-start)),black_calc(100%_-_min(var(--command-palette-scroll-fade),var(--scroll-area-overflow-y-end,var(--command-palette-scroll-fade)))),transparent_100%)] [mask-repeat:no-repeat]">
-									<ScrollArea.Content style={{ minWidth: "100%" }}>
-										<Autocomplete.Empty className="flex min-h-24 items-center justify-center p-4 text-sm text-gray-9 empty:m-0 empty:min-h-0 empty:p-0">
-											No results.
-										</Autocomplete.Empty>
+							<div className="combobox-list-scroll flex max-h-[min(60dvh,24rem)] min-h-0 flex-[0_1_auto] flex-col overflow-x-hidden overflow-y-auto overscroll-contain">
+								<Autocomplete.Empty className="flex min-h-24 items-center justify-center p-4 text-sm text-gray-9 empty:m-0 empty:min-h-0 empty:p-0">
+									No results.
+								</Autocomplete.Empty>
 
-										<Autocomplete.List className="p-1">
+								<Autocomplete.List className="pt-1 pb-1">
 											{(group: Group) => (
 												<Autocomplete.Group
 													key={group.value}
@@ -283,10 +280,10 @@ export function CommandPalette() {
 																	setOpen(false);
 																	setQuery("");
 																}}
-																className="flex h-8 cursor-default items-center gap-2 mx-1 px-3 text-[13px] rounded-sm select-none outline-none data-[highlighted]:bg-gray-a3 text-gray-12"
+																className="flex h-8 cursor-default items-center gap-2 ml-1 mr-0 pl-3 pr-2 text-[13px] rounded-sm select-none outline-none data-[highlighted]:bg-gray-a3 text-gray-12"
 															>
 																<span className="min-w-0 truncate">{item.label}</span>
-																<span className="ml-auto shrink-0 text-[11px] text-gray-10 num">
+																<span className="ml-auto min-w-0 truncate text-[11px] text-gray-10 num">
 																	{item.description ?? item.href ?? ""}
 																</span>
 															</Autocomplete.Item>
@@ -295,24 +292,8 @@ export function CommandPalette() {
 												</Autocomplete.Group>
 											)}
 										</Autocomplete.List>
-									</ScrollArea.Content>
-								</ScrollArea.Viewport>
-							</ScrollArea.Root>
+								</div>
 
-							<div className="border-gray-a3 flex items-center justify-between gap-3 border-t px-3 py-2 text-[11px] text-gray-10">
-								<div className="flex items-center gap-1.5">
-									<kbd className="kbd-key">↵</kbd>
-									<span>open</span>
-									<span className="mx-1 text-gray-a6">·</span>
-									<kbd className="kbd-key">↑</kbd>
-									<kbd className="kbd-key">↓</kbd>
-									<span>navigate</span>
-								</div>
-								<div className="flex items-center gap-1.5">
-									<kbd className="kbd-key">esc</kbd>
-									<span>close</span>
-								</div>
-							</div>
 						</Autocomplete.Root>
 					</Dialog.Popup>
 				</Dialog.Viewport>
