@@ -11,7 +11,7 @@ export function Content(props: ComponentProps<typeof _Dropdown.Content>) {
 				sideOffset={4}
 				{...props}
 				className={
-					"bg-gray-1 dark:bg-gray-3 border-gray-a3 min-w-[12rem] border rounded-md p-1 z-80 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)]" +
+					"bg-gray-2 border-gray-a3 min-w-[12rem] border rounded-md p-1 z-80 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)]" +
 					(props.className ? " " + props.className : "")
 				}
 			/>

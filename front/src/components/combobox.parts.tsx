@@ -40,7 +40,7 @@ function shouldDelayMobileSelectionClose() {
 }
 
 function getInputClass(_size: ComboboxSize) {
-	return "bg-gray-1 dark:bg-gray-3 w-full shrink-0 border-b border-gray-a3 outline-none max-sm:bg-white px-2.5 h-9 text-[13px]";
+	return "bg-gray-2 w-full shrink-0 border-b border-gray-a3 outline-none max-sm:bg-white px-2.5 h-9 text-[13px]";
 }
 
 function getItemClass(_size: ComboboxSize) {
@@ -397,7 +397,7 @@ export function Content<TItem = unknown>({
 				<BaseCombobox.Popup
 					{...props}
 					className={cx(
-						"bg-gray-1 dark:bg-gray-3 border-gray-a3 w-[var(--anchor-width)] max-h-[20rem] origin-[var(--transform-origin)] border rounded-md shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)] will-change-[scale,opacity] max-sm:origin-center max-sm:rounded-lg",
+						"bg-gray-2 border-gray-a3 w-[var(--anchor-width)] max-h-[20rem] origin-[var(--transform-origin)] border rounded-md shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)] will-change-[scale,opacity] max-sm:origin-center max-sm:rounded-lg",
 						"scale-100 opacity-100 transition-[scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)]",
 						"data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0",
 						"data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0",

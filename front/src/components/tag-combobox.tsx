@@ -215,7 +215,7 @@ export function TagMultiCombobox({
 										className="-my-2 -ml-2 mr-0 flex size-9 shrink-0 items-center justify-center text-gray-11"
 										aria-hidden
 									>
-										<span className="border-gray-a5 bg-gray-1 flex size-4 items-center justify-center border">
+										<span className="border-gray-a5 bg-gray-2 flex size-4 items-center justify-center border">
 											{selected && <IconCheck />}
 										</span>
 									</span>

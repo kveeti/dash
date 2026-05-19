@@ -45,7 +45,7 @@ const addButtonClass =
 	"focus inline-flex h-7 items-center gap-1 rounded-md border border-dashed border-gray-a5 px-2 text-[11px] text-gray-11 hover:text-gray-12 hover:border-gray-a7 hover:bg-gray-a2";
 
 const mobileSearchClass =
-	"bg-gray-1 h-9 w-full shrink-0 border-b border-gray-a3 px-3 text-[13px] text-gray-12 outline-none placeholder:text-gray-9 dark:bg-gray-3";
+	"bg-gray-2 h-9 w-full shrink-0 border-b border-gray-a3 px-3 text-[13px] text-gray-12 outline-none placeholder:text-gray-9";
 
 const mobileItemClass =
 	"flex min-h-10 w-full cursor-default items-center gap-2 rounded-sm px-2.5 py-2 text-[13px] text-gray-12 outline-none select-none data-[active-item]:bg-gray-a3 hover:bg-gray-a3";
@@ -1179,7 +1179,7 @@ function MobileFilterItem({
 		>
 			{multi && (
 				<span
-					className="border-gray-a5 bg-gray-1 mr-1 flex size-4 shrink-0 items-center justify-center border dark:bg-gray-3"
+					className="border-gray-a5 bg-gray-2 mr-1 flex size-4 shrink-0 items-center justify-center border"
 					aria-hidden
 				>
 					{checked && <CheckIcon />}

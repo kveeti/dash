@@ -238,7 +238,7 @@ export function CommandPalette() {
 			<Dialog.Portal>
 								<Dialog.Viewport className="fixed inset-0 flex items-start justify-center overflow-hidden px-2 pt-[14vh] pb-2">
 					<Dialog.Popup
-						className="bg-gray-1 dark:bg-gray-3 border-gray-a3 rounded-lg flex max-h-[min(36rem,calc(100dvh-5rem))] w-[calc(100vw-1rem)] max-w-[30rem] origin-top flex-col overflow-hidden border shadow-[0_24px_64px_-12px_rgba(0,0,0,0.2),0_4px_12px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_4px_12px_-4px_rgba(0,0,0,0.4)] transition-[transform,scale,opacity] duration-120 ease-[cubic-bezier(0.43,0.07,0.59,0.94)] data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0"
+						className="bg-gray-2 border-gray-a3 rounded-lg flex max-h-[min(36rem,calc(100dvh-5rem))] w-[calc(100vw-1rem)] max-w-[30rem] origin-top flex-col overflow-hidden border shadow-[0_24px_64px_-12px_rgba(0,0,0,0.2),0_4px_12px_-4px_rgba(0,0,0,0.1)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_4px_12px_-4px_rgba(0,0,0,0.4)] transition-[transform,scale,opacity] duration-120 ease-[cubic-bezier(0.43,0.07,0.59,0.94)] data-[ending-style]:scale-[0.98] data-[ending-style]:opacity-0 data-[starting-style]:scale-[0.98] data-[starting-style]:opacity-0"
 						aria-label="Command palette"
 					>
 						<Autocomplete.Root

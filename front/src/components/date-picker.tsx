@@ -126,7 +126,7 @@ export function DateRangePickerInput({
 					<IconCalendar />
 				</Button>
 			</Group>
-			<Popover className="z-50 rounded-lg border border-gray-a3 bg-gray-1 dark:bg-gray-3 p-2 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)] cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
+			<Popover className="z-50 rounded-lg border border-gray-a3 bg-gray-2 p-2 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)] cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
 				<Dialog className="outline-none max-sm:w-full">
 					<AriaRangeCalendar className="cursor-default max-sm:w-full">
 						<header className="mb-2 flex items-center gap-1 max-sm:mb-3 max-sm:px-2 max-sm:pt-2">
@@ -272,7 +272,7 @@ function DatePickerInputBase({
 					<IconCalendar />
 				</Button>
 			</Group>
-			<Popover className="z-50 rounded-lg border border-gray-a3 bg-gray-1 dark:bg-gray-3 p-2 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)] cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
+			<Popover className="z-50 rounded-lg border border-gray-a3 bg-gray-2 p-2 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)] cursor-default origin-[var(--trigger-anchor-point)] transition-[transform,scale,opacity] duration-350 ease-[cubic-bezier(0.16,1,0.3,1)] data-[entering]:scale-[0.99] data-[entering]:opacity-0 data-[exiting]:scale-[0.99] data-[exiting]:opacity-0 data-[starting-style]:scale-[0.99] data-[starting-style]:opacity-0 data-[ending-style]:scale-[0.99] data-[ending-style]:opacity-0 max-sm:!fixed max-sm:!left-4 max-sm:!right-4 max-sm:!top-[clamp(1rem,12dvh,24dvh)] max-sm:!bottom-auto max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:w-auto max-sm:!max-h-[calc(100dvh-2rem)] max-sm:overflow-y-auto max-sm:bg-white max-sm:shadow-2xl max-sm:origin-center max-sm:duration-300 max-sm:ease-[cubic-bezier(0.4,0,0.2,1)] max-sm:data-[entering]:scale-97 max-sm:data-[exiting]:scale-97 max-sm:data-[starting-style]:scale-97 max-sm:data-[ending-style]:scale-97 dark:max-sm:bg-gray-2">
 				<Dialog className="outline-none max-sm:w-full">
 					<Calendar className="cursor-default max-sm:w-full">
 						<header className="mb-2 flex items-center gap-1 max-sm:mb-3 max-sm:px-2 max-sm:pt-2">
@@ -316,13 +316,13 @@ function CalendarBottomNav() {
 		<div className="hidden max-sm:grid max-sm:grid-cols-2 max-sm:gap-2 max-sm:px-2 max-sm:pb-2 max-sm:pt-3">
 			<Button
 				slot="previous"
-				className="focus bg-gray-1 hover:bg-gray-a2 flex h-11 items-center justify-center text-gray-11 outline-none"
+				className="focus bg-gray-2 hover:bg-gray-a2 flex h-11 items-center justify-center text-gray-11 outline-none"
 			>
 				<IconChevronLeft />
 			</Button>
 			<Button
 				slot="next"
-				className="focus bg-gray-1 hover:bg-gray-a2 flex h-11 items-center justify-center text-gray-11 outline-none"
+				className="focus bg-gray-2 hover:bg-gray-a2 flex h-11 items-center justify-center text-gray-11 outline-none"
 			>
 				<IconChevronRight />
 			</Button>

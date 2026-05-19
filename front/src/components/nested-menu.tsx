@@ -13,7 +13,7 @@ function cx(...classes: Array<string | false | null | undefined>) {
 }
 
 const menuClass =
-	"z-50 min-w-[14rem] max-w-[20rem] max-h-[min(380px,var(--popover-available-height))] overflow-hidden rounded-md border border-gray-a3 bg-gray-1 dark:bg-gray-3 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)] outline-none flex flex-col";
+	"z-50 min-w-[14rem] max-w-[20rem] max-h-[min(380px,var(--popover-available-height))] overflow-hidden rounded-md border border-gray-a3 bg-gray-2 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)] outline-none flex flex-col";
 
 const rootMenuAnimationClass =
 	"dash-root-menu origin-[var(--popover-transform-origin)] will-change-[transform,opacity]";
@@ -22,7 +22,7 @@ const itemClass =
 	"flex w-full items-center gap-2 rounded-sm px-2.5 py-1.5 text-[12px] text-gray-12 cursor-default outline-none select-none scroll-m-1 scroll-mt-[var(--combobox-height,_0px)] data-[active-item]:bg-gray-a3";
 
 const comboboxInputClass =
-	"bg-gray-1 dark:bg-gray-3 w-full shrink-0 border-b border-gray-a3 outline-none h-9 px-2.5 text-[13px] text-gray-12 placeholder:text-gray-9";
+	"bg-gray-2 w-full shrink-0 border-b border-gray-a3 outline-none h-9 px-2.5 text-[13px] text-gray-12 placeholder:text-gray-9";
 
 const searchableSubmenuShift = -40;
 const plainSubmenuShift = -4;
@@ -171,7 +171,7 @@ export const NestedMenuItem = forwardRef<HTMLDivElement, NestedMenuItemProps>(
 			<>
 				{multi && (
 					<span
-						className="border-gray-a5 bg-gray-1 dark:bg-gray-3 mr-1 flex size-4 shrink-0 items-center justify-center border"
+						className="border-gray-a5 bg-gray-2 mr-1 flex size-4 shrink-0 items-center justify-center border"
 						aria-hidden
 					>
 						{checked && (

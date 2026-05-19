@@ -22,7 +22,7 @@ export function Content(props: ComponentProps<typeof _Dialog.Content> & { overla
 			<_Dialog.Content
 				{...props}
 				className={
-					"bg-gray-1 dark:bg-gray-3 border-gray-a3 fixed top-[50%] left-[50%] max-h-[85vh] w-[90vw] max-w-[26rem] transform-[translate(-50%,_-50%)] border rounded-lg p-5 outline-none shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)]" +
+					"bg-gray-2 border-gray-a3 fixed top-[50%] left-[50%] max-h-[85vh] w-[90vw] max-w-[26rem] transform-[translate(-50%,_-50%)] border rounded-lg p-5 outline-none shadow-[0_24px_64px_-12px_rgba(0,0,0,0.18),0_2px_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.7),0_2px_8px_-2px_rgba(0,0,0,0.4)]" +
 					" data-[state=open]:animate-dash-dialog-in" +
 					" data-[state=closed]:animate-dash-dialog-out" +
 					" " +

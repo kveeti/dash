@@ -127,8 +127,8 @@ export function Select({
 
 			<BaseSelect.Portal>
 				<BaseSelect.Positioner className="outline-hidden select-none z-50" sideOffset={4}>
-					<BaseSelect.Popup className="group min-w-[var(--anchor-width)] origin-[var(--transform-origin)] bg-gray-1 dark:bg-gray-3 text-gray-12 rounded-md border border-gray-a3 p-1 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)] transition-[transform,scale,opacity] data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[side=none]:min-w-[calc(var(--anchor-width)+1rem)] data-[side=none]:data-[ending-style]:transition-none data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[side=none]:data-[starting-style]:scale-100 data-[side=none]:data-[starting-style]:opacity-100 data-[side=none]:data-[starting-style]:transition-none">
-						<BaseSelect.ScrollUpArrow className="top-0 z-[1] flex h-4 w-full cursor-default items-center justify-center bg-gray-1 dark:bg-gray-3 text-center text-xs before:absolute data-[side=none]:before:top-[-100%] before:left-0 before:h-full before:w-full before:content-['']" />
+					<BaseSelect.Popup className="group min-w-[var(--anchor-width)] origin-[var(--transform-origin)] bg-gray-2 text-gray-12 rounded-md border border-gray-a3 p-1 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)] transition-[transform,scale,opacity] data-[ending-style]:scale-95 data-[ending-style]:opacity-0 data-[side=none]:min-w-[calc(var(--anchor-width)+1rem)] data-[side=none]:data-[ending-style]:transition-none data-[starting-style]:scale-95 data-[starting-style]:opacity-0 data-[side=none]:data-[starting-style]:scale-100 data-[side=none]:data-[starting-style]:opacity-100 data-[side=none]:data-[starting-style]:transition-none">
+						<BaseSelect.ScrollUpArrow className="top-0 z-[1] flex h-4 w-full cursor-default items-center justify-center bg-gray-2 text-center text-xs before:absolute data-[side=none]:before:top-[-100%] before:left-0 before:h-full before:w-full before:content-['']" />
 						<BaseSelect.List className="relative scroll-py-6 overflow-y-auto max-h-[var(--available-height)] z-20">
 							{items.map((item) => (
 								<BaseSelect.Item
@@ -149,7 +149,7 @@ export function Select({
 								</BaseSelect.Item>
 							))}
 						</BaseSelect.List>
-						<BaseSelect.ScrollDownArrow className="bottom-0 z-[1] flex h-4 w-full cursor-default items-center justify-center bg-gray-1 dark:bg-gray-3 text-center text-xs before:absolute before:left-0 before:h-full before:w-full before:content-[''] data-[side=none]:before:bottom-[-100%]" />
+						<BaseSelect.ScrollDownArrow className="bottom-0 z-[1] flex h-4 w-full cursor-default items-center justify-center bg-gray-2 text-center text-xs before:absolute before:left-0 before:h-full before:w-full before:content-[''] data-[side=none]:before:bottom-[-100%]" />
 					</BaseSelect.Popup>
 				</BaseSelect.Positioner>
 			</BaseSelect.Portal>

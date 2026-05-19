@@ -67,7 +67,7 @@
 }
 
 @utility surface {
-	@apply bg-gray-2 dark:bg-gray-2 border border-gray-a2 rounded-lg;
+	@apply bg-gray-2 dark:bg-gray-2 border border-gray-a4 rounded-lg;
 }
 
 @utility surface-bleed {
@@ -262,18 +262,18 @@ html {
 	--white-a11: rgba(255, 255, 255, 0.9);
 	--white-a12: rgba(255, 255, 255, 0.95);
 
-	--red-1: hsl(0, 100%, 99%);
-	--red-2: hsl(0, 100%, 98%);
-	--red-3: hsl(357, 90%, 96%);
-	--red-4: hsl(358, 100%, 93%);
-	--red-5: hsl(359, 100%, 90%);
-	--red-6: hsl(359, 94%, 87%);
-	--red-7: hsl(359, 77%, 81%);
-	--red-8: hsl(359, 70%, 74%);
-	--red-9: hsl(358, 75%, 59%);
-	--red-10: hsl(358, 69%, 55%);
-	--red-11: hsl(358, 65%, 49%);
-	--red-12: hsl(351, 63%, 24%);
+	--red-1: oklch(0.995 0.006 18);
+	--red-2: oklch(0.985 0.012 17);
+	--red-3: oklch(0.960 0.040 17);
+	--red-4: oklch(0.930 0.070 19);
+	--red-5: oklch(0.895 0.095 21);
+	--red-6: oklch(0.850 0.105 24);
+	--red-7: oklch(0.790 0.125 27);
+	--red-8: oklch(0.720 0.155 29);
+	--red-9: oklch(0.595 0.220 28);
+	--red-10: oklch(0.555 0.215 28);
+	--red-11: oklch(0.510 0.215 28);
+	--red-12: oklch(0.320 0.100 18);
 
 	--red-a1: hsla(0, 100%, 50%, 0.01);
 	--red-a2: hsla(0, 100%, 50%, 0.03);
@@ -288,18 +288,18 @@ html {
 	--red-a11: hsla(358, 100%, 38%, 0.83);
 	--red-a12: hsla(351, 100%, 17%, 0.91);
 
-	--green-1: hsla(120, 60%, 99%, 1);
-	--green-2: hsla(120, 43%, 97%, 1);
-	--green-3: hsla(120, 42%, 94%, 1);
-	--green-4: hsla(123, 45%, 90%, 1);
-	--green-5: hsla(122, 40%, 85%, 1);
-	--green-6: hsla(124, 39%, 78%, 1);
-	--green-7: hsla(126, 37%, 69%, 1);
-	--green-8: hsla(131, 38%, 56%, 1);
-	--green-9: hsla(131, 41%, 46%, 1);
-	--green-10: hsla(131, 43%, 43%, 1);
-	--green-11: hsla(132, 50%, 33%, 1);
-	--green-12: hsla(131, 30%, 18%, 1);
+	--green-1: oklch(0.995 0.005 140);
+	--green-2: oklch(0.985 0.015 140);
+	--green-3: oklch(0.960 0.040 142);
+	--green-4: oklch(0.930 0.060 143);
+	--green-5: oklch(0.890 0.075 144);
+	--green-6: oklch(0.835 0.085 144);
+	--green-7: oklch(0.770 0.100 146);
+	--green-8: oklch(0.670 0.130 148);
+	--green-9: oklch(0.580 0.165 149);
+	--green-10: oklch(0.550 0.160 149);
+	--green-11: oklch(0.460 0.135 150);
+	--green-12: oklch(0.300 0.060 149);
 
 	--green-a1: hsla(120, 100%, 38%, 0.02);
 	--green-a2: hsla(120, 100%, 30%, 0.04);
@@ -314,18 +314,22 @@ html {
 	--green-a11: hsla(132, 100%, 20%, 0.84);
 	--green-a12: hsla(131, 100%, 6%, 0.87);
 
-	--gray-1: #fcfcfc;
-	--gray-2: #f9f9f9;
-	--gray-3: #f0f0f0;
-	--gray-4: #e8e8e8;
-	--gray-5: #e0e0e0;
-	--gray-6: #d9d9d9;
-	--gray-7: #cecece;
-	--gray-8: #bbbbbb;
-	--gray-9: #8d8d8d;
-	--gray-10: #838383;
-	--gray-11: #646464;
-	--gray-12: #202020;
+	/* Warm neutral ramp — perceptual lightness via OKLCH,
+	   faint cream undertone (hue ~60°, chroma very low).
+	   Body (gray-1) is the tinted page; cards (gray-2) elevate toward white,
+	   mirroring dark mode where body is darkest and cards step lighter. */
+	--gray-1: oklch(0.975 0.003 60);
+	--gray-2: oklch(0.992 0.002 60);
+	--gray-3: oklch(0.955 0.003 60);
+	--gray-4: oklch(0.925 0.004 60);
+	--gray-5: oklch(0.895 0.004 60);
+	--gray-6: oklch(0.850 0.005 60);
+	--gray-7: oklch(0.795 0.005 60);
+	--gray-8: oklch(0.720 0.005 60);
+	--gray-9: oklch(0.620 0.005 60);
+	--gray-10: oklch(0.580 0.004 60);
+	--gray-11: oklch(0.470 0.004 60);
+	--gray-12: oklch(0.240 0.003 60);
 
 	--gray-a1: #00000003;
 	--gray-a2: #00000006;
@@ -395,18 +399,18 @@ html {
 
 		/* Warm neutral ramp — perceptual lightness via OKLCH,
 		   faint brown undertone (hue ~60°, chroma very low). */
-		--gray-1: oklch(0.19 0.002 60);
+		--gray-1: oklch(0.190 0.002 60);
 		--gray-2: oklch(0.215 0.003 60);
 		--gray-3: oklch(0.235 0.003 60);
-		--gray-4: oklch(0.31 0.004 60);
-		--gray-5: oklch(0.35 0.004 60);
-		--gray-6: oklch(0.40 0.005 60);
-		--gray-7: oklch(0.47 0.005 60);
-		--gray-8: oklch(0.56 0.005 60);
-		--gray-9: oklch(0.64 0.005 60);
-		--gray-10: oklch(0.69 0.004 60);
-		--gray-11: oklch(0.82 0.004 60);
-		--gray-12: oklch(0.96 0.003 60);
+		--gray-4: oklch(0.275 0.004 60);
+		--gray-5: oklch(0.320 0.004 60);
+		--gray-6: oklch(0.370 0.005 60);
+		--gray-7: oklch(0.430 0.005 60);
+		--gray-8: oklch(0.520 0.005 60);
+		--gray-9: oklch(0.600 0.005 60);
+		--gray-10: oklch(0.650 0.004 60);
+		--gray-11: oklch(0.810 0.004 60);
+		--gray-12: oklch(0.955 0.003 60);
 
 		--gray-a1: #00000000;
 		--gray-a2: #ffffff09;

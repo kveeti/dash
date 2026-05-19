@@ -480,7 +480,7 @@ function Hero(props: {
 		: null;
 
 	return (
-		<section className="grid gap-px overflow-hidden rounded-lg border border-gray-a3 bg-gray-a3 sm:grid-cols-3">
+		<section className="surface surface-bleed grid divide-y divide-gray-a3 sm:grid-cols-3 sm:divide-y-0 sm:divide-x">
 			<StatCell
 				label="Net"
 				value={signed(totals.net, props.reportingCurrency, props.fAmount)}
@@ -542,7 +542,7 @@ function StatCell({
 		" " +
 		(accent === "pos" ? "text-gray-12" : accent === "neg" ? "text-gray-12" : "text-gray-12");
 	return (
-		<div className="bg-gray-1 px-5 py-5">
+		<div className="px-5 py-5">
 			<div className="text-[10px] uppercase tracking-[0.06em] text-gray-10 font-medium">
 				{label}
 			</div>
