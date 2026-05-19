@@ -1,8 +1,15 @@
 import * as Ariakit from "@ariakit/react";
 import {
+	CompositeRenderer,
+	type CompositeRendererItemProps,
+	type CompositeRendererProps,
+} from "@ariakit/react-core/composite/composite-renderer";
+import {
 	createContext,
 	forwardRef,
 	useContext,
+	useId,
+	useMemo,
 	type ReactNode,
 } from "react";
 
@@ -26,10 +33,13 @@ const comboboxInputClass =
 
 const searchableSubmenuShift = -40;
 const plainSubmenuShift = -4;
+const defaultVirtualThreshold = 100;
+const defaultVirtualItemSize = 32;
+const defaultVirtualOverscan = 24;
 
 export interface NestedMenuProps {
 	label?: ReactNode;
-	children?: ReactNode;
+	children?: ReactNode | (() => ReactNode);
 	searchValue?: string;
 	onSearch?: (value: string) => void;
 	combobox?: ReactNode;
@@ -48,13 +58,23 @@ export function NestedMenu({
 }: NestedMenuProps) {
 	const parent = Ariakit.useMenuContext();
 	const searchable = searchValue != null || !!onSearch || !!combobox;
+	const comboboxStore = Ariakit.useComboboxStore({
+		resetValueOnHide: true,
+		includesBaseElement: false,
+		value: searchValue,
+		setValue: onSearch,
+	});
+	const menu = Ariakit.useMenuStore({
+		combobox: searchable ? comboboxStore : undefined,
+		timeout: 0,
+		showTimeout: 0,
+		placement: parent ? "right-start" : "bottom-start",
+	});
 
 	const element = (
-		<Ariakit.MenuProvider
-			showTimeout={0}
-			placement={parent ? "right-start" : "bottom-start"}
-		>
+		<>
 			<Ariakit.MenuButton
+				store={menu}
 				className={className}
 				render={
 					parent ? (
@@ -71,54 +91,146 @@ export function NestedMenu({
 				portal
 				overlap
 				unmountOnHide
+				store={menu}
 				gutter={parent ? -4 : 4}
 				preventBodyScroll={!parent}
+				typeahead={!searchable}
+				composite={!searchable}
 				shift={
 					parent ? (searchable ? searchableSubmenuShift : plainSubmenuShift) : 0
 				}
 				className={cx(menuClass, !parent && rootMenuAnimationClass)}
 			>
-				<SearchableContext.Provider value={searchable}>
-					{searchable ? (
-						<>
-							<div className="shrink-0 [&~*]:[--combobox-height:36px]">
-								<Ariakit.Combobox
-									autoSelect
-									render={combobox as Ariakit.ComboboxProps["render"]}
-									className={comboboxInputClass}
-								/>
-							</div>
-							<Ariakit.ComboboxList
-								alwaysVisible
-								className="scrollbar-hidden nested-menu-scroll overflow-y-auto p-1 flex-1 min-h-0"
-							>
-								{children}
-							</Ariakit.ComboboxList>
-						</>
-					) : (
-						<div className="scrollbar-hidden nested-menu-scroll overflow-y-auto p-1">
-							{children}
-						</div>
-					)}
-				</SearchableContext.Provider>
+				<NestedMenuContent
+					combobox={combobox}
+					comboboxStore={comboboxStore}
+					menu={menu}
+					searchable={searchable}
+				>
+					{children}
+				</NestedMenuContent>
 			</Ariakit.Menu>
-		</Ariakit.MenuProvider>
+		</>
 	);
 
-	if (searchable) {
-		return (
-			<Ariakit.ComboboxProvider
-				resetValueOnHide
-				includesBaseElement={false}
-				value={searchValue}
-				setValue={onSearch}
-			>
-				{element}
-			</Ariakit.ComboboxProvider>
-		);
+	return element;
+}
+
+type NestedMenuVirtualData<TItem> = {
+	data: TItem;
+	disabled?: boolean;
+};
+
+type NestedMenuVirtualItemProps<TItem> = Omit<
+	CompositeRendererItemProps<NestedMenuVirtualData<TItem>>,
+	"data" | "disabled" | "index"
+>;
+
+export function NestedMenuVirtualList<TItem>({
+	children,
+	getKey,
+	getDisabled,
+	itemSize = defaultVirtualItemSize,
+	items,
+	overscan = defaultVirtualOverscan,
+	threshold = defaultVirtualThreshold,
+}: {
+	children: (
+		item: TItem,
+		virtualProps: Partial<NestedMenuVirtualItemProps<TItem>>,
+	) => ReactNode;
+	getKey?: (item: TItem, index: number) => string;
+	getDisabled?: (item: TItem) => boolean;
+	itemSize?: number;
+	items: TItem[];
+	overscan?: number;
+	threshold?: number;
+}) {
+	const searchable = useContext(SearchableContext);
+	const combobox = Ariakit.useComboboxContext();
+	const menu = Ariakit.useMenuContext();
+	const reactId = useId();
+	const store = (searchable ? combobox : (menu ?? combobox)) as
+		| CompositeRendererProps<NestedMenuVirtualData<TItem>>["store"]
+		| undefined;
+	const rendererItems = useMemo(
+		() =>
+			items.map((item, index) => ({
+				id: `${reactId}-${getKey?.(item, index) ?? index}`,
+				data: item,
+				disabled: getDisabled?.(item),
+			})),
+		[getDisabled, getKey, items, reactId],
+	);
+
+	if (!store || items.length <= threshold) {
+		return <>{items.map((item) => children(item, {}))}</>;
 	}
 
-	return element;
+	return (
+		<CompositeRenderer
+			store={store}
+			items={rendererItems}
+			itemSize={itemSize}
+			estimatedItemSize={itemSize}
+			overscan={overscan}
+			initialItems={Math.min(items.length, Math.max(64, overscan * 2))}
+		>
+			{({ data, disabled: _disabled, index: _index, ...virtualProps }) =>
+				children(data, virtualProps)
+			}
+		</CompositeRenderer>
+	);
+}
+
+function NestedMenuContent({
+	children,
+	combobox,
+	comboboxStore,
+	menu,
+	searchable,
+}: {
+	children?: ReactNode | (() => ReactNode);
+	combobox?: ReactNode;
+	comboboxStore: Ariakit.ComboboxStore;
+	menu: Ariakit.MenuStore;
+	searchable: boolean;
+}) {
+	const mounted = Ariakit.useStoreState(menu, "mounted");
+	const shouldRenderChildren = mounted;
+	const renderedChildren =
+		shouldRenderChildren && typeof children === "function"
+			? children()
+			: shouldRenderChildren
+				? children
+				: null;
+
+	return (
+		<SearchableContext.Provider value={searchable}>
+			{searchable ? (
+				<>
+					<div className="shrink-0 [&~*]:[--combobox-height:36px]">
+						<Ariakit.Combobox
+							store={comboboxStore}
+							autoSelect
+							render={combobox as Ariakit.ComboboxProps["render"]}
+							className={comboboxInputClass}
+						/>
+					</div>
+					<Ariakit.ComboboxList
+						store={comboboxStore}
+						className="scrollbar-hidden nested-menu-scroll overflow-y-auto p-1 flex-1 min-h-0"
+					>
+						{renderedChildren}
+					</Ariakit.ComboboxList>
+				</>
+			) : (
+				<div className="scrollbar-hidden nested-menu-scroll overflow-y-auto p-1">
+					{renderedChildren}
+				</div>
+			)}
+		</SearchableContext.Provider>
+	);
 }
 
 const SubmenuTriggerItem = forwardRef<HTMLDivElement, Ariakit.ComboboxItemProps>(

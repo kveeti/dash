@@ -1,5 +1,12 @@
 import * as Ariakit from "@ariakit/react";
-import { startTransition, useMemo, useState, type ReactNode } from "react";
+import {
+	forwardRef,
+	startTransition,
+	useCallback,
+	useMemo,
+	useState,
+	type ReactNode,
+} from "react";
 import type { TransactionSort } from "../lib/queries/transactions";
 import { IconPlus } from "./icons/plus";
 import { IconChevronDown } from "./icons/chevron-down";
@@ -11,6 +18,7 @@ import {
 	NestedMenuItem,
 	NestedMenuEmpty,
 	NestedMenuSeparator,
+	NestedMenuVirtualList,
 } from "./nested-menu";
 import { DateRangeDialog } from "./date-picker";
 import * as Dialog from "./dialog";
@@ -201,10 +209,10 @@ function rootChoiceMatchesQuery({
 				dateRange ? "clear date" : undefined,
 			].some((label) => pathMatchesQuery(query, ["date", label]));
 		case "category":
-			return [
-				"uncategorized",
-				...(categories ?? []).map((category) => category.name),
-			].some((label) => pathMatchesQuery(query, ["category", label]));
+			if (pathMatchesQuery(query, ["category", "uncategorized"])) return true;
+			return (categories ?? []).some((category) =>
+				pathMatchesQuery(query, ["category", category.name]),
+			);
 		case "account":
 			return (accounts ?? []).some((account) =>
 				pathMatchesQuery(query, ["account", account.name, account.currency]),
@@ -563,9 +571,11 @@ function MobileRootFilterView({
 			),
 		[query, dateRange, categories, accounts, currencies, tags],
 	);
+	const hasSearch = query.trim().length > 0;
 	const globalMatches = useMemo(
-		() =>
-			buildMobileGlobalFilterItems({
+		() => {
+			if (!hasSearch) return [];
+			return buildMobileGlobalFilterItems({
 				query,
 				categoryId,
 				accountId,
@@ -579,8 +589,10 @@ function MobileRootFilterView({
 				tags,
 				setParams,
 				setView,
-			}),
+			});
+		},
 		[
+			hasSearch,
 			query,
 			categoryId,
 			accountId,
@@ -596,7 +608,6 @@ function MobileRootFilterView({
 			setView,
 		],
 	);
-	const hasSearch = query.trim().length > 0;
 
 	return (
 		<MobileComboboxView
@@ -910,19 +921,26 @@ function MobileCategoryFilterView({
 					uncategorized
 				</MobileFilterItem>
 			)}
-			{matches.map((item) => (
-				<MobileFilterItem
-					key={item.id}
-					value={item.id}
-					checked={value === item.id}
-					onClick={() => {
-						setParams({ cat: item.id, uncat: undefined });
-						close();
-					}}
-				>
-					{item.name}
-				</MobileFilterItem>
-			))}
+			<NestedMenuVirtualList
+				items={matches}
+				getKey={(item) => item.id}
+				itemSize={40}
+			>
+				{(item, virtualProps) => (
+					<MobileFilterItem
+						key={item.id}
+						{...virtualProps}
+						value={item.id}
+						checked={value === item.id}
+						onClick={() => {
+							setParams({ cat: item.id, uncat: undefined });
+							close();
+						}}
+					>
+						{item.name}
+					</MobileFilterItem>
+				)}
+			</NestedMenuVirtualList>
 			{!matches.length && query && <MobileFilterEmpty>no matches</MobileFilterEmpty>}
 		</MobileComboboxView>
 	);
@@ -951,24 +969,31 @@ function MobileAccountFilterView({
 			onQueryChange={setQuery}
 			placeholder="search accounts..."
 		>
-			{matches.map((item) => (
-				<MobileFilterItem
-					key={item.id}
-					value={item.id}
-					checked={value === item.id}
-					onClick={() => {
-						setParams({ acc: item.id });
-						close();
-					}}
-				>
-					<span className="flex w-full items-center gap-2">
-						<span className="flex-1 truncate">{item.name}</span>
-						<span className="shrink-0 text-[10px] text-gray-10">
-							{item.currency}
+			<NestedMenuVirtualList
+				items={matches}
+				getKey={(item) => item.id}
+				itemSize={40}
+			>
+				{(item, virtualProps) => (
+					<MobileFilterItem
+						key={item.id}
+						{...virtualProps}
+						value={item.id}
+						checked={value === item.id}
+						onClick={() => {
+							setParams({ acc: item.id });
+							close();
+						}}
+					>
+						<span className="flex w-full items-center gap-2">
+							<span className="flex-1 truncate">{item.name}</span>
+							<span className="shrink-0 text-[10px] text-gray-10">
+								{item.currency}
+							</span>
 						</span>
-					</span>
-				</MobileFilterItem>
-			))}
+					</MobileFilterItem>
+				)}
+			</NestedMenuVirtualList>
 			{!matches.length && <MobileFilterEmpty>no matches</MobileFilterEmpty>}
 		</MobileComboboxView>
 	);
@@ -1002,18 +1027,25 @@ function MobileTagFilterView({
 			onQueryChange={setQuery}
 			placeholder="search tags..."
 		>
-			{matches.map((item) => (
-				<MobileFilterItem
-					key={item.id}
-					value={item.id}
-					multi
-					checked={tagIds.includes(item.id)}
-					onClick={() => toggle(item.id)}
-				>
-					<span className="text-gray-8">#</span>
-					{item.name}
-				</MobileFilterItem>
-			))}
+			<NestedMenuVirtualList
+				items={matches}
+				getKey={(item) => item.id}
+				itemSize={40}
+			>
+				{(item, virtualProps) => (
+					<MobileFilterItem
+						key={item.id}
+						{...virtualProps}
+						value={item.id}
+						multi
+						checked={tagIds.includes(item.id)}
+						onClick={() => toggle(item.id)}
+					>
+						<span className="text-gray-8">#</span>
+						{item.name}
+					</MobileFilterItem>
+				)}
+			</NestedMenuVirtualList>
 			{!matches.length && <MobileFilterEmpty>no matches</MobileFilterEmpty>}
 		</MobileComboboxView>
 	);
@@ -1047,17 +1079,24 @@ function MobileCurrencyFilterView({
 			onQueryChange={setQuery}
 			placeholder="search currencies..."
 		>
-			{matches.map((code) => (
-				<MobileFilterItem
-					key={code}
-					value={code}
-					multi
-					checked={currencyIds.includes(code)}
-					onClick={() => toggle(code)}
-				>
-					<span className="font-mono">{code}</span>
-				</MobileFilterItem>
-			))}
+			<NestedMenuVirtualList
+				items={matches}
+				getKey={(code) => code}
+				itemSize={40}
+			>
+				{(code, virtualProps) => (
+					<MobileFilterItem
+						key={code}
+						{...virtualProps}
+						value={code}
+						multi
+						checked={currencyIds.includes(code)}
+						onClick={() => toggle(code)}
+					>
+						<span className="font-mono">{code}</span>
+					</MobileFilterItem>
+				)}
+			</NestedMenuVirtualList>
 			{!matches.length && <MobileFilterEmpty>no matches</MobileFilterEmpty>}
 		</MobileComboboxView>
 	);
@@ -1152,50 +1191,55 @@ function MobileActionItem({
 	);
 }
 
-function MobileFilterItem({
-	value,
-	children,
-	checked,
-	multi,
-	className,
-	onClick,
-}: {
+type MobileFilterItemProps = Omit<
+	Ariakit.ComboboxItemProps,
+	"children" | "onClick" | "store"
+> & {
 	value: string;
 	children: ReactNode;
 	checked?: boolean;
 	multi?: boolean;
 	className?: string;
 	onClick: () => void;
-}) {
-	return (
-		<Ariakit.ComboboxItem
-			value={value}
-			focusOnHover
-			blurOnHoverEnd={false}
-			setValueOnClick={false}
-			hideOnClick={false}
-			className={`${mobileItemClass}${className ? ` ${className}` : ""}`}
-			onClick={onClick}
-		>
-			{multi && (
-				<span
-					className="border-gray-a5 bg-gray-2 mr-1 flex size-4 shrink-0 items-center justify-center border"
-					aria-hidden
-				>
-					{checked && <CheckIcon />}
+};
+
+const MobileFilterItem = forwardRef<HTMLDivElement, MobileFilterItemProps>(
+	function MobileFilterItem(
+		{ value, children, checked, multi, className, onClick, ...props },
+		ref,
+	) {
+		return (
+			<Ariakit.ComboboxItem
+				ref={ref}
+				value={value}
+				focusOnHover
+				blurOnHoverEnd={false}
+				setValueOnClick={false}
+				hideOnClick={false}
+				{...props}
+				className={`${mobileItemClass}${className ? ` ${className}` : ""}`}
+				onClick={onClick}
+			>
+				{multi && (
+					<span
+						className="border-gray-a5 bg-gray-2 mr-1 flex size-4 shrink-0 items-center justify-center border"
+						aria-hidden
+					>
+						{checked && <CheckIcon />}
+					</span>
+				)}
+				<span className="flex min-w-0 flex-1 items-center gap-2 truncate text-left">
+					{children}
 				</span>
-			)}
-			<span className="flex min-w-0 flex-1 items-center gap-2 truncate text-left">
-				{children}
-			</span>
-			{!multi && checked && (
-				<span className="text-gray-11 shrink-0">
-					<CheckIcon />
-				</span>
-			)}
-		</Ariakit.ComboboxItem>
-	);
-}
+				{!multi && checked && (
+					<span className="text-gray-11 shrink-0">
+						<CheckIcon />
+					</span>
+				)}
+			</Ariakit.ComboboxItem>
+		);
+	},
+);
 
 function CheckIcon() {
 	return (
@@ -1305,6 +1349,41 @@ function CategorySubmenu({
 		() => filterByQuery(categories ?? [], query, (item) => item.name),
 		[categories, query],
 	);
+	const renderItems = useCallback(
+		() => (
+			<>
+				{!query && (
+					<NestedMenuItem
+						value="__uncat__"
+						checked={uncategorized}
+						closeAllOnClick
+						onClick={() => setParams({ cat: undefined, uncat: "1" })}
+					>
+						uncategorized
+					</NestedMenuItem>
+				)}
+				<NestedMenuVirtualList
+					items={matches}
+					getKey={(item) => item.id}
+				>
+					{(item, virtualProps) => (
+						<NestedMenuItem
+							key={item.id}
+							{...virtualProps}
+							value={item.id}
+							checked={value === item.id}
+							closeAllOnClick
+							onClick={() => setParams({ cat: item.id, uncat: undefined })}
+						>
+							{item.name}
+						</NestedMenuItem>
+					)}
+				</NestedMenuVirtualList>
+				{!matches.length && query && <NestedMenuEmpty>no matches</NestedMenuEmpty>}
+			</>
+		),
+		[matches, query, setParams, uncategorized, value],
+	);
 
 	return (
 		<NestedMenu
@@ -1312,28 +1391,7 @@ function CategorySubmenu({
 			combobox={<input placeholder="search categories…" />}
 			onSearch={(value) => startTransition(() => setQuery(value))}
 		>
-			{!query && (
-				<NestedMenuItem
-					value="__uncat__"
-					checked={uncategorized}
-					closeAllOnClick
-					onClick={() => setParams({ cat: undefined, uncat: "1" })}
-				>
-					uncategorized
-				</NestedMenuItem>
-			)}
-			{matches.map((item) => (
-				<NestedMenuItem
-					key={item.id}
-					value={item.id}
-					checked={value === item.id}
-					closeAllOnClick
-					onClick={() => setParams({ cat: item.id, uncat: undefined })}
-				>
-					{item.name}
-				</NestedMenuItem>
-			))}
-			{!matches.length && query && <NestedMenuEmpty>no matches</NestedMenuEmpty>}
+			{renderItems}
 		</NestedMenu>
 	);
 }
@@ -1352,6 +1410,33 @@ function AccountSubmenu({
 		() => filterByQuery(accounts ?? [], query, (item) => item.name),
 		[accounts, query],
 	);
+	const renderItems = useCallback(
+		() => (
+			<>
+				<NestedMenuVirtualList items={matches} getKey={(item) => item.id}>
+					{(item, virtualProps) => (
+						<NestedMenuItem
+							key={item.id}
+							{...virtualProps}
+							value={item.id}
+							checked={value === item.id}
+							closeAllOnClick
+							onClick={() => setParams({ acc: item.id })}
+						>
+							<span className="flex w-full items-center gap-2">
+								<span className="flex-1 truncate">{item.name}</span>
+								<span className="shrink-0 text-[10px] text-gray-10">
+									{item.currency}
+								</span>
+							</span>
+						</NestedMenuItem>
+					)}
+				</NestedMenuVirtualList>
+				{!matches.length && <NestedMenuEmpty>no matches</NestedMenuEmpty>}
+			</>
+		),
+		[matches, setParams, value],
+	);
 
 	return (
 		<NestedMenu
@@ -1359,23 +1444,7 @@ function AccountSubmenu({
 			combobox={<input placeholder="search accounts…" />}
 			onSearch={(value) => startTransition(() => setQuery(value))}
 		>
-			{matches.map((item) => (
-				<NestedMenuItem
-					key={item.id}
-					value={item.id}
-					checked={value === item.id}
-					closeAllOnClick
-					onClick={() => setParams({ acc: item.id })}
-				>
-					<span className="flex w-full items-center gap-2">
-						<span className="flex-1 truncate">{item.name}</span>
-						<span className="shrink-0 text-[10px] text-gray-10">
-							{item.currency}
-						</span>
-					</span>
-				</NestedMenuItem>
-			))}
-			{!matches.length && <NestedMenuEmpty>no matches</NestedMenuEmpty>}
+			{renderItems}
 		</NestedMenu>
 	);
 }
@@ -1395,12 +1464,34 @@ function TagSubmenu({
 		[tags, query],
 	);
 
-	function toggle(id: string) {
-		const next = tagIds.includes(id)
-			? tagIds.filter((tid) => tid !== id)
-			: [...tagIds, id];
-		setParams({ tags: formatStringArrayParam(next) });
-	}
+	const renderItems = useCallback(
+		() => (
+			<>
+				<NestedMenuVirtualList items={matches} getKey={(item) => item.id}>
+					{(item, virtualProps) => (
+						<NestedMenuItem
+							key={item.id}
+							{...virtualProps}
+							value={item.id}
+							multi
+							checked={tagIds.includes(item.id)}
+							onClick={() => {
+								const next = tagIds.includes(item.id)
+									? tagIds.filter((tid) => tid !== item.id)
+									: [...tagIds, item.id];
+								setParams({ tags: formatStringArrayParam(next) });
+							}}
+						>
+							<span className="text-gray-8">#</span>
+							{item.name}
+						</NestedMenuItem>
+					)}
+				</NestedMenuVirtualList>
+				{!matches.length && <NestedMenuEmpty>no matches</NestedMenuEmpty>}
+			</>
+		),
+		[matches, setParams, tagIds],
+	);
 
 	return (
 		<NestedMenu
@@ -1415,19 +1506,7 @@ function TagSubmenu({
 			combobox={<input placeholder="search tags…" />}
 			onSearch={(value) => startTransition(() => setQuery(value))}
 		>
-			{matches.map((item) => (
-				<NestedMenuItem
-					key={item.id}
-					value={item.id}
-					multi
-					checked={tagIds.includes(item.id)}
-					onClick={() => toggle(item.id)}
-				>
-					<span className="text-gray-8">#</span>
-					{item.name}
-				</NestedMenuItem>
-			))}
-			{!matches.length && <NestedMenuEmpty>no matches</NestedMenuEmpty>}
+			{renderItems}
 		</NestedMenu>
 	);
 }
@@ -1447,12 +1526,33 @@ function CurrencySubmenu({
 		[currencies, query],
 	);
 
-	function toggle(code: string) {
-		const next = currencyIds.includes(code)
-			? currencyIds.filter((c) => c !== code)
-			: [...currencyIds, code];
-		setParams({ cur: formatStringArrayParam(next) });
-	}
+	const renderItems = useCallback(
+		() => (
+			<>
+				<NestedMenuVirtualList items={matches} getKey={(code) => code}>
+					{(code, virtualProps) => (
+						<NestedMenuItem
+							key={code}
+							{...virtualProps}
+							value={code}
+							multi
+							checked={currencyIds.includes(code)}
+							onClick={() => {
+								const next = currencyIds.includes(code)
+									? currencyIds.filter((c) => c !== code)
+									: [...currencyIds, code];
+								setParams({ cur: formatStringArrayParam(next) });
+							}}
+						>
+							<span className="font-mono">{code}</span>
+						</NestedMenuItem>
+					)}
+				</NestedMenuVirtualList>
+				{!matches.length && <NestedMenuEmpty>no matches</NestedMenuEmpty>}
+			</>
+		),
+		[currencyIds, matches, setParams],
+	);
 
 	return (
 		<NestedMenu
@@ -1467,18 +1567,7 @@ function CurrencySubmenu({
 			combobox={<input placeholder="search currencies…" />}
 			onSearch={(value) => startTransition(() => setQuery(value))}
 		>
-			{matches.map((code) => (
-				<NestedMenuItem
-					key={code}
-					value={code}
-					multi
-					checked={currencyIds.includes(code)}
-					onClick={() => toggle(code)}
-				>
-					<span className="font-mono">{code}</span>
-				</NestedMenuItem>
-			))}
-			{!matches.length && <NestedMenuEmpty>no matches</NestedMenuEmpty>}
+			{renderItems}
 		</NestedMenu>
 	);
 }

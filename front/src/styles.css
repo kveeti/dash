@@ -162,39 +162,25 @@ body {
 	}
 }
 
-@keyframes dash-menu-in {
-	from {
-		opacity: 0;
-		transform: scale(0.98);
-	}
-	to {
-		opacity: 1;
-		transform: scale(1);
-	}
-}
-
-@keyframes dash-menu-out {
-	from {
-		opacity: 1;
-		transform: scale(1);
-	}
-	to {
-		opacity: 0;
-		transform: scale(0.98);
-	}
-}
-
 .dash-root-menu {
 	opacity: 0;
-	transform: scale(0.98);
+	transform: scale(0.97) translateY(-4px);
+	transition:
+		opacity 120ms cubic-bezier(0.22, 1, 0.36, 1),
+		transform 120ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .dash-root-menu[data-enter] {
-	animation: dash-menu-in 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	opacity: 1;
+	transform: scale(1) translateY(0);
 }
 
 .dash-root-menu[data-leave] {
-	animation: dash-menu-out 120ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+	opacity: 0;
+	transform: scale(0.985) translateY(-2px);
+	transition:
+		opacity 90ms cubic-bezier(0.4, 0, 0.2, 1),
+		transform 90ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -206,19 +192,16 @@ body {
 		from { opacity: 1; transform: translate(-50%, -50%); }
 		to { opacity: 0; transform: translate(-50%, -50%); }
 	}
-	@keyframes dash-menu-in {
-		from { opacity: 0; transform: none; }
-		to { opacity: 1; transform: none; }
-	}
-	@keyframes dash-menu-out {
-		from { opacity: 1; transform: none; }
-		to { opacity: 0; transform: none; }
+	.dash-root-menu {
+		transform: none;
+		transition: opacity 1ms linear;
 	}
 	.dash-root-menu[data-enter] {
-		animation: dash-menu-in 1ms linear forwards;
+		transform: none;
 	}
 	.dash-root-menu[data-leave] {
-		animation: dash-menu-out 1ms linear forwards;
+		transform: none;
+		transition: opacity 1ms linear;
 	}
 }
 
