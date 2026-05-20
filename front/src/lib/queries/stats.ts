@@ -229,6 +229,7 @@ export function useConvertedStatTransactionsQuery(input: StatsQueryInput & {
 			perCategoryLimit ?? "",
 		],
 		enabled: !!reportingCurrency && (input.enabled ?? true),
+		placeholderData: keepPreviousData,
 		queryFn: () =>
 			getConvertedStatTransactions({
 				db,

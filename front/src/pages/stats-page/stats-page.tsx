@@ -243,7 +243,6 @@ export function StatsPage() {
 							maxStalenessDays={maxStalenessDays}
 							search={q || undefined}
 							filters={activeFilters}
-							scopeParams={scopeParams}
 							period={period}
 							compare={compare}
 							customFrom={customFrom}

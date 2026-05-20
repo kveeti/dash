@@ -1,6 +1,8 @@
 import { useMemo } from "react";
+import { Popover } from "radix-ui";
 import { useI18n } from "../../providers";
 import { Spinner } from "../../components/spinner";
+import { FastLink } from "../../components/link";
 import {
 	useConvertedStatTransactionsQuery,
 	useConvertedStatsSummaryQuery,
@@ -14,14 +16,10 @@ import type {
 	StatsPeriodValue,
 } from "./stats-page-types";
 import {
-	addDays,
 	compareLabel,
-	parseIsoDate,
-	pickGranularity,
 	percentDelta,
 	resolveBaseRange,
 	resolveCompareRange,
-	type BucketGranularity,
 } from "./stats-canvas-helpers";
 
 const PERIODS: { value: StatsPeriodValue; label: string }[] = [
@@ -40,6 +38,9 @@ const COMPARES: { value: StatsCompareValue; label: string }[] = [
 	{ value: "none", label: "None" },
 ];
 
+const INCOME_COLUMN_MIN_SOURCES = 5;
+const INCOME_NOISE_RATIO = 0.01;
+
 type Props = {
 	reportingCurrency: string;
 	queryReportingCurrency: string | undefined;
@@ -47,7 +48,6 @@ type Props = {
 	maxStalenessDays: number;
 	search?: string;
 	filters?: TransactionFilters;
-	scopeParams: Record<string, string | undefined>;
 	period: StatsPeriodValue;
 	compare: StatsCompareValue;
 	customFrom: string;
@@ -67,7 +67,6 @@ export function StatsCanvas(props: Props) {
 		() => resolveCompareRange(baseRange, props.compare),
 		[baseRange, props.compare],
 	);
-	const granularity = pickGranularity(baseRange);
 
 	const sharedInput = {
 		reportingCurrency: props.queryReportingCurrency,
@@ -105,34 +104,26 @@ export function StatsCanvas(props: Props) {
 		() => (compareRange ? deriveTotals(compareTxQ.data ?? []) : null),
 		[compareTxQ.data, compareRange],
 	);
-	const buckets = useMemo(
-		() => bucketize(txQ.data ?? [], baseRange, granularity),
-		[txQ.data, baseRange, granularity],
-	);
-	const categories = useMemo(() => {
+	const expenseCategories = useMemo(() => {
 		const current = aggregateCategories(txQ.data ?? [], "e");
 		const previous = aggregateCategories(compareTxQ.data ?? [], "e");
 		return mergeCategoryDeltas(current, previous).slice(0, 10);
 	}, [txQ.data, compareTxQ.data]);
-	const counterparties = useMemo(() => {
-		const current = aggregateCounterparties(txQ.data ?? []);
-		const previousSet = new Set(
-			aggregateCounterparties(compareTxQ.data ?? []).map((r) => r.name),
-		);
-		return current.slice(0, 10).map((row) => ({
-			...row,
-			isNew: compareRange ? !previousSet.has(row.name) : false,
-		}));
-	}, [txQ.data, compareTxQ.data, compareRange]);
-	const currencyMix = useMemo(
-		() => aggregateCurrencies(txQ.data ?? [], props.reportingCurrency),
-		[txQ.data, props.reportingCurrency],
+	const incomeCategoriesAll = useMemo(() => {
+		const current = aggregateCategories(txQ.data ?? [], "i");
+		const previous = aggregateCategories(compareTxQ.data ?? [], "i");
+		return mergeCategoryDeltas(current, previous);
+	}, [txQ.data, compareTxQ.data]);
+	const topExpenseTxs = useMemo(
+		() => pickTopExpenseTxs(txQ.data ?? [], 5),
+		[txQ.data],
 	);
 
-	const loading =
-		summaryQ.isLoading ||
-		txQ.isLoading ||
-		(compareRange && (compareSummaryQ.isLoading || compareTxQ.isLoading));
+	const isFetching =
+		summaryQ.isFetching ||
+		txQ.isFetching ||
+		(!!compareRange && (compareSummaryQ.isFetching || compareTxQ.isFetching));
+	const hasAnyData = summaryQ.data != null || txQ.data != null;
 
 	return (
 		<div className="space-y-8">
@@ -143,54 +134,44 @@ export function StatsCanvas(props: Props) {
 				onCompareChange={props.onCompareChange}
 				baseRange={baseRange}
 				compareRange={compareRange}
+				isFetching={isFetching}
 			/>
 
-			{loading ? (
-				<div className="flex h-32 items-center justify-center text-gray-10">
-					<Spinner />
-				</div>
-			) : (
-				<>
-					<Hero
-						totals={totals}
-						compareTotals={compareTotals}
-						compareLabelText={compareLabel(props.compare)}
+			<div
+				className={
+					"space-y-8 transition-opacity duration-200 " +
+					(isFetching && hasAnyData ? "opacity-60" : "")
+				}
+			>
+				<Hero
+					totals={totals}
+					compareTotals={compareTotals}
+					compareLabelText={compareLabel(props.compare)}
+					reportingCurrency={props.reportingCurrency}
+					fAmount={f.amount}
+				/>
+				<CategoriesAndIncome
+					expenseRows={expenseCategories.slice(0, 10)}
+					incomeRows={incomeCategoriesAll}
+					reportingCurrency={props.reportingCurrency}
+					fAmount={f.amount}
+					hasCompare={!!compareRange}
+				/>
+				{topExpenseTxs.length > 0 && (
+					<TopExpenseTxs
+						rows={topExpenseTxs}
 						reportingCurrency={props.reportingCurrency}
 						fAmount={f.amount}
+						fShortDate={f.shortDate}
+						baseRange={baseRange}
 					/>
-					<CashflowStrip
-						buckets={buckets}
-						granularity={granularity}
-						reportingCurrency={props.reportingCurrency}
-						fAmount={f.amount}
-					/>
-					<div className="grid gap-6 lg:grid-cols-2">
-						<CategoryList
-							rows={categories}
-							reportingCurrency={props.reportingCurrency}
-							fAmount={f.amount}
-							scopeParams={props.scopeParams}
-							hasCompare={!!compareRange}
-						/>
-						<CounterpartyList
-							rows={counterparties}
-							reportingCurrency={props.reportingCurrency}
-							fAmount={f.amount}
-							hasCompare={!!compareRange}
-						/>
-					</div>
-					<CurrencyMix
-						rows={currencyMix}
-						reportingCurrency={props.reportingCurrency}
-						fAmount={f.amount}
-					/>
-					<Footnote
-						summary={summaryQ.data}
-						maxStalenessDays={props.maxStalenessDays}
-						mode={props.mode}
-					/>
-				</>
-			)}
+				)}
+				<Footnote
+					summary={summaryQ.data}
+					maxStalenessDays={props.maxStalenessDays}
+					mode={props.mode}
+				/>
+			</div>
 		</div>
 	);
 }
@@ -216,86 +197,6 @@ function deriveTotals(rows: ConvertedStatTransactionRow[]): Totals {
 		net: income - expense,
 		txCount: rows.length,
 	};
-}
-
-type Bucket = {
-	key: string;
-	label: string;
-	income: number;
-	expense: number;
-	net: number;
-};
-
-function bucketKeyFor(date: Date, granularity: BucketGranularity): string {
-	if (granularity === "day") {
-		return date.toISOString().slice(0, 10);
-	}
-	if (granularity === "week") {
-		const monday = new Date(date.getTime());
-		const day = monday.getUTCDay();
-		const diff = (day + 6) % 7;
-		monday.setUTCDate(monday.getUTCDate() - diff);
-		return monday.toISOString().slice(0, 10);
-	}
-	return date.toISOString().slice(0, 7);
-}
-
-function bucketLabelFor(key: string, granularity: BucketGranularity, locale = "fi-FI") {
-	if (granularity === "month") {
-		const [y, m] = key.split("-");
-		const dt = new Date(Date.UTC(Number(y), Number(m) - 1, 1));
-		return new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" }).format(dt);
-	}
-	const dt = new Date(`${key}T00:00:00Z`);
-	if (granularity === "week") {
-		return new Intl.DateTimeFormat(locale, {
-			month: "numeric",
-			day: "numeric",
-			timeZone: "UTC",
-		}).format(dt);
-	}
-	return new Intl.DateTimeFormat(locale, {
-		day: "numeric",
-		timeZone: "UTC",
-	}).format(dt);
-}
-
-function bucketize(
-	rows: ConvertedStatTransactionRow[],
-	range: DateRange,
-	granularity: BucketGranularity,
-): Bucket[] {
-	const map = new Map<string, Bucket>();
-	const from = parseIsoDate(range.from);
-	const to = parseIsoDate(range.to);
-	if (!from || !to) return [];
-
-	for (let cursor = new Date(from.getTime()); cursor <= to; cursor = addDays(cursor, 1)) {
-		const key = bucketKeyFor(cursor, granularity);
-		if (!map.has(key)) {
-			map.set(key, {
-				key,
-				label: bucketLabelFor(key, granularity),
-				income: 0,
-				expense: 0,
-				net: 0,
-			});
-		}
-	}
-
-	for (const row of rows) {
-		const date = parseIsoDate(row.eff_date);
-		if (!date) continue;
-		const key = bucketKeyFor(date, granularity);
-		const bucket = map.get(key);
-		if (!bucket) continue;
-		const amount = row.converted_amount ?? 0;
-		if (row.bucket === "i") bucket.income += amount;
-		else if (row.bucket === "e") bucket.expense += amount;
-		bucket.net = bucket.income - bucket.expense;
-	}
-
-	return [...map.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
 }
 
 type CategoryRow = {
@@ -337,50 +238,14 @@ function mergeCategoryDeltas(
 	});
 }
 
-type CounterpartyRow = {
-	name: string;
-	amount: number;
-	count: number;
-};
-
-function aggregateCounterparties(rows: ConvertedStatTransactionRow[]): CounterpartyRow[] {
-	const map = new Map<string, CounterpartyRow>();
-	for (const row of rows) {
-		if (row.bucket !== "e") continue;
-		const existing = map.get(row.counter_party) ?? {
-			name: row.counter_party,
-			amount: 0,
-			count: 0,
-		};
-		existing.amount += row.converted_amount ?? 0;
-		existing.count += 1;
-		map.set(row.counter_party, existing);
-	}
-	return [...map.values()].sort((a, b) => b.amount - a.amount);
-}
-
-type CurrencyRow = {
-	currency: string;
-	amount: number;
-	count: number;
-};
-
-function aggregateCurrencies(
+function pickTopExpenseTxs(
 	rows: ConvertedStatTransactionRow[],
-	reportingCurrency: string,
-): CurrencyRow[] {
-	const map = new Map<string, CurrencyRow>();
-	for (const row of rows) {
-		if (row.bucket !== "e") continue;
-		const cur = row.original_currency;
-		const existing = map.get(cur) ?? { currency: cur, amount: 0, count: 0 };
-		existing.amount += row.converted_amount ?? 0;
-		existing.count += 1;
-		map.set(cur, existing);
-	}
-	return [...map.values()]
-		.filter((row) => row.currency !== reportingCurrency)
-		.sort((a, b) => b.amount - a.amount);
+	n: number,
+): ConvertedStatTransactionRow[] {
+	return rows
+		.filter((r) => r.bucket === "e" && r.converted_amount != null)
+		.sort((a, b) => (b.converted_amount ?? 0) - (a.converted_amount ?? 0))
+		.slice(0, n);
 }
 
 function RailHeader(props: {
@@ -390,6 +255,7 @@ function RailHeader(props: {
 	onCompareChange: (value: StatsCompareValue) => void;
 	baseRange: DateRange;
 	compareRange: DateRange | null;
+	isFetching: boolean;
 }) {
 	return (
 		<div className="space-y-3">
@@ -415,6 +281,15 @@ function RailHeader(props: {
 							· compared to {props.compareRange.from} → {props.compareRange.to}
 						</span>
 					)}
+					<span
+						aria-hidden={!props.isFetching}
+						className={
+							"ml-1 text-gray-10 transition-opacity " +
+							(props.isFetching ? "opacity-100" : "opacity-0")
+						}
+					>
+						<Spinner />
+					</span>
 				</div>
 				<div className="flex items-center gap-1">
 					{COMPARES.map((c) => (
@@ -470,7 +345,7 @@ function Hero(props: {
 	reportingCurrency: string;
 	fAmount: (amount: number, currency: string) => string;
 }) {
-	const { totals, compareTotals } = props;
+	const { totals, compareTotals, fAmount, reportingCurrency } = props;
 	const netDelta = compareTotals ? percentDelta(totals.net, compareTotals.net) : null;
 	const incDelta = compareTotals
 		? percentDelta(totals.income, compareTotals.income)
@@ -478,36 +353,71 @@ function Hero(props: {
 	const expDelta = compareTotals
 		? percentDelta(totals.expense, compareTotals.expense)
 		: null;
+	const savingsRate = savingsRateOf(totals);
+	const compareSavingsRate = compareTotals ? savingsRateOf(compareTotals) : null;
+	const savingsRateDelta =
+		savingsRate != null && compareSavingsRate != null
+			? (savingsRate - compareSavingsRate) * 100
+			: null;
 
 	return (
-		<section className="surface surface-bleed grid divide-y divide-gray-a3 sm:grid-cols-3 sm:divide-y-0 sm:divide-x">
-			<StatCell
-				label="Net"
-				value={signed(totals.net, props.reportingCurrency, props.fAmount)}
-				delta={netDelta}
-				deltaInverted={false}
-				note={props.compareLabelText}
-				accent={totals.net >= 0 ? "pos" : "neg"}
-				large
-			/>
-			<StatCell
-				label="Income"
-				value={props.fAmount(totals.income, props.reportingCurrency)}
-				delta={incDelta}
-				deltaInverted={false}
-				note={props.compareLabelText}
-				accent="pos"
-			/>
-			<StatCell
-				label="Expense"
-				value={props.fAmount(totals.expense, props.reportingCurrency)}
-				delta={expDelta}
-				deltaInverted
-				note={props.compareLabelText}
-				accent="neg"
-			/>
+		<section className="surface surface-bleed px-5 py-6">
+			<div className="text-[10px] uppercase tracking-[0.06em] text-gray-10 font-medium">
+				Net
+			</div>
+			<div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+				<span className="num font-medium tracking-[-0.01em] text-gray-12 text-[36px] leading-none">
+					{signed(totals.net, reportingCurrency, fAmount)}
+				</span>
+				<DeltaBadge value={netDelta} inverted={false} />
+				<span className="text-[11px] text-gray-10">{props.compareLabelText}</span>
+			</div>
+			<div className="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px] text-gray-11">
+				<SublineStat
+					label="in"
+					value={fAmount(totals.income, reportingCurrency)}
+					delta={incDelta}
+					inverted={false}
+				/>
+				<span className="text-gray-a6">·</span>
+				<SublineStat
+					label="out"
+					value={fAmount(totals.expense, reportingCurrency)}
+					delta={expDelta}
+					inverted
+				/>
+				<span className="text-gray-a6">·</span>
+				<SublineStat
+					label="saved"
+					value={savingsRate == null ? "—" : `${(savingsRate * 100).toFixed(1)}%`}
+					delta={savingsRateDelta}
+					inverted={false}
+					deltaUnit="pp"
+				/>
+			</div>
 		</section>
 	);
+}
+
+function SublineStat(props: {
+	label: string;
+	value: string;
+	delta: number | null;
+	inverted: boolean;
+	deltaUnit?: "%" | "pp";
+}) {
+	return (
+		<span className="flex items-baseline gap-1.5">
+			<span className="num text-gray-12">{props.value}</span>
+			<span className="text-gray-10">{props.label}</span>
+			<DeltaBadge value={props.delta} inverted={props.inverted} unit={props.deltaUnit} />
+		</span>
+	);
+}
+
+function savingsRateOf(totals: Totals): number | null {
+	if (totals.income <= 0) return null;
+	return totals.net / totals.income;
 }
 
 function signed(
@@ -520,44 +430,17 @@ function signed(
 	return fAmount(value, currency);
 }
 
-function StatCell({
-	label,
+function DeltaBadge({
 	value,
-	delta,
-	deltaInverted,
-	note,
-	accent,
-	large,
+	inverted,
+	unit = "%",
 }: {
-	label: string;
-	value: string;
-	delta: number | null;
-	deltaInverted: boolean;
-	note: string;
-	accent: "pos" | "neg" | "neutral";
-	large?: boolean;
+	value: number | null;
+	inverted?: boolean;
+	unit?: "%" | "pp";
 }) {
-	const valueCls =
-		"num font-medium tracking-[-0.01em] " + (large ? "text-[28px]" : "text-[20px]") +
-		" " +
-		(accent === "pos" ? "text-gray-12" : accent === "neg" ? "text-gray-12" : "text-gray-12");
-	return (
-		<div className="px-5 py-5">
-			<div className="text-[10px] uppercase tracking-[0.06em] text-gray-10 font-medium">
-				{label}
-			</div>
-			<div className={"mt-2 " + valueCls}>{value}</div>
-			<div className="mt-2 flex items-center gap-2 text-[11px] text-gray-10">
-				<DeltaBadge value={delta} inverted={deltaInverted} />
-				<span>{note}</span>
-			</div>
-		</div>
-	);
-}
-
-function DeltaBadge({ value, inverted }: { value: number | null; inverted?: boolean }) {
 	if (value == null) {
-		return <span className="text-gray-9">—</span>;
+		return <span className="text-gray-9 num">—</span>;
 	}
 	const positive = inverted ? value < 0 : value > 0;
 	const negative = inverted ? value > 0 : value < 0;
@@ -565,170 +448,95 @@ function DeltaBadge({ value, inverted }: { value: number | null; inverted?: bool
 	const cls = positive
 		? "text-green-11"
 		: negative
-			? "text-red-11"
+			? "text-orange-11"
 			: "text-gray-10";
 	return (
 		<span className={"num " + cls}>
 			{sign}
-			{Math.abs(value).toFixed(1)}%
+			{Math.abs(value).toFixed(1)}
+			{unit}
 		</span>
 	);
 }
 
-function CashflowStrip(props: {
-	buckets: Bucket[];
-	granularity: BucketGranularity;
-	reportingCurrency: string;
-	fAmount: (amount: number, currency: string) => string;
-}) {
-	const max = Math.max(
-		1,
-		...props.buckets.flatMap((b) => [b.income, b.expense]),
-	);
-	const condensed = props.granularity === "day" && props.buckets.length > 31;
-	return (
-		<section className="surface surface-bleed px-3 sm:px-4 py-5">
-			<header className="mb-4 flex items-end justify-between">
-				<div>
-					<h2 className="text-[13px] font-medium text-gray-12">Cashflow</h2>
-					<p className="text-[11px] text-gray-10 mt-0.5">
-						Per {props.granularity} · income vs expense
-					</p>
-				</div>
-				<div className="flex items-center gap-3 text-[11px] text-gray-10">
-					<LegendDot className="bg-green-9" /> Income
-					<LegendDot className="bg-red-9" /> Expense
-				</div>
-			</header>
-			<div className="flex h-32 items-end gap-px">
-				{props.buckets.map((bucket) => (
-					<div
-						key={bucket.key}
-						className="flex flex-1 min-w-0 flex-col justify-end gap-px group"
-						title={`${bucket.label} · in ${props.fAmount(bucket.income, props.reportingCurrency)} · out ${props.fAmount(bucket.expense, props.reportingCurrency)}`}
-					>
-						<div
-							className="bg-green-a8 group-hover:bg-green-a10 transition-colors rounded-sm"
-							style={{ height: `${(bucket.income / max) * 100}%`, minHeight: bucket.income > 0 ? 2 : 0 }}
-						/>
-						<div
-							className="bg-red-a8 group-hover:bg-red-a10 transition-colors rounded-sm"
-							style={{ height: `${(bucket.expense / max) * 100}%`, minHeight: bucket.expense > 0 ? 2 : 0 }}
-						/>
-					</div>
-				))}
-			</div>
-			<div className="mt-2 flex gap-px text-[10px] text-gray-10">
-				{props.buckets.map((b, i) => {
-					const showLabel = !condensed || i % Math.ceil(props.buckets.length / 12) === 0;
-					return (
-						<div key={b.key} className="flex-1 min-w-0 text-center truncate">
-							{showLabel ? b.label : ""}
-						</div>
-					);
-				})}
-			</div>
-		</section>
-	);
+function displayCategoryName(name: string) {
+	return name === "__uncategorized__" ? "Uncategorized" : name;
 }
 
-function LegendDot({ className }: { className: string }) {
-	return (
-		<span
-			aria-hidden
-			className={"inline-block size-2 rounded-full " + className}
-		/>
-	);
-}
-
-function CategoryList(props: {
-	rows: CategoryRow[];
+function CategoriesAndIncome(props: {
+	expenseRows: CategoryRow[];
+	incomeRows: CategoryRow[];
 	reportingCurrency: string;
 	fAmount: (amount: number, currency: string) => string;
-	scopeParams: Record<string, string | undefined>;
 	hasCompare: boolean;
 }) {
-	const max = Math.max(1, ...props.rows.map((r) => r.amount));
+	const incomeTotal = props.incomeRows.reduce((sum, r) => sum + r.amount, 0);
+	const meaningfulIncome = incomeTotal > 0
+		? props.incomeRows.filter((r) => r.amount / incomeTotal >= INCOME_NOISE_RATIO)
+		: [];
+	const showIncomeColumn = meaningfulIncome.length >= INCOME_COLUMN_MIN_SOURCES;
+
+	if (showIncomeColumn) {
+		const incomeRows = meaningfulIncome.slice(0, 10);
+		const sharedMaxIncome = computeMax(incomeRows);
+		const sharedMaxExpense = computeMax(props.expenseRows);
+		return (
+			<section className="surface surface-bleed px-3 sm:px-4 py-5">
+				<header className="mb-4 flex items-end justify-between">
+					<h2 className="text-[13px] font-medium text-gray-12">Top categories</h2>
+					<span className="text-[11px] text-gray-10">Income · Expenses</span>
+				</header>
+				<div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+					<CategoryList
+						rows={incomeRows}
+						reportingCurrency={props.reportingCurrency}
+						fAmount={props.fAmount}
+						hasCompare={props.hasCompare}
+						kind="income"
+						heading="Income"
+						emptyText="No income in this period."
+						sharedMax={sharedMaxIncome}
+					/>
+					<CategoryList
+						rows={props.expenseRows}
+						reportingCurrency={props.reportingCurrency}
+						fAmount={props.fAmount}
+						hasCompare={props.hasCompare}
+						kind="expense"
+						heading="Expenses"
+						emptyText="No expenses in this period."
+						sharedMax={sharedMaxExpense}
+					/>
+				</div>
+			</section>
+		);
+	}
+
+	const sharedMax = computeMax(props.expenseRows);
 	return (
 		<section className="surface surface-bleed px-3 sm:px-4 py-5">
-			<header className="mb-4 flex items-end justify-between">
+			<header className="mb-4 flex items-end justify-between gap-4">
 				<h2 className="text-[13px] font-medium text-gray-12">Top categories</h2>
-				<span className="text-[11px] text-gray-10">By expense</span>
+				<IncomeOneLiner
+					rows={props.incomeRows}
+					reportingCurrency={props.reportingCurrency}
+					fAmount={props.fAmount}
+				/>
 			</header>
-			{props.rows.length === 0 ? (
+			{props.expenseRows.length === 0 ? (
 				<EmptyHint>No expenses in this period.</EmptyHint>
 			) : (
-				<ul className="space-y-2">
-					{props.rows.map((row) => {
-						const displayName =
-							row.name === "__uncategorized__" ? "Uncategorized" : row.name;
-						const deltaPct = props.hasCompare
-							? percentDelta(row.amount, row.previousAmount)
-							: null;
-						return (
-							<li key={row.name} className="space-y-1">
-								<div className="flex items-baseline justify-between gap-3 text-[12px]">
-									<span className="truncate text-gray-12">{displayName}</span>
-									<span className="num shrink-0 text-gray-12">
-										{props.fAmount(row.amount, props.reportingCurrency)}
-									</span>
-								</div>
-								<div className="relative h-1 overflow-hidden rounded-full bg-gray-a2">
-									<div
-										className="absolute inset-y-0 left-0 rounded-full bg-gray-a8"
-										style={{ width: `${(row.amount / max) * 100}%` }}
-									/>
-								</div>
-								{deltaPct != null && (
-									<div className="text-[10px] text-gray-10">
-										<DeltaBadge value={deltaPct} inverted /> vs prev
-									</div>
-								)}
-							</li>
-						);
-					})}
-				</ul>
-			)}
-		</section>
-	);
-}
-
-function CounterpartyList(props: {
-	rows: Array<CounterpartyRow & { isNew: boolean }>;
-	reportingCurrency: string;
-	fAmount: (amount: number, currency: string) => string;
-	hasCompare: boolean;
-}) {
-	return (
-		<section className="surface surface-bleed px-3 sm:px-4 py-5">
-			<header className="mb-4 flex items-end justify-between">
-				<h2 className="text-[13px] font-medium text-gray-12">Top counterparties</h2>
-				<span className="text-[11px] text-gray-10">By expense</span>
-			</header>
-			{props.rows.length === 0 ? (
-				<EmptyHint>No expenses in this period.</EmptyHint>
-			) : (
-				<ul className="divide-y divide-gray-a3">
-					{props.rows.map((row) => (
-						<li
+				<ul className="space-y-2.5 text-[12px]">
+					{props.expenseRows.map((row) => (
+						<CategoryRowItem
 							key={row.name}
-							className="flex items-center justify-between gap-3 py-2 text-[12px]"
-						>
-							<div className="flex min-w-0 items-center gap-2">
-								<span className="truncate text-gray-12">{row.name}</span>
-								{props.hasCompare && row.isNew && (
-									<span className="rounded-sm bg-gray-a3 px-1 text-[10px] uppercase tracking-wider text-gray-11">
-										new
-									</span>
-								)}
-							</div>
-							<div className="flex shrink-0 items-baseline gap-3">
-								<span className="text-[11px] text-gray-10 num">×{row.count}</span>
-								<span className="num text-gray-12">
-									{props.fAmount(row.amount, props.reportingCurrency)}
-								</span>
-							</div>
-						</li>
+							row={row}
+							reportingCurrency={props.reportingCurrency}
+							fAmount={props.fAmount}
+							hasCompare={props.hasCompare}
+							kind="expense"
+							sharedMax={sharedMax}
+						/>
 					))}
 				</ul>
 			)}
@@ -736,40 +544,242 @@ function CounterpartyList(props: {
 	);
 }
 
-function CurrencyMix(props: {
-	rows: CurrencyRow[];
+function computeMax(rows: CategoryRow[]): number {
+	return Math.max(1, ...rows.flatMap((r) => [r.amount, r.previousAmount]));
+}
+
+function IncomeOneLiner(props: {
+	rows: CategoryRow[];
 	reportingCurrency: string;
 	fAmount: (amount: number, currency: string) => string;
 }) {
-	if (props.rows.length === 0) return null;
+	if (props.rows.length === 0) {
+		return <span className="text-[11px] text-gray-10">No income</span>;
+	}
+	const inline = props.rows.slice(0, 3);
+	const others = props.rows.slice(3);
+	const othersTotal = others.reduce((sum, r) => sum + r.amount, 0);
+
+	return (
+		<div className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-1 text-[11px] text-gray-10">
+			<span className="text-gray-10">Income</span>
+			{inline.map((row, i) => (
+				<span key={row.name} className="flex items-baseline gap-1">
+					{i > 0 && <span className="text-gray-a6">·</span>}
+					<span className="text-gray-12">{displayCategoryName(row.name)}</span>
+					<span className="num text-gray-11">
+						{props.fAmount(row.amount, props.reportingCurrency)}
+					</span>
+				</span>
+			))}
+			{others.length > 0 && (
+				<>
+					<span className="text-gray-a6">·</span>
+					<OthersPopover
+						rows={others}
+						total={othersTotal}
+						reportingCurrency={props.reportingCurrency}
+						fAmount={props.fAmount}
+					/>
+				</>
+			)}
+		</div>
+	);
+}
+
+function OthersPopover(props: {
+	rows: CategoryRow[];
+	total: number;
+	reportingCurrency: string;
+	fAmount: (amount: number, currency: string) => string;
+}) {
+	const label = `${props.rows.length} other${props.rows.length === 1 ? "" : "s"}`;
+	return (
+		<Popover.Root>
+			<Popover.Trigger asChild>
+				<button
+					type="button"
+					className="focus rounded-md px-1.5 py-0.5 text-[11px] text-gray-11 hover:text-gray-12 hover:bg-gray-a2 transition-colors"
+				>
+					<span>{label}</span>{" "}
+					<span className="num text-gray-10">
+						{props.fAmount(props.total, props.reportingCurrency)}
+					</span>
+				</button>
+			</Popover.Trigger>
+			<Popover.Portal>
+				<Popover.Content
+					side="bottom"
+					align="end"
+					sideOffset={6}
+					className="bg-gray-2 border-gray-a3 z-80 min-w-[12rem] rounded-md border p-2 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)]"
+				>
+					<ul className="space-y-1.5 text-[12px]">
+						{props.rows.map((row) => (
+							<li key={row.name} className="flex items-baseline justify-between gap-3">
+								<span className="truncate text-gray-12">{displayCategoryName(row.name)}</span>
+								<span className="num shrink-0 text-gray-11">
+									{props.fAmount(row.amount, props.reportingCurrency)}
+								</span>
+							</li>
+						))}
+					</ul>
+				</Popover.Content>
+			</Popover.Portal>
+		</Popover.Root>
+	);
+}
+
+function CategoryList(props: {
+	rows: CategoryRow[];
+	reportingCurrency: string;
+	fAmount: (amount: number, currency: string) => string;
+	hasCompare: boolean;
+	kind: "income" | "expense";
+	heading: string;
+	emptyText: string;
+	sharedMax: number;
+}) {
+	return (
+		<div>
+			<div className="mb-2 text-[10px] uppercase tracking-[0.06em] text-gray-10 font-medium">
+				{props.heading}
+			</div>
+			{props.rows.length === 0 ? (
+				<EmptyHint>{props.emptyText}</EmptyHint>
+			) : (
+				<ul className="space-y-2.5 text-[12px]">
+					{props.rows.map((row) => (
+						<CategoryRowItem
+							key={row.name}
+							row={row}
+							reportingCurrency={props.reportingCurrency}
+							fAmount={props.fAmount}
+							hasCompare={props.hasCompare}
+							kind={props.kind}
+							sharedMax={props.sharedMax}
+						/>
+					))}
+				</ul>
+			)}
+		</div>
+	);
+}
+
+function CategoryRowItem(props: {
+	row: CategoryRow;
+	reportingCurrency: string;
+	fAmount: (amount: number, currency: string) => string;
+	hasCompare: boolean;
+	kind: "income" | "expense";
+	sharedMax: number;
+}) {
+	const { row, sharedMax, kind, hasCompare } = props;
+	const barCls = kind === "income" ? "bg-green-a8" : "bg-red-a8";
+	const direction: "up" | "down" | null =
+		hasCompare && row.previousAmount > 0 && row.amount !== row.previousAmount
+			? row.amount > row.previousAmount
+				? "up"
+				: "down"
+			: null;
+	const goodDirection = kind === "income" ? "up" : "down";
+	const arrowCls =
+		direction == null
+			? ""
+			: direction === goodDirection
+				? "text-green-11"
+				: "text-orange-11";
+	const showTick =
+		hasCompare && row.previousAmount > 0 && row.previousAmount !== row.amount;
+	return (
+		<li className="space-y-1">
+			<div className="flex items-baseline justify-between gap-3">
+				<span className="truncate text-gray-12">{displayCategoryName(row.name)}</span>
+				<span className="flex shrink-0 items-baseline gap-1.5">
+					{hasCompare && row.previousAmount > 0 && (
+						<>
+							<span className="num text-gray-10">
+								{props.fAmount(row.previousAmount, props.reportingCurrency)}
+							</span>
+							<span aria-hidden className={arrowCls || "text-gray-9"}>
+								→
+							</span>
+						</>
+					)}
+					<span className="num text-gray-12">
+						{props.fAmount(row.amount, props.reportingCurrency)}
+					</span>
+				</span>
+			</div>
+			<div className="relative h-[6px]">
+				<div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 overflow-hidden rounded-full bg-gray-a2">
+					<div
+						className={"absolute inset-y-0 left-0 rounded-full " + barCls}
+						style={{ width: `${(row.amount / sharedMax) * 100}%` }}
+					/>
+				</div>
+				{showTick && (
+					<div
+						className="absolute inset-y-0 w-[1.5px] rounded-full bg-gray-12"
+						style={{ left: `${(row.previousAmount / sharedMax) * 100}%` }}
+						title={`Prev: ${props.fAmount(row.previousAmount, props.reportingCurrency)}`}
+					/>
+				)}
+			</div>
+		</li>
+	);
+}
+
+function TopExpenseTxs(props: {
+	rows: ConvertedStatTransactionRow[];
+	reportingCurrency: string;
+	fAmount: (amount: number, currency: string) => string;
+	fShortDate: Intl.DateTimeFormat;
+	baseRange: DateRange;
+}) {
 	return (
 		<section className="surface surface-bleed px-3 sm:px-4 py-5">
 			<header className="mb-4 flex items-end justify-between">
-				<h2 className="text-[13px] font-medium text-gray-12">Currency exposure</h2>
-				<span className="text-[11px] text-gray-10">
-					Non-{props.reportingCurrency} expense, converted
-				</span>
+				<h2 className="text-[13px] font-medium text-gray-12">Biggest expenses</h2>
+				<span className="text-[11px] text-gray-10">Top 5 in period</span>
 			</header>
-			<ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-				{props.rows.map((row) => (
-					<li
-						key={row.currency}
-						className="rounded-md border border-gray-a3 p-3"
-					>
-						<div className="text-[10px] uppercase tracking-[0.06em] text-gray-10 font-medium">
-							{row.currency}
-						</div>
-						<div className="mt-1 text-[15px] font-medium num text-gray-12">
-							{props.fAmount(row.amount, props.reportingCurrency)}
-						</div>
-						<div className="text-[11px] text-gray-10 num">×{row.count} tx</div>
-					</li>
-				))}
+			<ul className="space-y-2 text-[12px]">
+				{props.rows.map((row) => {
+					const params = new URLSearchParams();
+					if (row.counter_party) params.set("q", row.counter_party);
+					params.set("from", props.baseRange.from);
+					params.set("to", props.baseRange.to);
+					const href = `/txs?${params.toString()}`;
+					const amount = row.converted_amount ?? 0;
+					const dateLabel = props.fShortDate.format(new Date(row.eff_date));
+					return (
+						<li key={row.id}>
+							<FastLink
+								href={href}
+								className="focus -mx-2 flex items-baseline justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-gray-a2"
+							>
+								<span className="min-w-0 flex-1 truncate">
+									<span className="text-gray-12">
+										{row.counter_party || "(no counterparty)"}
+									</span>
+									<span className="ml-2 text-gray-10">
+										{displayCategoryName(row.cat_name)}
+									</span>
+								</span>
+								<span className="flex shrink-0 items-baseline gap-2 num">
+									<span className="text-gray-10 text-[11px]">{dateLabel}</span>
+									<span className="text-gray-12">
+										{props.fAmount(amount, props.reportingCurrency)}
+									</span>
+								</span>
+							</FastLink>
+						</li>
+					);
+				})}
 			</ul>
 		</section>
 	);
 }
-
 function Footnote(props: {
 	summary?: {
 		coverage_count_ratio: number;
