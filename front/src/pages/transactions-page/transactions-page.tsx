@@ -41,6 +41,7 @@ import { TagMultiCombobox } from "../../components/tag-combobox";
 import { CurrencyMultiCombobox } from "../../components/currency-multi-combobox";
 import {
 	TransactionFilterMenu,
+	TransactionFilterUnstableCombobox,
 	buildFilterChips,
 	FilterChip,
 	SortMenu,
@@ -324,6 +325,19 @@ export function TransactionsPage() {
 						tags={tags.data}
 						setParams={setParams}
 						onRequestCustomDate={() => setShowFilters(true)}
+					/>
+					<TransactionFilterUnstableCombobox
+						categoryId={categoryId}
+						accountId={accountId}
+						currencyIds={currencyIds}
+						tagIds={tagIds}
+						uncategorized={uncategorized}
+						dateRange={dateRange}
+						categories={categories.data}
+						accounts={accounts.data}
+						currencies={currencies.data}
+						tags={tags.data}
+						setParams={setParams}
 					/>
 					{chips.map((chip) => (
 						<FilterChip key={chip.key} chip={chip} />

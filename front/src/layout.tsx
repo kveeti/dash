@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "./components/button";
 import * as Dropdown from "./components/dropdown";
 import { FastLink, SlowLink } from "./components/link";
-import { CommandPalette } from "./components/command-palette";
+import { CommandPalette, CommandPaletteV2 } from "./components/command-palette";
 import { useRoute } from "wouter";
 import { useSync } from "./lib/sync";
 import { TransactionWindowsProvider } from "./components/transaction-windows";
@@ -15,6 +15,7 @@ export function Layout(props: { children: ReactNode }) {
     <TransactionWindowsProvider>
       <Nav />
       <CommandPalette />
+      <CommandPaletteV2 />
       <main className="pt-12 pb-10">{props.children}</main>
     </TransactionWindowsProvider>
   );
