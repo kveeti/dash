@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
 import { useI18n } from "../providers";
 import type {
 	TransactionDetails,
@@ -13,13 +13,18 @@ import {
 	useTransactionsQuery,
 } from "../lib/queries/transactions";
 import { Button } from "./button";
-import { Combobox } from "./combobox";
 import { IconChevronsUpDown } from "./icons/chevrons-up-down";
 import { Select } from "./select";
 import {
 	getAvailableFlowAmount,
 	inferFlowDirection,
 } from "./selected-tx-flow-logic";
+import {
+	localSearchSource,
+	UnstableCombobox,
+	type UnstableComboboxConfig,
+	type UnstableComboboxItem,
+} from "./unstable-combobox";
 
 type FlowTargetItem = Pick<
 	TransactionRow,
@@ -52,10 +57,65 @@ export function SelectedTxCreateFlowForm({
 	);
 	const createFlowMutation = useCreateTransactionFlowMutation();
 	const targetTx = targetTxQuery.data;
-	const flowTargetItems =
-		targetSearchQuery.data?.transactions.filter((item) => item.id !== txId) ??
-		[];
-	const formatTargetDate = (date: Date) => f.longDate.format(date);
+	const flowTargetItems = useMemo(
+		() =>
+			targetSearchQuery.data?.transactions.filter((item) => item.id !== txId) ??
+			[],
+		[targetSearchQuery.data?.transactions, txId],
+	);
+	const formatTargetDate = useCallback(
+		(date: Date) => f.longDate.format(date),
+		[f.longDate],
+	);
+	const flowTargetConfig = useMemo<UnstableComboboxConfig>(() => {
+		const items = flowTargetItems.map<UnstableComboboxItem>((item) => ({
+			id: `transaction:${item.id}`,
+			label: item.counter_party,
+			textValue: item.counter_party,
+			description: item.account_name,
+			keywords: [
+				item.id,
+				item.account_name,
+				item.currency,
+				formatTargetDate(item.date),
+				f.amount(item.amount, item.currency),
+			],
+			checked: flowTarget?.id === item.id,
+			onSelect: ({ close }) => {
+				setFlowTarget(item);
+				close();
+			},
+			render: () => (
+				<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
+					<div className="min-w-0">
+						<p className="truncate">{item.counter_party}</p>
+						<p className="truncate text-xs text-gray-10">
+							{formatTargetDate(item.date)} · {item.account_name}
+						</p>
+					</div>
+					<span className="shrink-0 text-xs text-gray-10">
+						{f.amount(item.amount, item.currency)}
+					</span>
+				</div>
+			),
+		}));
+
+		return {
+			rootPageId: "root",
+			pages: {
+				root: {
+					id: "root",
+					title: "target transaction",
+					placeholder: "search transactions...",
+					empty: "no transactions found",
+					items,
+					search: {
+						sources: [localSearchSource({ id: "transactions", items })],
+					},
+				},
+			},
+		};
+	}, [f, flowTarget?.id, flowTargetItems, formatTargetDate]);
 	const flowDirection = targetTx
 		? inferFlowDirection({ selected: tx, target: targetTx, kind: flowKind })
 		: null;
@@ -202,61 +262,33 @@ export function SelectedTxCreateFlowForm({
 					/>
 				)}
 				<div className="flex gap-1">
-					<Combobox.Root
-						items={flowTargetItems}
-						value={flowTarget}
-						onValueChange={setFlowTarget}
-						onInputValueChange={setFlowTargetSearch}
-						itemToStringLabel={(item) =>
-							`${item.id} ${item.counter_party} ${item.account_name} ${formatTargetDate(item.date)} ${f.amount(item.amount, item.currency)}`
-						}
-						isItemEqualToValue={(item, selected) => item.id === selected.id}
-						autoHighlight
-					>
-						<Combobox.Trigger<FlowTargetItem, FlowTargetItem | null>
-							className="focus field-trigger data-[disabled]:opacity-60 flex h-9 flex-1 min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm"
-						>
-							{({ selectedValue }) => (
-								<>
-									<span className="truncate text-gray-12">
-										{selectedValue ? (
-											selectedValue.counter_party
-										) : (
-											<span className="text-gray-10">
-												target transaction
-											</span>
-										)}
-									</span>
-									<Combobox.Icon className="text-gray-10 flex shrink-0">
-										<IconChevronsUpDown />
-									</Combobox.Icon>
-								</>
-							)}
-						</Combobox.Trigger>
-						<Combobox.Content
-							searchPlaceholder="search transactions..."
-							empty="no transactions found"
-							size="sm"
-						>
-							<Combobox.List<FlowTargetItem>>
-								{(item) => (
-									<Combobox.Item key={item.id} value={item} size="sm">
-										<div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-											<div className="min-w-0">
-												<p className="truncate">{item.counter_party}</p>
-												<p className="truncate text-xs text-gray-10">
-													{formatTargetDate(item.date)} · {item.account_name}
-												</p>
-											</div>
-											<span className="shrink-0 text-xs text-gray-10">
-												{f.amount(item.amount, item.currency)}
-											</span>
-										</div>
-									</Combobox.Item>
-								)}
-							</Combobox.List>
-						</Combobox.Content>
-					</Combobox.Root>
+					<UnstableCombobox
+						className="flex-1 min-w-0"
+						config={flowTargetConfig}
+						onSearchChange={(query) => setFlowTargetSearch(query)}
+						trigger={({ open }) => (
+							<button
+								type="button"
+								className={
+									"focus field-trigger flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm" +
+									(open ? " border-gray-a5 bg-gray-a2" : "")
+								}
+							>
+								<span className="truncate text-gray-12">
+									{flowTarget ? (
+										flowTarget.counter_party
+									) : (
+										<span className="text-gray-10">
+											target transaction
+										</span>
+									)}
+								</span>
+								<span className="text-gray-10 flex shrink-0">
+									<IconChevronsUpDown />
+								</span>
+							</button>
+						)}
+					/>
 					<Button
 						type="submit"
 						size="sm"

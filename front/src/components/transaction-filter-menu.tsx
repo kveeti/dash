@@ -8,6 +8,7 @@ import {
 	type ReactNode,
 } from "react";
 import type { TransactionSort } from "../lib/queries/transactions";
+import { useCreateTagMutation } from "../lib/queries/tags";
 import { IconPlus } from "./icons/plus";
 import { IconChevronDown } from "./icons/chevron-down";
 import { IconChevronLeft } from "./icons/chevron-left";
@@ -50,6 +51,11 @@ export type TransactionFilterMenuProps = {
 	tags: TagOption[] | undefined;
 	setParams: Setter;
 	onRequestCustomDate?: () => void;
+};
+
+export type FilterUnstableComboboxProps = TransactionFilterMenuProps & {
+	includeDate?: boolean;
+	triggerLabel?: string;
 };
 
 const chipClass =
@@ -245,7 +251,6 @@ type MobileGlobalFilterItem = {
 	breadcrumb?: string;
 	checked?: boolean;
 	multi?: boolean;
-	closeOnSelect?: boolean;
 	onSelect: () => void;
 };
 
@@ -418,8 +423,27 @@ export function TransactionFilterUnstableCombobox({
 	currencies,
 	tags,
 	setParams,
-}: TransactionFilterMenuProps) {
+	includeDate = true,
+	triggerLabel = "add filter v2",
+}: FilterUnstableComboboxProps) {
 	const [customDateOpen, setCustomDateOpen] = useState(false);
+	const createTag = useCreateTagMutation();
+	const handleCreateTag = useCallback(
+		async (rawName: string) => {
+			if (createTag.isPending) return;
+
+			const name = rawName.trim().replace(/\s+/g, " ");
+			if (!name) return;
+
+			const existing = tags?.find(
+				(tag) => tag.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+			);
+			const tagId = existing?.id ?? (await createTag.mutateAsync(name));
+			const next = tagIds.includes(tagId) ? tagIds : [...tagIds, tagId];
+			setParams({ tags: formatStringArrayParam(next) });
+		},
+		[createTag, setParams, tagIds, tags],
+	);
 	const config = useMemo<UnstableComboboxConfig>(
 		() =>
 			buildUnstableFilterConfig({
@@ -435,6 +459,8 @@ export function TransactionFilterUnstableCombobox({
 				tags,
 				setParams,
 				onRequestCustomDate: () => setCustomDateOpen(true),
+				onCreateTag: handleCreateTag,
+				includeDate,
 			}),
 		[
 			categoryId,
@@ -448,6 +474,8 @@ export function TransactionFilterUnstableCombobox({
 			currencies,
 			tags,
 			setParams,
+			handleCreateTag,
+			includeDate,
 		],
 	);
 
@@ -455,7 +483,7 @@ export function TransactionFilterUnstableCombobox({
 		<>
 			<UnstableCombobox
 				title="add filter"
-				placeholder="filter..."
+				placeholder="Add filter..."
 				empty="no filters"
 				config={config}
 				trigger={({ open }) => (
@@ -468,23 +496,25 @@ export function TransactionFilterUnstableCombobox({
 						)}
 					>
 						<IconPlus className="size-3" />
-						<span>add filter v2</span>
+						<span>{triggerLabel}</span>
 					</button>
 				)}
 			/>
 
-			<Dialog.Root open={customDateOpen} onOpenChange={setCustomDateOpen}>
-				<Dialog.Content className="!w-auto !max-w-fit !p-4">
-					<Dialog.Title className="text-[12px] text-gray-11 font-mono mb-3 text-center">
-						custom date range
-					</Dialog.Title>
-					<DateRangeDialog
-						value={dateRange}
-						onChange={(next) => setParams({ from: next.from, to: next.to })}
-						onOpenChange={setCustomDateOpen}
-					/>
-				</Dialog.Content>
-			</Dialog.Root>
+			{includeDate && (
+				<Dialog.Root open={customDateOpen} onOpenChange={setCustomDateOpen}>
+					<Dialog.Content className="!w-auto !max-w-fit !p-4">
+						<Dialog.Title className="text-[12px] text-gray-11 font-mono mb-3 text-center">
+							custom date range
+						</Dialog.Title>
+						<DateRangeDialog
+							value={dateRange}
+							onChange={(next) => setParams({ from: next.from, to: next.to })}
+							onOpenChange={setCustomDateOpen}
+						/>
+					</Dialog.Content>
+				</Dialog.Root>
+			)}
 		</>
 	);
 }
@@ -501,9 +531,13 @@ function buildUnstableFilterConfig({
 	currencies,
 	tags,
 	setParams,
+	onCreateTag,
 	onRequestCustomDate,
+	includeDate,
 }: TransactionFilterMenuProps & {
+	onCreateTag: (name: string) => void | Promise<void>;
 	onRequestCustomDate: () => void;
+	includeDate: boolean;
 }): UnstableComboboxConfig {
 	const dateItems: UnstableComboboxItem[] = [
 		...datePresets.map<UnstableComboboxItem>((preset) => {
@@ -512,7 +546,6 @@ function buildUnstableFilterConfig({
 				id: `date:${preset.id}`,
 				label: preset.label,
 				checked: checkedDatePreset(dateRange, preset),
-				closeOnSelect: true,
 				onSelect: () => setParams({ from: range.from, to: range.to }),
 			};
 		}),
@@ -520,7 +553,6 @@ function buildUnstableFilterConfig({
 			id: "date:custom",
 			label: "custom range...",
 			keywords: ["date range"],
-			closeOnSelect: true,
 			onSelect: ({ close }) => {
 				close();
 				onRequestCustomDate();
@@ -532,7 +564,6 @@ function buildUnstableFilterConfig({
 						id: "date:clear",
 						label: "clear date",
 						keywords: ["date"],
-						closeOnSelect: true,
 						onSelect: () => setParams({ from: undefined, to: undefined }),
 					} satisfies UnstableComboboxItem,
 				]
@@ -543,14 +574,12 @@ function buildUnstableFilterConfig({
 			id: "category:uncategorized",
 			label: "uncategorized",
 			checked: uncategorized,
-			closeOnSelect: true,
 			onSelect: () => setParams({ cat: undefined, uncat: "1" }),
 		},
 		...(categories?.map<UnstableComboboxItem>((category) => ({
 			id: `category:${category.id}`,
 			label: category.name,
 			checked: categoryId === category.id,
-			closeOnSelect: true,
 			onSelect: () => setParams({ cat: category.id, uncat: undefined }),
 		})) ?? []),
 	];
@@ -561,7 +590,6 @@ function buildUnstableFilterConfig({
 			description: account.currency,
 			keywords: [account.currency],
 			checked: accountId === account.id,
-			closeOnSelect: true,
 			onSelect: () => setParams({ acc: account.id }),
 		})) ?? [];
 	const tagItems: UnstableComboboxItem[] =
@@ -576,7 +604,6 @@ function buildUnstableFilterConfig({
 			textValue: tag.name,
 			checked: tagIds.includes(tag.id),
 			multi: true,
-			closeOnSelect: false,
 			onSelect: () => {
 				const next = tagIds.includes(tag.id)
 					? tagIds.filter((tid) => tid !== tag.id)
@@ -584,6 +611,35 @@ function buildUnstableFilterConfig({
 				setParams({ tags: formatStringArrayParam(next) });
 			},
 		})) ?? [];
+	const createTagNodes = ({
+		normalizedQuery,
+		query,
+	}: {
+		normalizedQuery: string;
+		query: string;
+	}) => [
+		{
+			type: "group" as const,
+			id: "create-tag",
+			label: "Create",
+			items: [
+				{
+					id: `tag:create:${normalizedQuery}`,
+					label: (
+						<span className="flex min-w-0 items-center gap-1">
+							<span className="text-gray-8">#</span>
+							<span className="truncate">Create "{query.trim()}"</span>
+						</span>
+					),
+					textValue: query,
+					onSelect: ({ close }) => {
+						close();
+						void onCreateTag(query);
+					},
+				},
+			],
+		},
+	];
 	const currencyItems: UnstableComboboxItem[] =
 		currencies?.map((code) => ({
 			id: `currency:${code}`,
@@ -591,7 +647,6 @@ function buildUnstableFilterConfig({
 			textValue: code,
 			checked: currencyIds.includes(code),
 			multi: true,
-			closeOnSelect: false,
 			onSelect: () => {
 				const next = currencyIds.includes(code)
 					? currencyIds.filter((currency) => currency !== code)
@@ -600,7 +655,9 @@ function buildUnstableFilterConfig({
 			},
 		})) ?? [];
 	const rootItems: UnstableComboboxItem[] = [
-		{ id: "go:date", label: "date", pageId: "date" },
+		...(includeDate
+			? [{ id: "go:date", label: "date", pageId: "date" } satisfies UnstableComboboxItem]
+			: []),
 		{ id: "go:category", label: "category", pageId: "category" },
 		{ id: "go:account", label: "account", pageId: "account" },
 		{
@@ -631,97 +688,130 @@ function buildUnstableFilterConfig({
 		},
 	];
 
-	return {
-		rootPageId: "root",
-		pages: {
-			root: {
-				id: "root",
-				title: "add filter",
-				placeholder: "filter...",
-				empty: "no filters",
-				items: rootItems,
-				search: {
-					sources: [
-						localSearchSource({ id: "root", items: rootItems, label: "Filters" }),
-						localSearchSource({
-							id: "date",
-							items: dateItems,
-							label: "Date",
-							breadcrumb: "date",
-						}),
-						localSearchSource({
-							id: "category",
-							items: categoryItems,
-							label: "Category",
-							breadcrumb: "category",
-						}),
-						localSearchSource({
-							id: "account",
-							items: accountItems,
-							label: "Account",
-							breadcrumb: "account",
-						}),
-						localSearchSource({
-							id: "tags",
-							items: tagItems,
-							label: "Tags",
-							breadcrumb: "tags",
-						}),
-						localSearchSource({
-							id: "currency",
-							items: currencyItems,
-							label: "Currency",
-							breadcrumb: "currency",
-						}),
-					],
+	const pages: UnstableComboboxConfig["pages"] = {
+		root: {
+			id: "root",
+			title: "add filter",
+			placeholder: "Add filter...",
+			empty: "no filters",
+			items: rootItems,
+			queryNodes: [
+				{
+					id: "create-tag",
+					placement: "replace-empty",
+					when: ({ query, hasExactMatch }) =>
+						query.trim().length > 0 &&
+						!hasExactMatch((item) =>
+							item.id.startsWith("tag:") ? (item.textValue ?? "") : "",
+						),
+					getNodes: createTagNodes,
 				},
-			},
-			date: {
-				id: "date",
-				title: "date",
-				placeholder: "search dates...",
-				items: [
-					...dateItems.slice(0, datePresets.length),
-					{ type: "separator" },
-					...dateItems.slice(datePresets.length),
+			],
+			search: {
+				sources: [
+					localSearchSource({ id: "root", items: rootItems }),
+					...(includeDate
+						? [
+								localSearchSource({
+									id: "date",
+									items: dateItems,
+									label: "Date",
+									breadcrumb: "date",
+								}),
+							]
+						: []),
+					localSearchSource({
+						id: "category",
+						items: categoryItems,
+						label: "Category",
+						breadcrumb: "category",
+					}),
+					localSearchSource({
+						id: "account",
+						items: accountItems,
+						label: "Account",
+						breadcrumb: "account",
+					}),
+					localSearchSource({
+						id: "tags",
+						items: tagItems,
+						label: "Tags",
+						breadcrumb: "tags",
+					}),
+					localSearchSource({
+						id: "currency",
+						items: currencyItems,
+						label: "Currency",
+						breadcrumb: "currency",
+					}),
 				],
-				search: { sources: [localSearchSource({ id: "date", items: dateItems })] },
-			},
-			category: {
-				id: "category",
-				title: "category",
-				placeholder: "search categories...",
-				items: categoryItems,
-				search: {
-					sources: [localSearchSource({ id: "category", items: categoryItems })],
-				},
-			},
-			account: {
-				id: "account",
-				title: "account",
-				placeholder: "search accounts...",
-				items: accountItems,
-				search: {
-					sources: [localSearchSource({ id: "account", items: accountItems })],
-				},
-			},
-			tags: {
-				id: "tags",
-				title: "tags",
-				placeholder: "search tags...",
-				items: tagItems,
-				search: { sources: [localSearchSource({ id: "tags", items: tagItems })] },
-			},
-			currency: {
-				id: "currency",
-				title: "currency",
-				placeholder: "search currencies...",
-				items: currencyItems,
-				search: {
-					sources: [localSearchSource({ id: "currency", items: currencyItems })],
-				},
 			},
 		},
+		category: {
+			id: "category",
+			title: "category",
+			placeholder: "Filter...",
+			items: categoryItems,
+			search: {
+				sources: [localSearchSource({ id: "category", items: categoryItems })],
+			},
+		},
+		account: {
+			id: "account",
+			title: "account",
+			placeholder: "Filter...",
+			empty: "no accounts",
+			items: accountItems,
+			search: {
+				sources: [localSearchSource({ id: "account", items: accountItems })],
+			},
+		},
+		tags: {
+			id: "tags",
+			title: "tags",
+			placeholder: "Filter...",
+			empty: "no tags",
+			items: tagItems,
+			queryNodes: [
+				{
+					id: "create-tag",
+					placement: "after-results",
+					when: ({ query, hasExactMatch }) =>
+						query.trim().length > 0 && !hasExactMatch(),
+					getNodes: createTagNodes,
+				},
+			],
+			search: { sources: [localSearchSource({ id: "tags", items: tagItems })] },
+		},
+		currency: {
+			id: "currency",
+			title: "currency",
+			placeholder: "Filter...",
+			empty: "no currencies",
+			items: currencyItems,
+			search: {
+				sources: [localSearchSource({ id: "currency", items: currencyItems })],
+			},
+		},
+	};
+
+	if (includeDate) {
+		pages.date = {
+			id: "date",
+			title: "date",
+			placeholder: "Filter...",
+			items: [
+				...dateItems.slice(0, datePresets.length),
+				{ type: "separator" },
+				...dateItems.slice(datePresets.length),
+			],
+			search: { sources: [localSearchSource({ id: "date", items: dateItems })] },
+		};
+	}
+
+	return {
+		rootPageId: "root",
+		pages,
 	};
 }
 
@@ -1016,7 +1106,6 @@ function buildMobileGlobalFilterItems({
 				label: preset.label,
 				breadcrumb: "date",
 				checked: checkedDatePreset(dateRange, preset),
-				closeOnSelect: true,
 				onSelect: () => setParams({ from: range.from, to: range.to }),
 			},
 			["date", preset.label],
@@ -1041,7 +1130,6 @@ function buildMobileGlobalFilterItems({
 				value: "date:clear",
 				label: "clear date",
 				breadcrumb: "date",
-				closeOnSelect: true,
 				onSelect: () => setParams({ from: undefined, to: undefined }),
 			},
 			["date", "clear date"],
@@ -1055,7 +1143,6 @@ function buildMobileGlobalFilterItems({
 			label: "uncategorized",
 			breadcrumb: "category",
 			checked: uncategorized,
-			closeOnSelect: true,
 			onSelect: () => setParams({ cat: undefined, uncat: "1" }),
 		},
 		["category", "uncategorized"],
@@ -1069,7 +1156,6 @@ function buildMobileGlobalFilterItems({
 				label: category.name,
 				breadcrumb: "category",
 				checked: categoryId === category.id,
-				closeOnSelect: true,
 				onSelect: () => setParams({ cat: category.id, uncat: undefined }),
 			},
 			["category", category.name],
@@ -1091,7 +1177,6 @@ function buildMobileGlobalFilterItems({
 				),
 				breadcrumb: "account",
 				checked: accountId === account.id,
-				closeOnSelect: true,
 				onSelect: () => setParams({ acc: account.id }),
 			},
 			["account", account.name, account.currency],
@@ -1505,7 +1590,7 @@ function MobileActionItem({
 			multi={item.multi}
 			onClick={() => {
 				item.onSelect();
-				if (item.closeOnSelect) close();
+				if (item.multi) close();
 			}}
 		>
 			<span className="flex min-w-0 flex-1 items-center gap-2">

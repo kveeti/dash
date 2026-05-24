@@ -5,11 +5,14 @@ import {
 	type KeyboardEvent,
 	Fragment,
 	type MouseEvent,
+	type ReactElement,
 	type ReactNode,
 	forwardRef,
 	startTransition,
+	useCallback,
 	useEffect,
 	useId,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -19,19 +22,33 @@ import { IconChevronRight } from "./icons/chevron-right";
 
 const mobileQuery = "(max-width: 640px)";
 const defaultItemSize = 34;
+const defaultDesktopItemSize = 30;
 const defaultOverscan = 10;
+const inputHeight = 36;
+const emptyStateHeight = 80;
+const listPaddingY = 8;
+const listPaddingTop = listPaddingY / 2;
+const surfaceBorderY = 2;
+const desktopSurfaceMaxHeight = 416;
+const listMaxHeight = 384;
+const mobileSurfaceViewportPadding = 16;
+const desktopSubmenuShift = -(inputHeight + listPaddingTop);
 
 function cx(...classes: Array<string | false | null | undefined>) {
 	return classes.filter(Boolean).join(" ");
 }
 
-type UnstableComboboxRenderTrigger = (state: {
+export type UnstableComboboxTriggerState = {
 	open: boolean;
 	mobile: boolean;
-}) => Ariakit.MenuButtonProps["render"];
+};
+
+type UnstableComboboxRenderTrigger = (
+	state: UnstableComboboxTriggerState,
+) => ReactElement;
 
 export type UnstableComboboxTrigger =
-	| Ariakit.MenuButtonProps["render"]
+	| ReactElement
 	| UnstableComboboxRenderTrigger;
 
 export type UnstableComboboxSelectDetails = {
@@ -53,7 +70,6 @@ export type UnstableComboboxItem = {
 	disabled?: boolean;
 	checked?: boolean;
 	multi?: boolean;
-	closeOnSelect?: boolean;
 	pageId?: string;
 	children?: UnstableComboboxNode[];
 	title?: ReactNode;
@@ -93,6 +109,10 @@ export type UnstableComboboxSearchSource = {
 	limit?: number;
 	debounceMs?: number;
 	enabled?: (context: UnstableComboboxSearchContext) => boolean;
+	searchSync?: (
+		query: string,
+		context: UnstableComboboxSearchContext,
+	) => UnstableComboboxItem[];
 	search: (
 		query: string,
 		context: UnstableComboboxSearchContext,
@@ -103,6 +123,25 @@ export type UnstableComboboxSearchScope = {
 	sources: UnstableComboboxSearchSource[];
 };
 
+export type UnstableComboboxQueryNodesContext = {
+	query: string;
+	normalizedQuery: string;
+	pageId: string;
+	items: UnstableComboboxItem[];
+	results: UnstableComboboxItem[];
+	hasResults: boolean;
+	hasExactMatch: (getText?: (item: UnstableComboboxItem) => string) => boolean;
+};
+
+export type UnstableComboboxQueryNodes = {
+	id: string;
+	placement?: "before-results" | "after-results" | "replace-empty";
+	when?: (context: UnstableComboboxQueryNodesContext) => boolean;
+	getNodes: (
+		context: UnstableComboboxQueryNodesContext,
+	) => UnstableComboboxNode[];
+};
+
 export type UnstableComboboxPage = {
 	id: string;
 	title?: ReactNode;
@@ -110,6 +149,7 @@ export type UnstableComboboxPage = {
 	empty?: ReactNode;
 	items: UnstableComboboxNode[];
 	search?: UnstableComboboxSearchScope;
+	queryNodes?: UnstableComboboxQueryNodes[];
 };
 
 export type UnstableComboboxConfig = {
@@ -136,7 +176,6 @@ type BaseProps = {
 	popoverClassName?: string;
 	dialogClassName?: string;
 	presentation?: "responsive" | "dialog";
-	showDialogHeader?: boolean;
 	onSearchChange?: (query: string, page: { id: string }) => void;
 	filter?: (
 		item: Exclude<UnstableComboboxNode, UnstableComboboxSeparator>,
@@ -163,6 +202,7 @@ type Page = {
 	empty?: ReactNode;
 	items: UnstableComboboxNode[];
 	search?: UnstableComboboxSearchScope;
+	queryNodes?: UnstableComboboxQueryNodes[];
 };
 
 type PageStackEntry = {
@@ -181,25 +221,29 @@ type VirtualRowProps = {
 };
 
 const menuClass =
-	"z-80 flex min-w-[16rem] max-w-[24rem] max-h-[min(26rem,var(--popover-available-height))] flex-col overflow-hidden rounded-md border border-gray-a3 bg-gray-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.24),0_3px_8px_-3px_rgba(0,0,0,0.12)] outline-none dark:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.7),0_3px_8px_-3px_rgba(0,0,0,0.45)]";
+	"z-80 flex min-w-[12rem] max-w-[18rem] max-h-[min(26rem,var(--popover-available-height))] flex-col overflow-hidden rounded-md border border-gray-a3 bg-gray-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.24),0_3px_8px_-3px_rgba(0,0,0,0.12)] outline-none dark:shadow-[0_12px_32px_-12px_rgba(0,0,0,0.7),0_3px_8px_-3px_rgba(0,0,0,0.45)]";
 
 const menuMotionClass =
-	"origin-[var(--popover-transform-origin)] scale-[0.99] opacity-0 transition-[scale,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] data-[enter]:scale-100 data-[enter]:opacity-100 data-[leave]:scale-[0.99] data-[leave]:opacity-0 motion-reduce:duration-1";
+	"origin-[var(--popover-transform-origin)] scale-[0.975] opacity-0 transition-[scale,opacity] duration-90 ease-[cubic-bezier(0.16,1,0.3,1)] data-[enter]:scale-100 data-[enter]:opacity-100 data-[leave]:scale-[0.975] data-[leave]:opacity-0 motion-reduce:duration-1";
 
 const dialogMotionClass =
 	"origin-center scale-[0.97] opacity-0 transition-[transform,scale,opacity] duration-240 ease-[cubic-bezier(0.05,0.95,0.15,1)] data-[enter]:scale-100 data-[enter]:opacity-100 data-[leave]:duration-100 data-[leave]:ease-in data-[leave]:scale-[0.95] data-[leave]:opacity-0 motion-reduce:duration-1 motion-reduce:data-[leave]:duration-1";
 
+const menuBodyHeightTransition = "height 150ms cubic-bezier(0.16,1,0.3,1)";
+const dialogBodyHeightTransition =
+	"height 240ms cubic-bezier(0.05,0.95,0.15,1)";
+
 const inputClass =
-	"h-10 w-full shrink-0 border-0 border-b border-gray-a3 bg-transparent px-3 text-[13px] text-gray-12 outline-none placeholder:text-gray-9";
+	"h-9 w-full shrink-0 border-0 border-b border-gray-a3 bg-transparent px-3 text-[13px] text-gray-12 outline-none placeholder:text-gray-9";
 
 const listClass =
-	"combobox-list-scroll min-h-0 max-h-[min(24rem,var(--popover-available-height))] overflow-x-hidden overflow-y-auto p-1 overscroll-contain";
+	"combobox-list-scroll box-border min-h-0 max-h-[min(24rem,var(--popover-available-height))] shrink-0 scroll-px-1 overflow-x-hidden overflow-y-auto px-1 overscroll-contain";
 
 const itemClass =
-	"flex h-full w-full cursor-default items-center gap-2 rounded-sm px-2.5 text-[13px] text-gray-12 outline-none select-none data-[active-item]:bg-gray-a3 data-[disabled]:text-gray-8";
+	"flex h-full w-full cursor-default items-center gap-1 rounded-sm px-2 text-[12px] text-gray-12 outline-none select-none data-[active-item]:bg-gray-a3 data-[disabled]:text-gray-8";
 
 const groupClass =
-	"flex h-full items-center px-2.5 text-[10px] font-medium uppercase tracking-[0.06em] text-gray-10 select-none";
+	"flex h-full items-center px-2 text-[10px] font-medium uppercase tracking-[0.06em] text-gray-10 select-none";
 
 function getNodeType(node: UnstableComboboxNode) {
 	return node.type ?? "item";
@@ -226,6 +270,10 @@ function getSearchText(item: UnstableComboboxItem) {
 			return typeof value === "string" || typeof value === "number";
 		})
 		.join(" ");
+}
+
+function normalizeQuery(value: string) {
+	return value.trim().toLocaleLowerCase();
 }
 
 function defaultFilter(
@@ -258,7 +306,7 @@ function getRows({
 }) {
 	const context: UnstableComboboxFilterContext = {
 		query,
-		normalizedQuery: query.trim().toLocaleLowerCase(),
+		normalizedQuery: normalizeQuery(query),
 	};
 	const rows: Row[] = [];
 
@@ -282,6 +330,14 @@ function getRows({
 	}
 
 	return trimSeparators(rows);
+}
+
+function nodesToRows(items: UnstableComboboxNode[]) {
+	return getRows({
+		filter: () => true,
+		items,
+		query: "",
+	});
 }
 
 function trimSeparators(rows: Row[]) {
@@ -322,11 +378,93 @@ function getFocusableRowIndexes(rows: Row[]) {
 }
 
 function getRowOffsets(rows: Row[], itemSize: number) {
-	const offsets = [0];
+	const offsets = [rows.length ? listPaddingTop : 0];
 	for (const row of rows) {
 		offsets.push(offsets[offsets.length - 1]! + rowSize(row, itemSize));
 	}
 	return offsets;
+}
+
+function getRowsTotalHeight(rows: Row[], itemSize: number) {
+	return rows.reduce((total, row) => total + rowSize(row, itemSize), 0);
+}
+
+function getScrollableBodyHeight({
+	bodyMaxHeight,
+	itemSize,
+	rows,
+}: {
+	bodyMaxHeight: number;
+	itemSize: number;
+	rows: Row[];
+}) {
+	const offsets = getRowOffsets(rows, itemSize);
+	let hintedHeight = 0;
+
+	for (let index = 0; index < rows.length; index += 1) {
+		const row = rows[index]!;
+		if (row.type !== "item") continue;
+
+		const rowStart = offsets[index]!;
+		const midpoint = rowStart + rowSize(row, itemSize) / 2;
+		if (midpoint <= bodyMaxHeight) hintedHeight = midpoint;
+	}
+
+	return hintedHeight || bodyMaxHeight;
+}
+
+function getItemsFromNodes(nodes: UnstableComboboxNode[]) {
+	const items: UnstableComboboxItem[] = [];
+	for (const node of nodes) {
+		const type = getNodeType(node);
+		if (type === "separator") continue;
+		if (type === "group") {
+			items.push(...getItemsFromNodes((node as UnstableComboboxGroup).items));
+			continue;
+		}
+		const item = node as UnstableComboboxItem;
+		items.push(item);
+		if (item.children?.length) items.push(...getItemsFromNodes(item.children));
+	}
+	return items;
+}
+
+function getItemsFromRows(rows: Row[]) {
+	return rows.flatMap((row) => (row.type === "item" ? [row.item] : []));
+}
+
+function uniqueItemsById(items: UnstableComboboxItem[]) {
+	const seen = new Set<string>();
+	const unique: UnstableComboboxItem[] = [];
+	for (const item of items) {
+		if (seen.has(item.id)) continue;
+		seen.add(item.id);
+		unique.push(item);
+	}
+	return unique;
+}
+
+function getSurfaceLayout({
+	bodyMaxHeight,
+	itemSize,
+	rows,
+}: {
+	bodyMaxHeight: number;
+	itemSize: number;
+	rows: Row[];
+}) {
+	const contentHeight = rows.length
+		? getRowsTotalHeight(rows, itemSize) + listPaddingY
+		: emptyStateHeight;
+	const bodyHeight =
+		rows.length && contentHeight > bodyMaxHeight
+			? getScrollableBodyHeight({ bodyMaxHeight, itemSize, rows })
+			: Math.min(contentHeight, bodyMaxHeight);
+	return {
+		emptyHeight: rows.length ? 0 : bodyHeight,
+		listHeight: rows.length ? bodyHeight : 0,
+		bodyHeight,
+	};
 }
 
 type RowGroupRange = {
@@ -366,6 +504,7 @@ function pageFromConfigPage(
 		empty: page?.empty ?? fallback.empty,
 		items: page?.items ?? [],
 		search: page?.search,
+		queryNodes: page?.queryNodes,
 	};
 }
 
@@ -387,6 +526,74 @@ function useMediaQuery(query: string) {
 	return matches;
 }
 
+function getViewportHeight() {
+	if (typeof window === "undefined") return listMaxHeight + inputHeight;
+	return window.visualViewport?.height ?? window.innerHeight;
+}
+
+function useViewportHeight() {
+	const [height, setHeight] = useState(getViewportHeight);
+
+	useEffect(() => {
+		const update = () => setHeight(getViewportHeight());
+		window.addEventListener("resize", update);
+		window.visualViewport?.addEventListener("resize", update);
+		return () => {
+			window.removeEventListener("resize", update);
+			window.visualViewport?.removeEventListener("resize", update);
+		};
+	}, []);
+
+	return height;
+}
+
+function parseCssPixelValue(value: string) {
+	const parsed = Number.parseFloat(value);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function useDesktopBodyMaxHeight(element: HTMLElement | null) {
+	const fallback = desktopSurfaceMaxHeight - inputHeight - surfaceBorderY;
+	const [height, setHeight] = useState(fallback);
+
+	useLayoutEffect(() => {
+		if (!element) return;
+		let frame = 0;
+
+		const update = () => {
+			const availableHeight = parseCssPixelValue(
+				window
+					.getComputedStyle(element)
+					.getPropertyValue("--popover-available-height"),
+			);
+			const surfaceHeight = Math.min(
+				desktopSurfaceMaxHeight,
+				availableHeight ?? desktopSurfaceMaxHeight,
+			);
+			setHeight(Math.max(0, surfaceHeight - inputHeight - surfaceBorderY));
+		};
+		const scheduleUpdate = () => {
+			window.cancelAnimationFrame(frame);
+			frame = window.requestAnimationFrame(update);
+		};
+
+		scheduleUpdate();
+
+		const resizeObserver = new ResizeObserver(scheduleUpdate);
+		resizeObserver.observe(element);
+		window.addEventListener("resize", scheduleUpdate);
+		window.visualViewport?.addEventListener("resize", scheduleUpdate);
+		return () => {
+			window.cancelAnimationFrame(frame);
+			resizeObserver.disconnect();
+			window.removeEventListener("resize", scheduleUpdate);
+			window.visualViewport?.removeEventListener("resize", scheduleUpdate);
+		};
+	}, [element, fallback]);
+
+	return height;
+}
+
 function useControllableOpen({
 	defaultOpen,
 	onOpenChange,
@@ -403,10 +610,10 @@ function useControllableOpen({
 
 function renderTrigger(
 	trigger: UnstableComboboxTrigger,
-	state: { mobile: boolean; open: boolean },
+	state: UnstableComboboxTriggerState,
 ) {
 	if (typeof trigger === "function") {
-		return (trigger as UnstableComboboxRenderTrigger)(state);
+		return trigger(state);
 	}
 	return trigger;
 }
@@ -432,8 +639,56 @@ function usePageRows({
 	);
 	const searchRows = useSearchRows(page, trimmedQuery, localRows);
 
-	if (page.search && trimmedQuery) return searchRows;
-	return localRows;
+	const resultRows = page.search && trimmedQuery ? searchRows : localRows;
+	return useQueryNodesRows(page, query, resultRows);
+}
+
+function useQueryNodesRows(page: Page, query: string, resultRows: Row[]) {
+	const queryNodes = page.queryNodes;
+	const pageItems = useMemo(() => getItemsFromNodes(page.items), [page.items]);
+
+	return useMemo(() => {
+		if (!queryNodes?.length) return resultRows;
+
+		const normalizedQuery = normalizeQuery(query);
+		const results = getItemsFromRows(resultRows);
+		const exactMatchItems = uniqueItemsById([...pageItems, ...results]);
+		const context: UnstableComboboxQueryNodesContext = {
+			query,
+			normalizedQuery,
+			pageId: page.id,
+			items: pageItems,
+			results,
+			hasResults: resultRows.some((row) => row.type === "item"),
+			hasExactMatch: (getText = getItemText) =>
+				Boolean(normalizedQuery) &&
+				exactMatchItems.some(
+					(item) => normalizeQuery(getText(item)) === normalizedQuery,
+				),
+		};
+
+		const beforeRows: Row[] = [];
+		const afterRows: Row[] = [];
+		const replaceEmptyRows: Row[] = [];
+
+		for (const source of queryNodes) {
+			if (source.when && !source.when(context)) continue;
+			const rows = nodesToRows(source.getNodes(context));
+			if (!rows.length) continue;
+
+			const placement = source.placement ?? "after-results";
+			if (placement === "before-results") {
+				beforeRows.push(...rows);
+			} else if (placement === "replace-empty") {
+				replaceEmptyRows.push(...rows);
+			} else {
+				afterRows.push(...rows);
+			}
+		}
+
+		const middleRows = resultRows.length ? resultRows : replaceEmptyRows;
+		return trimSeparators([...beforeRows, ...middleRows, ...afterRows]);
+	}, [page.id, pageItems, query, queryNodes, resultRows]);
 }
 
 function sourceResultToRows(
@@ -454,6 +709,34 @@ function getEnabledSearchSources(
 	return sources.filter((source) => source.enabled?.(context) ?? true);
 }
 
+function createSearchContext(
+	pageId: string,
+	query: string,
+	signal: AbortSignal,
+): UnstableComboboxSearchContext {
+	return {
+		query,
+		normalizedQuery: query.toLocaleLowerCase(),
+		pageId,
+		signal,
+	};
+}
+
+function getSyncSearchRows(page: Page, query: string) {
+	const sources = page.search?.sources;
+	if (!sources?.length || !query) return [];
+
+	const controller = new AbortController();
+	const context = createSearchContext(page.id, query, controller.signal);
+	const enabledSources = getEnabledSearchSources(sources, context);
+
+	return enabledSources.flatMap((source) => {
+		if (!source.searchSync) return [];
+		if (source.debounceMs && source.debounceMs > 0) return [];
+		return sourceResultToRows(source, source.searchSync(query, context));
+	});
+}
+
 function useSearchRows(page: Page, query: string, fallbackRows: Row[]) {
 	const [state, setState] = useState<{
 		key: string;
@@ -462,18 +745,14 @@ function useSearchRows(page: Page, query: string, fallbackRows: Row[]) {
 
 	const sources = page.search?.sources;
 	const key = `${page.id}:${query}`;
+	const syncRows = useMemo(() => getSyncSearchRows(page, query), [page, query]);
 
 	useEffect(() => {
 		if (!sources?.length || !query) return;
 
 		const controller = new AbortController();
 		const sourceResults = new Map<string, UnstableComboboxItem[]>();
-		const context: UnstableComboboxSearchContext = {
-			query,
-			normalizedQuery: query.toLocaleLowerCase(),
-			pageId: page.id,
-			signal: controller.signal,
-		};
+		const context = createSearchContext(page.id, query, controller.signal);
 		const enabledSources = getEnabledSearchSources(sources, context);
 		let pending = enabledSources.length;
 
@@ -529,6 +808,7 @@ function useSearchRows(page: Page, query: string, fallbackRows: Row[]) {
 		return [];
 	}
 	if (state.key !== key) {
+		if (syncRows.length) return syncRows;
 		return fallbackRows.length ? fallbackRows : state.rows;
 	}
 	return state.rows;
@@ -556,16 +836,22 @@ export function localSearchSource({
 		id,
 		label,
 		limit,
-		search: (_query, context) => {
-			const tokens = context.normalizedQuery.split(/\s+/).filter(Boolean);
-			return indexed
-				.filter(({ search }) => tokens.every((token) => search.includes(token)))
-				.map(({ item }) => ({
-					...item,
-					breadcrumb: item.breadcrumb ?? breadcrumb,
-				}));
-		},
+		searchSync: searchLocalItems,
+		search: searchLocalItems,
 	};
+
+	function searchLocalItems(
+		_query: string,
+		context: UnstableComboboxSearchContext,
+	) {
+		const tokens = context.normalizedQuery.split(/\s+/).filter(Boolean);
+		return indexed
+			.filter(({ search }) => tokens.every((token) => search.includes(token)))
+			.map(({ item }) => ({
+				...item,
+				breadcrumb: item.breadcrumb ?? breadcrumb,
+			}));
+	}
 }
 
 export function UnstableCombobox({
@@ -573,7 +859,7 @@ export function UnstableCombobox({
 	defaultOpen,
 	empty = "No results",
 	filter = defaultFilter,
-	itemSize = defaultItemSize,
+	itemSize,
 	items,
 	onOpenChange,
 	onSearchChange,
@@ -581,7 +867,6 @@ export function UnstableCombobox({
 	overscan = defaultOverscan,
 	presentation = "responsive",
 	placeholder = "Search...",
-	showDialogHeader = false,
 	title = "Command menu",
 	trigger,
 	className,
@@ -599,6 +884,8 @@ export function UnstableCombobox({
 		[empty, placeholder, title],
 	);
 	const pages = config?.pages;
+	const mobileItemSize = itemSize ?? defaultItemSize;
+	const desktopItemSize = itemSize ?? defaultDesktopItemSize;
 	const rootPageId = config?.rootPageId ?? "root";
 	const rootPage = useMemo<Page>(() => {
 		if (config) return pageFromConfigPage(pages?.[rootPageId], fallback);
@@ -617,74 +904,31 @@ export function UnstableCombobox({
 				className={className}
 				dialogClassName={dialogClassName}
 				filter={filter}
-				itemSize={itemSize}
+				itemSize={mobileItemSize}
 				onOpenChange={setOpen}
 				onSearchChange={onSearchChange}
 				open={currentOpen}
 				overscan={overscan}
 				pages={pages}
 				rootPage={rootPage}
-				showHeader={showDialogHeader}
 				trigger={trigger}
 			/>
 		);
 	}
 
 	return (
-		<DesktopCombobox
-			className={className}
-			filter={filter}
-			itemSize={itemSize}
-			onSearchChange={onSearchChange}
-			onOpenChange={setOpen}
-			open={currentOpen}
-			overscan={overscan}
-			page={rootPage}
-			pages={pages}
-			popoverClassName={popoverClassName}
-			trigger={trigger}
-		/>
-	);
-}
-
-function DesktopCombobox({
-	className,
-	filter,
-	itemSize,
-	onSearchChange,
-	onOpenChange,
-	open,
-	overscan,
-	page,
-	pages,
-	popoverClassName,
-	trigger,
-}: {
-	className?: string;
-	filter: NonNullable<BaseProps["filter"]>;
-	itemSize: number;
-	onSearchChange?: BaseProps["onSearchChange"];
-	onOpenChange: (open: boolean) => void;
-	open: boolean;
-	overscan: number;
-	page: Page;
-	pages?: Record<string, UnstableComboboxPage>;
-	popoverClassName?: string;
-	trigger: UnstableComboboxTrigger;
-}) {
-	return (
 		<DesktopMenu
 			className={className}
 			filter={filter}
-			itemSize={itemSize}
+			itemSize={desktopItemSize}
 			onSearchChange={onSearchChange}
 			onOpenChange={onOpenChange}
 			open={open}
 			overscan={overscan}
-			page={page}
+			page={rootPage}
 			pages={pages}
 			popoverClassName={popoverClassName}
-			trigger={renderTrigger(trigger, { mobile: false, open })}
+			trigger={renderTrigger(trigger, { mobile: false, open: currentOpen })}
 		/>
 	);
 }
@@ -715,6 +959,11 @@ function DesktopMenu({
 	trigger?: Ariakit.MenuButtonProps["render"];
 }) {
 	const parent = Ariakit.useMenuContext();
+	const [menuElement, setMenuElement] = useState<HTMLElement | null>(null);
+	const setMenuRef = useCallback((element: HTMLElement | null) => {
+		setMenuElement(element);
+	}, []);
+	const bodyMaxHeight = useDesktopBodyMaxHeight(menuElement);
 	const [query, setQuery] = useState("");
 	const combobox = Ariakit.useComboboxStore({
 		includesBaseElement: false,
@@ -728,6 +977,11 @@ function DesktopMenu({
 		},
 	});
 	const rows = usePageRows({ filter, page, query });
+	const layout = getSurfaceLayout({
+		bodyMaxHeight,
+		itemSize,
+		rows,
+	});
 
 	return (
 		<Ariakit.MenuProvider
@@ -735,23 +989,23 @@ function DesktopMenu({
 			open={open}
 			setOpen={onOpenChange}
 			placement={parent ? "right-start" : "bottom-start"}
-			showTimeout={80}
-			timeout={80}
+			showTimeout={parent ? 0 : 80}
+			timeout={parent ? 0 : 80}
 		>
 			<Ariakit.MenuButton className={className} render={trigger} />
 			<Ariakit.Menu
+				ref={setMenuRef}
 				portal
 				overlap={!!parent}
 				unmountOnHide
 				gutter={parent ? -4 : 4}
-				shift={parent ? -42 : 0}
+				shift={parent ? desktopSubmenuShift : 0}
 				preventBodyScroll={!parent}
 				typeahead={false}
 				composite={false}
 				className={cx(
 					menuClass,
-					menuMotionClass,
-					!parent && "dash-root-menu",
+					!parent && menuMotionClass,
 					popoverClassName,
 				)}
 			>
@@ -763,26 +1017,37 @@ function DesktopMenu({
 						className={inputClass}
 					/>
 				</div>
-				<VirtualRows
-					combobox={combobox}
-					itemSize={itemSize}
-					overscan={overscan}
-					rows={rows}
+				<ComboboxBody
+					animate={!parent}
+					height={layout.bodyHeight}
+					transition={menuBodyHeightTransition}
 				>
-					{(row, rowProps) => (
-						<DesktopRow
-							filter={filter}
-							itemSize={itemSize}
-							onSearchChange={onSearchChange}
-							overscan={overscan}
-							pages={pages}
-							parentCombobox={combobox}
-							row={row}
-							rowProps={rowProps}
-						/>
+					<VirtualRows
+						combobox={combobox}
+						itemSize={itemSize}
+						listHeight={layout.listHeight}
+						overscan={overscan}
+						rows={rows}
+					>
+						{(row, rowProps) => (
+							<DesktopRow
+								filter={filter}
+								itemSize={itemSize}
+								onSearchChange={onSearchChange}
+								overscan={overscan}
+								pages={pages}
+								parentCombobox={combobox}
+								row={row}
+								rowProps={rowProps}
+							/>
+						)}
+					</VirtualRows>
+					{!rows.length && (
+						<EmptyState style={{ height: layout.emptyHeight }}>
+							{page.empty}
+						</EmptyState>
 					)}
-				</VirtualRows>
-				{!rows.length && <EmptyState>{page.empty}</EmptyState>}
+				</ComboboxBody>
 			</Ariakit.Menu>
 		</Ariakit.MenuProvider>
 	);
@@ -923,7 +1188,7 @@ function ComboboxActionItem({
 }) {
 	const menu = Ariakit.useMenuContext();
 	const close = () => menu?.hideAll();
-	const closeOnSelect = item.closeOnSelect ?? !item.multi;
+	const closeOnSelect = item.multi;
 
 	return (
 		<Ariakit.ComboboxItem
@@ -934,7 +1199,7 @@ function ComboboxActionItem({
 			setValueOnClick={false}
 			hideOnClick={false}
 			disabled={item.disabled}
-			className={cx(itemClass, mobile && "px-3")}
+			className={cx(itemClass, mobile && "px-3 text-[13px]")}
 			{...rowProps}
 			onClick={(event) => {
 				if (item.disabled) return;
@@ -946,16 +1211,25 @@ function ComboboxActionItem({
 				if (closeOnSelect) close();
 			}}
 		>
-			<ItemContent item={item} />
+			<ItemContent
+				item={item}
+				onCheckboxClick={(event) => {
+					if (item.disabled) return;
+					event.stopPropagation();
+					item.onSelect?.({ close, event, item });
+				}}
+			/>
 		</Ariakit.ComboboxItem>
 	);
 }
 
 function ItemContent({
 	item,
+	onCheckboxClick,
 	trailing,
 }: {
 	item: UnstableComboboxItem;
+	onCheckboxClick?: (event: MouseEvent<HTMLElement>) => void;
 	trailing?: ReactNode;
 }) {
 	if (item.render) return item.render(item);
@@ -963,10 +1237,18 @@ function ItemContent({
 		<>
 			{item.multi && (
 				<span
-					className="border-gray-a5 bg-gray-2 flex size-4 shrink-0 items-center justify-center border"
-					aria-hidden
+					className="-my-2 -ml-2 flex size-8 shrink-0 items-center justify-center"
+					role="checkbox"
+					aria-checked={!!item.checked}
+					aria-label={`${item.checked ? "Remove" : "Select"} ${getItemText(item)}`}
+					onClick={onCheckboxClick}
 				>
-					{item.checked && <IconCheck />}
+					<span
+						className="border-gray-a5 bg-gray-2 flex size-4 items-center justify-center border"
+						aria-hidden
+					>
+						{item.checked && <IconCheck />}
+					</span>
 				</span>
 			)}
 			{item.icon && <span className="shrink-0 text-gray-11">{item.icon}</span>}
@@ -992,9 +1274,42 @@ function ItemContent({
 	);
 }
 
-function EmptyState({ children }: { children: ReactNode }) {
+function ComboboxBody({
+	animate = true,
+	children,
+	height,
+	transition,
+}: {
+	animate?: boolean;
+	children: ReactNode;
+	height: number;
+	transition: string;
+}) {
 	return (
-		<div className="flex min-h-20 items-center justify-center px-3 py-4 text-[13px] text-gray-10">
+		<div
+			className="box-border min-h-0 shrink-0 overflow-hidden motion-reduce:!transition-none"
+			style={{
+				height,
+				transition: animate ? transition : undefined,
+			}}
+		>
+			{children}
+		</div>
+	);
+}
+
+function EmptyState({
+	children,
+	style,
+}: {
+	children: ReactNode;
+	style?: CSSProperties;
+}) {
+	return (
+		<div
+			className="box-border flex min-h-20 shrink-0 items-center justify-center px-3 py-4 text-[13px] text-gray-10"
+			style={style}
+		>
 			{children}
 		</div>
 	);
@@ -1004,12 +1319,14 @@ function VirtualRows({
 	children,
 	combobox,
 	itemSize,
+	listHeight,
 	overscan,
 	rows,
 }: {
 	children: (row: Row, rowProps: VirtualRowProps) => ReactNode;
 	combobox: Ariakit.ComboboxStore;
 	itemSize: number;
+	listHeight: number;
 	overscan: number;
 	rows: Row[];
 }) {
@@ -1023,6 +1340,8 @@ function VirtualRows({
 		getItemKey: (index) => `${id}-${rowKey(rows[index]!)}`,
 		getScrollElement: () => scrollRef.current,
 		estimateSize: (index) => rowSize(rows[index]!, itemSize),
+		paddingEnd: rows.length ? listPaddingTop : 0,
+		paddingStart: rows.length ? listPaddingTop : 0,
 		rangeExtractor: (range) => {
 			const indexes = defaultRangeExtractor(range);
 			if (focusableIndexes.first !== -1) indexes.push(focusableIndexes.first);
@@ -1093,6 +1412,7 @@ function VirtualRows({
 			store={combobox}
 			alwaysVisible
 			className={listClass}
+			style={{ height: listHeight }}
 		>
 			<div
 				role="presentation"
@@ -1163,7 +1483,6 @@ function MobileCombobox({
 	overscan,
 	pages,
 	rootPage,
-	showHeader,
 	trigger,
 }: {
 	className?: string;
@@ -1176,7 +1495,6 @@ function MobileCombobox({
 	overscan: number;
 	pages?: Record<string, UnstableComboboxPage>;
 	rootPage: Page;
-	showHeader: boolean;
 	trigger: UnstableComboboxTrigger;
 }) {
 	const [stack, setStack] = useState<PageStackEntry[]>([{ id: rootPage.id }]);
@@ -1221,7 +1539,7 @@ function MobileCombobox({
 					dialogClassName,
 				)}
 				aria-label={
-					!showHeader && typeof rootPage.title === "string"
+					typeof rootPage.title === "string"
 						? rootPage.title
 						: undefined
 				}
@@ -1242,7 +1560,6 @@ function MobileCombobox({
 					overscan={overscan}
 					page={currentPage}
 					pages={pages}
-					showHeader={showHeader}
 				/>
 			</Ariakit.Dialog>
 		</>
@@ -1259,7 +1576,6 @@ function MobilePage({
 	overscan,
 	page,
 	pages,
-	showHeader,
 }: {
 	close: () => void;
 	filter: NonNullable<BaseProps["filter"]>;
@@ -1270,8 +1586,15 @@ function MobilePage({
 	overscan: number;
 	page: Page;
 	pages?: Record<string, UnstableComboboxPage>;
-	showHeader: boolean;
 }) {
+	const viewportHeight = useViewportHeight();
+	const bodyMaxHeight = Math.max(
+		0,
+		Math.min(
+			listMaxHeight,
+			viewportHeight - mobileSurfaceViewportPadding - inputHeight - surfaceBorderY,
+		),
+	);
 	const [query, setQuery] = useState("");
 	const combobox = Ariakit.useComboboxStore({
 		includesBaseElement: false,
@@ -1285,6 +1608,11 @@ function MobilePage({
 		},
 	});
 	const rows = usePageRows({ filter, page, query });
+	const layout = getSurfaceLayout({
+		bodyMaxHeight,
+		itemSize,
+		rows,
+	});
 
 	const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
 		if (event.key !== "Backspace") return;
@@ -1295,14 +1623,7 @@ function MobilePage({
 	};
 
 	return (
-		<div className="flex max-h-[min(34rem,calc(100dvh-1rem))] min-h-0 flex-col">
-			{showHeader && (
-				<div className="flex h-11 shrink-0 items-center border-b border-gray-a3 px-3">
-					<Ariakit.DialogHeading className="min-w-0 flex-1 truncate text-center text-[13px] font-medium text-gray-12">
-						{page.title}
-					</Ariakit.DialogHeading>
-				</div>
-			)}
+		<div className="flex min-h-0 flex-col">
 			<Ariakit.Combobox
 				store={combobox}
 				autoSelect
@@ -1311,51 +1632,64 @@ function MobilePage({
 				className={inputClass}
 				onKeyDown={onInputKeyDown}
 			/>
-			<VirtualRows
-				combobox={combobox}
-				itemSize={itemSize}
-				overscan={overscan}
-				rows={rows}
+			<ComboboxBody
+				height={layout.bodyHeight}
+				transition={dialogBodyHeightTransition}
 			>
-				{(row, rowProps) => {
-					if (row.type === "group") {
+				<VirtualRows
+					combobox={combobox}
+					itemSize={itemSize}
+					listHeight={layout.listHeight}
+					overscan={overscan}
+					rows={rows}
+				>
+					{(row, rowProps) => {
+						if (row.type === "group") {
+							return (
+								<Ariakit.ComboboxGroupLabel
+									className={groupClass}
+									{...rowProps}
+								>
+									{row.label}
+								</Ariakit.ComboboxGroupLabel>
+							);
+						}
+						if (row.type === "separator") {
+							return (
+								<Ariakit.Separator
+									className="my-1 border-gray-a3"
+									{...rowProps}
+								/>
+							);
+						}
+						const targetPage = getTargetPage(row.item, pages);
+						if (targetPage) {
+							return (
+								<ComboboxActionItem
+									combobox={combobox}
+									item={row.item}
+									mobile
+									onNavigate={() => onPush(targetPage)}
+									rowProps={rowProps}
+								/>
+							);
+						}
 						return (
-							<Ariakit.ComboboxGroupLabel className={groupClass} {...rowProps}>
-								{row.label}
-							</Ariakit.ComboboxGroupLabel>
-						);
-					}
-					if (row.type === "separator") {
-						return (
-							<Ariakit.Separator
-								className="my-1 border-gray-a3"
-								{...rowProps}
-							/>
-						);
-					}
-					const targetPage = getTargetPage(row.item, pages);
-					if (targetPage) {
-						return (
-							<ComboboxActionItem
+							<MobileActionItem
+								close={close}
 								combobox={combobox}
 								item={row.item}
-								mobile
-								onNavigate={() => onPush(targetPage)}
 								rowProps={rowProps}
 							/>
 						);
-					}
-					return (
-						<MobileActionItem
-							close={close}
-							combobox={combobox}
-							item={row.item}
-							rowProps={rowProps}
-						/>
-					);
-				}}
-			</VirtualRows>
-			{!rows.length && <EmptyState>{page.empty}</EmptyState>}
+					}}
+				</VirtualRows>
+				{!rows.length && (
+					<EmptyState style={{ height: layout.emptyHeight }}>
+						{page.empty}
+					</EmptyState>
+				)}
+			</ComboboxBody>
 		</div>
 	);
 }
@@ -1371,7 +1705,7 @@ function MobileActionItem({
 	item: UnstableComboboxItem;
 	rowProps: VirtualRowProps;
 }) {
-	const closeOnSelect = item.closeOnSelect ?? !item.multi;
+	const closeOnSelect = item.multi;
 	return (
 		<Ariakit.ComboboxItem
 			store={combobox}
@@ -1381,7 +1715,7 @@ function MobileActionItem({
 			setValueOnClick={false}
 			hideOnClick={false}
 			disabled={item.disabled}
-			className={cx(itemClass, "px-3")}
+			className={cx(itemClass, "px-3 text-[13px]")}
 			{...rowProps}
 			onClick={(event) => {
 				if (item.disabled) return;
@@ -1389,7 +1723,14 @@ function MobileActionItem({
 				if (closeOnSelect) close();
 			}}
 		>
-			<ItemContent item={item} />
+			<ItemContent
+				item={item}
+				onCheckboxClick={(event) => {
+					if (item.disabled) return;
+					event.stopPropagation();
+					item.onSelect?.({ close, event, item });
+				}}
+			/>
 		</Ariakit.ComboboxItem>
 	);
 }

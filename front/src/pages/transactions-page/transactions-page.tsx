@@ -28,7 +28,6 @@ import {
 import { Button, buttonStyles } from "../../components/button";
 import { Input } from "../../components/input";
 import { CategoryCombobox } from "../../components/category-combobox";
-import { Combobox } from "../../components/combobox";
 import { IconChevronsUpDown } from "../../components/icons/chevrons-up-down";
 import { DateRangePickerInput } from "../../components/date-picker";
 import { useTransactionWindows } from "../../components/transaction-windows";
@@ -46,6 +45,12 @@ import {
 	FilterChip,
 	SortMenu,
 } from "../../components/transaction-filter-menu";
+import {
+	localSearchSource,
+	UnstableCombobox,
+	type UnstableComboboxConfig,
+	type UnstableComboboxItem,
+} from "../../components/unstable-combobox";
 
 type DateRangeFilter = {
 	from: string;
@@ -927,57 +932,60 @@ function AccountFilterCombobox({
 
 	const selectedItem =
 		items.find((item) => item.value === (value || "__all__")) ?? items[0];
+	const config = useMemo<UnstableComboboxConfig>(() => {
+		const accountItems = items.map<UnstableComboboxItem>((item) => ({
+			id: `account:${item.value}`,
+			label: item.label,
+			textValue: item.label,
+			description: item.currency,
+			keywords: item.currency ? [item.currency] : undefined,
+			checked: item.value === selectedItem?.value,
+			onSelect: ({ close }) => {
+				onChange(item.value === "__all__" ? "" : item.value);
+				close();
+			},
+		}));
+
+		return {
+			rootPageId: "root",
+			pages: {
+				root: {
+					id: "root",
+					title: "account",
+					placeholder: "search accounts...",
+					empty: "No accounts found.",
+					items: accountItems,
+					search: {
+						sources: [
+							localSearchSource({ id: "accounts", items: accountItems }),
+						],
+					},
+				},
+			},
+		};
+	}, [items, onChange, selectedItem?.value]);
 
 	return (
-		<Combobox.Root
-			items={items}
-			value={selectedItem}
-			onValueChange={(next) => {
-				if (!next || next.value === "__all__") {
-					onChange("");
-					return;
-				}
-				onChange(next.value);
-			}}
-			itemToStringLabel={(item) => item.label}
-			isItemEqualToValue={(item, selected) => item.value === selected.value}
-			autoHighlight
-		>
-			<Combobox.Trigger<AccountFilterItem, AccountFilterItem | null>
-				className="focus field-trigger data-[disabled]:opacity-60 flex h-9 flex-1 min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm"
-			>
-				{({ selectedValue }) => (
-					<>
-						<span className="truncate text-gray-12">
-							{selectedValue?.label ?? "all accounts"}
-						</span>
-						<Combobox.Icon className="text-gray-10 flex shrink-0">
-							<IconChevronsUpDown />
-						</Combobox.Icon>
-					</>
-				)}
-			</Combobox.Trigger>
-			<Combobox.Content
-				searchPlaceholder="search accounts..."
-				empty="No accounts found."
-				size="sm"
-			>
-				<Combobox.List<AccountFilterItem>>
-					{(item) => (
-						<Combobox.Item key={item.value} value={item} size="sm">
-							<div className="flex w-full items-center justify-between gap-2">
-								<span className="truncate">{item.label}</span>
-								{item.currency ? (
-									<span className="shrink-0 text-xs text-gray-10">
-										{item.currency}
-									</span>
-								) : null}
-							</div>
-						</Combobox.Item>
-					)}
-				</Combobox.List>
-			</Combobox.Content>
-		</Combobox.Root>
+		<UnstableCombobox
+			className="flex-1 min-w-0"
+			config={config}
+			trigger={({ open }) => (
+				<button
+					type="button"
+					className={
+						"focus field-trigger flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm" +
+						(open ? " border-gray-a5 bg-gray-a2" : "")
+					}
+				>
+					<span className="truncate text-gray-12">
+						{selectedItem?.label ?? "all accounts"}
+					</span>
+					<span className="text-gray-10 flex shrink-0">
+						<IconChevronsUpDown />
+					</span>
+				</button>
+			)}
+		/>
 	);
 }
 

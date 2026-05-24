@@ -13,12 +13,17 @@ import {
 } from "../lib/queries/accounts";
 import { DEFAULT_CURRENCY, normalizeCurrency } from "../lib/currency";
 import { useCurrencyMetaQuery } from "../lib/queries/currencies";
-import { Combobox } from "./combobox";
 import { IconChevronsUpDown } from "./icons/chevrons-up-down";
 import { Select } from "./select";
 import { Input } from "./input";
 import { buttonStyles } from "./button";
 import { useTransientOptions } from "./use-transient-options";
+import {
+	localSearchSource,
+	UnstableCombobox,
+	type UnstableComboboxConfig,
+	type UnstableComboboxItem,
+} from "./unstable-combobox";
 
 type AccountItem = {
 	value: string;
@@ -32,13 +37,16 @@ function accountItemKey(item: AccountItem) {
 	return item.value;
 }
 
+function cx(...classes: Array<string | false | null | undefined>) {
+	return classes.filter(Boolean).join(" ");
+}
+
 export function AccountSelectCreate({
 	defaultValue,
 	onChange,
 	name = "account_id",
 	label = "account",
 	required = true,
-	disabled = false,
 	defaultCreateCurrency = DEFAULT_CURRENCY,
 }: {
 	defaultValue?: string;
@@ -46,7 +54,6 @@ export function AccountSelectCreate({
 	name?: string;
 	label?: string;
 	required?: boolean;
-	disabled?: boolean;
 	defaultCreateCurrency?: string;
 }) {
 	const accounts = useAccountsQuery();
@@ -102,17 +109,16 @@ export function AccountSelectCreate({
 			label: selectedAccountValue,
 		};
 	}, [accountOptions.options, selectedAccountValue]);
-
-	function handleSelectAccount(account: Account | null) {
+	const handleSelectAccount = useCallback((account: Account | null) => {
 		const nextId = account?.id ?? "";
 		if (hiddenAccountIdRef.current) {
 			hiddenAccountIdRef.current.value = nextId;
 		}
 		setSelectedAccountValue(nextId);
 		onChange?.(account);
-	}
+	}, [onChange]);
 
-	function openCreateDialog(rawName: string) {
+	const openCreateDialog = useCallback((rawName: string) => {
 		const defaultCurrency = normalizeCurrency(
 			defaultCreateCurrency,
 			DEFAULT_CURRENCY,
@@ -124,7 +130,73 @@ export function AccountSelectCreate({
 		});
 		setCreateFormKey((prev) => prev + 1);
 		setOpenDialog(true);
-	}
+	}, [defaultCreateCurrency]);
+
+	const config = useMemo<UnstableComboboxConfig>(() => {
+		const accountItems = accountOptions.options.map<UnstableComboboxItem>(
+			(item) => ({
+				id: `account:${item.value}`,
+				label: item.label,
+				textValue: item.label,
+				description: item.currency,
+				keywords: item.currency ? [item.currency] : undefined,
+				checked: item.value === selectedAccountValue,
+				onSelect: ({ close }) => {
+					handleSelectAccount(item.account ?? null);
+					close();
+				},
+			}),
+		);
+
+		return {
+			rootPageId: "root",
+			pages: {
+				root: {
+					id: "root",
+					title: "account",
+					placeholder: "search accounts...",
+					empty: "No accounts found.",
+					items: accountItems,
+					search: {
+						sources: [
+							localSearchSource({ id: "accounts", items: accountItems }),
+						],
+					},
+					queryNodes: [
+						{
+							id: "create-account",
+							placement: "after-results",
+							when: ({ query, hasExactMatch }) =>
+								query.trim().length > 0 && !hasExactMatch(),
+							getNodes: ({ normalizedQuery, query }) => [
+								{
+									type: "group",
+									id: "create-account",
+									label: "Create",
+									items: [
+										{
+											id: `account:create:${normalizedQuery}`,
+											label: `Create "${query.trim()}"`,
+											textValue: query,
+											onSelect: ({ close }) => {
+												close();
+												openCreateDialog(query);
+											},
+										},
+									],
+								},
+							],
+						},
+					],
+				},
+			},
+		};
+	}, [
+		accountOptions.options,
+		handleSelectAccount,
+		openCreateDialog,
+		selectedAccountValue,
+	]);
 
 	async function createAccountFromDialog(input: {
 		name: string;
@@ -188,87 +260,30 @@ export function AccountSelectCreate({
 				type="hidden"
 				name={name}
 				value={selectedAccountValue}
+				required={required}
 				readOnly
 			/>
-			<Combobox.Root
-				items={accountOptions.options}
-				value={selectedItem}
-				onValueChange={(next) => {
-					if (!next) {
-						handleSelectAccount(null);
-						return;
-					}
-					handleSelectAccount(next.account ?? null);
-				}}
-				itemToStringLabel={(item) => item.label}
-				isItemEqualToValue={(item, selected) => item.value === selected.value}
-				create={{
-					getItem: ({ items, normalizedInputValue, trimmedInputValue }) => {
-						if (!trimmedInputValue) return null;
-
-						const hasExactMatch = items.some(
-							(item) =>
-								item.label.trim().toLocaleLowerCase() === normalizedInputValue,
-						);
-						if (hasExactMatch) return null;
-
-						return {
-							value: `create:${trimmedInputValue.toLocaleLowerCase()}`,
-							label: `Create "${trimmedInputValue}"`,
-							creatable: trimmedInputValue,
-						};
-					},
-					isItem: (item) => Boolean(item.creatable),
-					onRequest: openCreateDialog,
-					getQuery: (item) => item.creatable ?? "",
-				}}
-				required={required}
-				disabled={disabled}
-				autoHighlight
-			>
-				<Combobox.Trigger<AccountItem, AccountItem | null>
-					className="focus field-trigger data-[disabled]:opacity-60 flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-3 pr-2.5 text-sm"
-				>
-					{({ selectedValue }) => (
-						<>
-							<span className="truncate text-gray-12">
-								{selectedValue?.label ?? (
-									<span className="text-gray-10">select account...</span>
-								)}
-							</span>
-							<Combobox.Icon className="text-gray-10 flex shrink-0">
-								<IconChevronsUpDown />
-							</Combobox.Icon>
-						</>
-					)}
-				</Combobox.Trigger>
-				<Combobox.Content
-					searchPlaceholder="search accounts..."
-					empty="No accounts found."
-				>
-					<Combobox.List<AccountItem>>
-						{(item) => (
-							<Combobox.Item key={item.value} value={item}>
-								{item.creatable ? (
-									<div className="flex w-full items-center justify-between gap-2">
-										<span className="truncate">
-											Create "{item.creatable}"
-										</span>
-										<span className="text-xs text-gray-10">new</span>
-									</div>
-								) : (
-									<div className="flex w-full items-center justify-between gap-2">
-										<span className="truncate">{item.label}</span>
-										<span className="shrink-0 text-xs text-gray-10">
-											{item.currency}
-										</span>
-									</div>
-								)}
-							</Combobox.Item>
+			<UnstableCombobox
+				config={config}
+				trigger={({ open }) => (
+					<button
+						type="button"
+						className={cx(
+							"focus field-trigger flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-3 pr-2.5 text-sm",
+							open && "border-gray-a5 bg-gray-a2",
 						)}
-					</Combobox.List>
-				</Combobox.Content>
-			</Combobox.Root>
+					>
+						<span className="truncate text-gray-12">
+							{selectedItem?.label ?? (
+								<span className="text-gray-10">select account...</span>
+							)}
+						</span>
+						<span className="text-gray-10 flex shrink-0">
+							<IconChevronsUpDown />
+						</span>
+					</button>
+				)}
+			/>
 
 			<Dialog.Root open={openDialog} onOpenChange={setOpenDialog}>
 				<Dialog.Portal>

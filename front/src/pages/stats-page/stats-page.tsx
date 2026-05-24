@@ -7,17 +7,17 @@ import { DesktopYearMonthExplorer } from "./desktop-year-month-explorer";
 import { StatsOverviewPanel } from "./stats-overview-panel";
 import { StatsCanvas } from "./stats-canvas";
 import { Input } from "../../components/input";
-import { CategoryCombobox } from "../../components/category-combobox";
-import { Combobox } from "../../components/combobox";
-import { IconChevronsUpDown } from "../../components/icons/chevrons-up-down";
 import { useCategoryOptionsQuery } from "../../lib/queries/categories";
 import { useAccountsQuery } from "../../lib/queries/accounts";
 import { useTransactionCurrenciesQuery } from "../../lib/queries/transactions";
 import { useTagOptionsQuery } from "../../lib/queries/tags";
 import { FastLink } from "../../components/link";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
-import { TagMultiCombobox } from "../../components/tag-combobox";
-import { CurrencyMultiCombobox } from "../../components/currency-multi-combobox";
+import {
+	buildFilterChips,
+	FilterChip,
+	TransactionFilterUnstableCombobox,
+} from "../../components/transaction-filter-menu";
 import {
 	formatStringArrayParam,
 	parseStringArrayParam,
@@ -388,6 +388,20 @@ function StatsScopeControls({
 	tags: Array<{ id: string; name: string }> | undefined;
 	setParams: (updates: Record<string, string | undefined>) => void;
 }) {
+	const chips = buildFilterChips({
+		q,
+		categoryId,
+		accountId,
+		currencyIds,
+		tagIds,
+		uncategorized,
+		dateRange: undefined,
+		categories,
+		accounts,
+		tags,
+		setParams,
+	});
+
 	return (
 		<div className="space-y-2">
 			<Input
@@ -398,54 +412,25 @@ function StatsScopeControls({
 				value={q}
 				onChange={(e) => setParams({ q: e.currentTarget.value || undefined })}
 			/>
-			<div className="grid gap-2 sm:grid-cols-3">
-				<CategoryCombobox
-					size="sm"
-					className="min-w-0"
-					value={uncategorized ? "__uncat__" : categoryId}
-					onChange={(nextValue) => {
-						if (nextValue === "__uncat__") {
-							setParams({ cat: undefined, uncat: "1" });
-							return;
-						}
-						setParams({ cat: nextValue || undefined, uncat: undefined });
-					}}
-					placeholder="all categories"
-					items={[
-						{ id: "", value: "", label: "all categories" },
-						{ id: "__uncat__", value: "__uncat__", label: "uncategorized" },
-						...(categories?.map((category) => ({
-							id: category.id,
-							value: category.id,
-							label: category.name,
-						})) ?? []),
-					]}
-				/>
-				<AccountFilterCombobox
-					value={accountId}
+			<div className="flex flex-wrap items-center gap-1.5">
+				<TransactionFilterUnstableCombobox
+					categoryId={categoryId}
+					accountId={accountId}
+					currencyIds={currencyIds}
+					tagIds={tagIds}
+					uncategorized={uncategorized}
+					dateRange={undefined}
+					categories={categories}
 					accounts={accounts}
-					onChange={(nextValue) => setParams({ acc: nextValue || undefined })}
-				/>
-				<CurrencyMultiCombobox
 					currencies={currencies}
-					value={currencyIds}
-					onChange={(nextCurrencyIds) =>
-						setParams({ cur: formatStringArrayParam(nextCurrencyIds) })
-					}
-					placeholder="all currencies"
-					size="sm"
+					tags={tags}
+					setParams={setParams}
+					includeDate={false}
+					triggerLabel="add filter"
 				/>
-			</div>
-			<div>
-				<TagMultiCombobox
-					items={tags ?? []}
-					value={tagIds}
-					onChange={(nextTagIds) =>
-						setParams({ tags: formatStringArrayParam(nextTagIds) })
-					}
-					placeholder="filter by tag..."
-					size="sm"
-				/>
+				{chips.map((chip) => (
+					<FilterChip key={chip.key} chip={chip} />
+				))}
 			</div>
 			{hasScope && (
 				<button
@@ -466,91 +451,5 @@ function StatsScopeControls({
 				</button>
 			)}
 		</div>
-	);
-}
-
-type AccountFilterItem = {
-	value: string;
-	label: string;
-	currency?: string;
-};
-
-function AccountFilterCombobox({
-	value,
-	accounts,
-	onChange,
-}: {
-	value: string;
-	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
-	onChange: (value: string) => void;
-}) {
-	const items = useMemo<AccountFilterItem[]>(
-		() => [
-			{
-				value: "__all__",
-				label: "all accounts",
-			},
-			...(accounts ?? []).map((account) => ({
-				value: account.id,
-				label: account.name,
-				currency: account.currency,
-			})),
-		],
-		[accounts],
-	);
-
-	const selectedItem =
-		items.find((item) => item.value === (value || "__all__")) ?? items[0];
-
-	return (
-		<Combobox.Root
-			items={items}
-			value={selectedItem}
-			onValueChange={(next) => {
-				if (!next || next.value === "__all__") {
-					onChange("");
-					return;
-				}
-				onChange(next.value);
-			}}
-			itemToStringLabel={(item) => item.label}
-			isItemEqualToValue={(item, selected) => item.value === selected.value}
-			autoHighlight
-		>
-			<Combobox.Trigger<AccountFilterItem, AccountFilterItem | null>
-				className="focus field-trigger data-[disabled]:opacity-60 flex h-9 min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm"
-			>
-				{({ selectedValue }) => (
-					<>
-						<span className="truncate text-gray-12">
-							{selectedValue?.label ?? "all accounts"}
-						</span>
-						<Combobox.Icon className="text-gray-10 flex shrink-0">
-							<IconChevronsUpDown />
-						</Combobox.Icon>
-					</>
-				)}
-			</Combobox.Trigger>
-			<Combobox.Content
-				searchPlaceholder="search accounts..."
-				empty="No accounts found."
-				size="sm"
-			>
-				<Combobox.List<AccountFilterItem>>
-					{(item) => (
-						<Combobox.Item key={item.value} value={item} size="sm">
-							<div className="flex w-full items-center justify-between gap-2">
-								<span className="truncate">{item.label}</span>
-								{item.currency ? (
-									<span className="shrink-0 text-xs text-gray-10">
-										{item.currency}
-									</span>
-								) : null}
-							</div>
-						</Combobox.Item>
-					)}
-				</Combobox.List>
-			</Combobox.Content>
-		</Combobox.Root>
 	);
 }
