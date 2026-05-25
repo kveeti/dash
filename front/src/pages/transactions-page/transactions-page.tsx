@@ -14,38 +14,23 @@ import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
 import {
 	Fragment,
-	useMemo,
 	useRef,
-	useState,
 	type MouseEvent,
 	type Ref,
 } from "react";
 import { Button, buttonStyles } from "../../components/button";
-import { Input } from "../../components/input";
-import { CategoryCombobox } from "../../components/category-combobox";
-import { IconChevronsUpDown } from "../../components/icons/chevrons-up-down";
-import { DateRangePickerInput } from "../../components/date-picker";
 import { useTransactionWindows } from "../../components/transaction-windows";
 import { FastLink } from "../../components/link";
 import {
 	formatStringArrayParam,
 	parseStringArrayParam,
 } from "../../lib/string-array-param";
-import { TagMultiCombobox } from "../../components/tag-combobox";
-import { CurrencyMultiCombobox } from "../../components/currency-multi-combobox";
 import {
-	TransactionFilterMenu,
 	TransactionFilterUnstableCombobox,
 	buildFilterChips,
 	FilterChip,
 	SortMenu,
 } from "../../components/transaction-filter-menu";
-import {
-	localSearchSource,
-	UnstableCombobox,
-	type UnstableComboboxConfig,
-	type UnstableComboboxItem,
-} from "../../components/unstable-combobox";
 import { useCommandPalette } from "../../components/command-palette-context";
 import { useTransactionSelection } from "../../components/transaction-selection-context";
 
@@ -233,7 +218,6 @@ export function TransactionsPage() {
 	const selection = useTransactionSelection();
 	const { openTransaction } = useTransactionWindows();
 	const scrolledForCursor = useRef<string | null>(null);
-	const [showFilters, setShowFilters] = useState(hasFilters);
 	const dateSorted = isDateSort(sort);
 	const hideAccount = !!accountId || accounts.data?.length === 1;
 	const hideCategory = !!categoryId;
@@ -278,36 +262,10 @@ export function TransactionsPage() {
 						>
 							Stats
 						</FastLink>
-						<button
-							type="button"
-							className={
-								"focus h-7 rounded-md px-2.5 text-[12px] transition-colors " +
-								(showFilters || hasFilters
-									? "bg-gray-a3 text-gray-12"
-									: "text-gray-11 hover:text-gray-12 hover:bg-gray-a2")
-							}
-							onClick={() => setShowFilters((v) => !v)}
-						>
-							{hasFilters ? "Filters · on" : "Filters"}
-						</button>
 					</div>
 				</div>
 
 				<div className="hidden sm:flex mt-3 flex-wrap items-center gap-1.5">
-					<TransactionFilterMenu
-						categoryId={categoryId}
-						accountId={accountId}
-						currencyIds={currencyIds}
-						tagIds={tagIds}
-						uncategorized={uncategorized}
-						dateRange={dateRange}
-						categories={categories.data}
-						accounts={accounts.data}
-						currencies={currencies.data}
-						tags={tags.data}
-						setParams={setParams}
-						onRequestCustomDate={() => setShowFilters(true)}
-					/>
 					<TransactionFilterUnstableCombobox
 						categoryId={categoryId}
 						accountId={accountId}
@@ -328,26 +286,6 @@ export function TransactionsPage() {
 						<SortMenu sort={sort} setParams={setParams} />
 					</div>
 				</div>
-
-				{showFilters && (
-					<div className="hidden sm:block mt-3 space-y-2">
-						<FilterControls
-							q={q}
-							categoryId={categoryId}
-							accountId={accountId}
-							currencyIds={currencyIds}
-							tagIds={tagIds}
-							uncategorized={uncategorized}
-							dateRange={dateRange}
-							hasFilters={hasFilters}
-							categories={categories.data}
-							accounts={accounts.data}
-							currencies={currencies.data}
-							tags={tags.data}
-							setParams={setParams}
-						/>
-					</div>
-				)}
 
 				<ul className="mt-4">
 					{transactionsQuery.data?.transactions.map((tx, i) => {
@@ -406,13 +344,7 @@ export function TransactionsPage() {
 			<div
 				className={
 					"fixed right-0 left-0 max-w-[35rem] mx-auto z-40 pointer-events-none" +
-					(selection.isSelecting && showFilters
-						? " bottom-52 sm:bottom-12"
-						: selection.isSelecting
-							? " bottom-32 sm:bottom-12"
-							: showFilters
-								? " bottom-52 sm:bottom-0"
-								: " bottom-16 sm:bottom-0")
+					(selection.isSelecting ? " bottom-32 sm:bottom-12" : " bottom-16 sm:bottom-0")
 				}
 			>
 				<div className="flex justify-end pb-4">
@@ -434,10 +366,6 @@ export function TransactionsPage() {
 			</div>
 
 			<MobileFilterBar
-				showFilters={showFilters}
-				setShowFilters={setShowFilters}
-				hasFilters={hasFilters}
-				statsHref={statsHref}
 				q={q}
 				categoryId={categoryId}
 				accountId={accountId}
@@ -737,240 +665,7 @@ function TxRow({
 	);
 }
 
-function FilterControls({
-	q,
-	categoryId,
-	accountId,
-	currencyIds,
-	tagIds,
-	uncategorized,
-	dateRange,
-	hasFilters,
-	categories,
-	accounts,
-	currencies,
-	tags,
-	setParams,
-}: {
-	q: string;
-	categoryId: string;
-	accountId: string;
-	currencyIds: string[];
-	tagIds: string[];
-	uncategorized: boolean;
-	dateRange: DateRangeFilter | undefined;
-	hasFilters: boolean;
-	categories: Array<{ id: string; name: string }> | undefined;
-	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
-	currencies: string[] | undefined;
-	tags: Array<{ id: string; name: string }> | undefined;
-	setParams: (updates: Record<string, string | undefined>) => void;
-}) {
-	return (
-		<div className="space-y-2">
-			<Input
-				size="sm"
-				type="text"
-				placeholder="search..."
-				autoComplete="off"
-				value={q}
-				onChange={(e) => setParams({ q: e.currentTarget.value || undefined })}
-			/>
-			<div className="flex items-end gap-2">
-				<div className="flex-1 min-w-0 text-xs font-mono">
-					<DateRangePickerInput
-						label="date"
-						size="sm"
-						value={dateRange}
-						showWeekNumbers
-						onChange={(nextRange) =>
-							setParams({ from: nextRange.from, to: nextRange.to })
-						}
-					/>
-				</div>
-				{dateRange && (
-					<button
-						type="button"
-						className="h-8 shrink-0 px-2 text-xs text-gray-10 hover:text-gray-12"
-						onClick={() => setParams({ from: undefined, to: undefined })}
-					>
-						clear
-					</button>
-				)}
-			</div>
-			<div className="flex gap-2">
-				<AccountFilterCombobox
-					value={accountId}
-					accounts={accounts}
-					onChange={(nextValue) =>
-						setParams({ acc: nextValue || undefined })
-					}
-				/>
-				<CategoryCombobox
-					size="sm"
-					className="flex-1 min-w-0"
-					value={uncategorized ? "__uncat__" : categoryId}
-					onChange={(nextValue) => {
-						if (nextValue === "__uncat__") {
-							setParams({ cat: undefined, uncat: "1" });
-							return;
-						}
-						setParams({ cat: nextValue || undefined, uncat: undefined });
-					}}
-					placeholder="all categories"
-					items={[
-						{ id: "", value: "", label: "all categories" },
-						{ id: "__uncat__", value: "__uncat__", label: "uncategorized" },
-						...(categories?.map((category) => ({
-							id: category.id,
-							value: category.id,
-							label: category.name,
-						})) ?? []),
-					]}
-				/>
-			</div>
-
-			<div>
-				<TagMultiCombobox
-					items={tags ?? []}
-					value={tagIds}
-					onChange={(nextTagIds) =>
-						setParams({ tags: formatStringArrayParam(nextTagIds) })
-					}
-					placeholder="filter by tag..."
-					size="sm"
-				/>
-			</div>
-
-			<div>
-				<CurrencyMultiCombobox
-					currencies={currencies}
-					value={currencyIds}
-					onChange={(nextCurrencyIds) =>
-						setParams({ cur: formatStringArrayParam(nextCurrencyIds) })
-					}
-					placeholder="all currencies"
-					size="sm"
-				/>
-			</div>
-			{hasFilters && (
-				<button
-					type="button"
-					className="text-xs text-gray-10 hover:text-gray-12 underline"
-					onClick={() =>
-						setParams({
-							q: undefined,
-							cat: undefined,
-							acc: undefined,
-							cur: undefined,
-							tags: undefined,
-							uncat: undefined,
-							from: undefined,
-							to: undefined,
-						})
-					}
-				>
-					clear all
-				</button>
-			)}
-		</div>
-	);
-}
-
-type AccountFilterItem = {
-	value: string;
-	label: string;
-	currency?: string;
-};
-
-function AccountFilterCombobox({
-	value,
-	accounts,
-	onChange,
-}: {
-	value: string;
-	accounts: Array<{ id: string; name: string; currency: string }> | undefined;
-	onChange: (value: string) => void;
-}) {
-	const items = useMemo<AccountFilterItem[]>(
-		() => [
-			{
-				value: "__all__",
-				label: "all accounts",
-			},
-			...(accounts ?? []).map((account) => ({
-				value: account.id,
-				label: account.name,
-				currency: account.currency,
-			})),
-		],
-		[accounts],
-	);
-
-	const selectedItem =
-		items.find((item) => item.value === (value || "__all__")) ?? items[0];
-	const config = useMemo<UnstableComboboxConfig>(() => {
-		const accountItems = items.map<UnstableComboboxItem>((item) => ({
-			id: `account:${item.value}`,
-			label: item.label,
-			textValue: item.label,
-			description: item.currency,
-			keywords: item.currency ? [item.currency] : undefined,
-			checked: item.value === selectedItem?.value,
-			onSelect: ({ close }) => {
-				onChange(item.value === "__all__" ? "" : item.value);
-				close();
-			},
-		}));
-
-		return {
-			rootPageId: "root",
-			pages: {
-				root: {
-					id: "root",
-					title: "account",
-					placeholder: "search accounts...",
-					empty: "No accounts found.",
-					items: accountItems,
-					search: {
-						sources: [
-							localSearchSource({ id: "accounts", items: accountItems }),
-						],
-					},
-				},
-			},
-		};
-	}, [items, onChange, selectedItem?.value]);
-
-	return (
-		<UnstableCombobox
-			className="flex-1 min-w-0"
-			config={config}
-			trigger={({ open }) => (
-				<button
-					type="button"
-					className={
-						"focus field-trigger flex h-9 w-full min-w-0 items-center justify-between gap-2 overflow-hidden pl-2.5 pr-2 text-sm" +
-						(open ? " border-gray-a5 bg-gray-a2" : "")
-					}
-				>
-					<span className="truncate text-gray-12">
-						{selectedItem?.label ?? "all accounts"}
-					</span>
-					<span className="text-gray-10 flex shrink-0">
-						<IconChevronsUpDown />
-					</span>
-				</button>
-			)}
-		/>
-	);
-}
-
 function MobileFilterBar({
-	showFilters,
-	setShowFilters,
-	hasFilters,
-	statsHref,
 	q,
 	categoryId,
 	accountId,
@@ -984,10 +679,6 @@ function MobileFilterBar({
 	tags,
 	setParams,
 }: {
-	showFilters: boolean;
-	setShowFilters: (v: boolean) => void;
-	hasFilters: boolean;
-	statsHref: string;
 	q: string;
 	categoryId: string;
 	accountId: string;
@@ -1018,74 +709,24 @@ function MobileFilterBar({
 	return (
 		<div className="fixed bottom-10 left-0 right-0 z-40 sm:hidden">
 			<div className="mx-auto max-w-[35rem] px-3">
-				{showFilters && (
-					<div className="space-y-2 border border-b-0 border-gray-a4 bg-gray-2 px-3 py-3">
-						<Input
-							size="sm"
-							type="text"
-							placeholder="search..."
-							autoComplete="off"
-							value={q}
-							onChange={(e) =>
-								setParams({ q: e.currentTarget.value || undefined })
-							}
-						/>
-						<div className="flex flex-wrap items-center gap-1.5">
-							<TransactionFilterMenu
-								categoryId={categoryId}
-								accountId={accountId}
-								currencyIds={currencyIds}
-								tagIds={tagIds}
-								uncategorized={uncategorized}
-								dateRange={dateRange}
-								categories={categories}
-								accounts={accounts}
-								currencies={currencies}
-								tags={tags}
-								setParams={setParams}
-							/>
-							{chips.map((chip) => (
-								<FilterChip key={chip.key} chip={chip} />
-							))}
-						</div>
-						{hasFilters && (
-							<button
-								type="button"
-								className="text-xs text-gray-10 hover:text-gray-12 underline"
-								onClick={() =>
-									setParams({
-										q: undefined,
-										cat: undefined,
-										acc: undefined,
-										cur: undefined,
-										tags: undefined,
-										uncat: undefined,
-										from: undefined,
-										to: undefined,
-									})
-								}
-							>
-								clear all
-							</button>
-						)}
-					</div>
-				)}
-				<button
-					type="button"
-					className={
-						"w-full border border-gray-a4 bg-gray-2 px-3 py-2 text-xs text-left" +
-						(hasFilters ? " text-gray-12" : " text-gray-10")
-					}
-					onClick={() => setShowFilters(!showFilters)}
-				>
-					{hasFilters ? "filters (on)" : "filters"}
-				</button>
-				<FastLink
-					href={statsHref}
-					className="block w-full border-x border-b border-gray-a4 bg-gray-2 px-3 py-2 text-xs text-gray-11"
-				>
-					stats for scope
-				</FastLink>
+				<div className="flex flex-wrap items-center gap-1.5 border border-gray-a4 bg-gray-2 px-3 py-2">
+					<TransactionFilterUnstableCombobox
+						categoryId={categoryId}
+						accountId={accountId}
+						currencyIds={currencyIds}
+						tagIds={tagIds}
+						uncategorized={uncategorized}
+						dateRange={dateRange}
+						categories={categories}
+						accounts={accounts}
+						currencies={currencies}
+						tags={tags}
+						setParams={setParams}
+					/>
+					{chips.map((chip) => (
+						<FilterChip key={chip.key} chip={chip} />
+					))}
+				</div>
 			</div>
 		</div>
 	);

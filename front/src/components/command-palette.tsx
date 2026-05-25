@@ -603,7 +603,7 @@ function CommandPaletteV2({
 				placeholder="Type a command or search..."
 				empty="No results"
 				config={config}
-				dialogClassName="sm:left-1/2 sm:right-auto sm:top-[14vh] sm:w-[calc(100vw-1rem)] sm:max-w-[32rem] sm:-translate-x-1/2"
+				dialogClassName="sm:left-1/2 sm:right-auto sm:top-[14vh] sm:w-[calc(100vw-1rem)] sm:max-w-[32rem] sm:-translate-x-1/2 sm:translate-y-0"
 				trigger={({ open }) => (
 					<button
 						type="button"
