@@ -2,18 +2,13 @@ import { useSearchParams, useLocation } from "wouter";
 import { useI18n } from "../../providers";
 import {
 	useTransactionsQuery,
-	useBulkSetCategoryMutation,
 	useTransactionCurrenciesQuery,
 	type TransactionRow,
 	type TransactionSort,
 } from "../../lib/queries/transactions";
 import { useCategoryOptionsQuery } from "../../lib/queries/categories";
 import { useAccountsQuery } from "../../lib/queries/accounts";
-import {
-	useBulkAddTransactionTagMutation,
-	useBulkRemoveTransactionTagMutation,
-	useTagOptionsQuery,
-} from "../../lib/queries/tags";
+import { useTagOptionsQuery } from "../../lib/queries/tags";
 import type { TransactionFilters } from "../../lib/queries/query-keys";
 import { Empty } from "../../components/empty";
 import { Pagination, buildPaginatedHref } from "../../components/pagination";
@@ -51,6 +46,8 @@ import {
 	type UnstableComboboxConfig,
 	type UnstableComboboxItem,
 } from "../../components/unstable-combobox";
+import { useCommandPalette } from "../../components/command-palette-context";
+import { useTransactionSelection } from "../../components/transaction-selection-context";
 
 type DateRangeFilter = {
 	from: string;
@@ -201,26 +198,6 @@ function useFilterParams() {
 	};
 }
 
-function useSelection() {
-	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-	function toggle(txId: string) {
-		setSelectedIds((prev) => {
-			const next = new Set(prev);
-			if (next.has(txId)) next.delete(txId);
-			else next.add(txId);
-			return next;
-		});
-	}
-
-	function clear() {
-		setSelectedIds(new Set());
-	}
-
-	return { selectedIds, toggle, clear, isSelecting: selectedIds.size > 0 };
-}
-
-
 export function TransactionsPage() {
 	const {
 		left,
@@ -253,7 +230,7 @@ export function TransactionsPage() {
 	const currencies = useTransactionCurrenciesQuery();
 	const tags = useTagOptionsQuery();
 
-	const selection = useSelection();
+	const selection = useTransactionSelection();
 	const { openTransaction } = useTransactionWindows();
 	const scrolledForCursor = useRef<string | null>(null);
 	const [showFilters, setShowFilters] = useState(hasFilters);
@@ -1121,113 +1098,20 @@ function BulkEditBar({
 	selectedIds: Set<string>;
 	onClear: () => void;
 }) {
-	const categories = useCategoryOptionsQuery();
-	const tags = useTagOptionsQuery();
-	const bulkSetCategory = useBulkSetCategoryMutation();
-	const bulkAddTag = useBulkAddTransactionTagMutation();
-	const bulkRemoveTag = useBulkRemoveTransactionTagMutation();
-	const [categoryId, setCategoryId] = useState("");
-	const [tagIds, setTagIds] = useState<string[]>([]);
-
-	async function handleApply() {
-		if (bulkSetCategory.isPending) return;
-		await bulkSetCategory.mutateAsync({
-			txIds: [...selectedIds],
-			categoryId: categoryId || null,
-		});
-		onClear();
-	}
-
-	async function handleAddTag() {
-		if (bulkAddTag.isPending) return;
-		if (!tagIds.length) return;
-		await Promise.all(
-			tagIds.map((tagId) =>
-				bulkAddTag.mutateAsync({
-					txIds: [...selectedIds],
-					tagId,
-				}),
-			),
-		);
-		setTagIds([]);
-		onClear();
-	}
-
-	async function handleRemoveTag() {
-		if (bulkRemoveTag.isPending) return;
-		if (!tagIds.length) return;
-		await Promise.all(
-			tagIds.map((tagId) =>
-				bulkRemoveTag.mutateAsync({
-					txIds: [...selectedIds],
-					tagId,
-				}),
-			),
-		);
-		setTagIds([]);
-		onClear();
-	}
+	const { openCommandPalette } = useCommandPalette();
 
 	return (
 		<div className="fixed bottom-4 left-0 right-0 z-30 px-4">
-			<div className="mx-auto max-w-[35rem] rounded-lg border border-gray-a4 bg-gray-1 px-3 py-2.5 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.2),0_4px_12px_-4px_rgba(0,0,0,0.08)] dark:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6),0_4px_12px_-4px_rgba(0,0,0,0.4)] space-y-2">
-				<div className="flex items-center gap-2">
-					<span className="text-[12px] shrink-0 text-gray-11 num">{selectedIds.size} selected</span>
-
-					<CategoryCombobox
-						size="sm"
-						className="flex-1 min-w-0"
-						value={categoryId}
-						onChange={setCategoryId}
-						creatable
-						placeholder="select category..."
-						items={
-							categories.data?.map((category) => ({
-								id: category.id,
-								value: category.id,
-								label: category.name,
-							})) ?? []
-						}
-					/>
-
-					<Button
-						size="sm"
-						onClick={handleApply}
-					>
-						apply
-					</Button>
-					<Button size="sm" variant="ghost" onClick={onClear}>
-						cancel
-					</Button>
-				</div>
-				<div className="flex items-center gap-2">
-					<div className="min-w-0 flex-1">
-						<TagMultiCombobox
-							items={tags.data ?? []}
-							value={tagIds}
-							onChange={setTagIds}
-							placeholder="select tags..."
-							size="sm"
-							creatable
-						/>
-					</div>
-					<Button
-						size="sm"
-						variant="ghost"
-						onClick={handleAddTag}
-						disabled={!tagIds.length}
-					>
-						add tags
-					</Button>
-					<Button
-						size="sm"
-						variant="ghost"
-						onClick={handleRemoveTag}
-						disabled={!tagIds.length}
-					>
-						remove
-					</Button>
-				</div>
+			<div className="mx-auto flex max-w-[35rem] items-center gap-2 rounded-lg border border-gray-a4 bg-gray-1 px-3 py-2.5 shadow-[0_12px_32px_-8px_rgba(0,0,0,0.2),0_4px_12px_-4px_rgba(0,0,0,0.08)] dark:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.6),0_4px_12px_-4px_rgba(0,0,0,0.4)]">
+				<span className="min-w-0 flex-1 text-[12px] text-gray-11 num">
+					{selectedIds.size} selected
+				</span>
+				<Button size="sm" onClick={openCommandPalette}>
+					actions
+				</Button>
+				<Button size="sm" variant="ghost" onClick={onClear}>
+					cancel
+				</Button>
 			</div>
 		</div>
 	);

@@ -895,6 +895,54 @@ export async function getOneTransaction(
 	return foldTransactionDetails(rows);
 }
 
+type RawTransactionBulkEditRow = {
+	id: string;
+	category_id: string | null;
+	tag_id: string | null;
+	tag_name: string | null;
+};
+
+export async function listTransactionBulkEditRows(
+	db: DbHandle,
+	txIds: string[],
+): Promise<TransactionBulkEditRow[]> {
+	const uniqueIds = Array.from(new Set(txIds)).filter(Boolean);
+	if (!uniqueIds.length) return [];
+
+	const placeholders = uniqueIds.map(() => "?").join(", ");
+	const rows = await db.query<RawTransactionBulkEditRow>(
+		`select
+			t.id,
+			t.category_id,
+			tag.id as tag_id,
+			tag.name as tag_name
+		from transactions t
+		left join transaction_tags tt
+			on tt.transaction_id = t.id
+			and tt._sync_is_deleted = 0
+		left join tags tag
+			on tag.id = tt.tag_id
+			and tag._sync_is_deleted = 0
+		where t._sync_is_deleted = 0
+			and t.id in (${placeholders})
+		order by t.id asc, lower(tag.name) asc, tag.id asc`,
+		uniqueIds,
+	);
+
+	const transactions: TransactionBulkEditRow[] = [];
+	const byId = new Map<string, TransactionBulkEditRow>();
+	for (const row of rows) {
+		let transaction = byId.get(row.id);
+		if (!transaction) {
+			transaction = { id: row.id, category_id: row.category_id, tags: [] };
+			byId.set(row.id, transaction);
+			transactions.push(transaction);
+		}
+		appendJoinedTag(transaction.tags, row);
+	}
+	return transactions;
+}
+
 export type TransactionsResult = {
 	transactions: TransactionRow[];
 	next_id: string | null;
@@ -936,6 +984,12 @@ export type TransactionDetails = TransactionWithConvertedAmount & {
 	category_id: string | null;
 	account_id: string;
 	account_name: string;
+	tags: TransactionTag[];
+};
+
+export type TransactionBulkEditRow = {
+	id: string;
+	category_id: string | null;
 	tags: TransactionTag[];
 };
 
@@ -2357,5 +2411,40 @@ export async function bulkSetTransactionCategory(
 			where id in (${placeholders})`,
 			[categoryId, now, Date.now(), ...txIds],
 		);
+	});
+}
+
+export async function bulkDeleteTransactions(
+	db: DbHandle,
+	txIds: string[],
+) {
+	const uniqueIds = Array.from(new Set(txIds)).filter(Boolean);
+	if (!uniqueIds.length) return;
+
+	await db.withTx(async (txDb) => {
+		const now = new Date().toISOString();
+		const editedAt = Date.now();
+		const placeholders = uniqueIds.map(() => "?").join(", ");
+		await txDb.exec(
+			`update transactions set
+				_sync_is_deleted = 1,
+				updated_at = ?,
+				_sync_status = 1,
+				_sync_edited_at = ?
+			where id in (${placeholders})`,
+			[now, editedAt, ...uniqueIds],
+		);
+		await txDb.exec(
+			`update transaction_flows set
+				_sync_is_deleted = 1,
+				updated_at = ?,
+				_sync_status = 1,
+				_sync_edited_at = ?
+			where (from_transaction_id in (${placeholders})
+				or to_transaction_id in (${placeholders}))
+				and _sync_is_deleted = 0`,
+			[now, editedAt, ...uniqueIds, ...uniqueIds],
+		);
+		await refreshTransactionSearchDocs(txDb, uniqueIds);
 	});
 }

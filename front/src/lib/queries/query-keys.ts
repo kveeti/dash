@@ -54,6 +54,8 @@ export const queryKeys = {
 			cursor?.right,
 		] as const,
 	transaction: (id?: string) => [...queryKeyRoots.transaction, id] as const,
+	transactionBulkEdit: (ids: string[]) =>
+		[...queryKeyRoots.transactions, "bulk-edit", ids.join(",")] as const,
 	transactionFlows: (id?: string) => [...queryKeyRoots.transactionFlows, id] as const,
 	transactionLinkSuggestions: (id?: string) =>
 		[...queryKeyRoots.transactionLinkSuggestions, id] as const,

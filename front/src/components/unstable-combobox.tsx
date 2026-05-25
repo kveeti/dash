@@ -68,7 +68,7 @@ export type UnstableComboboxItem = {
 	icon?: ReactNode;
 	end?: ReactNode;
 	disabled?: boolean;
-	checked?: boolean;
+	checked?: boolean | "mixed";
 	multi?: boolean;
 	pageId?: string;
 	children?: UnstableComboboxNode[];
@@ -208,6 +208,7 @@ type Page = {
 type PageStackEntry = {
 	id: string;
 	page?: Page;
+	restoreItemId?: string;
 };
 
 type Row =
@@ -375,6 +376,11 @@ function getFocusableRowIndexes(rows: Row[]) {
 		last = index;
 	}
 	return { first, last };
+}
+
+function getItemRowIndex(rows: Row[], itemId: string | undefined) {
+	if (!itemId) return -1;
+	return rows.findIndex((row) => row.type === "item" && row.item.id === itemId);
 }
 
 function getRowOffsets(rows: Row[], itemSize: number) {
@@ -1192,6 +1198,7 @@ function ComboboxActionItem({
 
 	return (
 		<Ariakit.ComboboxItem
+			id={mobile ? item.id : undefined}
 			store={combobox}
 			value={getSearchText(item)}
 			focusOnHover
@@ -1233,21 +1240,24 @@ function ItemContent({
 	trailing?: ReactNode;
 }) {
 	if (item.render) return item.render(item);
+	const checked = item.checked === true;
+	const mixed = item.checked === "mixed";
 	return (
 		<>
 			{item.multi && (
 				<span
 					className="-my-2 -ml-2 flex size-8 shrink-0 items-center justify-center"
 					role="checkbox"
-					aria-checked={!!item.checked}
-					aria-label={`${item.checked ? "Remove" : "Select"} ${getItemText(item)}`}
+					aria-checked={mixed ? "mixed" : checked}
+					aria-label={`${checked ? "Remove" : "Select"} ${getItemText(item)}`}
 					onClick={onCheckboxClick}
 				>
 					<span
 						className="border-gray-a5 bg-gray-2 flex size-4 items-center justify-center border"
 						aria-hidden
 					>
-						{item.checked && <IconCheck />}
+						{checked && <IconCheck />}
+						{mixed && <span className="h-px w-2 bg-gray-11" />}
 					</span>
 				</span>
 			)}
@@ -1264,7 +1274,7 @@ function ItemContent({
 				</span>
 			)}
 			{item.end}
-			{!item.multi && item.checked && (
+			{!item.multi && checked && (
 				<span className="shrink-0 text-gray-11">
 					<IconCheck />
 				</span>
@@ -1316,6 +1326,7 @@ function EmptyState({
 }
 
 function VirtualRows({
+	activeItemId,
 	children,
 	combobox,
 	itemSize,
@@ -1323,6 +1334,7 @@ function VirtualRows({
 	overscan,
 	rows,
 }: {
+	activeItemId?: string;
 	children: (row: Row, rowProps: VirtualRowProps) => ReactNode;
 	combobox: Ariakit.ComboboxStore;
 	itemSize: number;
@@ -1333,6 +1345,10 @@ function VirtualRows({
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const id = useId();
 	const focusableIndexes = useMemo(() => getFocusableRowIndexes(rows), [rows]);
+	const activeItemIndex = useMemo(
+		() => getItemRowIndex(rows, activeItemId),
+		[activeItemId, rows],
+	);
 	const rowOffsets = useMemo(() => getRowOffsets(rows, itemSize), [itemSize, rows]);
 	const groupRanges = useMemo(() => getRowGroupRanges(rows), [rows]);
 	const virtualizer = useVirtualizer({
@@ -1346,12 +1362,19 @@ function VirtualRows({
 			const indexes = defaultRangeExtractor(range);
 			if (focusableIndexes.first !== -1) indexes.push(focusableIndexes.first);
 			if (focusableIndexes.last !== -1) indexes.push(focusableIndexes.last);
+			if (activeItemIndex !== -1) indexes.push(activeItemIndex);
 			return Array.from(new Set(indexes)).sort((a, b) => a - b);
 		},
 		overscan,
 		useFlushSync: false,
 	});
 	const virtualRows = virtualizer.getVirtualItems();
+
+	useLayoutEffect(() => {
+		if (activeItemIndex === -1) return;
+		virtualizer.scrollToIndex(activeItemIndex, { align: "auto" });
+	}, [activeItemIndex, virtualizer]);
+
 	const groupedVirtualRows = new Map<
 		number,
 		{ range: RowGroupRange; virtualRows: typeof virtualRows }
@@ -1501,14 +1524,16 @@ function MobileCombobox({
 	const dialog = Ariakit.useDialogStore({
 		open,
 		setOpen: (nextOpen) => {
-			if (nextOpen) setStack([{ id: rootPage.id }]);
+			setStack([{ id: rootPage.id }]);
 			onOpenChange(nextOpen);
 		},
 	});
 	const dialogOpen = Ariakit.useStoreState(dialog, "open");
+
 	const currentPageEntry = stack[stack.length - 1] ?? { id: rootPage.id };
+	const isRootPage = currentPageEntry.id === rootPage.id;
 	const currentPage =
-		currentPageEntry.id === rootPage.id
+		isRootPage
 			? rootPage
 			: pages?.[currentPageEntry.id]
 				? pageFromConfigPage(pages[currentPageEntry.id], {
@@ -1545,21 +1570,32 @@ function MobileCombobox({
 				}
 			>
 				<MobilePage
+					key={currentPage.id}
 					close={close}
 					filter={filter}
+					isRootPage={isRootPage}
 					itemSize={itemSize}
 					onBack={
 						stack.length > 1
 							? () => setStack((pages) => pages.slice(0, -1))
 							: undefined
 					}
-					onPush={(nextPage) =>
-						setStack((stack) => [...stack, { id: nextPage.id, page: nextPage }])
+					onPush={(nextPage, fromItemId) =>
+						setStack((stack) => {
+							const current = stack[stack.length - 1];
+							if (!current) return [{ id: nextPage.id, page: nextPage }];
+							return [
+								...stack.slice(0, -1),
+								{ ...current, restoreItemId: fromItemId },
+								{ id: nextPage.id, page: nextPage },
+							];
+						})
 					}
 					onSearchChange={onSearchChange}
 					overscan={overscan}
 					page={currentPage}
 					pages={pages}
+					restoreItemId={currentPageEntry.restoreItemId}
 				/>
 			</Ariakit.Dialog>
 		</>
@@ -1569,6 +1605,7 @@ function MobileCombobox({
 function MobilePage({
 	close,
 	filter,
+	isRootPage,
 	itemSize,
 	onBack,
 	onPush,
@@ -1576,16 +1613,19 @@ function MobilePage({
 	overscan,
 	page,
 	pages,
+	restoreItemId,
 }: {
 	close: () => void;
 	filter: NonNullable<BaseProps["filter"]>;
+	isRootPage: boolean;
 	itemSize: number;
 	onBack?: () => void;
-	onPush: (page: Page) => void;
+	onPush: (page: Page, fromItemId: string) => void;
 	onSearchChange?: BaseProps["onSearchChange"];
 	overscan: number;
 	page: Page;
 	pages?: Record<string, UnstableComboboxPage>;
+	restoreItemId?: string;
 }) {
 	const viewportHeight = useViewportHeight();
 	const bodyMaxHeight = Math.max(
@@ -1596,6 +1636,7 @@ function MobilePage({
 		),
 	);
 	const [query, setQuery] = useState("");
+	const rows = usePageRows({ filter, page, query });
 	const combobox = Ariakit.useComboboxStore({
 		includesBaseElement: false,
 		resetValueOnHide: true,
@@ -1607,7 +1648,10 @@ function MobilePage({
 			});
 		},
 	});
-	const rows = usePageRows({ filter, page, query });
+	const pagePlaceholder =
+		!isRootPage && getLabelText(page.title)
+			? getLabelText(page.title)
+			: page.placeholder;
 	const layout = getSurfaceLayout({
 		bodyMaxHeight,
 		itemSize,
@@ -1626,9 +1670,15 @@ function MobilePage({
 		<div className="flex min-h-0 flex-col">
 			<Ariakit.Combobox
 				store={combobox}
-				autoSelect
+				autoSelect="always"
 				autoFocus
-				placeholder={page.placeholder}
+				getAutoSelectId={(items) => {
+					if (!restoreItemId || query) return undefined;
+					return items.some((item) => item.id === restoreItemId)
+						? restoreItemId
+						: undefined;
+				}}
+				placeholder={pagePlaceholder}
 				className={inputClass}
 				onKeyDown={onInputKeyDown}
 			/>
@@ -1637,6 +1687,7 @@ function MobilePage({
 				transition={dialogBodyHeightTransition}
 			>
 				<VirtualRows
+					activeItemId={query ? undefined : restoreItemId}
 					combobox={combobox}
 					itemSize={itemSize}
 					listHeight={layout.listHeight}
@@ -1669,7 +1720,7 @@ function MobilePage({
 									combobox={combobox}
 									item={row.item}
 									mobile
-									onNavigate={() => onPush(targetPage)}
+									onNavigate={() => onPush(targetPage, row.item.id)}
 									rowProps={rowProps}
 								/>
 							);
@@ -1708,6 +1759,7 @@ function MobileActionItem({
 	const closeOnSelect = item.multi;
 	return (
 		<Ariakit.ComboboxItem
+			id={item.id}
 			store={combobox}
 			value={getSearchText(item)}
 			focusOnHover

@@ -9,6 +9,7 @@ import { useI18n } from "../../providers";
 import { useEncrypted } from "../../encrypted-context";
 import {
 	DEFAULT_TRANSACTIONS_LIMIT,
+	bulkDeleteTransactions,
 	bulkSetTransactionCategory,
 	createTransaction,
 	createTransactionFlow,
@@ -19,12 +20,14 @@ import {
 	listTransactionFlows,
 	listTransactionLinkSuggestionPage,
 	listTransactionLinkSuggestions,
+	listTransactionBulkEditRows,
 	listTransactions,
 	normalizeTransactionCursor,
 	normalizeTransactionSort,
 	updateTransaction,
 	updateTransactionQuickEdit,
 	type SuggestedTransactionFlow,
+	type TransactionBulkEditRow,
 	type TransactionCursorInput,
 	type TransactionDetails,
 	type TransactionFlow,
@@ -49,6 +52,7 @@ export type {
 	TransactionInput,
 	TransactionLinkSuggestion,
 	TransactionLinkSuggestionKind,
+	TransactionBulkEditRow,
 	TransactionLinkSuggestionPageResult,
 	TransactionRow,
 	TransactionSort,
@@ -100,6 +104,16 @@ export function useTransactionQuery(id: string | undefined) {
 		queryKey: queryKeys.transaction(id),
 		queryFn: () => getOneTransaction(db, id!),
 		enabled: !!id,
+	});
+}
+
+export function useTransactionBulkEditRowsQuery(txIds: string[]) {
+	const { db } = useEncrypted();
+	const sortedIds = Array.from(new Set(txIds)).filter(Boolean).sort();
+	return useQuery({
+		queryKey: queryKeys.transactionBulkEdit(sortedIds),
+		queryFn: () => listTransactionBulkEditRows(db, sortedIds),
+		enabled: sortedIds.length > 0,
 	});
 }
 
@@ -243,5 +257,14 @@ export function useBulkSetCategoryMutation() {
 			categoryId: string | null;
 		}) => bulkSetTransactionCategory(db, input),
 		onSuccess: () => invalidateTransactionQueries(qc),
+	});
+}
+
+export function useBulkDeleteTransactionsMutation() {
+	const { db } = useEncrypted();
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (txIds: string[]) => bulkDeleteTransactions(db, txIds),
+		onSuccess: () => invalidateFlowQueries(qc),
 	});
 }

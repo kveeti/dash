@@ -3,7 +3,9 @@ import type { ReactNode } from "react";
 import { Button } from "./components/button";
 import * as Dropdown from "./components/dropdown";
 import { FastLink, SlowLink } from "./components/link";
-import { CommandPaletteV2 } from "./components/command-palette";
+import { CommandPaletteProvider } from "./components/command-palette";
+import { useCommandPalette } from "./components/command-palette-context";
+import { TransactionSelectionProvider } from "./components/transaction-selection-provider";
 import { useRoute } from "wouter";
 import { useSync } from "./lib/sync";
 import { TransactionWindowsProvider } from "./components/transaction-windows";
@@ -13,9 +15,12 @@ export function Layout(props: { children: ReactNode }) {
 
   return (
     <TransactionWindowsProvider>
-      <Nav />
-      <CommandPaletteV2 />
-      <main className="pt-12 pb-10">{props.children}</main>
+      <TransactionSelectionProvider>
+        <CommandPaletteProvider>
+          <Nav />
+          <main className="pt-12 pb-10">{props.children}</main>
+        </CommandPaletteProvider>
+      </TransactionSelectionProvider>
     </TransactionWindowsProvider>
   );
 }
@@ -70,14 +75,12 @@ function Wordmark() {
 }
 
 function CommandPaletteHint() {
+  const { openCommandPalette } = useCommandPalette();
+
   return (
     <button
       type="button"
-      onClick={() => {
-        window.dispatchEvent(
-          new KeyboardEvent("keydown", { key: "k", metaKey: true }),
-        );
-      }}
+      onClick={openCommandPalette}
       className="focus border border-gray-a3 rounded-md hover:border-gray-a5 hover:bg-gray-a2 transition-colors hidden sm:flex h-7 items-center gap-2 pl-2.5 pr-1.5 text-[12px] text-gray-10"
       aria-label="Open command palette"
     >
