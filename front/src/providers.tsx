@@ -3,6 +3,7 @@ import {
 	QueryClient,
 	QueryClientProvider,
 } from "@tanstack/react-query";
+import { TooltipProvider } from "@ariakit/react/tooltip";
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { queryKeyRoots } from "./lib/queries/query-keys";
 import { normalizeCurrency } from "./lib/currency";
@@ -40,9 +41,11 @@ export function Providers(props: { children: ReactNode }) {
 	return (
 		<I18nProvider>
 			<QueryClientProvider client={queryClient}>
-				<EncryptedProvider>
-					{props.children}
-				</EncryptedProvider>
+				<TooltipProvider placement="top" showTimeout={250} hideTimeout={0}>
+					<EncryptedProvider>
+						{props.children}
+					</EncryptedProvider>
+				</TooltipProvider>
 			</QueryClientProvider>
 		</I18nProvider>
 	);

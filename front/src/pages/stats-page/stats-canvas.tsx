@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { Popover } from "radix-ui";
 import { useI18n } from "../../providers";
 import { Spinner } from "../../components/spinner";
 import { FastLink } from "../../components/link";
+import { AppTooltip } from "../../components/tooltip";
 import {
 	useConvertedStatTransactionsQuery,
 	useConvertedStatsSummaryQuery,
@@ -37,9 +37,6 @@ const COMPARES: { value: StatsCompareValue; label: string }[] = [
 	{ value: "year-over-year", label: "YoY" },
 	{ value: "none", label: "None" },
 ];
-
-const INCOME_COLUMN_MIN_SOURCES = 5;
-const INCOME_NOISE_RATIO = 0.01;
 
 type Props = {
 	reportingCurrency: string;
@@ -370,13 +367,22 @@ function Hero(props: {
 					{signed(totals.net, reportingCurrency, fAmount)}
 				</span>
 				<DeltaBadge value={netDelta} inverted={false} />
-				<span className="text-[11px] text-gray-10">{props.compareLabelText}</span>
+				<HeroCompareLabel
+					previousValue={
+						compareTotals ? signed(compareTotals.net, reportingCurrency, fAmount) : null
+					}
+				>
+					{props.compareLabelText}
+				</HeroCompareLabel>
 			</div>
 			<div className="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px] text-gray-11">
 				<SublineStat
 					label="in"
 					value={fAmount(totals.income, reportingCurrency)}
 					delta={incDelta}
+					previousValue={
+						compareTotals ? fAmount(compareTotals.income, reportingCurrency) : null
+					}
 					inverted={false}
 				/>
 				<span className="text-gray-a6">·</span>
@@ -384,6 +390,10 @@ function Hero(props: {
 					label="out"
 					value={fAmount(totals.expense, reportingCurrency)}
 					delta={expDelta}
+					previousValue={
+						compareTotals ? fAmount(compareTotals.expense, reportingCurrency) : null
+					}
+					tooltipPlacement="bottom"
 					inverted
 				/>
 				<span className="text-gray-a6">·</span>
@@ -391,6 +401,11 @@ function Hero(props: {
 					label="saved"
 					value={savingsRate == null ? "—" : `${(savingsRate * 100).toFixed(1)}%`}
 					delta={savingsRateDelta}
+					previousValue={
+						compareSavingsRate == null
+							? null
+							: `${(compareSavingsRate * 100).toFixed(1)}%`
+					}
 					inverted={false}
 					deltaUnit="pp"
 				/>
@@ -399,19 +414,80 @@ function Hero(props: {
 	);
 }
 
+function HeroCompareLabel({
+	children,
+	previousValue,
+}: {
+	children: React.ReactNode;
+	previousValue: string | null;
+}) {
+	if (!previousValue) {
+		return <span className="text-[11px] text-gray-10">{children}</span>;
+	}
+
+	return (
+		<PreviousValueTooltip
+			previousValue={previousValue}
+			className="text-[11px] text-gray-10"
+		>
+			{children}
+		</PreviousValueTooltip>
+	);
+}
+
 function SublineStat(props: {
 	label: string;
 	value: string;
 	delta: number | null;
+	previousValue: string | null;
 	inverted: boolean;
 	deltaUnit?: "%" | "pp";
+	tooltipPlacement?: "top" | "bottom";
 }) {
 	return (
 		<span className="flex items-baseline gap-1.5">
 			<span className="num text-gray-12">{props.value}</span>
 			<span className="text-gray-10">{props.label}</span>
-			<DeltaBadge value={props.delta} inverted={props.inverted} unit={props.deltaUnit} />
+			<PreviousValueTooltip
+				previousValue={props.previousValue}
+				placement={props.tooltipPlacement}
+			>
+				<DeltaBadge
+					value={props.delta}
+					inverted={props.inverted}
+					unit={props.deltaUnit}
+				/>
+			</PreviousValueTooltip>
 		</span>
+	);
+}
+
+function PreviousValueTooltip({
+	children,
+	previousValue,
+	className,
+	placement,
+}: {
+	children: React.ReactNode;
+	previousValue: string | null;
+	className?: string;
+	placement?: "top" | "bottom";
+}) {
+	if (!previousValue) return children;
+
+	return (
+		<AppTooltip
+			className={className}
+			placement={placement}
+			content={
+				<>
+					<span className="text-gray-10">Previous</span>{" "}
+					<span className="num text-gray-12">{previousValue}</span>
+				</>
+			}
+		>
+			{children}
+		</AppTooltip>
 	);
 }
 
@@ -470,164 +546,43 @@ function CategoriesAndIncome(props: {
 	fAmount: (amount: number, currency: string) => string;
 	hasCompare: boolean;
 }) {
-	const incomeTotal = props.incomeRows.reduce((sum, r) => sum + r.amount, 0);
-	const meaningfulIncome = incomeTotal > 0
-		? props.incomeRows.filter((r) => r.amount / incomeTotal >= INCOME_NOISE_RATIO)
-		: [];
-	const showIncomeColumn = meaningfulIncome.length >= INCOME_COLUMN_MIN_SOURCES;
-
-	if (showIncomeColumn) {
-		const incomeRows = meaningfulIncome.slice(0, 10);
-		const sharedMaxIncome = computeMax(incomeRows);
-		const sharedMaxExpense = computeMax(props.expenseRows);
-		return (
-			<section className="surface surface-bleed px-3 sm:px-4 py-5">
-				<header className="mb-4 flex items-end justify-between">
-					<h2 className="text-[13px] font-medium text-gray-12">Top categories</h2>
-					<span className="text-[11px] text-gray-10">Income · Expenses</span>
-				</header>
-				<div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
-					<CategoryList
-						rows={incomeRows}
-						reportingCurrency={props.reportingCurrency}
-						fAmount={props.fAmount}
-						hasCompare={props.hasCompare}
-						kind="income"
-						heading="Income"
-						emptyText="No income in this period."
-						sharedMax={sharedMaxIncome}
-					/>
-					<CategoryList
-						rows={props.expenseRows}
-						reportingCurrency={props.reportingCurrency}
-						fAmount={props.fAmount}
-						hasCompare={props.hasCompare}
-						kind="expense"
-						heading="Expenses"
-						emptyText="No expenses in this period."
-						sharedMax={sharedMaxExpense}
-					/>
-				</div>
-			</section>
-		);
-	}
-
-	const sharedMax = computeMax(props.expenseRows);
+	const incomeRows = props.incomeRows.slice(0, 10);
+	const sharedMaxExpense = computeMax(props.expenseRows);
+	const sharedMaxIncome = computeMax(incomeRows);
 	return (
 		<section className="surface surface-bleed px-3 sm:px-4 py-5">
-			<header className="mb-4 flex items-end justify-between gap-4">
+			<header className="mb-4 flex items-end justify-between">
 				<h2 className="text-[13px] font-medium text-gray-12">Top categories</h2>
-				<IncomeOneLiner
-					rows={props.incomeRows}
+				<span className="text-[11px] text-gray-10">Expenses · Income</span>
+			</header>
+			<div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
+				<CategoryList
+					rows={props.expenseRows}
 					reportingCurrency={props.reportingCurrency}
 					fAmount={props.fAmount}
+					hasCompare={props.hasCompare}
+					kind="expense"
+					heading="Expenses"
+					emptyText="No expenses in this period."
+					sharedMax={sharedMaxExpense}
 				/>
-			</header>
-			{props.expenseRows.length === 0 ? (
-				<EmptyHint>No expenses in this period.</EmptyHint>
-			) : (
-				<ul className="space-y-2.5 text-[12px]">
-					{props.expenseRows.map((row) => (
-						<CategoryRowItem
-							key={row.name}
-							row={row}
-							reportingCurrency={props.reportingCurrency}
-							fAmount={props.fAmount}
-							hasCompare={props.hasCompare}
-							kind="expense"
-							sharedMax={sharedMax}
-						/>
-					))}
-				</ul>
-			)}
+				<CategoryList
+					rows={incomeRows}
+					reportingCurrency={props.reportingCurrency}
+					fAmount={props.fAmount}
+					hasCompare={props.hasCompare}
+					kind="income"
+					heading="Income"
+					emptyText="No income in this period."
+					sharedMax={sharedMaxIncome}
+				/>
+			</div>
 		</section>
 	);
 }
 
 function computeMax(rows: CategoryRow[]): number {
 	return Math.max(1, ...rows.flatMap((r) => [r.amount, r.previousAmount]));
-}
-
-function IncomeOneLiner(props: {
-	rows: CategoryRow[];
-	reportingCurrency: string;
-	fAmount: (amount: number, currency: string) => string;
-}) {
-	if (props.rows.length === 0) {
-		return <span className="text-[11px] text-gray-10">No income</span>;
-	}
-	const inline = props.rows.slice(0, 3);
-	const others = props.rows.slice(3);
-	const othersTotal = others.reduce((sum, r) => sum + r.amount, 0);
-
-	return (
-		<div className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-1 text-[11px] text-gray-10">
-			<span className="text-gray-10">Income</span>
-			{inline.map((row, i) => (
-				<span key={row.name} className="flex items-baseline gap-1">
-					{i > 0 && <span className="text-gray-a6">·</span>}
-					<span className="text-gray-12">{displayCategoryName(row.name)}</span>
-					<span className="num text-gray-11">
-						{props.fAmount(row.amount, props.reportingCurrency)}
-					</span>
-				</span>
-			))}
-			{others.length > 0 && (
-				<>
-					<span className="text-gray-a6">·</span>
-					<OthersPopover
-						rows={others}
-						total={othersTotal}
-						reportingCurrency={props.reportingCurrency}
-						fAmount={props.fAmount}
-					/>
-				</>
-			)}
-		</div>
-	);
-}
-
-function OthersPopover(props: {
-	rows: CategoryRow[];
-	total: number;
-	reportingCurrency: string;
-	fAmount: (amount: number, currency: string) => string;
-}) {
-	const label = `${props.rows.length} other${props.rows.length === 1 ? "" : "s"}`;
-	return (
-		<Popover.Root>
-			<Popover.Trigger asChild>
-				<button
-					type="button"
-					className="focus rounded-md px-1.5 py-0.5 text-[11px] text-gray-11 hover:text-gray-12 hover:bg-gray-a2 transition-colors"
-				>
-					<span>{label}</span>{" "}
-					<span className="num text-gray-10">
-						{props.fAmount(props.total, props.reportingCurrency)}
-					</span>
-				</button>
-			</Popover.Trigger>
-			<Popover.Portal>
-				<Popover.Content
-					side="bottom"
-					align="end"
-					sideOffset={6}
-					className="bg-gray-2 border-gray-a3 z-80 min-w-[12rem] rounded-md border p-2 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.18),0_2px_6px_-2px_rgba(0,0,0,0.08)] dark:shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6),0_2px_6px_-2px_rgba(0,0,0,0.4)]"
-				>
-					<ul className="space-y-1.5 text-[12px]">
-						{props.rows.map((row) => (
-							<li key={row.name} className="flex items-baseline justify-between gap-3">
-								<span className="truncate text-gray-12">{displayCategoryName(row.name)}</span>
-								<span className="num shrink-0 text-gray-11">
-									{props.fAmount(row.amount, props.reportingCurrency)}
-								</span>
-							</li>
-						))}
-					</ul>
-				</Popover.Content>
-			</Popover.Portal>
-		</Popover.Root>
-	);
 }
 
 function CategoryList(props: {
