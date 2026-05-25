@@ -51,6 +51,7 @@ type Props = {
 	customTo: string;
 	onPeriodChange: (value: StatsPeriodValue) => void;
 	onCompareChange: (value: StatsCompareValue) => void;
+	onRangeSelect: (range: DateRange) => void;
 };
 
 export function StatsCanvas(props: Props) {
@@ -129,6 +130,7 @@ export function StatsCanvas(props: Props) {
 				compare={props.compare}
 				onPeriodChange={props.onPeriodChange}
 				onCompareChange={props.onCompareChange}
+				onRangeSelect={props.onRangeSelect}
 				baseRange={baseRange}
 				compareRange={compareRange}
 				isFetching={isFetching}
@@ -250,6 +252,7 @@ function RailHeader(props: {
 	compare: StatsCompareValue;
 	onPeriodChange: (value: StatsPeriodValue) => void;
 	onCompareChange: (value: StatsCompareValue) => void;
+	onRangeSelect: (range: DateRange) => void;
 	baseRange: DateRange;
 	compareRange: DateRange | null;
 	isFetching: boolean;
@@ -273,10 +276,16 @@ function RailHeader(props: {
 					<span className="text-gray-a6">→</span>
 					<span>{props.baseRange.to}</span>
 					{props.compareRange && (
-						<span className="text-gray-9">
+						<button
+							type="button"
+							onClick={() => {
+								if (props.compareRange) props.onRangeSelect(props.compareRange);
+							}}
+							className="focus rounded-sm px-1 py-0.5 text-gray-9 transition-colors hover:bg-gray-a2 hover:text-gray-12"
+						>
 							{" "}
 							· compared to {props.compareRange.from} → {props.compareRange.to}
-						</span>
+						</button>
 					)}
 					<span
 						aria-hidden={!props.isFetching}

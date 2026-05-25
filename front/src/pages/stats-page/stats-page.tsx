@@ -265,6 +265,13 @@ export function StatsPage() {
 							onCompareChange={(value) =>
 								setStatsParams({ compare: value })
 							}
+							onRangeSelect={(range) => {
+								setStatsParams({
+									period: "custom",
+									from: range.from,
+									to: range.to,
+								});
+							}}
 						/>
 					</TabsPanel>
 
