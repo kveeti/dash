@@ -32,6 +32,7 @@ const surfaceBorderY = 2;
 const desktopSurfaceMaxHeight = 416;
 const listMaxHeight = 384;
 const mobileSurfaceViewportPadding = 16;
+const mobileDialogMaxHeightRatio = 0.84;
 const desktopSubmenuShift = -(inputHeight + listPaddingTop);
 
 function cx(...classes: Array<string | false | null | undefined>) {
@@ -393,6 +394,13 @@ function getRowOffsets(rows: Row[], itemSize: number) {
 
 function getRowsTotalHeight(rows: Row[], itemSize: number) {
 	return rows.reduce((total, row) => total + rowSize(row, itemSize), 0);
+}
+
+function getRowScrollMarginTop(rows: Row[], index: number, itemSize: number) {
+	if (index <= 0) return undefined;
+	const previousRow = rows[index - 1];
+	if (previousRow?.type !== "group") return undefined;
+	return rowSize(previousRow, itemSize) + listPaddingTop;
 }
 
 function getScrollableBodyHeight({
@@ -1344,10 +1352,14 @@ function VirtualRows({
 }) {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const id = useId();
+	const comboboxActiveId = Ariakit.useStoreState(combobox, "activeId");
+	const effectiveActiveItemId =
+		activeItemId ??
+		(typeof comboboxActiveId === "string" ? comboboxActiveId : undefined);
 	const focusableIndexes = useMemo(() => getFocusableRowIndexes(rows), [rows]);
 	const activeItemIndex = useMemo(
-		() => getItemRowIndex(rows, activeItemId),
-		[activeItemId, rows],
+		() => getItemRowIndex(rows, effectiveActiveItemId),
+		[effectiveActiveItemId, rows],
 	);
 	const rowOffsets = useMemo(() => getRowOffsets(rows, itemSize), [itemSize, rows]);
 	const groupRanges = useMemo(() => getRowGroupRanges(rows), [rows]);
@@ -1363,17 +1375,15 @@ function VirtualRows({
 			if (focusableIndexes.first !== -1) indexes.push(focusableIndexes.first);
 			if (focusableIndexes.last !== -1) indexes.push(focusableIndexes.last);
 			if (activeItemIndex !== -1) indexes.push(activeItemIndex);
+			if (activeItemIndex > 0 && rows[activeItemIndex - 1]?.type === "group") {
+				indexes.push(activeItemIndex - 1);
+			}
 			return Array.from(new Set(indexes)).sort((a, b) => a - b);
 		},
 		overscan,
 		useFlushSync: false,
 	});
 	const virtualRows = virtualizer.getVirtualItems();
-
-	useLayoutEffect(() => {
-		if (activeItemIndex === -1) return;
-		virtualizer.scrollToIndex(activeItemIndex, { align: "auto" });
-	}, [activeItemIndex, virtualizer]);
 
 	const groupedVirtualRows = new Map<
 		number,
@@ -1411,6 +1421,7 @@ function VirtualRows({
 			height: virtualRow.size,
 			left: 0,
 			position: "absolute",
+			scrollMarginTop: getRowScrollMarginTop(rows, virtualRow.index, itemSize),
 			top: 0,
 			transform: `translateY(${top}px)`,
 			width: "100%",
@@ -1559,7 +1570,7 @@ function MobileCombobox({
 				preventBodyScroll
 				backdrop={false}
 				className={cx(
-					"fixed top-2 left-2 right-2 z-80 flex max-h-[calc(100dvh-1rem)] flex-col overflow-hidden rounded-lg border border-gray-a4 bg-gray-2 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.28),0_4px_12px_-4px_rgba(0,0,0,0.14)] outline-none dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.75),0_4px_12px_-4px_rgba(0,0,0,0.45)]",
+					"fixed top-[42dvh] left-2 right-2 z-80 flex max-h-[calc(84dvh-1rem)] -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-gray-a4 bg-gray-2 shadow-[0_24px_64px_-12px_rgba(0,0,0,0.28),0_4px_12px_-4px_rgba(0,0,0,0.14)] outline-none dark:shadow-[0_24px_64px_-12px_rgba(0,0,0,0.75),0_4px_12px_-4px_rgba(0,0,0,0.45)]",
 					dialogMotionClass,
 					dialogClassName,
 				)}
@@ -1632,7 +1643,10 @@ function MobilePage({
 		0,
 		Math.min(
 			listMaxHeight,
-			viewportHeight - mobileSurfaceViewportPadding - inputHeight - surfaceBorderY,
+			viewportHeight * mobileDialogMaxHeightRatio -
+				mobileSurfaceViewportPadding -
+				inputHeight -
+				surfaceBorderY,
 		),
 	);
 	const [query, setQuery] = useState("");
