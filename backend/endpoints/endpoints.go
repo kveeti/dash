@@ -16,7 +16,7 @@ import (
 func GetRouter(state *state.State) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("POST /api/v1/auth/login", NewHandler(HandleLogin(state)))
+	mux.HandleFunc("GET /api/v1/auth/login", NewHandler(HandleLogin(state)))
 	mux.HandleFunc("GET /api/v1/auth/callback", NewHandler(HandleCallback(state)))
 	mux.HandleFunc("POST /api/v1/auth/logout", NewHandler(HandleLogout(state)))
 
@@ -30,7 +30,10 @@ func GetRouter(state *state.State) http.Handler {
 
 	// middleware chain (outermost first)
 	var handler http.Handler = mux
-	handler = Cors(state.Config.FrontUrl)(handler)
+	// CORS is only needed when the frontend is served from a different origin.
+	if state.Config.FrontUrl != "" {
+		handler = Cors(state.Config.FrontUrl)(handler)
+	}
 	handler = Logger(handler)
 	handler = RequestID(handler)
 
@@ -101,12 +104,7 @@ func Authenticate(state *state.State, r *http.Request) (*AuthInfo, error) {
 		return nil, invalidAuth
 	}
 
-	token, err := auth.ValidateToken(state.Config.Secret, cookie.Value)
-	if err != nil {
-		return nil, invalidAuth
-	}
-
-	session, err := state.Data.GetSessionByIDAndUserID(r.Context(), token.SessionID, token.UserID)
+	session, err := state.Data.GetSessionByTokenHash(r.Context(), auth.HashToken(cookie.Value))
 	if err != nil {
 		return nil, NewUnexpectedErr("error getting session: %w", err)
 	}
@@ -115,8 +113,8 @@ func Authenticate(state *state.State, r *http.Request) (*AuthInfo, error) {
 	}
 
 	return &AuthInfo{
-		UserID:    token.UserID,
-		SessionID: token.SessionID,
+		UserID:    session.UserID,
+		SessionID: session.ID,
 	}, nil
 }
 

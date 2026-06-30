@@ -1,68 +1,33 @@
 package auth
 
 import (
-	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
-	"fmt"
-	"strconv"
-	"strings"
-	"time"
 )
 
-const dataSplitter = "."
-const signatureSplitter = ":"
-
-type Token struct {
-	UserID    string
-	SessionID string
+// RandomString returns a URL-safe random string with 32 bytes of entropy.
+func RandomString() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func CreateToken(secret, userID, sessionID string, expiry time.Time) string {
-	data := userID + dataSplitter + sessionID + dataSplitter + strconv.FormatInt(expiry.UTC().UnixMilli(), 10)
-	signature := createSignature(secret, data)
-
-	return data + signatureSplitter + signature
-}
-
-func ValidateToken(secret, token string) (*Token, error) {
-	dataAndSignature := strings.Split(token, signatureSplitter)
-	if len(dataAndSignature) != 2 {
-		return nil, fmt.Errorf("invalid token")
-	}
-
-	data := dataAndSignature[0]
-	signature := dataAndSignature[1]
-
-	expectedSignature := createSignature(secret, data)
-	if subtle.ConstantTimeCompare([]byte(signature), []byte(expectedSignature)) != 1 {
-		return nil, fmt.Errorf("invalid signature")
-	}
-
-	dataSplit := strings.Split(data, dataSplitter)
-	if len(dataSplit) != 3 {
-		return nil, fmt.Errorf("invalid token")
-	}
-
-	expiry, err := strconv.ParseInt(dataSplit[2], 10, 64)
+// NewSessionToken returns a random opaque token to put in the cookie and the
+// hash to store in the database. Only the hash is persisted, so a database
+// leak does not expose usable session tokens.
+func NewSessionToken() (raw, hash string, err error) {
+	raw, err = RandomString()
 	if err != nil {
-		return nil, fmt.Errorf("error parsing expiry: %w", err)
+		return "", "", err
 	}
-
-	if time.Now().UTC().UnixMilli() > expiry {
-		return nil, fmt.Errorf("token expired")
-	}
-
-	return &Token{
-		UserID:    dataSplit[0],
-		SessionID: dataSplit[1],
-	}, nil
+	return raw, HashToken(raw), nil
 }
 
-func createSignature(secret, data string) string {
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(data))
-
-	return base64.URLEncoding.EncodeToString(mac.Sum(nil))
+// HashToken hashes a raw session token for storage and lookup.
+func HashToken(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

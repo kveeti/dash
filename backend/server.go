@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"money/backend/auth"
 	"money/backend/config"
 	"money/backend/data"
 	"money/backend/endpoints"
@@ -12,8 +13,6 @@ import (
 	"os/signal"
 )
 
-// App wires up the data layer, router and http server and blocks until shutdown.
-// started, if non-nil, receives once the server is listening (used by tests).
 func App(config *config.Config, started chan struct{}) {
 	if config.IsProd {
 		slog.Info("starting in prod")
@@ -26,7 +25,12 @@ func App(config *config.Config, started chan struct{}) {
 		panic(err)
 	}
 
-	router := endpoints.GetRouter(state.NewState(data, config))
+	oidc, err := auth.NewOIDC(context.TODO(), config.OIDC)
+	if err != nil {
+		panic(err)
+	}
+
+	router := endpoints.GetRouter(state.NewState(data, config, oidc))
 
 	s := NewHttpServer(router, ":8000")
 	if err := s.Start(); err != nil {

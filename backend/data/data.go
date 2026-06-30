@@ -55,7 +55,9 @@ create table if not exists users (
 create table if not exists sessions (
     id varchar(22) primary key,
     user_id varchar(22) not null references users(id),
-    created_at timestamptz not null
+    token_hash text not null unique,
+    created_at timestamptz not null,
+    expires_at timestamptz not null
 );
 create index if not exists idx_sessions_user_id on sessions(user_id);
 `
