@@ -3,7 +3,9 @@ package auth
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"money/backend/config"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -17,7 +19,7 @@ type OIDC struct {
 }
 
 func NewOIDC(ctx context.Context, c config.OIDCConfig) (*OIDC, error) {
-	provider, err := oidc.NewProvider(ctx, c.Issuer)
+	provider, err := discover(ctx, c.Issuer)
 	if err != nil {
 		return nil, fmt.Errorf("error creating oidc provider: %w", err)
 	}
@@ -32,6 +34,25 @@ func NewOIDC(ctx context.Context, c config.OIDCConfig) (*OIDC, error) {
 		},
 		verifier: provider.Verifier(&oidc.Config{ClientID: c.ClientID}),
 	}, nil
+}
+
+// discover retries provider discovery: the issuer may be briefly unreachable at
+// startup (dev IdP still booting, provider restarting during a deploy).
+func discover(ctx context.Context, issuer string) (*oidc.Provider, error) {
+	var err error
+	for attempt := 1; attempt <= 10; attempt++ {
+		var provider *oidc.Provider
+		if provider, err = oidc.NewProvider(ctx, issuer); err == nil {
+			return provider, nil
+		}
+		slog.Warn("oidc discovery failed, retrying", "issuer", issuer, "attempt", attempt, "err", err)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+	return nil, err
 }
 
 // NewPKCEVerifier returns a random PKCE code verifier.
