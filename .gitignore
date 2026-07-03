@@ -1,3 +1,7 @@
 .env
 .DS_Store
 .pg
+
+# built frontend, embedded into the backend binary
+backend/webdist/*
+!backend/webdist/.gitkeep

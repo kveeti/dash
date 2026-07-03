@@ -12,7 +12,11 @@ type Config struct {
 	// backend. When set (separate origin, e.g. a dev server) it enables CORS and
 	// is used as the post-login redirect target.
 	FrontUrl string
-	DbUrl    string
+	// DevViteUrl, when set, makes the backend reverse-proxy every non-API request
+	// to the Vite dev server at this URL (for HMR) instead of serving the embedded
+	// build. Empty = serve the embedded frontend. Dev only.
+	DevViteUrl string
+	DbUrl      string
 
 	OIDC OIDCConfig
 }
@@ -41,6 +45,7 @@ func LoadConfig() (*Config, error) {
 		IsProd:     os.Getenv("IS_PROD") == "1",
 		BackendUrl: os.Getenv("BACKEND_URL"),
 		FrontUrl:   os.Getenv("FRONT_URL"),
+		DevViteUrl: os.Getenv("DEV_VITE_URL"),
 		DbUrl:      os.Getenv("DB_URL"),
 		OIDC: OIDCConfig{
 			Issuer:       os.Getenv("OIDC_ISSUER"),

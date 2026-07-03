@@ -1,0 +1,135 @@
+@keyframes cmdk-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes cmdk-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes cmdk-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes cmdk-dialog-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+[cmdk-overlay] {
+  position: fixed;
+  inset: 0;
+  background-color: var(--black-a6);
+
+  &[data-expanded] {
+    animation: cmdk-overlay-in 200ms ease-out;
+  }
+  &[data-closed] {
+    animation: cmdk-overlay-out 150ms ease-in;
+  }
+}
+
+[cmdk-dialog] {
+  position: fixed;
+  inset-block-start: 15vh;
+  inset-inline: 0;
+  margin-inline: auto;
+  inline-size: min(90vw, 32rem);
+
+  background-color: var(--gray-1);
+  border: 1px solid var(--gray-6);
+  border-radius: var(--s2);
+  box-shadow: 0 var(--s2) var(--s6) var(--black-a5);
+  overflow: hidden;
+  transform-origin: center;
+
+  &[data-expanded] {
+    animation: cmdk-dialog-in 240ms cubic-bezier(0.05, 0.95, 0.15, 1);
+  }
+  &[data-closed] {
+    animation: cmdk-dialog-out 100ms ease-in;
+  }
+}
+
+[cmdk-input] {
+  inline-size: 100%;
+  padding: 0.5rlh 0.75rlh;
+  font: inherit;
+  color: var(--gray-12);
+  background-color: transparent;
+  border: none;
+  border-bottom: 1px solid var(--gray-4);
+  outline: none;
+
+  &::placeholder {
+    color: var(--gray-9);
+  }
+}
+
+[cmdk-list] {
+  block-size: calc(var(--cmdk-list-height) + 2 * var(--s1));
+  max-block-size: 18rlh;
+  overflow-y: auto;
+  padding: var(--s1);
+  transition: block-size 240ms cubic-bezier(0.05, 0.95, 0.15, 1);
+}
+
+[cmdk-group-heading] {
+  padding: var(--s1) var(--s2);
+  font-size: 0.8em;
+  color: var(--gray-10);
+}
+
+[cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s1) var(--s2);
+  border-radius: var(--s1);
+  color: var(--gray-12);
+  cursor: pointer;
+  user-select: none;
+
+  &[data-selected="true"] {
+    background-color: var(--gray-3);
+  }
+
+  &[data-disabled="true"] {
+    color: var(--gray-9);
+    cursor: not-allowed;
+  }
+}
+
+[cmdk-empty] {
+  padding: 0.75rlh;
+  text-align: center;
+  color: var(--gray-10);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [cmdk-overlay],
+  [cmdk-dialog],
+  [cmdk-list] {
+    animation-duration: 1ms;
+    transition-duration: 1ms;
+  }
+}

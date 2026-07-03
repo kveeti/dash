@@ -30,7 +30,7 @@ func App(config *config.Config, started chan struct{}) {
 		panic(err)
 	}
 
-	router := endpoints.GetRouter(state.NewState(data, config, oidc))
+	router := endpoints.GetRouter(state.NewState(data, config, oidc), frontendFS())
 
 	s := NewHttpServer(router, ":8000")
 	if err := s.Start(); err != nil {

@@ -3,10 +3,12 @@ package endpoints
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/url"
 	"testing"
+	"testing/fstest"
 
 	"money/backend/auth"
 	"money/backend/config"
@@ -17,6 +19,11 @@ import (
 )
 
 const testFrontURL = "http://frontend.test"
+
+// testFrontendFS stands in for the embedded build in router tests.
+func testFrontendFS() fs.FS {
+	return fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>test</title>")}}
+}
 
 type testApp struct {
 	url    string
@@ -61,7 +68,7 @@ func newTestAppWith(t *testing.T, opts appOpts) *testApp {
 
 	st := state.NewState(d, &config.Config{BackendUrl: appURL, FrontUrl: opts.frontURL}, oidcClient)
 
-	srv := &http.Server{Handler: GetRouter(st)}
+	srv := &http.Server{Handler: GetRouter(st, testFrontendFS())}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
 

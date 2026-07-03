@@ -4,16 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"money/backend/auth"
 	"money/backend/data"
 	"money/backend/state"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
-func GetRouter(state *state.State) http.Handler {
+func GetRouter(state *state.State, dist fs.FS) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/v1/auth/login", NewHandler(HandleLogin(state)))
@@ -27,6 +29,8 @@ func GetRouter(state *state.State) http.Handler {
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
+
+	mux.Handle("/", FrontendHandler(state, dist))
 
 	// middleware chain (outermost first)
 	var handler http.Handler = mux
@@ -58,6 +62,12 @@ func GetRequestID(r *http.Request) string {
 
 func Logger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip frontend/proxy traffic (static assets, Vite HMR) — only log the API.
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		reqID := GetRequestID(r)
 
 		slog.LogAttrs(r.Context(), slog.LevelInfo, "rs",
