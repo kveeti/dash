@@ -5,15 +5,6 @@
   cursor: default;
 }
 
-.triggerError {
-  border-color: var(--red-7);
-
-  &:focus {
-    border-color: var(--red-8);
-    box-shadow: 0 0 0 3px var(--red-a4);
-  }
-}
-
 .content {
   min-inline-size: 12rem;
   background-color: var(--gray-2);

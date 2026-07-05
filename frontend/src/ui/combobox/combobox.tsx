@@ -54,7 +54,7 @@ function Trigger(props: { children: JSX.Element; error?: boolean }) {
   const { onTriggerPointerDown } = useCombobox();
   return (
     <Popover.Trigger
-      class={`${styles.trigger} ${inputStyles.control} ${props.error ? styles.triggerError : ""}`}
+      class={`${styles.trigger} ${inputStyles.control} ${props.error ? inputStyles.invalid : ""}`}
       onPointerDown={onTriggerPointerDown}
     >
       {props.children}

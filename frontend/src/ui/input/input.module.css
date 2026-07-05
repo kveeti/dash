@@ -4,6 +4,31 @@
   gap: var(--s1);
 }
 
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  min-block-size: 1lh;
+  font-size: var(--text-xs);
+  color: var(--red-11);
+}
+
+.error:empty {
+  display: none;
+}
+
+.error:not(:empty)::before {
+  --error-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Cpath fill-rule='evenodd' d='M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z' clip-rule='evenodd'/%3E%3C/svg%3E");
+
+  content: "";
+  flex-shrink: 0;
+  inline-size: 1.25em;
+  block-size: 1.25em;
+  background-color: currentColor;
+  -webkit-mask: var(--error-icon) center / contain no-repeat;
+  mask: var(--error-icon) center / contain no-repeat;
+}
+
 .labelRow {
   display: flex;
   justify-content: space-between;
@@ -25,8 +50,24 @@
     align-items: center;
   }
 
+  .horizontal .error {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .horizontal .error:empty {
+    display: block;
+  }
+
   .horizontal .labelRow {
+    grid-row: 2;
+    grid-column: 1;
     justify-content: flex-start;
+  }
+
+  .horizontal> :not(.labelRow):not(.error) {
+    grid-row: 2;
+    grid-column: 2;
   }
 
   .horizontal .label {
@@ -34,50 +75,56 @@
   }
 }
 
-.control {
-  inline-size: 100%;
-  block-size: 2.25rem;
+/* Shared surface for every single-field control (plain input + group segments). */
+.control,
+.group>* {
   padding-inline: 0.7rem;
   color: var(--gray-12);
   background-color: var(--gray-2);
   border: 0.5px solid var(--gray-8);
-  border-radius: 0.75rem;
   font: inherit;
-
   outline: 1px solid transparent;
   outline-offset: -1px;
+}
 
-  &::placeholder {
-    color: var(--gray-10);
-  }
+.control::placeholder,
+.group>input::placeholder {
+  color: var(--gray-10);
+}
 
-  &:focus-visible {
-    outline-color: var(--accent);
-  }
+.control:focus-visible,
+.group>*:focus-visible {
+  border-color: var(--accent);
+  outline-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 22%, transparent);
+}
+
+.control {
+  inline-size: 100%;
+  block-size: 2.25rem;
+  border-radius: 0.75rem;
 }
 
 .placeholder {
   color: var(--gray-10);
 }
 
-.controlError {
-  border-color: var(--red-7);
-
-  &:focus {
-    border-color: var(--red-8);
-    box-shadow: 0 0 0 3px var(--red-a4);
-  }
+/* Error: red border + tint on the control itself. */
+.invalid {
+  border-color: var(--red-8);
+  background-color: var(--red-2);
 }
 
-.error {
-  font-size: var(--text-xs);
-  color: var(--red-11);
+.invalid:focus-visible {
+  border-color: var(--red-9);
+  outline-color: var(--red-9);
+  box-shadow: 0 0 0 3px var(--red-a6);
 }
 
 @media (hover: hover) {
 
-  .control:not(:focus):not(.controlError):hover,
-  .group>*:not(:focus):hover {
+  .control:not(:focus):not(.invalid):hover,
+  .group>*:not(:focus):not(.invalid):hover {
     border-color: var(--gray-9);
   }
 }
@@ -92,19 +139,11 @@
 
   &>* {
     min-inline-size: 0;
-    padding-inline: 0.7rem;
-    color: var(--gray-12);
-    background-color: var(--gray-2);
-    border: 0.5px solid var(--gray-8);
-    font: inherit;
-    outline: 1px solid transparent;
-    outline-offset: -1px;
   }
 
   &>*:focus-visible {
     position: relative;
     z-index: 1;
-    outline-color: var(--accent);
   }
 
   &> :not(:first-child) {
@@ -123,10 +162,6 @@
 
   &>input {
     flex: 1;
-
-    &::placeholder {
-      color: var(--gray-10);
-    }
   }
 
   &>select {

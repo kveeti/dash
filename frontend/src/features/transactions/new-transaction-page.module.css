@@ -9,7 +9,7 @@
   inline-size: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--s5);
+  gap: var(--s3);
 }
 
 @media (min-width: 30rem) {
@@ -17,7 +17,7 @@
     display: grid;
     grid-template-columns: auto minmax(0, 22rem);
     column-gap: var(--s6);
-    row-gap: var(--s5);
+    row-gap: var(--s3);
     align-items: center;
   }
 

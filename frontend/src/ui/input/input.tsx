@@ -1,4 +1,5 @@
-import { type JSX, Show, splitProps } from "solid-js";
+import { type JSX, splitProps } from "solid-js";
+import { Dynamic } from "solid-js/web";
 
 import styles from "./input.module.css";
 
@@ -6,20 +7,23 @@ interface FieldProps {
   label: string;
   error?: string;
   class?: string;
+  /** Wrapper element; use "div" when the control isn't a native input. */
+  as?: "label" | "div";
   children: JSX.Element;
 }
 
 export function Field(props: FieldProps) {
   return (
-    <label class={`${styles.field} ${props.class ?? ""}`}>
+    <Dynamic
+      component={props.as ?? "label"}
+      class={`${styles.field} ${props.class ?? ""}`}
+    >
       <span class={styles.labelRow}>
         <span class={styles.label}>{props.label}</span>
-        <Show when={props.error}>
-          <span class={styles.error}>{props.error}</span>
-        </Show>
       </span>
+      <span class={styles.error}>{props.error}</span>
       {props.children}
-    </label>
+    </Dynamic>
   );
 }
 
@@ -40,7 +44,7 @@ export function Input(props: Props) {
     <Field label={local.label} error={local.error} class={local.class}>
       <input
         {...rest}
-        class={`${styles.control} ${local.error ? styles.controlError : ""}`}
+        class={`${styles.control} ${local.error ? styles.invalid : ""}`}
       />
     </Field>
   );

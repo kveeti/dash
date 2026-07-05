@@ -3,6 +3,7 @@ import { For, Show } from "solid-js";
 import type { Bucket } from "../../api/buckets";
 import { Combobox, useCombobox } from "../../ui/combobox/combobox";
 import { Command, useCommandState } from "../../ui/combobox/command";
+import { Field } from "../../ui/input/input";
 import inputStyles from "../../ui/input/input.module.css";
 
 interface Props {
@@ -22,13 +23,7 @@ interface Props {
 export function BucketCombobox(props: Props) {
   const selected = () => props.buckets.find((b) => b.id === props.value);
   return (
-    <div class={`${inputStyles.field} ${props.class ?? ""}`}>
-      <span class={inputStyles.labelRow}>
-        <span class={inputStyles.label}>{props.label}</span>
-        <Show when={props.error}>
-          <span class={inputStyles.error}>{props.error}</span>
-        </Show>
-      </span>
+    <Field label={props.label} error={props.error} class={props.class} as="div">
       <Combobox>
         <Combobox.Trigger error={!!props.error}>
           <Show
@@ -53,7 +48,7 @@ export function BucketCombobox(props: Props) {
           </Command>
         </Combobox.Content>
       </Combobox>
-    </div>
+    </Field>
   );
 }
 

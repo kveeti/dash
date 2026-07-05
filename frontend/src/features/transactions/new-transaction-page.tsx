@@ -18,7 +18,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 const schema = v.object({
   date: v.pipe(v.string(), v.nonEmpty("Pick a date")),
-  counterparty: v.string(),
+  counterparty: v.pipe(v.string(), v.nonEmpty("Enter a counterparty")),
   description: v.string(),
   amount: v.pipe(
     v.string(),
@@ -181,6 +181,7 @@ function TransactionForm() {
               <InputGroup>
                 <input
                   {...amount.props}
+                  class={amount.errors?.[0] ? inputStyles.invalid : undefined}
                   type="text"
                   inputmode="decimal"
                   placeholder="0.00"
