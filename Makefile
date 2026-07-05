@@ -26,3 +26,11 @@ build-frontend:
 # Builds the frontend into backend/webdist, then the backend binary with it embedded.
 build: build-frontend
 	@cd backend && go build -o ../dist/dash .
+
+# Generate a Nordea-format test CSV for load-testing the importer (written beside the Makefile).
+# Override params: make gencsv N=200000 O=big.csv DUP=0.1
+N ?= 200000
+O ?= transactions.csv
+DUP ?= 0.05
+gencsv:
+	@cd backend && go run ./tools/gencsv -n $(N) -o $(abspath $(O)) -dup $(DUP)
