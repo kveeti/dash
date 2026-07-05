@@ -20,7 +20,7 @@ func App(config *config.Config, started chan struct{}) {
 		slog.Info("starting in dev")
 	}
 
-	data, err := data.NewData(context.TODO(), config.DbUrl)
+	d, err := data.NewData(context.TODO(), config.DbUrl, config.ImportStore, config.ImportDir)
 	if err != nil {
 		panic(err)
 	}
@@ -30,7 +30,11 @@ func App(config *config.Config, started chan struct{}) {
 		panic(err)
 	}
 
-	router := endpoints.GetRouter(state.NewState(data, config, oidc), frontendFS())
+	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	defer stopWorkers()
+	d.StartImportWorkers(workerCtx)
+
+	router := endpoints.GetRouter(state.NewState(d, config, oidc), frontendFS())
 
 	s := NewHttpServer(router, ":8000")
 	if err := s.Start(); err != nil {

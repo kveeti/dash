@@ -94,7 +94,7 @@ func newTestData(t *testing.T) *data.Data {
 		t.Fatalf("building dsn: %v", err)
 	}
 
-	d, err := data.NewData(context.Background(), dsn)
+	d, err := data.NewData(context.Background(), dsn, "", "")
 	if err != nil {
 		t.Fatalf("connecting test db: %v", err)
 	}

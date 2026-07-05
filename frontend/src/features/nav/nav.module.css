@@ -1,25 +1,26 @@
 nav {
-  position: fixed;
-  height: 1.5rlh;
-  inset: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 2.25rem;
 
   background-color: var(--gray-1);
-  border-bottom: 1px solid var(--gray-2);
+  border-bottom: 1px solid var(--gray-3);
 
   div {
     display: flex;
-    max-inline-size: 40rem;
+    max-inline-size: 35rem;
     margin-inline: auto;
     height: 100%;
-    padding-inline: 0.5rlh;
+    padding-inline: var(--s3);
 
     .navLinks {
       list-style: none;
       display: flex;
 
-      .link > a {
-        font-size: 0.95em;
-        padding-inline: 0.5rlh;
+      .link>a {
+        font-size: var(--text-sm);
+        padding-inline: var(--s3);
         height: 100%;
         display: inline-flex;
         align-items: center;

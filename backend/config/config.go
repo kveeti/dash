@@ -18,6 +18,11 @@ type Config struct {
 	DevViteUrl string
 	DbUrl      string
 
+	// ImportStore selects where uploaded import files are kept: "disk" (under
+	// ImportDir) or "postgres" (default, bytea).
+	ImportStore string
+	ImportDir   string
+
 	OIDC OIDCConfig
 }
 
@@ -42,11 +47,13 @@ func (c *Config) EffectiveFrontUrl() string {
 
 func LoadConfig() (*Config, error) {
 	config := &Config{
-		IsProd:     os.Getenv("IS_PROD") == "1",
-		BackendUrl: os.Getenv("BACKEND_URL"),
-		FrontUrl:   os.Getenv("FRONT_URL"),
-		DevViteUrl: os.Getenv("DEV_VITE_URL"),
-		DbUrl:      os.Getenv("DB_URL"),
+		IsProd:      os.Getenv("IS_PROD") == "1",
+		BackendUrl:  os.Getenv("BACKEND_URL"),
+		FrontUrl:    os.Getenv("FRONT_URL"),
+		DevViteUrl:  os.Getenv("DEV_VITE_URL"),
+		DbUrl:       os.Getenv("DB_URL"),
+		ImportStore: os.Getenv("IMPORT_STORE"),
+		ImportDir:   os.Getenv("IMPORT_DIR"),
 		OIDC: OIDCConfig{
 			Issuer:       os.Getenv("OIDC_ISSUER"),
 			ClientID:     os.Getenv("OIDC_CLIENT_ID"),

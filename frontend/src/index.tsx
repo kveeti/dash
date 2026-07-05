@@ -2,6 +2,7 @@
 import "solid-devtools";
 import "./index.css";
 import { Router } from "@solidjs/router";
+import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 import { render } from "solid-js/web";
 
 import { routes } from "./routes";
@@ -12,4 +13,13 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   throw new Error("No root elem");
 }
 
-render(() => <Router root={(props) => props.children}>{routes}</Router>, root);
+const queryClient = new QueryClient();
+
+render(
+  () => (
+    <QueryClientProvider client={queryClient}>
+      <Router root={(props) => props.children}>{routes}</Router>
+    </QueryClientProvider>
+  ),
+  root,
+);

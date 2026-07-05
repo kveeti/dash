@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@formisch/solid':
+        specifier: 1.0.0-rc.0
+        version: 1.0.0-rc.0(solid-js@1.9.9)(typescript@6.0.3)(valibot@1.4.2(typescript@6.0.3))
       '@kobalte/core':
         specifier: ^0.13.12
         version: 0.13.12(solid-js@1.9.9)
@@ -20,9 +23,15 @@ importers:
       '@solidjs/router':
         specifier: ^0.15.1
         version: 0.15.3(solid-js@1.9.9)
+      '@tanstack/solid-query':
+        specifier: ^5.101.2
+        version: 5.101.2(solid-js@1.9.9)
       solid-js:
         specifier: ^1.9.5
         version: 1.9.9
+      valibot:
+        specifier: ^1.4.2
+        version: 1.4.2(typescript@6.0.3)
     devDependencies:
       '@playwright/test':
         specifier: ^1.61.1
@@ -351,6 +360,16 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
+
+  '@formisch/solid@1.0.0-rc.0':
+    resolution: {integrity: sha512-GNxLq59iC0qN2zlHIfQ8V1rSMrRVyadpxW7j8wQHReOxbicEaguLF2fYxZW+22tyBEVRAKiv/E63xzdl46yJPA==}
+    peerDependencies:
+      solid-js: ^1.6.0
+      typescript: '>=5'
+      valibot: ^1.4.1
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -984,6 +1003,14 @@ packages:
 
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
+
+  '@tanstack/query-core@5.101.2':
+    resolution: {integrity: sha512-hH5MLoJhF7KaIGd7q3xTXGXvslI+GYlM1Z/35aSHHWaCJWB7XvTSHYuV3eM7tw+aE0mT/xMro4M4Q9rCGHT0lw==}
+
+  '@tanstack/solid-query@5.101.2':
+    resolution: {integrity: sha512-IbCeM23gEbU0lW4wWFQhS4ELjgdmVXjhyCUh8pFemdMIuA5UswlkqEMryEE+lCMtxLS7m0oN1yWMocKi7vwXdw==}
+    peerDependencies:
+      solid-js: ^1.6.0
 
   '@types/babel__core@7.20.5':
     resolution: {integrity: sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==}
@@ -1683,6 +1710,14 @@ packages:
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
+  valibot@1.4.2:
+    resolution: {integrity: sha512-gjdCvJ6d3RyHAneqxMYMW9QMCwYMb3jpOO0IyHZV1bnRHFBHrX3VkIILt5XYR0WhwHiH7Mty8ovuPZ/O3gamrg==}
+    peerDependencies:
+      typescript: '>=5'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   validate-html-nesting@1.2.3:
     resolution: {integrity: sha512-kdkWdCl6eCeLlRShJKbjVOU2kFKxMF8Ghu50n+crEoyx+VKm3FxAxF9z4DCy6+bbTOqNW0+jcIYRnjoIRzigRw==}
 
@@ -2022,6 +2057,13 @@ snapshots:
       '@floating-ui/utils': 0.2.11
 
   '@floating-ui/utils@0.2.11': {}
+
+  '@formisch/solid@1.0.0-rc.0(solid-js@1.9.9)(typescript@6.0.3)(valibot@1.4.2(typescript@6.0.3))':
+    dependencies:
+      solid-js: 1.9.9
+      valibot: 1.4.2(typescript@6.0.3)
+    optionalDependencies:
+      typescript: 6.0.3
 
   '@humanfs/core@0.19.2':
     dependencies:
@@ -2476,6 +2518,13 @@ snapshots:
   '@swc/helpers@0.5.23':
     dependencies:
       tslib: 2.8.1
+
+  '@tanstack/query-core@5.101.2': {}
+
+  '@tanstack/solid-query@5.101.2(solid-js@1.9.9)':
+    dependencies:
+      '@tanstack/query-core': 5.101.2
+      solid-js: 1.9.9
 
   '@types/babel__core@7.20.5':
     dependencies:
@@ -3193,6 +3242,10 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
+
+  valibot@1.4.2(typescript@6.0.3):
+    optionalDependencies:
+      typescript: 6.0.3
 
   validate-html-nesting@1.2.3: {}
 

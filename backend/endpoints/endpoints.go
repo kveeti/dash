@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"money/backend/auth"
-	"money/backend/data"
-	"money/backend/state"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"money/backend/auth"
+	"money/backend/data"
+	"money/backend/state"
 )
 
 func GetRouter(state *state.State, dist fs.FS) http.Handler {
@@ -25,6 +26,23 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 	getUserID := GetUserIDMiddleware(state)
 
 	mux.HandleFunc("GET /api/v1/users/@me", NewHandler(HandleGetMe(state, getUserID)))
+
+	mux.HandleFunc("GET /api/v1/buckets", NewHandler(HandleListBuckets(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/buckets", NewHandler(HandleCreateBucket(state, getUserID)))
+
+	mux.HandleFunc("GET /api/v1/transactions", NewHandler(HandleListTransactions(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/transactions", NewHandler(HandleCreateTransaction(state, getUserID)))
+	mux.HandleFunc("PATCH /api/v1/transactions/{id}", NewHandler(HandleUpdateTransaction(state, getUserID)))
+	mux.HandleFunc("DELETE /api/v1/transactions/{id}", NewHandler(HandleDeleteTransaction(state, getUserID)))
+
+	mux.HandleFunc("GET /api/v1/balances", NewHandler(HandleGetBalances(state, getUserID)))
+
+	mux.HandleFunc("POST /api/v1/imports", NewHandler(HandleCreateImport(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/imports", NewHandler(HandleListImports(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/imports/{id}", NewHandler(HandleGetImport(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/imports/{id}/duplicates", NewHandler(HandleListDuplicates(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/imports/rows/{id}/import", NewHandler(HandleForceImportRow(state, getUserID)))
+	mux.HandleFunc("DELETE /api/v1/imports/{id}", NewHandler(HandleDeleteImport(state, getUserID)))
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -50,7 +68,7 @@ const REQ_ID_KEY req_ctx_key = "req_id"
 
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		*r = *r.WithContext(context.WithValue(r.Context(), REQ_ID_KEY, data.NewRequestID()))
+		*r = *r.WithContext(context.WithValue(r.Context(), REQ_ID_KEY, data.NewPrivateID()))
 		next.ServeHTTP(w, r)
 	})
 }

@@ -1,13 +1,14 @@
 import { useNavigate } from "@solidjs/router";
 import { createSignal, For, onCleanup, onMount } from "solid-js";
 
-import { Command } from "../../ui/combobox/combobox";
+import { Command } from "../../ui/combobox/command";
 
 import styles from "./nav.module.css";
 
 const pages = [
   { label: "inbox", href: "/inbox" },
   { label: "transactions", href: "/transactions" },
+  { label: "import", href: "/imports" },
 ];
 
 export function Nav() {

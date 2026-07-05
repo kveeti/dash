@@ -1,0 +1,59 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  text-align: start;
+  cursor: default;
+}
+
+.triggerError {
+  border-color: var(--red-7);
+
+  &:focus {
+    border-color: var(--red-8);
+    box-shadow: 0 0 0 3px var(--red-a4);
+  }
+}
+
+.content {
+  min-inline-size: 12rem;
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-a4);
+  border-radius: 0.75rem;
+  box-shadow: 0 var(--s1) var(--s2) var(--black-a2);
+  transform-origin: var(--kb-popover-content-transform-origin);
+}
+
+/* Kobalte mounts/unmounts content and holds it during the exit via animationend
+ * (solid-presence) — so keyframes, not transitions. forceMount would enable
+ * interruptible transitions but leaves a phantom layer in Kobalte's layerStack,
+ * breaking outside-dismiss when multiple popovers exist. Scale stays subtle so
+ * a reopen mid-close barely jumps. */
+.content[data-expanded] {
+  animation: combobox-content-in 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.content[data-closed] {
+  animation: combobox-content-out 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes combobox-content-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes combobox-content-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .content[data-expanded],
+  .content[data-closed] {
+    animation-duration: 1ms;
+  }
+}

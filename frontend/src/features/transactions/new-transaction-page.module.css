@@ -1,0 +1,47 @@
+.card {
+  padding: var(--s5);
+  background-color: var(--gray-1);
+  border: 1px solid var(--gray-3);
+  border-radius: var(--s5);
+}
+
+.form {
+  inline-size: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+}
+
+@media (min-width: 30rem) {
+  .form {
+    display: grid;
+    grid-template-columns: auto minmax(0, 22rem);
+    column-gap: var(--s6);
+    row-gap: var(--s5);
+    align-items: center;
+  }
+
+  .form > * {
+    grid-column: 1 / -1;
+  }
+}
+
+.toggle {
+  display: flex;
+  gap: var(--s2);
+}
+
+.toggle button {
+  flex: 1;
+  padding: var(--s2);
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-4);
+  border-radius: var(--s2);
+  color: var(--gray-11);
+  cursor: pointer;
+}
+
+.toggle button.active {
+  background-color: var(--gray-4);
+  color: var(--gray-12);
+}

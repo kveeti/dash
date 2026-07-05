@@ -12,6 +12,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
+    "skipLibCheck": true,
 
     // Type Checking & Safety
     "strict": true,

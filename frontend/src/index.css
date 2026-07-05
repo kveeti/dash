@@ -19,30 +19,37 @@
 }
 
 main {
-  padding-top: 2.5rlh;
-  padding-inline: 1rlh;
-  max-inline-size: 40rem;
+  height: 100%;
+  padding-top: var(--s5);
+  max-inline-size: 35rem;
   margin-inline: auto;
 }
 
 header,
 aside,
 footer {
-  padding: 1rlh;
+  padding: var(--s5);
 }
 
 h1 {
-  line-height: 1rlh;
-  margin-block-end: 1rlh;
+  font-size: var(--text-xl);
+  line-height: 1.2;
+  margin-block-end: var(--s5);
+}
+
+h2 {
+  font-size: var(--text-lg);
 }
 
 body {
-  background-image: linear-gradient(rgba(50, 50, 50, 0.2) 1px, transparent 1px);
-  background-size: 100% 1rlh;
+  /* background-image: linear-gradient(rgba(50, 50, 50, 0.2) 1px, transparent 1px);
+  background-size: 100% 1.5rem; */
+  display: block;
+  font-size: var(--text-base);
 }
 
 html {
-  background-color: var(--gray-1);
+  background-color: var(--gray-2);
   color: var(--gray-12);
   font-family: geist;
 }

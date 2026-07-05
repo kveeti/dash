@@ -1,22 +1,14 @@
 package data
 
-import "github.com/jaevor/go-nanoid"
+import (
+	"github.com/google/uuid"
+	"github.com/jaevor/go-nanoid"
+)
 
-var alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
-var newID, _ = nanoid.CustomASCII(alphabet, 18)
+const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
 
-func NewID() string {
-	return newID()
-}
+var newPublicID, _ = nanoid.CustomASCII(alphabet, 16)
 
-func NewUserID() string {
-	return "usr_" + newID()
-}
-
-func NewSessionID() string {
-	return "ses_" + newID()
-}
-
-func NewRequestID() string {
-	return "req_" + newID()
+func NewPrivateID() string {
+	return uuid.Must(uuid.NewV7()).String()
 }

@@ -12,6 +12,7 @@ import (
 
 	"money/backend/auth"
 	"money/backend/config"
+	"money/backend/data"
 	"money/backend/state"
 
 	"github.com/oauth2-proxy/mockoidc"
@@ -29,6 +30,7 @@ type testApp struct {
 	url    string
 	mock   *mockoidc.MockOIDC
 	client *http.Client
+	d      *data.Data
 }
 
 // appOpts tweaks the config a test app is built with. Zero values mean: CORS
@@ -58,6 +60,9 @@ func newTestAppWith(t *testing.T, opts appOpts) *testApp {
 	}
 
 	d := newTestData(t)
+	workerCtx, stopWorkers := context.WithCancel(context.Background())
+	t.Cleanup(stopWorkers)
+	d.StartImportWorkers(workerCtx)
 	oidcClient, err := auth.NewOIDC(context.Background(), config.OIDCConfig{
 		Issuer:       m.Issuer(),
 		ClientID:     m.ClientID,
@@ -78,6 +83,7 @@ func newTestAppWith(t *testing.T, opts appOpts) *testApp {
 		client: &http.Client{
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
+		d: d,
 	}
 }
 

@@ -2,9 +2,10 @@
 // (test/pages) via https://github.com/create-signal/cmdk-solid. Served only by
 // vite.fixtures.config.ts for the Playwright suite — never part of the app bundle.
 import { type RouteDefinition, useSearchParams } from "@solidjs/router";
-import { createSignal, onMount, Show } from "solid-js";
+import { createSignal, For, onMount, Show } from "solid-js";
 
-import { Command } from "../../../src/ui/combobox/combobox";
+import { Combobox, useCombobox } from "../../../src/ui/combobox/combobox";
+import { Command } from "../../../src/ui/combobox/command";
 
 function Index() {
   return (
@@ -258,6 +259,37 @@ function DialogPage() {
   );
 }
 
+// Our Combobox shell (Kobalte popover + cmdk), not a cmdk port. Exercises the
+// pointerdown open/close hack in combobox.tsx.
+function ShellPage() {
+  return (
+    <Combobox>
+      <Combobox.Trigger>Pick</Combobox.Trigger>
+      <Combobox.Content>
+        <Command>
+          <Command.Input placeholder="Search…" />
+          <Command.List>
+            <ShellRows />
+          </Command.List>
+        </Command>
+      </Combobox.Content>
+    </Combobox>
+  );
+}
+
+function ShellRows() {
+  const { close } = useCombobox();
+  return (
+    <For each={["Alpha", "Beta", "Gamma"]}>
+      {(it) => (
+        <Command.Item value={it} onSelect={close}>
+          {it}
+        </Command.Item>
+      )}
+    </For>
+  );
+}
+
 export const comboboxRoutes: RouteDefinition[] = [
   { path: "/combobox", component: Index },
   { path: "/combobox/item", component: ItemPage },
@@ -267,4 +299,5 @@ export const comboboxRoutes: RouteDefinition[] = [
   { path: "/combobox/keybinds", component: Keybinds },
   { path: "/combobox/numeric", component: Numeric },
   { path: "/combobox/dialog", component: DialogPage },
+  { path: "/combobox/shell", component: ShellPage },
 ];

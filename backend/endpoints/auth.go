@@ -80,13 +80,13 @@ func HandleCallback(st *state.State) Handler {
 		}
 		if user == nil {
 			user = &data.User{
-				ID:        data.NewUserID(),
+				ID:        data.NewPrivateID(),
 				Subject:   claims.Subject,
 				Issuer:    claims.Issuer,
 				Email:     claims.Email,
 				CreatedAt: time.Now(),
 			}
-			if err := st.Data.InsertUser(r.Context(), *user); err != nil {
+			if err := st.Data.CreateUser(r.Context(), *user); err != nil {
 				return NewUnexpectedErr("error inserting user: %w", err)
 			}
 		}
@@ -133,7 +133,7 @@ func issueSession(w http.ResponseWriter, st *state.State, r *http.Request, userI
 	expiry := now.Add(sessionDuration)
 
 	session := data.Session{
-		ID:        data.NewSessionID(),
+		ID:        data.NewPrivateID(),
 		UserID:    userID,
 		TokenHash: tokenHash,
 		CreatedAt: now,

@@ -20,7 +20,7 @@ func HandleGetMe(state *state.State, getUserID GetUserID) Handler {
 			return NewErr("user not found", http.StatusNotFound)
 		}
 
-		Json(w, JSON{"id": user.ID, "email": user.Email})
+		Json(w, JSON{"id": user.ID, "email": user.Email, "home_currency": user.HomeCurrency})
 		return nil
 	}
 }
