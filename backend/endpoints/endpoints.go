@@ -168,7 +168,7 @@ func NewHandler(handler Handler) http.HandlerFunc {
 				apiErr = NewUnexpectedErr("unexpected error: %w", err).(*ApiError)
 			}
 
-			slog.Error(apiErr.messageToLog, "id", reqID)
+			slog.Error(apiErr.messageToLog, "req_id", reqID)
 
 			w.Header().Set("content-type", "application/json")
 			w.WriteHeader(apiErr.httpStatus)
