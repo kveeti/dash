@@ -1,10 +1,10 @@
-import { type JSX, splitProps } from "solid-js";
+import { type JSX, Show, splitProps } from "solid-js";
 import { Dynamic } from "solid-js/web";
 
 import styles from "./input.module.css";
 
 interface FieldProps {
-  label: string;
+  label?: string;
   error?: string;
   class?: string;
   /** Wrapper element; use "div" when the control isn't a native input. */
@@ -18,9 +18,11 @@ export function Field(props: FieldProps) {
       component={props.as ?? "label"}
       class={`${styles.field} ${props.class ?? ""}`}
     >
-      <span class={styles.labelRow}>
-        <span class={styles.label}>{props.label}</span>
-      </span>
+      <Show when={props.label}>
+        <span class={styles.labelRow}>
+          <span class={styles.label}>{props.label}</span>
+        </span>
+      </Show>
       <span class={styles.error}>{props.error}</span>
       {props.children}
     </Dynamic>
@@ -34,7 +36,7 @@ export function InputGroup(props: { class?: string; children: JSX.Element }) {
 }
 
 interface Props extends JSX.InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
   error?: string;
 }
 
