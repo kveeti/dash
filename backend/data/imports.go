@@ -92,7 +92,7 @@ type RowSource interface {
 }
 
 // importParser is a RowSource that also reports per-row parse errors, so the
-// worker can record them on the batch after promotion.
+// worker can record them on the batch after staging.
 type importParser interface {
 	RowSource
 	Errors() []RowError
@@ -110,8 +110,8 @@ func parserFor(source string, r io.Reader) (importParser, error) {
 // CreateImport durably stores the uploaded file as the batch's work item, then
 // records the batch pointer. Blob-before-pointer: the blob lands first, so a batch
 // row always has its file; the only failure mode is an orphan blob if the pointer
-// insert fails (swept later). All parsing and promotion happen in the background
-// worker (see promoteBatch). Returns the batch.
+// insert fails (swept later). All parsing and staging happen in the background
+// worker (see stageBatch). Returns the batch.
 func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filename string, r io.Reader) (*ImportBatch, error) {
 	batch := ImportBatch{ID: NewPrivateID(), UserID: userID, BucketID: bucketID, Source: source, Filename: filename, CreatedAt: time.Now().UTC(), Status: "uploaded"}
 
@@ -161,7 +161,7 @@ func (d *Data) ValidateImportBucket(ctx context.Context, userID, bucketID string
 	return nil
 }
 
-// stageCopySource adapts a RowSource into a CopyFromSource for the promote_stage
+// stageCopySource adapts a RowSource into a CopyFromSource for the import_stage
 // temp table, hashing each row's content one at a time so nothing is materialized.
 // The hash is content-only; occurrence is assigned by a set-based pass afterward.
 type stageCopySource struct {
@@ -202,80 +202,64 @@ func (d *Data) kickImport() {
 // invariant), then the window ranks only those. occurrence makes genuine repeats
 // distinct and lets overlapping re-exports dedup cross-batch.
 const stageOccurrenceSQL = `
-update promote_stage r set occurrence = x.occ
+update import_stage r set occurrence = x.occ
 from (
     select id, row_number() over (partition by dedup_hash order by id) - 1 as occ
-    from promote_stage
+    from import_stage
     where dedup_hash in (
-        select dedup_hash from promote_stage group by dedup_hash having count(*) > 1
+        select dedup_hash from import_stage group by dedup_hash having count(*) > 1
     )
 ) x
 where r.id = x.id and x.occ > 0`
 
-// promoteStageSQL turns the temp table of one file into ledger rows in a single
-// set-based statement: each row is imported unless an already-imported row shares
-// its (dedup_hash, occurrence). Imported rows get a transaction + both posting legs
-// (counter-leg on the hidden uncategorized bucket) and an import_rows record;
-// duplicates get an import_rows record pointing at the collision. Within one file
-// (dedup_hash, occurrence) is unique, so there is no within-batch winner logic; the
-// partial unique index catches cross-batch races (the batch is retried, and the row
-// then reads as a duplicate). Params: $1 user, $2 bucket, $3 batch. Returns
-// (imported, duplicates).
-const promoteStageSQL = `
+// stageRowsSQL turns the temp table of one file into import_rows in a single
+// set-based statement: each row lands as 'pending' (an inbox item) unless an
+// already-present non-duplicate row shares its (dedup_hash, occurrence), in which
+// case it lands as 'duplicate' pointing at the collision. No transaction is created
+// here — categorizing a pending row later creates the ledger transaction. Within one
+// file (dedup_hash, occurrence) is unique, so there is no within-batch winner logic;
+// the partial unique index catches cross-batch races (the batch is retried, and the
+// row then reads as a duplicate). Params: $1 batch. Returns (added, duplicates).
+const stageRowsSQL = `
 with stage as materialized (
     select s.id as stage_id, s.date, s.amount, s.currency, s.raw_description, s.raw,
-           s.dedup_hash, s.occurrence,
-           s.raw->>'payee' as payee, s.raw->>'message' as message,
-           uuidv7() as row_id, uuidv7() as txn_id, uuidv7() as p1_id, uuidv7() as p2_id
-    from promote_stage s
+           s.dedup_hash, s.occurrence, uuidv7() as row_id
+    from import_stage s
 ),
 existing as (
     select st.stage_id, i.id as e_id
     from stage st
-    join import_rows i on i.dedup_hash = st.dedup_hash and i.occurrence = st.occurrence and i.status = 'imported'
+    join import_rows i on i.dedup_hash = st.dedup_hash and i.occurrence = st.occurrence and i.status <> 'duplicate'
 ),
 decided as materialized (
-    select st.*, (e.e_id is null) as is_import, e.e_id as dup_of
+    select st.*, (e.e_id is null) as is_add, e.e_id as dup_of
     from stage st
     left join existing e on e.stage_id = st.stage_id
 ),
-unc as (
-    select id from buckets where owner_user_id = $1 and kind = 'expense' and hidden = true limit 1
-),
-ins_txn as (
-    insert into transactions (id, owner_user_id, date, counterparty, description, created_at)
-    select txn_id, $1, date, payee, message, now() from decided where is_import
-),
-ins_post as (
-    insert into postings (id, transaction_id, bucket_id, amount, currency, mirror_id, created_at)
-    select p1_id, txn_id, $2, amount, currency, null::uuid, now() from decided where is_import
-    union all
-    select p2_id, txn_id, (select id from unc), -amount, currency, null::uuid, now() from decided where is_import
-),
-ins_imported as (
-    insert into import_rows (id, batch_id, date, amount, currency, raw_description, raw, dedup_hash, occurrence, status, transaction_id)
-    select row_id, $3, date, amount, currency, raw_description, raw, dedup_hash, occurrence, 'imported', txn_id
-    from decided where is_import
+ins_pending as (
+    insert into import_rows (id, batch_id, date, amount, currency, raw_description, raw, dedup_hash, occurrence, status)
+    select row_id, $1, date, amount, currency, raw_description, raw, dedup_hash, occurrence, 'pending'
+    from decided where is_add
 ),
 ins_dup as (
     insert into import_rows (id, batch_id, date, amount, currency, raw_description, raw, dedup_hash, occurrence, status, duplicate_of)
-    select row_id, $3, date, amount, currency, raw_description, raw, dedup_hash, occurrence, 'duplicate', dup_of
-    from decided where not is_import
+    select row_id, $1, date, amount, currency, raw_description, raw, dedup_hash, occurrence, 'duplicate', dup_of
+    from decided where not is_add
 )
-select count(*) filter (where is_import), count(*) filter (where not is_import) from decided`
+select count(*) filter (where is_add), count(*) filter (where not is_add) from decided`
 
-// promote loads one batch's parsed rows into an unlogged temp table (no WAL),
-// assigns occurrence, and runs promoteStageSQL — all on one pinned connection in a
-// single transaction that drops the temp table on commit. Returns (imported,
+// stageFile loads one batch's parsed rows into an unlogged temp table (no WAL),
+// assigns occurrence, and runs stageRowsSQL — all on one pinned connection in a
+// single transaction that drops the temp table on commit. Returns (added,
 // duplicates).
-func (d *Data) promote(ctx context.Context, batch ImportBatch, src RowSource) (int, int, error) {
+func (d *Data) stageFile(ctx context.Context, batch ImportBatch, src RowSource) (int, int, error) {
 	conn, err := d.db.Conn(ctx)
 	if err != nil {
 		return 0, 0, err
 	}
 	defer conn.Close()
 
-	var imported, duplicates int
+	var added, duplicates int
 	err = conn.Raw(func(driverConn any) error {
 		pgxConn := driverConn.(*stdlib.Conn).Conn()
 		tx, err := pgxConn.Begin(ctx)
@@ -284,7 +268,7 @@ func (d *Data) promote(ctx context.Context, batch ImportBatch, src RowSource) (i
 		}
 		defer tx.Rollback(ctx)
 
-		if _, err := tx.Exec(ctx, `create temp table promote_stage (
+		if _, err := tx.Exec(ctx, `create temp table import_stage (
 			id uuid, date date, amount bigint, currency text,
 			raw_description text, raw jsonb, dedup_hash text, occurrence int not null default 0
 		) on commit drop`); err != nil {
@@ -292,7 +276,7 @@ func (d *Data) promote(ctx context.Context, batch ImportBatch, src RowSource) (i
 		}
 
 		cs := &stageCopySource{src: src, bucketID: batch.BucketID}
-		if _, err := tx.CopyFrom(ctx, pgx.Identifier{"promote_stage"},
+		if _, err := tx.CopyFrom(ctx, pgx.Identifier{"import_stage"},
 			[]string{"id", "date", "amount", "currency", "raw_description", "raw", "dedup_hash"}, cs); err != nil {
 			return err
 		}
@@ -303,12 +287,12 @@ func (d *Data) promote(ctx context.Context, batch ImportBatch, src RowSource) (i
 		if _, err := tx.Exec(ctx, stageOccurrenceSQL); err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, promoteStageSQL, batch.UserID, batch.BucketID, batch.ID).Scan(&imported, &duplicates); err != nil {
+		if err := tx.QueryRow(ctx, stageRowsSQL, batch.ID).Scan(&added, &duplicates); err != nil {
 			return err
 		}
 		return tx.Commit(ctx)
 	})
-	return imported, duplicates, err
+	return added, duplicates, err
 }
 
 // claimBatchSQL claims the oldest uploaded batch belonging to the user with the
@@ -340,12 +324,12 @@ func (d *Data) claimBatch(ctx context.Context) (ImportBatch, bool, error) {
 	return b, true, nil
 }
 
-// promoteBatch claims one uploaded batch, promotes it from its stored file, and
-// finalizes status. Returns whether a batch was processed. Promote is retried in
+// stageBatch claims one uploaded batch, stages its rows from its stored file, and
+// finalizes status. Returns whether a batch was processed. Staging is retried in
 // process: a cross-batch dedup race errors on the unique index, then succeeds on
 // retry once the winner has committed (the losing rows become duplicates). A batch
 // that never succeeds is marked failed; a done batch's blob is deleted.
-func (d *Data) promoteBatch(ctx context.Context) (bool, error) {
+func (d *Data) stageBatch(ctx context.Context) (bool, error) {
 	batch, ok, err := d.claimBatch(ctx)
 	if err != nil || !ok {
 		return false, err
@@ -353,9 +337,9 @@ func (d *Data) promoteBatch(ctx context.Context) (bool, error) {
 	slog.Info("import: claimed batch", "batch", batch.ID, "user", batch.UserID, "file", batch.Filename)
 	start := time.Now()
 
-	imported, duplicates, parseErrs, err := d.runPromote(ctx, batch)
+	added, duplicates, parseErrs, err := d.runStage(ctx, batch)
 	if err != nil {
-		slog.Error("import: promote failed", "batch", batch.ID, "took", time.Since(start), "err", err)
+		slog.Error("import: staging failed", "batch", batch.ID, "took", time.Since(start), "err", err)
 		d.failBatch(ctx, batch.ID, err)
 		return true, nil
 	}
@@ -366,12 +350,12 @@ func (d *Data) promoteBatch(ctx context.Context) (bool, error) {
 	if err := d.files.Delete(ctx, batch.ID); err != nil {
 		slog.Error("import blob delete failed", "batch", batch.ID, "err", err)
 	}
-	slog.Info("import: batch done", "batch", batch.ID, "imported", imported,
+	slog.Info("import: batch done", "batch", batch.ID, "added", added,
 		"duplicates", duplicates, "parse_errors", len(parseErrs), "took", time.Since(start))
 	return true, nil
 }
 
-func (d *Data) runPromote(ctx context.Context, batch ImportBatch) (int, int, []RowError, error) {
+func (d *Data) runStage(ctx context.Context, batch ImportBatch) (int, int, []RowError, error) {
 	var lastErr error
 	for attempt := 0; attempt < importMaxAttempts; attempt++ {
 		blob, err := d.files.Open(ctx, batch.ID)
@@ -383,16 +367,16 @@ func (d *Data) runPromote(ctx context.Context, batch ImportBatch) (int, int, []R
 			blob.Close()
 			return 0, 0, nil, err
 		}
-		imported, duplicates, err := d.promote(ctx, batch, parser)
+		added, duplicates, err := d.stageFile(ctx, batch, parser)
 		blob.Close()
 		if err == nil {
-			return imported, duplicates, parser.Errors(), nil
+			return added, duplicates, parser.Errors(), nil
 		}
 		lastErr = err
 		if ctx.Err() != nil {
 			return 0, 0, nil, ctx.Err()
 		}
-		slog.Warn("import: promote attempt failed, retrying", "batch", batch.ID, "attempt", attempt+1, "err", err)
+		slog.Warn("import: staging attempt failed, retrying", "batch", batch.ID, "attempt", attempt+1, "err", err)
 		time.Sleep(importBackoff)
 	}
 	return 0, 0, nil, lastErr
@@ -417,7 +401,7 @@ func (d *Data) failBatch(ctx context.Context, batchID string, cause error) {
 	}
 }
 
-// ForceImport turns a duplicate row into a real transaction. The row keeps its
+// ForceImport turns a duplicate row into a pending inbox row. The row keeps its
 // content hash; it just claims the next free occurrence for that hash, so it
 // coexists with the copy it collided with and future imports dedup against it too.
 func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
@@ -427,17 +411,12 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 	}
 	defer tx.Rollback()
 
-	var (
-		bucketID, currency, status, hash string
-		date                             time.Time
-		amount                           int64
-		raw                              json.RawMessage
-	)
+	var status, hash string
 	err = tx.QueryRowContext(ctx,
-		`select b.bucket_id, r.date, r.amount, r.currency, r.raw, r.status, r.dedup_hash
+		`select r.status, r.dedup_hash
 		 from import_rows r join import_batches b on b.id = r.batch_id
 		 where r.id = $1 and b.user_id = $2`, rowID, userID).
-		Scan(&bucketID, &date, &amount, &currency, &raw, &status, &hash)
+		Scan(&status, &hash)
 	if err == sql.ErrNoRows {
 		return ErrImportNotFound
 	}
@@ -448,30 +427,10 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 		return ErrNotDuplicate
 	}
 
-	var fields struct {
-		Payee   string `json:"payee"`
-		Message string `json:"message"`
-	}
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return err
-	}
-
-	uncategorized, err := uncategorizedBucketID(ctx, tx, userID)
-	if err != nil {
-		return err
-	}
-
 	var occurrence int
 	if err := tx.QueryRowContext(ctx,
-		"select coalesce(max(occurrence)+1, 0) from import_rows where dedup_hash = $1 and status = 'imported'",
+		"select coalesce(max(occurrence)+1, 0) from import_rows where dedup_hash = $1 and status <> 'duplicate'",
 		hash).Scan(&occurrence); err != nil {
-		return err
-	}
-
-	txnID, err := insertImportTransaction(ctx, tx, userID, bucketID, uncategorized, ParsedRow{
-		Date: date, Amount: amount, Currency: currency, Payee: fields.Payee, Message: fields.Message,
-	})
-	if err != nil {
 		return err
 	}
 
@@ -483,15 +442,15 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		"update import_rows set status = 'imported', transaction_id = $1, duplicate_of = null, occurrence = $2 where id = $3",
-		txnID, occurrence, rowID); err != nil {
+		"update import_rows set status = 'pending', duplicate_of = null, occurrence = $1 where id = $2",
+		occurrence, rowID); err != nil {
 		return err
 	}
 
 	return tx.Commit()
 }
 
-// DeleteImport drops the batch, its rows and any transactions promotion created,
+// DeleteImport drops the batch, its rows and any transactions categorizing created,
 // in one tx, then deletes the stored file. Before-images of every deleted row
 // stream straight into audit_logs via to_jsonb — nothing is loaded into Go — and
 // deleting the rows clears the dedup memory so a corrected re-import just works.
@@ -551,7 +510,7 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 func (d *Data) ListImports(ctx context.Context, userID string) ([]ImportBatch, error) {
 	rows, err := d.db.QueryContext(ctx,
 		`select b.id, b.bucket_id, b.filename, b.created_at, b.status,
-		        count(*) filter (where r.status = 'imported'),
+		        count(*) filter (where r.status <> 'duplicate'),
 		        count(*) filter (where r.status = 'duplicate')
 		 from import_batches b
 		 left join import_rows r on r.batch_id = b.id
@@ -581,7 +540,7 @@ func (d *Data) GetImportStatus(ctx context.Context, userID, batchID string) (*Im
 	var b ImportBatch
 	err := d.db.QueryRowContext(ctx,
 		`select b.id, b.bucket_id, b.filename, b.created_at, b.status, coalesce(b.parse_errors, '[]'::jsonb),
-		        count(*) filter (where r.status = 'imported'),
+		        count(*) filter (where r.status <> 'duplicate'),
 		        count(*) filter (where r.status = 'duplicate')
 		 from import_batches b
 		 left join import_rows r on r.batch_id = b.id
@@ -689,25 +648,6 @@ func (d *Data) ListDuplicates(ctx context.Context, userID, batchID, cursor strin
 		out = append(out, r)
 	}
 	return out, rows.Err()
-}
-
-func uncategorizedBucketID(ctx context.Context, tx *sql.Tx, userID string) (string, error) {
-	var id string
-	err := tx.QueryRowContext(ctx,
-		"select id from buckets where owner_user_id = $1 and kind = 'expense' and hidden = true limit 1", userID).Scan(&id)
-	return id, err
-}
-
-func insertImportTransaction(ctx context.Context, tx *sql.Tx, userID, bucketID, uncategorized string, row ParsedRow) (string, error) {
-	txn := Transaction{ID: NewPrivateID(), OwnerUserID: userID, Date: row.Date, Counterparty: row.Payee, Description: row.Message}
-	postings := []Posting{
-		{BucketID: bucketID, Amount: row.Amount, Currency: row.Currency},
-		{BucketID: uncategorized, Amount: -row.Amount, Currency: row.Currency},
-	}
-	if err := insertTransactionTx(ctx, tx, &txn, postings); err != nil {
-		return "", err
-	}
-	return txn.ID, nil
 }
 
 func loadImportRow(ctx context.Context, tx *sql.Tx, rowID string) (*ImportRow, error) {

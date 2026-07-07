@@ -41,7 +41,7 @@ func decodeBuckets(t *testing.T, resp *http.Response) []map[string]any {
 	return out
 }
 
-// A new user starts with exactly the two hidden buckets (clearing + uncategorized).
+// A new user starts with exactly one hidden bucket (clearing).
 func TestNewUserHasHiddenBuckets(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 
@@ -49,15 +49,9 @@ func TestNewUserHasHiddenBuckets(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	buckets := decodeBuckets(t, resp)
-	require.Len(t, buckets, 2)
-
-	kinds := map[string]bool{}
-	for _, b := range buckets {
-		require.True(t, b["hidden"].(bool))
-		kinds[b["kind"].(string)] = true
-	}
-	require.True(t, kinds["clearing"])
-	require.True(t, kinds["expense"])
+	require.Len(t, buckets, 1)
+	require.True(t, buckets[0]["hidden"].(bool))
+	require.Equal(t, "clearing", buckets[0]["kind"])
 }
 
 func TestCreateAndListBucket(t *testing.T) {
@@ -74,7 +68,7 @@ func TestCreateAndListBucket(t *testing.T) {
 
 	resp = authed(t, app, http.MethodGet, "/api/v1/buckets", nil)
 	buckets := decodeBuckets(t, resp)
-	require.Len(t, buckets, 3) // 2 hidden + Groceries
+	require.Len(t, buckets, 2) // clearing + Groceries
 
 	var names []string
 	for _, b := range buckets {

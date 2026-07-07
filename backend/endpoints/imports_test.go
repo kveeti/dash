@@ -87,19 +87,16 @@ func TestImportNordea(t *testing.T) {
 	require.Equal(t, 2, res.Imported)
 	require.Equal(t, 0, res.Duplicates)
 
+	// Import stages rows into the inbox; no transactions exist until categorized.
 	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 2)
+	require.Empty(t, decodeTxns(t, resp))
 
-	byParty := map[string]map[string]any{}
-	for _, tx := range txns {
-		byParty[tx["counterparty"].(string)] = tx
-	}
-	require.Equal(t, "Groceries", byParty["K-Market"]["description"])
-	require.Equal(t, "Salary", byParty["Employer"]["description"])
-
-	balances := getBalances(t, app)
-	require.Equal(t, int64(-1234+10000), balances[bank]["EUR"])
+	byParty := inboxByParty(getInbox(t, app, ""))
+	require.Len(t, byParty, 2)
+	require.Equal(t, "Groceries", byParty["K-Market"].Description)
+	require.Equal(t, int64(-1234), byParty["K-Market"].Amount)
+	require.Equal(t, "Salary", byParty["Employer"].Description)
+	require.Equal(t, int64(10000), byParty["Employer"].Amount)
 }
 
 func TestImportIdenticalRowsBothImport(t *testing.T) {
@@ -111,9 +108,7 @@ func TestImportIdenticalRowsBothImport(t *testing.T) {
 	require.Equal(t, 2, res.Imported)
 	require.Equal(t, 0, res.Duplicates)
 
-	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 2)
+	require.Len(t, getInbox(t, app, ""), 2)
 }
 
 func TestImportDedupsReimport(t *testing.T) {
@@ -129,16 +124,15 @@ func TestImportDedupsReimport(t *testing.T) {
 	require.Equal(t, 0, res.Imported)
 	require.Equal(t, 2, res.Duplicates)
 
-	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 2)
+	// The first import's two rows are still the only inbox items.
+	require.Len(t, getInbox(t, app, ""), 2)
 
 	dups := dupRows(t, app, res.ID)
 	require.Len(t, dups, 2)
 	for _, row := range dups {
 		require.NotNil(t, row.DuplicateOf)
 		require.NotNil(t, row.Target, "duplicate row exposes its target inline")
-		require.NotNil(t, row.Target.TransactionID)
+		require.Nil(t, row.Target.TransactionID, "target is a pending row, not yet a transaction")
 	}
 }
 
@@ -147,7 +141,7 @@ func TestForceImportDuplicate(t *testing.T) {
 	bank := createBucket(t, app, "asset", "Bank")
 
 	row := nordeaRow("2026/07/01", "-5,00", "Cafe", "Coffee")
-	doImport(t, app, bank, nordeaHeader+row)        // occ 0 imported
+	doImport(t, app, bank, nordeaHeader+row)        // occ 0 pending
 	res := doImport(t, app, bank, nordeaHeader+row) // occ 0 duplicate
 	require.Equal(t, 1, res.Duplicates)
 
@@ -158,9 +152,7 @@ func TestForceImportDuplicate(t *testing.T) {
 	resp := authed(t, app, http.MethodPost, "/api/v1/imports/rows/"+dupID+"/import", nil)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 2) // original + forced
+	require.Len(t, getInbox(t, app, ""), 2) // original + forced
 
 	// A third import of the same single-row file dups against both copies.
 	res = doImport(t, app, bank, nordeaHeader+row+row)
@@ -174,13 +166,12 @@ func TestDeleteImportBatch(t *testing.T) {
 
 	csv := nordeaHeader + nordeaRow("2026/07/01", "-12,34", "K-Market", "Groceries")
 	res := doImport(t, app, bank, csv)
+	require.Len(t, getInbox(t, app, ""), 1)
 
 	resp := authed(t, app, http.MethodDelete, "/api/v1/imports/"+res.ID, nil)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Empty(t, txns)
+	require.Empty(t, getInbox(t, app, ""))
 
 	// Dedup memory cleared: re-import works fresh.
 	res = doImport(t, app, bank, csv)
@@ -214,9 +205,7 @@ func TestImportBalanceDisambiguates(t *testing.T) {
 	require.Equal(t, 1, res.Imported)
 	require.Equal(t, 0, res.Duplicates)
 
-	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 2)
+	require.Len(t, getInbox(t, app, ""), 2)
 
 	// Re-export at the same balance dedups.
 	res = doImport(t, app, bank, nordeaHeader+nordeaRowBal("2026/07/01", "-5,00", "Cafe", "Coffee", "80.00"))
@@ -346,7 +335,6 @@ func TestListDuplicatesPaginates(t *testing.T) {
 	for _, r := range p1.Rows {
 		require.NotNil(t, r.DuplicateOf)
 		require.NotNil(t, r.DuplicateTarget, "duplicate row exposes its target inline")
-		require.NotNil(t, r.DuplicateTarget.TransactionID)
 	}
 
 	p2 := getDuplicates(t, app, res.ID, "?limit=2&cursor="+*p1.NextCursor)

@@ -13,8 +13,8 @@ const (
 	importPollFallback = 30 * time.Second
 )
 
-// StartImportWorkers launches the background pool that promotes uploaded import
-// batches into real transactions. Boot recovery first re-queues any batch left
+// StartImportWorkers launches the background pool that stages uploaded import
+// batches into pending inbox rows. Boot recovery first re-queues any batch left
 // `processing` by a crash (its file is still stored, so a retry is free). Workers
 // then wake on a kick (sent after each upload) or a periodic poll, and claim
 // whole batches via FOR UPDATE SKIP LOCKED with per-user round-robin fairness.
@@ -45,12 +45,12 @@ func (d *Data) importWorker(ctx context.Context) {
 
 func (d *Data) drainImports(ctx context.Context) {
 	for {
-		did, err := d.promoteBatch(ctx)
+		did, err := d.stageBatch(ctx)
 		if ctx.Err() != nil {
 			return
 		}
 		if err != nil {
-			slog.Error("import promote failed, will retry on next poll", "err", err)
+			slog.Error("import staging failed, will retry on next poll", "err", err)
 			return
 		}
 		if !did {

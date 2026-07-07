@@ -71,7 +71,6 @@ create table if not exists users (
     created_at timestamptz not null,
     unique (issuer, subject)
 );
-alter table users add column if not exists home_currency text not null default 'EUR';
 
 create table if not exists sessions (
     id uuid primary key,
@@ -161,17 +160,15 @@ create table if not exists import_rows (
     raw jsonb not null,
     dedup_hash text not null,
     occurrence int not null default 0,
-    status text not null check (status in ('imported', 'duplicate')),
+    status text not null check (status in ('pending', 'categorized', 'duplicate')),
     transaction_id uuid references transactions(id) on delete set null,
     duplicate_of uuid references import_rows(id) on delete set null
 );
-alter table import_rows add column if not exists occurrence int not null default 0;
 create index if not exists idx_import_rows_batch on import_rows(batch_id);
 create index if not exists idx_import_rows_dupes on import_rows(batch_id, id) where status = 'duplicate';
 -- FK back-references, else deleting a parent seq-scans import_rows per row (O(n^2) undo).
 create index if not exists idx_import_rows_txn on import_rows(transaction_id) where transaction_id is not null;
 create index if not exists idx_import_rows_dupof on import_rows(duplicate_of) where duplicate_of is not null;
-drop index if exists idx_import_rows_dedup;
-drop index if exists idx_import_rows_staged;
-create unique index if not exists idx_import_rows_dedup_occ on import_rows(dedup_hash, occurrence) where status = 'imported';
+-- dedup memory = every row that isn't a duplicate (pending/categorized both block re-import).
+create unique index if not exists idx_import_rows_dedup_occ on import_rows(dedup_hash, occurrence) where status <> 'duplicate';
 `
