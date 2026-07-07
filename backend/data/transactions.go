@@ -338,7 +338,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate t
 	args := []any{userID}
 	cursorClause := ""
 	if cursorID != "" {
-		cursorClause = "and (t.date, t.id) < ($2::date, $3::uuid)"
+		cursorClause = "and (t.date, t.id) < ($2::timestamptz, $3::uuid)"
 		args = append(args, cursorDate, cursorID)
 	}
 	searchClause := ""

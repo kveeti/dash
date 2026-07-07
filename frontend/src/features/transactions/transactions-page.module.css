@@ -3,10 +3,7 @@
   align-items: baseline;
   gap: var(--s3);
   padding-block: var(--s2);
-
-  &:not(:last-child) {
-    border-block-end: 1px solid var(--gray-3);
-  }
+  border-block-end: 1px solid var(--gray-3);
 }
 
 .primary {

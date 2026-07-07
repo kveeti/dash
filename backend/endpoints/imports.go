@@ -199,7 +199,7 @@ func HandleListDuplicates(state *state.State, getUserID GetUserID) Handler {
 		for i, row := range rows {
 			out[i] = JSON{
 				"id":              row.ID,
-				"date":            row.Date.Format(dateLayout),
+				"date":            formatDate(row.Date),
 				"amount":          row.Amount,
 				"currency":        row.Currency,
 				"raw_description": row.RawDescription,
@@ -208,7 +208,7 @@ func HandleListDuplicates(state *state.State, getUserID GetUserID) Handler {
 			}
 			if t := row.Target; t != nil {
 				out[i]["duplicate_target"] = JSON{
-					"date":            t.Date.Format(dateLayout),
+					"date":            formatDate(t.Date),
 					"amount":          t.Amount,
 					"currency":        t.Currency,
 					"raw_description": t.RawDescription,

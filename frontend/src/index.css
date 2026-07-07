@@ -50,4 +50,5 @@ html {
   background-color: var(--gray-2);
   color: var(--gray-12);
   font-family: geist;
+  overscroll-behavior-y: none;
 }

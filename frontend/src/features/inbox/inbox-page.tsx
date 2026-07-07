@@ -12,7 +12,6 @@ import { categorizeInbox, inboxQuery, type InboxRow } from "../../api/inbox";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { Combobox } from "../../ui/combobox/combobox";
 import { Filterbar } from "../list-page/filterbar";
-import { groupByDate } from "../list-page/group-by-date";
 import { FloatingBar } from "../list-page/floating-bar";
 import { CategoryMenu } from "../transactions/bucket-combobox";
 import { formatAmount } from "../transactions/transaction-row";
@@ -20,12 +19,16 @@ import { formatAmount } from "../transactions/transaction-row";
 import shell from "../list-page/list-page.module.css";
 import styles from "./inbox-page.module.css";
 
-const dateFormat = new Intl.DateTimeFormat(undefined, {
-  weekday: "long",
+const shortDateFmt = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
   day: "numeric",
-  month: "long",
+});
+
+const longDateFmt = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
   year: "numeric",
-  timeZone: "UTC",
 });
 
 export default function InboxPage() {
@@ -85,6 +88,9 @@ export default function InboxPage() {
       return next;
     });
 
+  const thisYear = new Date().getFullYear();
+  let prevDateFormatted: string | null = null;
+
   return (
     <div class={shell.wrapper}>
       <Filterbar
@@ -107,28 +113,37 @@ export default function InboxPage() {
         </Match>
 
         <Match when={inbox.data && buckets.data}>
-          <For
-            each={groupByDate(items(), (r) => r.date)}
-            fallback={
-              <p class={shell.col}>
-                {params.q ? "no results" : "nothing to categorize 🎉"}
-              </p>
-            }
-          >
-            {(group) => (
-              <section>
-                <div class={shell.date}>
-                  <div class={shell.col}>
-                    {dateFormat.format(new Date(group.date))}
-                  </div>
-                </div>
-                <ul class={`${shell.list} ${shell.col}`}>
-                  <For each={group.items}>
-                    {(row) => (
+          <ul class={shell.list}>
+            <For
+              each={items()}
+              fallback={
+                <p class={shell.col}>
+                  {params.q ? "no results" : "nothing to categorize 🎉"}
+                </p>
+              }
+            >
+              {(row) => {
+                const dateConverted = new Date(row.date);
+                const showYear = dateConverted.getFullYear() !== thisYear;
+                const dateFormatted = showYear
+                  ? longDateFmt.format(dateConverted)
+                  : shortDateFmt.format(dateConverted);
+                const showDateHeader = dateFormatted !== prevDateFormatted;
+                prevDateFormatted = dateFormatted;
+
+                return (
+                  <>
+                    <Show when={showDateHeader}>
+                      <li role="presentation" class={shell.datePos}>
+                        <h2 class={shell.date}>{dateFormatted}</h2>
+                      </li>
+                    </Show>
+
+                    <li class={shell.col}>
                       <Show
                         when={selectMode()}
                         fallback={
-                          <li class={styles.row}>
+                          <div class={styles.row}>
                             <Combobox>
                               <Combobox.Trigger class={styles.rowTrigger}>
                                 <Info row={row} />
@@ -148,27 +163,28 @@ export default function InboxPage() {
                                 />
                               </Combobox.Content>
                             </Combobox>
-                          </li>
+                          </div>
                         }
                       >
-                        <li
+                        <div
                           class={shell.selectable}
                           onClick={() => toggle(row.id)}
                         >
                           <Checkbox
                             checked={selected().has(row.id)}
+                            tabindex={-1}
                             style={{ "pointer-events": "none" }}
                           />
                           <Info row={row} />
                           <Amount row={row} />
-                        </li>
+                        </div>
                       </Show>
-                    )}
-                  </For>
-                </ul>
-              </section>
-            )}
-          </For>
+                    </li>
+                  </>
+                );
+              }}
+            </For>
+          </ul>
 
           <Show when={inbox.hasNextPage}>
             <button

@@ -108,7 +108,7 @@ create index if not exists idx_audit_logs_row on audit_logs(table_name, row_id);
 create table if not exists transactions (
     id uuid primary key,
     owner_user_id uuid not null references users(id),
-    date date not null,
+    date timestamptz not null,
     counterparty text not null default '',
     description text not null default '',
     created_at timestamptz not null
@@ -153,7 +153,7 @@ create table if not exists import_files (
 create table if not exists import_rows (
     id uuid primary key,
     batch_id uuid not null references import_batches(id),
-    date date not null,
+    date timestamptz not null,
     amount bigint not null,
     currency text not null,
     raw_description text not null,

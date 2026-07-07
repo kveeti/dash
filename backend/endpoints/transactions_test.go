@@ -46,7 +46,7 @@ func clearingBucketID(t *testing.T, app *testApp) string {
 func postTransaction(t *testing.T, app *testApp, postings []map[string]any) *http.Response {
 	t.Helper()
 	return authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-		"date":        "2026-07-01",
+		"date":        "2026-07-01T00:00:00Z",
 		"description": "test",
 		"postings":    postings,
 	})
@@ -76,7 +76,7 @@ func TestCreateBalancedTransaction(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	txns := decodeTxns(t, resp)
 	require.Len(t, txns, 1)
-	require.Equal(t, "2026-07-01", txns[0]["date"])
+	require.Equal(t, "2026-07-01T00:00:00Z", txns[0]["date"])
 	require.Len(t, txns[0]["postings"], 2)
 }
 
@@ -86,7 +86,7 @@ func TestCounterpartyRoundTrips(t *testing.T) {
 	groceries := createBucket(t, app, "expense", "Groceries")
 
 	resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-		"date":         "2026-07-01",
+		"date":         "2026-07-01T00:00:00Z",
 		"counterparty": "K-Market",
 		"description":  "weekly shop",
 		"postings": []map[string]any{
@@ -105,7 +105,7 @@ func TestCounterpartyRoundTrips(t *testing.T) {
 	require.Equal(t, "K-Market", txns[0]["counterparty"])
 
 	resp = authed(t, app, http.MethodPatch, "/api/v1/transactions/"+created["id"].(string), map[string]any{
-		"date":         "2026-07-01",
+		"date":         "2026-07-01T00:00:00Z",
 		"counterparty": "Lidl",
 		"description":  "weekly shop",
 		"postings": []map[string]any{
@@ -151,16 +151,16 @@ func TestListOrdersByDateDesc(t *testing.T) {
 		})
 		require.Equal(t, http.StatusCreated, resp.StatusCode)
 	}
-	post("2026-07-01")
-	post("2026-07-03")
-	post("2026-07-02")
+	post("2026-07-01T00:00:00Z")
+	post("2026-07-03T00:00:00Z")
+	post("2026-07-02T00:00:00Z")
 
 	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
 	txns := decodeTxns(t, resp)
 	require.Len(t, txns, 3)
-	require.Equal(t, "2026-07-03", txns[0]["date"])
-	require.Equal(t, "2026-07-02", txns[1]["date"])
-	require.Equal(t, "2026-07-01", txns[2]["date"])
+	require.Equal(t, "2026-07-03T00:00:00Z", txns[0]["date"])
+	require.Equal(t, "2026-07-02T00:00:00Z", txns[1]["date"])
+	require.Equal(t, "2026-07-01T00:00:00Z", txns[2]["date"])
 }
 
 func TestSearchByCounterparty(t *testing.T) {
@@ -170,7 +170,7 @@ func TestSearchByCounterparty(t *testing.T) {
 
 	post := func(counterparty string) {
 		resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-			"date":         "2026-07-01",
+			"date":         "2026-07-01T00:00:00Z",
 			"counterparty": counterparty,
 			"postings": []map[string]any{
 				{"bucket_id": bank, "amount": -100, "currency": "EUR"},
@@ -298,7 +298,7 @@ func TestUpdateTransaction(t *testing.T) {
 	})
 
 	resp := authed(t, app, http.MethodPatch, "/api/v1/transactions/"+id, map[string]any{
-		"date":        "2026-07-05",
+		"date":        "2026-07-05T00:00:00Z",
 		"description": "updated",
 		"postings": []map[string]any{
 			{"bucket_id": bank, "amount": -1500, "currency": "EUR"},
@@ -315,7 +315,7 @@ func TestUpdateTransaction(t *testing.T) {
 	txns := decodeTxns(t, resp)
 	require.Len(t, txns, 1)
 	require.Equal(t, "updated", txns[0]["description"])
-	require.Equal(t, "2026-07-05", txns[0]["date"])
+	require.Equal(t, "2026-07-05T00:00:00Z", txns[0]["date"])
 }
 
 func TestUpdateRejectsUnbalanced(t *testing.T) {
@@ -328,7 +328,7 @@ func TestUpdateRejectsUnbalanced(t *testing.T) {
 	})
 
 	resp := authed(t, app, http.MethodPatch, "/api/v1/transactions/"+id, map[string]any{
-		"date": "2026-07-05", "description": "x",
+		"date": "2026-07-05T00:00:00Z", "description": "x",
 		"postings": []map[string]any{
 			{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
 			{"bucket_id": groceries, "amount": 999, "currency": "EUR"},
@@ -343,7 +343,7 @@ func TestUpdateNotFound(t *testing.T) {
 	groceries := createBucket(t, app, "expense", "Groceries")
 
 	resp := authed(t, app, http.MethodPatch, "/api/v1/transactions/00000000-0000-0000-0000-000000000000", map[string]any{
-		"date": "2026-07-05", "description": "x",
+		"date": "2026-07-05T00:00:00Z", "description": "x",
 		"postings": []map[string]any{
 			{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
 			{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},

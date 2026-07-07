@@ -269,7 +269,7 @@ func (d *Data) stageFile(ctx context.Context, batch ImportBatch, src RowSource) 
 		defer tx.Rollback(ctx)
 
 		if _, err := tx.Exec(ctx, `create temp table import_stage (
-			id uuid, date date, amount bigint, currency text,
+			id uuid, date timestamptz, amount bigint, currency text,
 			raw_description text, raw jsonb, dedup_hash text, occurrence int not null default 0
 		) on commit drop`); err != nil {
 			return err

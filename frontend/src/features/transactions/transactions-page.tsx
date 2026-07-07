@@ -16,7 +16,6 @@ import {
 } from "../../api/transactions";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { Filterbar } from "../list-page/filterbar";
-import { groupByDate } from "../list-page/group-by-date";
 import { FloatingBar } from "../list-page/floating-bar";
 import {
   formatAmount,
@@ -34,12 +33,16 @@ const asKind =
       ? (row as Extract<TransactionRow, { kind: K }>)
       : undefined;
 
-const dateFormat = new Intl.DateTimeFormat(undefined, {
-  weekday: "long",
+const shortDateFmt = new Intl.DateTimeFormat(undefined, {
+  weekday: "short",
+  month: "short",
   day: "numeric",
-  month: "long",
+});
+
+const longDateFmt = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
   year: "numeric",
-  timeZone: "UTC",
 });
 
 export default function TransactionsPage() {
@@ -104,6 +107,9 @@ export default function TransactionsPage() {
     },
   }));
 
+  const thisYear = new Date().getFullYear();
+  let prevDateFormatted: string | null = null;
+
   return (
     <div class={shell.wrapper}>
       <Filterbar
@@ -124,24 +130,33 @@ export default function TransactionsPage() {
           </p>
         </Match>
         <Match when={transactions.data && buckets.data}>
-          <For
-            each={groupByDate(allTxns(), (t) => t.date)}
-            fallback={<p class={shell.col}>no transactions yet</p>}
-          >
-            {(group) => (
-              <section>
-                <div class={shell.date}>
-                  <div class={shell.col}>
-                    {dateFormat.format(new Date(group.date))}
-                  </div>
-                </div>
-                <ul class={`${shell.list} ${shell.col}`}>
-                  <For each={group.items}>
-                    {(txn) => (
+          <ul class={shell.list}>
+            <For
+              each={allTxns()}
+              fallback={<p class={shell.col}>no transactions yet</p>}
+            >
+              {(txn) => {
+                const dateConverted = new Date(txn.date);
+                const showYear = dateConverted.getFullYear() !== thisYear;
+                const dateFormatted = showYear
+                  ? longDateFmt.format(dateConverted)
+                  : shortDateFmt.format(dateConverted);
+                const showDateHeader = dateFormatted !== prevDateFormatted;
+                prevDateFormatted = dateFormatted;
+
+                return (
+                  <>
+                    <Show when={showDateHeader}>
+                      <li role="presentation" class={shell.datePos}>
+                        <h2 class={shell.date}>{dateFormatted}</h2>
+                      </li>
+                    </Show>
+
+                    <li class={shell.col}>
                       <Show
                         when={selectMode()}
                         fallback={
-                          <li class={styles.row}>
+                          <div class={styles.row}>
                             <Row txn={txn} buckets={bucketsById()} />
                             <button
                               type="button"
@@ -150,10 +165,10 @@ export default function TransactionsPage() {
                             >
                               delete
                             </button>
-                          </li>
+                          </div>
                         }
                       >
-                        <li
+                        <div
                           class={shell.selectable}
                           onClick={() => toggle(txn.id)}
                         >
@@ -163,14 +178,14 @@ export default function TransactionsPage() {
                             style={{ "pointer-events": "none" }}
                           />
                           <Row txn={txn} buckets={bucketsById()} />
-                        </li>
+                        </div>
                       </Show>
-                    )}
-                  </For>
-                </ul>
-              </section>
-            )}
-          </For>
+                    </li>
+                  </>
+                );
+              }}
+            </For>
+          </ul>
 
           <Show when={transactions.hasNextPage}>
             <button

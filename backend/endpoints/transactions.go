@@ -9,7 +9,9 @@ import (
 	"time"
 )
 
-const dateLayout = "2006-01-02"
+const dateLayout = time.RFC3339
+
+func formatDate(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
 type postingBody struct {
 	BucketID string `json:"bucket_id"`
@@ -49,7 +51,7 @@ func parseCursor(r *http.Request) (time.Time, string, error) {
 	}
 	date, err := time.Parse(dateLayout, r.URL.Query().Get("before_date"))
 	if err != nil {
-		return time.Time{}, "", NewErr("before_date must be YYYY-MM-DD", http.StatusBadRequest)
+		return time.Time{}, "", NewErr("before_date must be an RFC3339 timestamp", http.StatusBadRequest)
 	}
 	return date, id, nil
 }
@@ -70,7 +72,7 @@ func decodeTransactionBody(r *http.Request) (time.Time, string, string, []data.P
 	}
 	date, err := time.Parse(dateLayout, body.Date)
 	if err != nil {
-		return time.Time{}, "", "", nil, NewErr("date must be YYYY-MM-DD", http.StatusBadRequest)
+		return time.Time{}, "", "", nil, NewErr("date must be an RFC3339 timestamp", http.StatusBadRequest)
 	}
 	postings := make([]data.Posting, len(body.Postings))
 	for i, p := range body.Postings {
@@ -93,7 +95,7 @@ func mapTransactionErr(err error) error {
 func writeTransaction(w http.ResponseWriter, status int, txn *data.Transaction, postings []data.Posting) {
 	out := transactionResponse{
 		ID:           txn.ID,
-		Date:         txn.Date.Format(dateLayout),
+		Date:         formatDate(txn.Date),
 		Counterparty: txn.Counterparty,
 		Description:  txn.Description,
 		Postings:     make([]postingResponse, len(postings)),
@@ -209,11 +211,11 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 			for j, p := range postings[t.ID] {
 				ps[j] = toPostingResponse(p)
 			}
-			out.Transactions[i] = transactionResponse{ID: t.ID, Date: t.Date.Format(dateLayout), Counterparty: t.Counterparty, Description: t.Description, Postings: ps}
+			out.Transactions[i] = transactionResponse{ID: t.ID, Date: formatDate(t.Date), Counterparty: t.Counterparty, Description: t.Description, Postings: ps}
 		}
 		if len(txns) == data.TransactionPageSize {
 			last := txns[len(txns)-1]
-			out.NextCursor = &cursor{Date: last.Date.Format(dateLayout), ID: last.ID}
+			out.NextCursor = &cursor{Date: formatDate(last.Date), ID: last.ID}
 		}
 		Json(w, out)
 		return nil

@@ -26,7 +26,7 @@ func (d *Data) ListInbox(ctx context.Context, userID string, cursorDate time.Tim
 	args := []any{userID}
 	cursorClause := ""
 	if cursorID != "" {
-		cursorClause = "and (r.date, r.id) < ($2::date, $3::uuid)"
+		cursorClause = "and (r.date, r.id) < ($2::timestamptz, $3::uuid)"
 		args = append(args, cursorDate, cursorID)
 	}
 	searchClause := ""

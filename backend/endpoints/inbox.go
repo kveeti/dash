@@ -41,7 +41,7 @@ func HandleListInbox(state *state.State, getUserID GetUserID) Handler {
 		for i, row := range rows {
 			out.Rows[i] = inboxRowResponse{
 				ID:           row.ID,
-				Date:         row.Date.Format(dateLayout),
+				Date:         formatDate(row.Date),
 				Amount:       row.Amount,
 				Currency:     row.Currency,
 				Counterparty: row.Counterparty,
@@ -50,7 +50,7 @@ func HandleListInbox(state *state.State, getUserID GetUserID) Handler {
 		}
 		if len(rows) == data.InboxPageSize {
 			last := rows[len(rows)-1]
-			out.NextCursor = &cursor{Date: last.Date.Format(dateLayout), ID: last.ID}
+			out.NextCursor = &cursor{Date: formatDate(last.Date), ID: last.ID}
 		}
 		Json(w, out)
 		return nil
