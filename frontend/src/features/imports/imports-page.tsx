@@ -8,9 +8,9 @@ import { bucketsQuery, createBucket } from "../../api/buckets";
 import { createImport, importsQuery } from "../../api/imports";
 import { Button } from "../../ui/button/button";
 import { Field, InputGroup } from "../../ui/input/input";
-import inputStyles from "../../ui/input/input.module.css";
 import { BucketCombobox } from "../transactions/bucket-combobox";
 
+import inputStyles from "../../ui/input/input.module.css";
 import styles from "./imports.module.css";
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {
@@ -27,7 +27,9 @@ const schema = v.object({
 
 export default function ImportsPage() {
   return (
-    <div style={{ display: "flex", "flex-direction": "column", gap: "var(--s6)" }}>
+    <div
+      style={{ display: "flex", "flex-direction": "column", gap: "var(--s6)" }}
+    >
       <div>
         <h1 class={styles.title}>Import transactions</h1>
         <div class={styles.card}>
@@ -123,7 +125,11 @@ function ImportForm() {
           {(field) => (
             <Field class={inputStyles.horizontal} label="Format">
               <InputGroup>
-                <select {...field.props} style={{ flex: "1" }} value={field.input ?? ""}>
+                <select
+                  {...field.props}
+                  style={{ flex: "1" }}
+                  value={field.input ?? ""}
+                >
                   <option value="nordea">Nordea</option>
                 </select>
               </InputGroup>
@@ -135,7 +141,13 @@ function ImportForm() {
           <p>error: {mutation.error?.message}</p>
         </Show>
 
-        <div style={{ display: "flex", "flex-direction": "row-reverse", gap: "1rem" }}>
+        <div
+          style={{
+            display: "flex",
+            "flex-direction": "row-reverse",
+            gap: "1rem",
+          }}
+        >
           <Button
             type="submit"
             disabled={form.isSubmitting}

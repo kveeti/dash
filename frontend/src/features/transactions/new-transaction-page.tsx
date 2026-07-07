@@ -1,4 +1,9 @@
-import { createForm, Field as FormField, Form, setInput } from "@formisch/solid";
+import {
+  createForm,
+  Field as FormField,
+  Form,
+  setInput,
+} from "@formisch/solid";
 import { useNavigate } from "@solidjs/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
 import { createSignal, For, Show } from "solid-js";
@@ -9,9 +14,9 @@ import { createTransaction } from "../../api/transactions";
 import { meQuery } from "../../api/user";
 import { Button } from "../../ui/button/button";
 import { Field, Input, InputGroup } from "../../ui/input/input";
-import inputStyles from "../../ui/input/input.module.css";
 import { BucketCombobox } from "./bucket-combobox";
 
+import inputStyles from "../../ui/input/input.module.css";
 import styles from "./new-transaction-page.module.css";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -42,7 +47,15 @@ export default function NewTransactionPage() {
 
   return (
     <>
-      <h1 style={{"font-size":"1.2rem", "font-weight":"500", "padding-inline": "var(--s5)"}}>New transaction</h1>
+      <h1
+        style={{
+          "font-size": "1.2rem",
+          "font-weight": "500",
+          "padding-inline": "var(--s5)",
+        }}
+      >
+        New transaction
+      </h1>
       <Show when={buckets.data && me.data} fallback={<p>loading…</p>}>
         <TransactionForm />
       </Show>
@@ -58,30 +71,21 @@ function TransactionForm() {
 
   const [mode, setMode] = createSignal<"expense" | "income">("expense");
 
-  const uncategorized = buckets.data!.find(
-    (b) => b.kind === "expense" && b.hidden,
-  );
-
   const form = createForm({
     schema,
     initialInput: {
       date: today(),
       currency: me.data!.home_currency,
-      category: uncategorized?.id,
     },
   });
 
   const switchMode = (next: "expense" | "income") => {
     setMode(next);
-    setInput(form, {
-      path: ["category"],
-      input: next === "expense" ? (uncategorized?.id ?? "") : "",
-    });
+    setInput(form, { path: ["category"], input: "" });
   };
 
   const assets = () => buckets.data?.filter((b) => b.kind === "asset") ?? [];
-  const categories = () =>
-    buckets.data?.filter((b) => b.kind === mode()) ?? [];
+  const categories = () => buckets.data?.filter((b) => b.kind === mode()) ?? [];
 
   const currencyOptions = () => {
     const common = ["EUR", "USD", "GBP", "SEK", "NOK", "DKK", "CHF", "JPY"];
@@ -129,9 +133,8 @@ function TransactionForm() {
   };
 
   return (
-    <div class={styles.card}>
+    <div class={styles.cad}>
       <Form of={form} class={styles.form} onSubmit={onSubmit}>
-
         <FormField of={form} path={["date"]}>
           {(field) => (
             <Input
@@ -241,11 +244,26 @@ function TransactionForm() {
           <p>error: {mutation.error?.message}</p>
         </Show>
 
-        <div style={{display: "flex", "flex-direction":"row-reverse", gap: "1rem" }}>
-          <Button type="submit" disabled={form.isSubmitting} style={{"width":"100%"}}>
+        <div
+          style={{
+            display: "flex",
+            "flex-direction": "row-reverse",
+            gap: "1rem",
+          }}
+        >
+          <Button
+            type="submit"
+            disabled={form.isSubmitting}
+            style={{ width: "100%" }}
+          >
             Save
           </Button>
-          <Button type="reset" variant="outline" disabled={form.isSubmitting} style={{"width":"unset"}}>
+          <Button
+            type="reset"
+            variant="outline"
+            disabled={form.isSubmitting}
+            style={{ width: "unset" }}
+          >
             Reset
           </Button>
         </div>

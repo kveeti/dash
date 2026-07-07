@@ -2,14 +2,30 @@ import type { Bucket } from "../../api/buckets";
 import type { Posting, Transaction } from "../../api/transactions";
 
 export type TransactionRow =
-  | { kind: "simple"; category: string; amount: number; currency: string; account?: string }
-  | { kind: "transfer"; from: string; to: string; amount: number; currency: string }
-  | { kind: "generic"; legs: { name: string; amount: number; currency: string }[] };
+  | {
+      kind: "simple";
+      category: string;
+      amount: number;
+      currency: string;
+      account?: string;
+    }
+  | {
+      kind: "transfer";
+      from: string;
+      to: string;
+      amount: number;
+      currency: string;
+    }
+  | {
+      kind: "generic";
+      legs: { name: string; amount: number; currency: string }[];
+    };
 
 export function formatAmount(amount: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(
-    amount / 100,
-  );
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency,
+  }).format(amount / 100);
 }
 
 export function toTransactionRow(

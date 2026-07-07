@@ -163,6 +163,77 @@ func TestListOrdersByDateDesc(t *testing.T) {
 	require.Equal(t, "2026-07-01", txns[2]["date"])
 }
 
+func TestSearchByCounterparty(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+
+	post := func(counterparty string) {
+		resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
+			"date":         "2026-07-01",
+			"counterparty": counterparty,
+			"postings": []map[string]any{
+				{"bucket_id": bank, "amount": -100, "currency": "EUR"},
+				{"bucket_id": groceries, "amount": 100, "currency": "EUR"},
+			},
+		})
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+	}
+	post("K-Market Kamppi")
+	post("K-Market Helsinki")
+	post("Shell")
+
+	resp := authed(t, app, http.MethodGet, "/api/v1/transactions?q=market", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Len(t, decodeTxns(t, resp), 2)
+}
+
+// BulkCategorize recategorizes existing transactions (transactions page), repointing
+// each one's single expense/income leg to a new category.
+func TestBulkCategorize(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	dining := createBucket(t, app, "expense", "Dining")
+	groceries := createBucket(t, app, "expense", "Groceries")
+
+	entry := func() string {
+		return createTransaction(t, app, []map[string]any{
+			{"bucket_id": bank, "amount": -500, "currency": "EUR"},
+			{"bucket_id": dining, "amount": 500, "currency": "EUR"},
+		})
+	}
+	a, b, c := entry(), entry(), entry()
+
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/categorize", map[string]any{
+		"transaction_ids": []string{a, b, c},
+		"bucket_id":       groceries,
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var out map[string]int
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Equal(t, 3, out["categorized"])
+
+	balances := getBalances(t, app)
+	require.Equal(t, int64(1500), balances[groceries]["EUR"])
+	require.NotContains(t, balances, dining)
+}
+
+func TestBulkCategorizeRejectsNonCategory(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	txn := createTransaction(t, app, []map[string]any{
+		{"bucket_id": bank, "amount": -500, "currency": "EUR"},
+		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
+	})
+
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/categorize", map[string]any{
+		"transaction_ids": []string{txn},
+		"bucket_id":       bank,
+	})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
 func TestRejectsUnbalancedTransaction(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")

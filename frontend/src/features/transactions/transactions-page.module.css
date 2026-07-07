@@ -1,25 +1,12 @@
-.group:not(:first-of-type) {
-  margin-block-start: var(--s5);
-}
-
-.date {
-  font-size: var(--text-sm);
-  color: var(--gray-11);
-  margin-block-end: var(--s2);
-}
-
-.list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-}
-
 .row {
   display: flex;
   align-items: baseline;
   gap: var(--s3);
   padding-block: var(--s2);
-  border-block-end: 1px solid var(--gray-3);
+
+  &:not(:last-child) {
+    border-block-end: 1px solid var(--gray-3);
+  }
 }
 
 .primary {

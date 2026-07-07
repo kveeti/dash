@@ -745,7 +745,11 @@ const Item: ParentComponent<CommandItemProps> = (props) => {
             : select
         }
         onPointerDown={(e) => {
-          if (localProps.disabled || e.button !== 0 || e.pointerType !== "mouse")
+          if (
+            localProps.disabled ||
+            e.button !== 0 ||
+            e.pointerType !== "mouse"
+          )
             return;
           e.preventDefault();
           pointerSelected = true;

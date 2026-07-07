@@ -1,29 +1,38 @@
-import { A } from "@solidjs/router";
+import { useSearchParams } from "@solidjs/router";
 import {
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/solid-query";
-import { For, Match, Show, Switch } from "solid-js";
+import { createSignal, For, Match, Show, Switch } from "solid-js";
 
-import { bucketsQuery, type Bucket } from "../../api/buckets";
+import { bucketsQuery, createBucket, type Bucket } from "../../api/buckets";
 import {
+  bulkCategorize,
   deleteTransaction,
   transactionsQuery,
   type Transaction,
 } from "../../api/transactions";
+import { Checkbox } from "../../ui/checkbox/checkbox";
+import { Filterbar } from "../list-page/filterbar";
+import { groupByDate } from "../list-page/group-by-date";
+import { FloatingBar } from "../list-page/floating-bar";
 import {
   formatAmount,
   toTransactionRow,
   type TransactionRow,
 } from "./transaction-row";
 
-const asKind = <K extends TransactionRow["kind"]>(kind: K) => (
-  row: TransactionRow,
-) => (row.kind === kind ? (row as Extract<TransactionRow, { kind: K }>) : undefined);
-
+import shell from "../list-page/list-page.module.css";
 import styles from "./transactions-page.module.css";
+
+const asKind =
+  <K extends TransactionRow["kind"]>(kind: K) =>
+  (row: TransactionRow) =>
+    row.kind === kind
+      ? (row as Extract<TransactionRow, { kind: K }>)
+      : undefined;
 
 const dateFormat = new Intl.DateTimeFormat(undefined, {
   weekday: "long",
@@ -33,23 +42,16 @@ const dateFormat = new Intl.DateTimeFormat(undefined, {
   timeZone: "UTC",
 });
 
-function groupByDate(txns: Transaction[]): { date: string; txns: Transaction[] }[] {
-  const groups: { date: string; txns: Transaction[] }[] = [];
-  for (const txn of txns) {
-    const last = groups[groups.length - 1];
-    if (last && last.date === txn.date) last.txns.push(txn);
-    else groups.push({ date: txn.date, txns: [txn] });
-  }
-  return groups;
-}
-
 export default function TransactionsPage() {
-  const transactions = useInfiniteQuery(transactionsQuery);
+  const [params, setParams] = useSearchParams<{ q?: string }>();
+
+  const transactions = useInfiniteQuery(() =>
+    transactionsQuery(params.q ?? ""),
+  );
   const buckets = useQuery(bucketsQuery);
   const queryClient = useQueryClient();
 
-  const allTxns = () =>
-    transactions.data!.pages.flatMap((p) => p.transactions);
+  const allTxns = () => transactions.data!.pages.flatMap((p) => p.transactions);
 
   const bucketsById = () =>
     new Map(buckets.data!.map((b) => [b.id, b] as [string, Bucket]));
@@ -64,64 +66,138 @@ export default function TransactionsPage() {
     if (window.confirm("Delete this transaction?")) mutation.mutate(txn.id);
   };
 
+  const [selectMode, setSelectMode] = createSignal(false);
+  const [selected, setSelected] = createSignal(new Set<string>());
+
+  const clearSelection = () => setSelected(new Set<string>());
+
+  const exitSelect = () => {
+    setSelectMode(false);
+    clearSelection();
+  };
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const categories = () =>
+    buckets.data!.filter(
+      (b) => (b.kind === "expense" || b.kind === "income") && !b.hidden,
+    );
+
+  const onCreate = async (name: string) => {
+    const bucket = await createBucket({ kind: "expense", name });
+    await queryClient.invalidateQueries({ queryKey: ["buckets"] });
+    return bucket;
+  };
+
+  const categorize = useMutation(() => ({
+    mutationFn: ({ ids, bucketId }: { ids: string[]; bucketId: string }) =>
+      bulkCategorize(ids, bucketId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      exitSelect();
+    },
+  }));
+
   return (
-    <>
-      <div style={{display:"flex", "justify-content":"space-between", "padding-inline": "1.5rem"}}>
-        <h1 style={{"font-size":"1.2rem", "font-weight":"500"}}>Transactions</h1>
+    <div class={shell.wrapper}>
+      <Filterbar
+        selectLabel="Select transactions"
+        selectMode={selectMode()}
+        onSelectMode={(on) => (on ? setSelectMode(true) : exitSelect())}
+        search={params.q ?? ""}
+        onSearch={(value) => setParams({ q: value }, { replace: true })}
+      />
 
-        <A href="/transactions/new">New expense</A>
-      </div>
-
-      <div style={{"background-color":"var(--gray-1)", height: "100%", padding: "var(--s5)", "border-radius": "var(--s3)", border: "1px solid var(--gray-3)"}}>
-        <Switch>
-          <Match when={transactions.isPending || buckets.isPending}>
-            <p>loading…</p>
-          </Match>
-          <Match when={transactions.isError || buckets.isError}>
-            <p>error: {(transactions.error ?? buckets.error)?.message}</p>
-          </Match>
-          <Match when={transactions.data && buckets.data}>
-            <For
-              each={groupByDate(allTxns())}
-              fallback={<p>no transactions yet</p>}
-            >
-              {(group) => (
-                <section class={styles.group}>
-                  <div class={styles.date}>
+      <Switch>
+        <Match when={transactions.isPending || buckets.isPending}>
+          <p class={shell.col}>loading…</p>
+        </Match>
+        <Match when={transactions.isError || buckets.isError}>
+          <p class={shell.col}>
+            error: {(transactions.error ?? buckets.error)?.message}
+          </p>
+        </Match>
+        <Match when={transactions.data && buckets.data}>
+          <For
+            each={groupByDate(allTxns(), (t) => t.date)}
+            fallback={<p class={shell.col}>no transactions yet</p>}
+          >
+            {(group) => (
+              <section>
+                <div class={shell.date}>
+                  <div class={shell.col}>
                     {dateFormat.format(new Date(group.date))}
                   </div>
-                  <ul class={styles.list}>
-                    <For each={group.txns}>
-                      {(txn) => (
-                        <li class={styles.row}>
+                </div>
+                <ul class={`${shell.list} ${shell.col}`}>
+                  <For each={group.items}>
+                    {(txn) => (
+                      <Show
+                        when={selectMode()}
+                        fallback={
+                          <li class={styles.row}>
+                            <Row txn={txn} buckets={bucketsById()} />
+                            <button
+                              type="button"
+                              class={styles.delete}
+                              onClick={() => onDelete(txn)}
+                            >
+                              delete
+                            </button>
+                          </li>
+                        }
+                      >
+                        <li
+                          class={shell.selectable}
+                          onClick={() => toggle(txn.id)}
+                        >
+                          <Checkbox
+                            checked={selected().has(txn.id)}
+                            tabindex={-1}
+                            style={{ "pointer-events": "none" }}
+                          />
                           <Row txn={txn} buckets={bucketsById()} />
-                          <button
-                            type="button"
-                            class={styles.delete}
-                            onClick={() => onDelete(txn)}
-                          >
-                            delete
-                          </button>
                         </li>
-                      )}
-                    </For>
-                  </ul>
-                </section>
-              )}
-            </For>
-            <Show when={transactions.hasNextPage}>
-              <button
-                type="button"
-                onClick={() => transactions.fetchNextPage()}
-                disabled={transactions.isFetchingNextPage}
-              >
-                {transactions.isFetchingNextPage ? "loading…" : "Load older"}
-              </button>
-            </Show>
-          </Match>
-        </Switch>
-      </div>
-    </>
+                      </Show>
+                    )}
+                  </For>
+                </ul>
+              </section>
+            )}
+          </For>
+
+          <Show when={transactions.hasNextPage}>
+            <button
+              type="button"
+              class={shell.col}
+              onClick={() => transactions.fetchNextPage()}
+              disabled={transactions.isFetchingNextPage}
+            >
+              {transactions.isFetchingNextPage ? "loading…" : "Load older"}
+            </button>
+          </Show>
+
+          <Show when={selectMode()}>
+            <FloatingBar
+              count={selected().size}
+              categories={categories()}
+              onClear={clearSelection}
+              onExit={exitSelect}
+              onCategorize={(bucketId) =>
+                categorize.mutate({ ids: [...selected()], bucketId })
+              }
+              onCreate={onCreate}
+            />
+          </Show>
+        </Match>
+      </Switch>
+    </div>
   );
 }
 

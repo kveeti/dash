@@ -7,7 +7,7 @@ export function Layout(props: { children: JSX.Element }) {
     <>
       <Nav />
 
-      <main style={{height:"100%"}}>{props.children}</main>
+      <main style={{ height: "100%" }}>{props.children}</main>
     </>
   );
 }

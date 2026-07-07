@@ -1,4 +1,5 @@
 :root {
+  --px: 0.0625rem;
   --s1: 0.25rem;
   --s2: 0.5rem;
   --s3: 0.75rem;
@@ -200,5 +201,11 @@
     --gray-a10: #ffffff72;
     --gray-a11: #ffffffaf;
     --gray-a12: #ffffffed;
+  }
+
+  --nav-height: 2.25rem;
+
+  @media (display-mode: standalone) {
+    --nav-height: 3.5rem;
   }
 }

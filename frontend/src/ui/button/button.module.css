@@ -62,7 +62,10 @@
 
 @media (hover: hover) {
   .primary:not(:disabled):hover {
-    background-image: linear-gradient(oklch(0.5 0.12 148), oklch(0.37 0.12 148));
+    background-image: linear-gradient(
+      oklch(0.5 0.12 148),
+      oklch(0.37 0.12 148)
+    );
   }
 
   .outline:not(:disabled):hover {

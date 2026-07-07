@@ -1,4 +1,4 @@
-import { infiniteQueryOptions } from "@tanstack/solid-query";
+import { infiniteQueryOptions, keepPreviousData } from "@tanstack/solid-query";
 
 import { api } from "./http";
 
@@ -27,17 +27,24 @@ interface TransactionsPage {
   next_cursor: Cursor | null;
 }
 
-export const transactionsQuery = () =>
+const transactionsPage = (pageParam: Cursor | null, extra = "") => {
+  const cursor = pageParam
+    ? `before_date=${pageParam.date}&before_id=${pageParam.id}`
+    : "";
+  const query = [cursor, extra].filter(Boolean).join("&");
+  return api<TransactionsPage>(
+    `/api/v1/transactions${query ? `?${query}` : ""}`,
+  );
+};
+
+export const transactionsQuery = (q: string) =>
   infiniteQueryOptions({
-    queryKey: ["transactions"],
-    queryFn: ({ pageParam }: { pageParam: Cursor | null }) => {
-      const query = pageParam
-        ? `?before_date=${pageParam.date}&before_id=${pageParam.id}`
-        : "";
-      return api<TransactionsPage>(`/api/v1/transactions${query}`);
-    },
+    queryKey: ["transactions", "list", q],
+    queryFn: ({ pageParam }: { pageParam: Cursor | null }) =>
+      transactionsPage(pageParam, q ? `q=${encodeURIComponent(q)}` : ""),
     initialPageParam: null as Cursor | null,
     getNextPageParam: (last: TransactionsPage) => last.next_cursor,
+    placeholderData: keepPreviousData,
   });
 
 export interface PostingInput {
@@ -55,6 +62,19 @@ export function createTransaction(input: {
   return api<Transaction>("/api/v1/transactions", {
     method: "POST",
     body: JSON.stringify(input),
+  });
+}
+
+export function bulkCategorize(
+  transactionIds: string[],
+  bucketId: string,
+): Promise<{ categorized: number }> {
+  return api<{ categorized: number }>("/api/v1/transactions/categorize", {
+    method: "POST",
+    body: JSON.stringify({
+      transaction_ids: transactionIds,
+      bucket_id: bucketId,
+    }),
   });
 }
 

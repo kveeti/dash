@@ -83,7 +83,7 @@ func mapTransactionErr(err error) error {
 	switch {
 	case errors.Is(err, data.ErrNotFound):
 		return NewErr(err.Error(), http.StatusNotFound)
-	case errors.Is(err, data.ErrUnbalanced), errors.Is(err, data.ErrInvalidPostings), errors.Is(err, data.ErrInvalidBucket):
+	case errors.Is(err, data.ErrUnbalanced), errors.Is(err, data.ErrInvalidPostings), errors.Is(err, data.ErrInvalidBucket), errors.Is(err, data.ErrInvalidCategory):
 		return NewErr(err.Error(), http.StatusBadRequest)
 	default:
 		return NewUnexpectedErr("transaction error: %w", err)
@@ -147,6 +147,29 @@ func HandleUpdateTransaction(state *state.State, getUserID GetUserID) Handler {
 	}
 }
 
+func HandleBulkCategorize(state *state.State, getUserID GetUserID) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		userID, err := getUserID(r)
+		if err != nil {
+			return err
+		}
+		var body struct {
+			TransactionIDs []string `json:"transaction_ids"`
+			BucketID       string   `json:"bucket_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			return NewErr("invalid request body", http.StatusBadRequest)
+		}
+
+		n, err := state.Data.BulkCategorize(r.Context(), userID, body.TransactionIDs, body.BucketID)
+		if err != nil {
+			return mapTransactionErr(err)
+		}
+		Json(w, map[string]int{"categorized": n})
+		return nil
+	}
+}
+
 func HandleDeleteTransaction(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)
@@ -173,7 +196,9 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 			return err
 		}
 
-		txns, postings, err := state.Data.ListTransactions(r.Context(), userID, cursorDate, cursorID)
+		q := r.URL.Query().Get("q")
+
+		txns, postings, err := state.Data.ListTransactions(r.Context(), userID, cursorDate, cursorID, q)
 		if err != nil {
 			return NewUnexpectedErr("error listing transactions: %w", err)
 		}

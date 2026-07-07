@@ -65,7 +65,7 @@
     justify-content: flex-start;
   }
 
-  .horizontal> :not(.labelRow):not(.error) {
+  .horizontal > :not(.labelRow):not(.error) {
     grid-row: 2;
     grid-column: 2;
   }
@@ -77,7 +77,7 @@
 
 /* Shared surface for every single-field control (plain input + group segments). */
 .control,
-.group>* {
+.group > * {
   padding-inline: 0.7rem;
   color: var(--gray-12);
   background-color: var(--gray-2);
@@ -88,12 +88,12 @@
 }
 
 .control::placeholder,
-.group>input::placeholder {
+.group > input::placeholder {
   color: var(--gray-10);
 }
 
 .control:focus-visible,
-.group>*:focus-visible {
+.group > *:focus-visible {
   border-color: var(--accent);
   outline-color: var(--accent);
   box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 22%, transparent);
@@ -122,9 +122,8 @@
 }
 
 @media (hover: hover) {
-
   .control:not(:focus):not(.invalid):hover,
-  .group>*:not(:focus):not(.invalid):hover {
+  .group > *:not(:focus):not(.invalid):hover {
     border-color: var(--gray-9);
   }
 }
@@ -137,34 +136,34 @@
   inline-size: 100%;
   block-size: 2.25rem;
 
-  &>* {
+  & > * {
     min-inline-size: 0;
   }
 
-  &>*:focus-visible {
+  & > *:focus-visible {
     position: relative;
     z-index: 1;
   }
 
-  &> :not(:first-child) {
+  & > :not(:first-child) {
     margin-inline-start: -1px;
   }
 
-  &> :first-child {
+  & > :first-child {
     border-start-start-radius: 0.75rem;
     border-end-start-radius: 0.75rem;
   }
 
-  &> :last-child {
+  & > :last-child {
     border-start-end-radius: 0.75rem;
     border-end-end-radius: 0.75rem;
   }
 
-  &>input {
+  & > input {
     flex: 1;
   }
 
-  &>select {
+  & > select {
     cursor: pointer;
     appearance: none;
     padding-inline-end: 2.2rem;

@@ -1,0 +1,56 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+
+  &:not(:last-child) {
+    border-block-end: 1px solid var(--gray-3);
+  }
+}
+
+button.rowTrigger {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding-block: var(--s2);
+  padding-inline: var(--s3);
+  margin-inline: calc(-1 * var(--s3));
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  border-radius: var(--s2);
+}
+
+@media (hover: hover) {
+  button.rowTrigger:hover {
+    background: var(--gray-a3);
+  }
+}
+
+.info {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.primary {
+  min-inline-size: 0;
+}
+
+.secondary {
+  color: var(--gray-11);
+  font-size: var(--text-sm);
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.positive {
+  color: var(--green-10);
+}

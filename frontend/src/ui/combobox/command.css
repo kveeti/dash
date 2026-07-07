@@ -104,10 +104,18 @@
   /* As tall as fits below the trigger, snapped down so a clamped list always
      cuts its last row at --peek — the scroll affordance. The 3rem is the input
      + borders sitting above the list inside the popover. */
-  max-block-size: max(calc(var(--item-h) * 1.5),
-      calc(round(down,
-          var(--kb-popper-content-available-height, 100vh) - 3rem - var(--item-h) * var(--peek),
-          var(--item-h)) + var(--item-h) * var(--peek)));
+  max-block-size: max(
+    calc(var(--item-h) * 1.5),
+    calc(
+      round(
+          down,
+          var(--kb-popper-content-available-height, 100vh) - 3rem -
+            var(--item-h) * var(--peek),
+          var(--item-h)
+        ) +
+        var(--item-h) * var(--peek)
+    )
+  );
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 0.2rem 0.2rem;
@@ -173,7 +181,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   [cmdk-overlay],
   [cmdk-dialog],
   [cmdk-list] {

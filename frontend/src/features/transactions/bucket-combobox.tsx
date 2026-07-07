@@ -4,6 +4,7 @@ import type { Bucket } from "../../api/buckets";
 import { Combobox, useCombobox } from "../../ui/combobox/combobox";
 import { Command, useCommandState } from "../../ui/combobox/command";
 import { Field } from "../../ui/input/input";
+
 import inputStyles from "../../ui/input/input.module.css";
 
 interface Props {
@@ -25,7 +26,9 @@ export function BucketCombobox(props: Props) {
   return (
     <Field label={props.label} error={props.error} class={props.class} as="div">
       <Combobox>
-        <Combobox.Trigger error={!!props.error}>
+        <Combobox.Trigger
+          class={`${inputStyles.control} ${props.error ? inputStyles.invalid : ""}`}
+        >
           <Show
             when={selected()}
             fallback={
@@ -36,19 +39,43 @@ export function BucketCombobox(props: Props) {
           </Show>
         </Combobox.Trigger>
         <Combobox.Content>
-          <Command>
-            <Command.Input style={{"border-bottom":"1px solid var(--gray-4)","margin-bottom": "0.25rem"}} placeholder={props.searchPlaceholder} />
-            <Command.List hideScrollbar>
-              <Rows
-                buckets={props.buckets}
-                onChange={props.onChange}
-                onCreate={props.onCreate}
-              />
-            </Command.List>
-          </Command>
+          <CategoryMenu
+            buckets={props.buckets}
+            onChange={props.onChange}
+            onCreate={props.onCreate}
+            searchPlaceholder={props.searchPlaceholder}
+          />
         </Combobox.Content>
       </Combobox>
     </Field>
+  );
+}
+
+/** The popover menu (search + bucket list + create) minus any trigger, so a
+ * caller can anchor it to its own trigger — e.g. a whole inbox row. */
+export function CategoryMenu(props: {
+  buckets: Bucket[];
+  onChange: (id: string) => void;
+  onCreate: (name: string) => Promise<Bucket>;
+  searchPlaceholder: string;
+}) {
+  return (
+    <Command>
+      <Command.Input
+        style={{
+          "border-bottom": "1px solid var(--gray-4)",
+          "margin-bottom": "0.25rem",
+        }}
+        placeholder={props.searchPlaceholder}
+      />
+      <Command.List hideScrollbar>
+        <Rows
+          buckets={props.buckets}
+          onChange={props.onChange}
+          onCreate={props.onCreate}
+        />
+      </Command.List>
+    </Command>
   );
 }
 

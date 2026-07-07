@@ -2,7 +2,6 @@ import { Popover } from "@kobalte/core/popover";
 import { createContext, createSignal, type JSX, useContext } from "solid-js";
 
 import styles from "./combobox.module.css";
-import inputStyles from "../input/input.module.css";
 
 /** A trigger + popover shell around a cmdk <Command>. Selecting an item closes
  * it via useCombobox().close. Deliberately dumb: no device automation, no
@@ -10,37 +9,17 @@ import inputStyles from "../input/input.module.css";
  * never an automatic mobile/desktop switch. */
 type ComboboxCtx = {
   close: () => void;
-  onTriggerPointerDown: (e: PointerEvent) => void;
 };
 const ComboboxContext = createContext<ComboboxCtx>();
 export const useCombobox = () => useContext(ComboboxContext)!;
 
 function Root(props: { children: JSX.Element }) {
   const [open, setOpen] = createSignal(false);
-  // Kobalte's trigger toggles on click, not pointerdown, so re-pressing an open
-  // trigger lingers until release. We toggle on pointerdown ourselves and swallow
-  // the toggle Kobalte fires on the trailing click, so it doesn't undo us.
-  let swallowNextChange = false;
   return (
-    <ComboboxContext.Provider
-      value={{
-        close: () => setOpen(false),
-        onTriggerPointerDown: (e) => {
-          if (e.button !== 0 || e.pointerType !== "mouse") return;
-          swallowNextChange = true;
-          setOpen((o) => !o);
-        },
-      }}
-    >
+    <ComboboxContext.Provider value={{ close: () => setOpen(false) }}>
       <Popover
         open={open()}
-        onOpenChange={(next) => {
-          if (swallowNextChange) {
-            swallowNextChange = false;
-            return;
-          }
-          setOpen(next);
-        }}
+        onOpenChange={setOpen}
         placement="bottom-start"
         gutter={6}
       >
@@ -50,13 +29,9 @@ function Root(props: { children: JSX.Element }) {
   );
 }
 
-function Trigger(props: { children: JSX.Element; error?: boolean }) {
-  const { onTriggerPointerDown } = useCombobox();
+function Trigger(props: { children: JSX.Element; class?: string }) {
   return (
-    <Popover.Trigger
-      class={`${styles.trigger} ${inputStyles.control} ${props.error ? inputStyles.invalid : ""}`}
-      onPointerDown={onTriggerPointerDown}
-    >
+    <Popover.Trigger class={`${styles.trigger} ${props.class ?? ""}`}>
       {props.children}
     </Popover.Trigger>
   );

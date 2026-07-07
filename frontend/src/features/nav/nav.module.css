@@ -1,11 +1,20 @@
 nav {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  z-index: 2;
   height: 2.25rem;
-
   background-color: var(--gray-1);
-  border-bottom: 1px solid var(--gray-3);
+  height: var(--nav-height);
+
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  border-top: var(--px) solid var(--gray-a3);
+
+  @media (min-width: 35rem) {
+    position: sticky;
+    top: 0;
+    border-bottom: var(--px) solid var(--gray-a3);
+  }
 
   div {
     display: flex;
@@ -18,7 +27,7 @@ nav {
       list-style: none;
       display: flex;
 
-      .link>a {
+      .link > a {
         font-size: var(--text-sm);
         padding-inline: var(--s3);
         height: 100%;

@@ -20,8 +20,6 @@
 
 main {
   height: 100%;
-  padding-top: var(--s5);
-  max-inline-size: 35rem;
   margin-inline: auto;
 }
 

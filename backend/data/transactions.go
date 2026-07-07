@@ -18,6 +18,7 @@ var (
 	ErrUnbalanced      = errors.New("transaction does not balance: each currency must net to zero")
 	ErrInvalidPostings = errors.New("transaction needs at least two postings with nonzero amounts")
 	ErrInvalidBucket   = errors.New("posting references a bucket you do not own")
+	ErrInvalidCategory = errors.New("bucket is not a category you own")
 	ErrNotFound        = errors.New("transaction not found")
 )
 
@@ -162,6 +163,61 @@ func (d *Data) UpdateTransaction(ctx context.Context, userID, txnID string, date
 	return &updated, postings, nil
 }
 
+// BulkCategorize repoints the single expense/income leg of every given
+// transaction to one category bucket in a single set-based update (this covers
+// both uncategorized inbox items and recategorizing already-categorized ones),
+// auditing each repointed posting's before-image the same way. Transactions
+// without exactly one category leg — transfers, splits, or not owned — are
+// silently skipped. Returns the number of legs repointed.
+func (d *Data) BulkCategorize(ctx context.Context, userID string, txnIDs []string, bucketID string) (int, error) {
+	if len(txnIDs) == 0 {
+		return 0, nil
+	}
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	var valid bool
+	if err := tx.QueryRowContext(ctx,
+		"select exists(select 1 from buckets where id = $1 and owner_user_id = $2 and kind in ('expense', 'income') and hidden = false)",
+		bucketID, userID).Scan(&valid); err != nil {
+		return 0, err
+	}
+	if !valid {
+		return 0, ErrInvalidCategory
+	}
+
+	const scope = `p.transaction_id = any($2::uuid[])
+		and p.bucket_id in (select id from buckets where owner_user_id = $1 and kind in ('expense', 'income'))
+		and (select count(*) from postings p2
+			where p2.transaction_id = p.transaction_id
+			and p2.bucket_id in (select id from buckets where owner_user_id = $1 and kind in ('expense', 'income'))) = 1`
+
+	if _, err := tx.ExecContext(ctx,
+		`insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at)
+		 select uuidv7(), $1, 'postings', p.id, 'update', to_jsonb(p), now()
+		 from postings p
+		 where `+scope, userID, txnIDs); err != nil {
+		return 0, err
+	}
+
+	res, err := tx.ExecContext(ctx,
+		`update postings p set bucket_id = $3 where `+scope, userID, txnIDs, bucketID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
 // DeleteTransaction removes a transaction and its postings, recording a
 // before-image of every deleted row in the audit log.
 func (d *Data) DeleteTransaction(ctx context.Context, userID, txnID string) error {
@@ -278,19 +334,25 @@ const TransactionPageSize = 100
 // first (page CTE) so a limit never splits a transaction's postings, and both
 // the page selection and the posting join filter through visiblePostings so no
 // non-visible leg leaks.
-func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate time.Time, cursorID string) ([]Transaction, map[string][]Posting, error) {
+func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate time.Time, cursorID string, q string) ([]Transaction, map[string][]Posting, error) {
 	args := []any{userID}
 	cursorClause := ""
 	if cursorID != "" {
 		cursorClause = "and (t.date, t.id) < ($2::date, $3::uuid)"
 		args = append(args, cursorDate, cursorID)
 	}
+	searchClause := ""
+	if q != "" {
+		n := strconv.Itoa(len(args) + 1)
+		searchClause = "and (t.counterparty ilike $" + n + " or t.description ilike $" + n + ")"
+		args = append(args, "%"+q+"%")
+	}
 	rows, err := d.db.QueryContext(ctx,
 		`with page as (
 			select distinct t.id, t.owner_user_id, t.date, t.counterparty, t.description, t.created_at
 			from transactions t
 			join postings p on p.transaction_id = t.id
-			where `+visiblePostings+` `+cursorClause+`
+			where `+visiblePostings+` `+cursorClause+` `+searchClause+`
 			order by t.date desc, t.id desc
 			limit `+strconv.Itoa(TransactionPageSize)+`
 		)

@@ -1,0 +1,131 @@
+.wrapper {
+  --filter-bar-height: 3.25rem;
+}
+
+.col {
+  max-inline-size: 35rem;
+  margin-inline: auto;
+
+  padding-inline: var(--s3);
+
+  @media (min-width: 35rem) {
+    padding-inline: var(--s5);
+  }
+}
+
+.date {
+  position: sticky;
+  z-index: 1;
+  padding-block: var(--s1);
+  font-size: var(--text-sm);
+  color: var(--gray-11);
+  background-color: var(--gray-3);
+
+  top: 0;
+
+  @media (min-width: 35rem) {
+    top: calc(2.25rem + 2.25rem + 2 * var(--s2));
+  }
+}
+
+.list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  padding-block: var(--s2);
+}
+
+.selectable {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding-block: var(--s2);
+  border-block-end: 1px solid var(--gray-3);
+  cursor: pointer;
+}
+
+.filterbarPos {
+  z-index: 2;
+  background-color: var(--gray-2);
+
+  position: fixed;
+  bottom: var(--nav-height);
+  left: 0;
+  right: 0;
+  border-top: 1px solid var(--gray-a4);
+
+  @media (min-width: 35rem) {
+    border: none;
+
+    position: sticky;
+    top: 2.25rem;
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+  }
+}
+
+.filterbar {
+  max-width: 35rem;
+  width: 100%;
+  margin-inline: auto;
+  display: flex;
+  gap: var(--s4);
+  align-items: center;
+  height: var(--filter-bar-height);
+
+  padding-inline: var(--s3);
+
+  @media (min-width: 35rem) {
+    padding: var(--s2) var(--s5);
+  }
+}
+
+.filterbar input {
+  flex: 1;
+  min-inline-size: 0;
+}
+
+.floatingbarPos {
+  z-index: 3;
+  position: fixed;
+  left: 0;
+  right: 0;
+  padding: var(--s2);
+
+  bottom: calc(var(--nav-height) + var(--filter-bar-height));
+
+  @media (min-width: 35rem) {
+    bottom: 0;
+  }
+}
+
+.floatingbar {
+  width: 100%;
+  max-width: 25rem;
+  margin-inline: auto;
+
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2);
+  background-color: var(--gray-2);
+  border: 1px solid var(--gray-6);
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 16px var(--black-a5);
+
+  .close {
+    block-size: 0.75rem;
+  }
+}
+
+.count {
+  color: var(--gray-11);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.barPicker {
+  flex: 1;
+  min-inline-size: 0;
+}

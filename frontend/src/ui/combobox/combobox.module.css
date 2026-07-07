@@ -42,7 +42,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   .content[data-expanded],
   .content[data-closed] {
     animation-duration: 1ms;
