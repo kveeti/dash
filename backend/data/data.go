@@ -133,6 +133,7 @@ create table if not exists import_batches (
     bucket_id uuid not null references buckets(id),
     source text not null,
     filename text not null,
+    timezone text not null,
     created_at timestamptz not null,
     status text not null default 'uploaded' check (status in ('uploaded', 'processing', 'done', 'failed')),
     error text,

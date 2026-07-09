@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +19,7 @@ func row(date, amount, payee, message, reference, currency string) string {
 
 func parseAll(t *testing.T, r io.Reader) (*NordeaParser, []ParsedRow) {
 	t.Helper()
-	p := NewNordeaParser(r)
+	p := NewNordeaParser(r, time.UTC)
 	var rows []ParsedRow
 	for p.Next() {
 		rows = append(rows, p.Row())
@@ -46,6 +47,17 @@ func TestNordeaValid(t *testing.T) {
 	require.Equal(t, int64(10000), rows[1].Amount)
 	require.Equal(t, "EUR", rows[1].Currency) // default when column empty
 	require.Equal(t, "Employer", rows[1].Payee)
+}
+
+func TestNordeaDateInTimezone(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+
+	p := NewNordeaParser(strings.NewReader(testHeader+row("2026/07/01", "1,00", "X", "", "", "EUR")), loc)
+	require.True(t, p.Next())
+
+	// Midnight Helsinki (summer, UTC+3) is 2026-06-30T21:00:00Z.
+	require.Equal(t, "2026-06-30T21:00:00Z", p.Row().Date.UTC().Format(time.RFC3339))
 }
 
 func TestNordeaBadRowsSkipped(t *testing.T) {

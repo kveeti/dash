@@ -87,11 +87,13 @@ export async function createImport(input: {
   file: File;
   bucketId: string;
   format: string;
+  timezone: string;
 }): Promise<ImportResult> {
   const form = new FormData();
   form.append("file", input.file);
   form.append("bucket_id", input.bucketId);
   form.append("format", input.format);
+  form.append("timezone", input.timezone);
   return api<ImportResult>("/api/v1/imports", {
     method: "POST",
     body: form,

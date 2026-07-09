@@ -33,6 +33,7 @@ func importCSV(t *testing.T, app *testApp, bucketID, csv string) *http.Response 
 	mw := multipart.NewWriter(&buf)
 	require.NoError(t, mw.WriteField("bucket_id", bucketID))
 	require.NoError(t, mw.WriteField("format", "nordea"))
+	require.NoError(t, mw.WriteField("timezone", "Europe/Helsinki"))
 	fw, err := mw.CreateFormFile("file", "export.csv")
 	require.NoError(t, err)
 	_, err = fw.Write([]byte(csv))

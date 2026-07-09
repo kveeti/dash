@@ -44,18 +44,22 @@ var (
 // 1-based line and never abort; an underlying reader error is fatal (Err).
 type NordeaParser struct {
 	reader *csv.Reader
+	loc    *time.Location
 	line   int
 	row    ParsedRow
 	errs   []RowError
 	err    error
 }
 
-func NewNordeaParser(r io.Reader) *NordeaParser {
+// NewNordeaParser reads a Nordea export whose rows carry plain dates; loc is the
+// timezone those dates are interpreted in (midnight local), so the stored
+// timestamptz lands on the right day for the account holder.
+func NewNordeaParser(r io.Reader, loc *time.Location) *NordeaParser {
 	reader := csv.NewReader(r)
 	reader.Comma = ';'
 	reader.FieldsPerRecord = -1
 	reader.LazyQuotes = true
-	return &NordeaParser{reader: reader}
+	return &NordeaParser{reader: reader, loc: loc}
 }
 
 func (p *NordeaParser) Next() bool {
@@ -79,7 +83,7 @@ func (p *NordeaParser) Next() bool {
 		for i, field := range rec {
 			rec[i] = decodeField(field)
 		}
-		row, perr := parseNordeaRow(rec)
+		row, perr := parseNordeaRow(rec, p.loc)
 		if perr != nil {
 			p.errs = append(p.errs, RowError{p.line, perr.Error()})
 			continue
@@ -119,7 +123,7 @@ func ValidNordeaHeader(line string) bool {
 	return true
 }
 
-func parseNordeaRow(cols []string) (ParsedRow, error) {
+func parseNordeaRow(cols []string, loc *time.Location) (ParsedRow, error) {
 	col := func(i int) string {
 		if i < len(cols) {
 			return strings.TrimSpace(cols[i])
@@ -131,8 +135,11 @@ func parseNordeaRow(cols []string) (ParsedRow, error) {
 	if m == nil {
 		return ParsedRow{}, fmt.Errorf("invalid date: %s", col(0))
 	}
-	date, err := time.Parse("2006-01-02", m[1]+"-"+m[2]+"-"+m[3])
-	if err != nil {
+	year, _ := strconv.Atoi(m[1])
+	month, _ := strconv.Atoi(m[2])
+	day, _ := strconv.Atoi(m[3])
+	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, loc)
+	if date.Year() != year || date.Month() != time.Month(month) || date.Day() != day {
 		return ParsedRow{}, fmt.Errorf("invalid date: %s", col(0))
 	}
 

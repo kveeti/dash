@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 const duplicatesPageSize = 50
@@ -53,6 +54,10 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 		if bucketID == "" {
 			return NewErr("bucket_id is required", http.StatusBadRequest)
 		}
+		timezone := r.FormValue("timezone")
+		if _, err := time.LoadLocation(timezone); err != nil || timezone == "" {
+			return NewErr("valid timezone is required", http.StatusBadRequest)
+		}
 		if err := state.Data.ValidateImportBucket(r.Context(), userID, bucketID); err != nil {
 			return mapImportErr(err)
 		}
@@ -95,7 +100,7 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			return NewUnexpectedErr("temp seek: %w", err)
 		}
 
-		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, "nordea", header.Filename, tmp)
+		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, "nordea", header.Filename, timezone, tmp)
 		if err != nil {
 			return mapImportErr(err)
 		}

@@ -111,7 +111,7 @@ function TransactionForm() {
     const accountAmount = mode() === "expense" ? -values.amount : values.amount;
     try {
       await mutation.mutateAsync({
-        date: values.date,
+        date: new Date(values.date + "T00:00:00").toISOString(),
         counterparty: values.counterparty,
         description: values.description,
         postings: [

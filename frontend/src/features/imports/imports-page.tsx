@@ -23,7 +23,14 @@ const schema = v.object({
   file: v.instance(File, "Choose a file"),
   bucket: v.pipe(v.string(), v.nonEmpty("Select an account")),
   format: v.string(),
+  timezone: v.pipe(v.string(), v.nonEmpty("Select a timezone")),
 });
+
+const detectedTimezone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+const timezones = [
+  detectedTimezone,
+  ...Intl.supportedValuesOf("timeZone").filter((tz) => tz !== detectedTimezone),
+];
 
 export default function ImportsPage() {
   return (
@@ -54,7 +61,7 @@ function ImportForm() {
 
   const form = createForm({
     schema,
-    initialInput: { format: "nordea" },
+    initialInput: { format: "nordea", timezone: detectedTimezone },
   });
 
   const accounts = () =>
@@ -84,6 +91,7 @@ function ImportForm() {
         file: values.file,
         bucketId: values.bucket,
         format: values.format,
+        timezone: values.timezone,
       });
     } catch {
       // surfaced via mutation.isError below
@@ -131,6 +139,28 @@ function ImportForm() {
                   value={field.input ?? ""}
                 >
                   <option value="nordea">Nordea</option>
+                </select>
+              </InputGroup>
+            </Field>
+          )}
+        </FormField>
+
+        <FormField of={form} path={["timezone"]}>
+          {(field) => (
+            <Field
+              class={inputStyles.horizontal}
+              label="Dates in timezone"
+              error={field.errors?.[0]}
+            >
+              <InputGroup>
+                <select
+                  {...field.props}
+                  style={{ flex: "1" }}
+                  value={field.input ?? ""}
+                >
+                  <For each={timezones}>
+                    {(tz) => <option value={tz}>{tz}</option>}
+                  </For>
                 </select>
               </InputGroup>
             </Field>

@@ -30,6 +30,7 @@ type ImportBatch struct {
 	BucketID    string
 	Source      string
 	Filename    string
+	Timezone    string
 	CreatedAt   time.Time
 	Status      string
 	Imported    int
@@ -98,10 +99,13 @@ type importParser interface {
 	Errors() []RowError
 }
 
-func parserFor(source string, r io.Reader) (importParser, error) {
+// parserFor builds the parser for a source. loc is the timezone the batch was
+// uploaded with; parsers for date-only formats (Nordea) interpret their plain
+// dates as midnight in it. A parser for a timestamped format would ignore loc.
+func parserFor(source string, r io.Reader, loc *time.Location) (importParser, error) {
 	switch source {
 	case "nordea":
-		return NewNordeaParser(r), nil
+		return NewNordeaParser(r, loc), nil
 	default:
 		return nil, fmt.Errorf("unsupported import source %q", source)
 	}
@@ -112,8 +116,8 @@ func parserFor(source string, r io.Reader) (importParser, error) {
 // row always has its file; the only failure mode is an orphan blob if the pointer
 // insert fails (swept later). All parsing and staging happen in the background
 // worker (see stageBatch). Returns the batch.
-func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filename string, r io.Reader) (*ImportBatch, error) {
-	batch := ImportBatch{ID: NewPrivateID(), UserID: userID, BucketID: bucketID, Source: source, Filename: filename, CreatedAt: time.Now().UTC(), Status: "uploaded"}
+func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filename, timezone string, r io.Reader) (*ImportBatch, error) {
+	batch := ImportBatch{ID: NewPrivateID(), UserID: userID, BucketID: bucketID, Source: source, Filename: filename, Timezone: timezone, CreatedAt: time.Now().UTC(), Status: "uploaded"}
 
 	if err := d.files.Put(ctx, batch.ID, r); err != nil {
 		return nil, err
@@ -126,8 +130,8 @@ func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filen
 	defer tx.Rollback()
 
 	if _, err := tx.ExecContext(ctx,
-		"insert into import_batches (id, user_id, bucket_id, source, filename, created_at, status) values ($1, $2, $3, $4, $5, $6, 'uploaded')",
-		batch.ID, batch.UserID, batch.BucketID, batch.Source, batch.Filename, batch.CreatedAt); err != nil {
+		"insert into import_batches (id, user_id, bucket_id, source, filename, timezone, created_at, status) values ($1, $2, $3, $4, $5, $6, $7, 'uploaded')",
+		batch.ID, batch.UserID, batch.BucketID, batch.Source, batch.Filename, batch.Timezone, batch.CreatedAt); err != nil {
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -309,11 +313,11 @@ with claimed as (
 )
 update import_batches set status = 'processing'
 where id in (select id from claimed)
-returning id, user_id, bucket_id, source, filename`
+returning id, user_id, bucket_id, source, filename, timezone`
 
 func (d *Data) claimBatch(ctx context.Context) (ImportBatch, bool, error) {
 	var b ImportBatch
-	err := d.db.QueryRowContext(ctx, claimBatchSQL).Scan(&b.ID, &b.UserID, &b.BucketID, &b.Source, &b.Filename)
+	err := d.db.QueryRowContext(ctx, claimBatchSQL).Scan(&b.ID, &b.UserID, &b.BucketID, &b.Source, &b.Filename, &b.Timezone)
 	if err == sql.ErrNoRows {
 		return ImportBatch{}, false, nil
 	}
@@ -356,13 +360,17 @@ func (d *Data) stageBatch(ctx context.Context) (bool, error) {
 }
 
 func (d *Data) runStage(ctx context.Context, batch ImportBatch) (int, int, []RowError, error) {
+	loc, err := time.LoadLocation(batch.Timezone)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("invalid batch timezone %q: %w", batch.Timezone, err)
+	}
 	var lastErr error
 	for attempt := 0; attempt < importMaxAttempts; attempt++ {
 		blob, err := d.files.Open(ctx, batch.ID)
 		if err != nil {
 			return 0, 0, nil, err
 		}
-		parser, err := parserFor(batch.Source, blob)
+		parser, err := parserFor(batch.Source, blob, loc)
 		if err != nil {
 			blob.Close()
 			return 0, 0, nil, err
