@@ -3,7 +3,7 @@
   align-items: baseline;
   gap: var(--s3);
   padding-block: var(--s2);
-  border-block-end: 1px solid var(--gray-3);
+  border-block-end: 1px solid var(--border);
 }
 
 .primary {
@@ -12,7 +12,7 @@
 }
 
 .secondary {
-  color: var(--gray-11);
+  color: var(--fg-muted);
   font-size: var(--text-sm);
 }
 
@@ -22,17 +22,17 @@
 }
 
 .positive {
-  color: var(--green-10);
+  color: var(--positive);
 }
 
 .delete {
   background: none;
   border: none;
-  color: var(--gray-10);
+  color: var(--fg-subtle);
   cursor: pointer;
   padding: 0;
 }
 
 .delete:hover {
-  color: var(--red-11);
+  color: var(--danger-fg);
 }

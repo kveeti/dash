@@ -45,7 +45,7 @@
 [cmdk-overlay] {
   position: fixed;
   inset: 0;
-  background-color: var(--black-a6);
+  background-color: var(--scrim);
 
   &[data-expanded] {
     animation: cmdk-overlay-in 200ms ease-out;
@@ -63,8 +63,8 @@
   margin-inline: auto;
   inline-size: min(90vw, 32rem);
 
-  background-color: var(--gray-1);
-  border: 1px solid var(--gray-6);
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
   border-radius: var(--s2);
   box-shadow: 0 var(--s2) var(--s6) var(--black-a5);
   overflow: hidden;
@@ -83,7 +83,7 @@
   inline-size: 100%;
   height: 2.25rem;
   padding-inline: var(--s3);
-  color: var(--gray-12);
+  color: var(--fg);
   background-color: transparent;
   font: inherit;
 
@@ -91,7 +91,7 @@
   outline: none;
 
   &::placeholder {
-    color: var(--gray-10);
+    color: var(--fg-subtle);
   }
 }
 
@@ -121,21 +121,21 @@
   padding: 0 0.2rem 0.2rem;
   transition: block-size 240ms cubic-bezier(0.05, 0.95, 0.15, 1);
   scrollbar-width: thin;
-  scrollbar-color: var(--gray-6) transparent;
+  scrollbar-color: var(--border-strong) transparent;
 
   &::-webkit-scrollbar {
     inline-size: 8px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: var(--gray-6);
+    background-color: var(--border-strong);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
 
   &::-webkit-scrollbar-thumb:hover {
-    background-color: var(--gray-7);
+    background-color: var(--border-field);
   }
 
   &[data-hide-scrollbar] {
@@ -150,7 +150,7 @@
 [cmdk-group-heading] {
   padding: var(--s1) var(--s2);
   font-size: var(--text-xs);
-  color: var(--gray-10);
+  color: var(--fg-subtle);
 }
 
 [cmdk-item] {
@@ -160,16 +160,16 @@
   height: var(--s6);
   padding-inline: var(--s3);
   border-radius: 0.5rem;
-  color: var(--gray-12);
+  color: var(--fg);
   cursor: default;
   user-select: none;
 
   &[data-selected="true"] {
-    background-color: var(--gray-4);
+    background-color: var(--hover-strong);
   }
 
   &[data-disabled="true"] {
-    color: var(--gray-9);
+    color: var(--fg-faint);
     cursor: not-allowed;
   }
 }
@@ -177,7 +177,7 @@
 [cmdk-empty] {
   padding: var(--s4);
   text-align: center;
-  color: var(--gray-10);
+  color: var(--fg-subtle);
 }
 
 @media (prefers-reduced-motion: reduce) {

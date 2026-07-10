@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   gap: var(--s3);
-  border-block-end: 1px solid var(--gray-3);
+  border-block-end: 1px solid var(--border);
 }
 
 button.rowTrigger {
@@ -25,7 +25,7 @@ button.rowTrigger {
 
 @media (hover: hover) {
   button.rowTrigger:hover {
-    background: var(--gray-a3);
+    background: var(--hover);
   }
 }
 
@@ -39,7 +39,7 @@ button.rowTrigger {
 }
 
 .secondary {
-  color: var(--gray-11);
+  color: var(--fg-muted);
   font-size: var(--text-sm);
 }
 
@@ -49,5 +49,5 @@ button.rowTrigger {
 }
 
 .positive {
-  color: var(--green-10);
+  color: var(--positive);
 }

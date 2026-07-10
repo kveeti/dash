@@ -1,19 +1,19 @@
 nav {
   z-index: 2;
   height: 2.25rem;
-  background-color: var(--gray-1);
+  background-color: var(--surface);
   height: var(--nav-height);
 
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  border-top: var(--px) solid var(--gray-a3);
+  border-top: var(--px) solid var(--hairline);
 
   @media (min-width: 35rem) {
     position: sticky;
     top: 0;
-    border-bottom: var(--px) solid var(--gray-a3);
+    border-bottom: var(--px) solid var(--hairline);
   }
 
   div {
@@ -37,7 +37,7 @@ nav {
         color: unset;
 
         &:hover {
-          background-color: var(--gray-2);
+          background-color: var(--hover);
         }
       }
     }

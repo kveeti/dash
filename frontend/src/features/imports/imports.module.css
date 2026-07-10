@@ -21,7 +21,7 @@
 
 .label {
   font-size: var(--text-sm);
-  color: var(--gray-11);
+  color: var(--fg-muted);
 }
 
 .header {
@@ -54,17 +54,17 @@
 }
 
 .batch:not(:last-child) {
-  border-block-end: 1px solid var(--gray-3);
+  border-block-end: 1px solid var(--border);
 }
 
 .meta {
-  color: var(--gray-11);
+  color: var(--fg-muted);
   font-size: var(--text-sm);
 }
 
 .counts {
   margin-block: var(--s3) var(--s5);
-  color: var(--gray-11);
+  color: var(--fg-muted);
 }
 
 .dupe {
@@ -72,7 +72,7 @@
   align-items: baseline;
   gap: var(--s3);
   padding-block: var(--s3);
-  border-block-end: 1px solid var(--gray-3);
+  border-block-end: 1px solid var(--border);
 }
 
 .dupeMain {
@@ -81,7 +81,7 @@
 }
 
 .target {
-  color: var(--gray-11);
+  color: var(--fg-muted);
   font-size: var(--text-sm);
 }
 
@@ -99,7 +99,7 @@
 
 .card {
   padding: var(--s5);
-  background-color: var(--gray-1);
-  border: 1px solid var(--gray-3);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--s5);
 }

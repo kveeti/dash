@@ -10,7 +10,7 @@
   gap: var(--s1);
   min-block-size: 1lh;
   font-size: var(--text-xs);
-  color: var(--red-11);
+  color: var(--danger-fg);
 }
 
 .error:empty {
@@ -38,7 +38,7 @@
 
 .label {
   font-size: var(--text-sm);
-  color: var(--gray-11);
+  color: var(--fg-muted);
 }
 
 @media (min-width: 30rem) {
@@ -53,10 +53,6 @@
   .horizontal .error {
     grid-row: 1;
     grid-column: 2;
-  }
-
-  .horizontal .error:empty {
-    display: block;
   }
 
   .horizontal .labelRow {
@@ -79,9 +75,9 @@
 .control,
 .group > * {
   padding-inline: 0.7rem;
-  color: var(--gray-12);
-  background-color: var(--gray-2);
-  border: 0.5px solid var(--gray-8);
+  color: var(--fg);
+  background-color: var(--bg);
+  border: 0.5px solid var(--border-field);
   font: inherit;
   outline: 1px solid transparent;
   outline-offset: -1px;
@@ -89,7 +85,7 @@
 
 .control::placeholder,
 .group > input::placeholder {
-  color: var(--gray-10);
+  color: var(--fg-subtle);
 }
 
 .control:focus-visible,
@@ -106,25 +102,25 @@
 }
 
 .placeholder {
-  color: var(--gray-10);
+  color: var(--fg-subtle);
 }
 
 /* Error: red border + tint on the control itself. */
 .invalid {
-  border-color: var(--red-8);
-  background-color: var(--red-2);
+  border-color: var(--danger-border);
+  background-color: var(--danger-bg);
 }
 
 .invalid:focus-visible {
-  border-color: var(--red-9);
-  outline-color: var(--red-9);
-  box-shadow: 0 0 0 3px var(--red-a6);
+  border-color: var(--danger);
+  outline-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-ring);
 }
 
 @media (hover: hover) {
   .control:not(:focus):not(.invalid):hover,
   .group > *:not(:focus):not(.invalid):hover {
-    border-color: var(--gray-9);
+    border-color: var(--border-field-hover);
   }
 }
 
@@ -178,7 +174,7 @@
     inset-block: 0;
     inset-inline-end: 0.7rem;
     inline-size: 1em;
-    background-color: var(--gray-11);
+    background-color: var(--fg-muted);
     -webkit-mask: var(--chevron) center / 1em no-repeat;
     mask: var(--chevron) center / 1em no-repeat;
     pointer-events: none;

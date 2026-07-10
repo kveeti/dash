@@ -203,6 +203,36 @@
     --gray-a12: #ffffffed;
   }
 
+  /* Semantic roles — components reference these, never the raw scales above.
+     They resolve to primitives lazily, so dark mode is inherited for free. */
+  --fg: var(--gray-12);
+  --fg-muted: var(--gray-11);
+  --fg-subtle: var(--gray-10);
+  --fg-faint: var(--gray-9);
+
+  --bg: var(--gray-2);
+  --surface: var(--gray-1);
+  --surface-sunken: var(--gray-3);
+  --hover: var(--gray-a3);
+  --hover-strong: var(--gray-4);
+
+  --border: var(--gray-3);
+  --border-strong: var(--gray-6);
+  --border-field: var(--gray-8);
+  --border-field-hover: var(--gray-9);
+  --hairline: var(--gray-a4);
+
+  --scrim: var(--black-a6);
+
+  --danger: var(--red-9);
+  --danger-hover: var(--red-10);
+  --danger-fg: var(--red-11);
+  --danger-border: var(--red-8);
+  --danger-bg: var(--red-2);
+  --danger-ring: var(--red-a6);
+
+  --positive: var(--green-10);
+
   --nav-height: 2.25rem;
 
   @media (display-mode: standalone) {

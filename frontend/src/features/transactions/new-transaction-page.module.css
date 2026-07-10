@@ -1,7 +1,7 @@
 .card {
   padding: var(--s5);
-  background-color: var(--gray-1);
-  border: 1px solid var(--gray-3);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--s5);
 }
 
@@ -34,14 +34,14 @@
 .toggle button {
   flex: 1;
   padding: var(--s2);
-  background-color: var(--gray-2);
-  border: 1px solid var(--gray-4);
+  background-color: var(--bg);
+  border: 1px solid var(--border);
   border-radius: var(--s2);
-  color: var(--gray-11);
+  color: var(--fg-muted);
   cursor: pointer;
 }
 
 .toggle button.active {
-  background-color: var(--gray-4);
-  color: var(--gray-12);
+  background-color: var(--hover-strong);
+  color: var(--fg);
 }

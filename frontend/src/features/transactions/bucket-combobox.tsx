@@ -63,7 +63,7 @@ export function CategoryMenu(props: {
     <Command>
       <Command.Input
         style={{
-          "border-bottom": "1px solid var(--gray-4)",
+          "border-bottom": "1px solid var(--border)",
           "margin-bottom": "0.25rem",
         }}
         placeholder={props.searchPlaceholder}

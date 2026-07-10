@@ -47,8 +47,8 @@ body {
 }
 
 html {
-  background-color: var(--gray-2);
-  color: var(--gray-12);
+  background-color: var(--bg);
+  color: var(--fg);
   font-family: geist;
   overscroll-behavior-y: none;
 }
