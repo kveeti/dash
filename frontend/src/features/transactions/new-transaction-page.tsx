@@ -46,20 +46,14 @@ export default function NewTransactionPage() {
   const me = useQuery(meQuery);
 
   return (
-    <>
-      <h1
-        style={{
-          "font-size": "1.2rem",
-          "font-weight": "500",
-          "padding-inline": "var(--s5)",
-        }}
-      >
+    <div class={styles.page}>
+      <h1 style={{ "font-size": "1.2rem", "font-weight": "500" }}>
         New transaction
       </h1>
       <Show when={buckets.data && me.data} fallback={<p>loading…</p>}>
         <TransactionForm />
       </Show>
-    </>
+    </div>
   );
 }
 
@@ -133,7 +127,7 @@ function TransactionForm() {
   };
 
   return (
-    <div class={styles.cad}>
+    <div class={styles.card}>
       <Form of={form} class={styles.form} onSubmit={onSubmit}>
         <FormField of={form} path={["date"]}>
           {(field) => (

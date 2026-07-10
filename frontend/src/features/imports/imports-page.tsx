@@ -34,9 +34,7 @@ const timezones = [
 
 export default function ImportsPage() {
   return (
-    <div
-      style={{ display: "flex", "flex-direction": "column", gap: "var(--s6)" }}
-    >
+    <div class={styles.page}>
       <div>
         <h1 class={styles.title}>Import transactions</h1>
         <div class={styles.card}>
@@ -46,9 +44,7 @@ export default function ImportsPage() {
 
       <div>
         <h1 class={styles.title}>Past imports</h1>
-        <div style={{ "padding-inline": "var(--s5)" }}>
-          <PastImports />
-        </div>
+        <PastImports />
       </div>
     </div>
   );

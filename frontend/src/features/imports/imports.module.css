@@ -1,8 +1,23 @@
+.page {
+  inline-size: 100%;
+  max-inline-size: 35rem;
+  margin-inline: auto;
+  padding-block-start: var(--s5);
+  padding-inline: var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+
+  @media (min-width: 35rem) {
+    padding-inline: var(--s5);
+  }
+}
+
 .form {
   inline-size: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--s5);
+  gap: var(--s3);
 }
 
 @media (min-width: 30rem) {
@@ -10,7 +25,7 @@
     display: grid;
     grid-template-columns: auto minmax(0, 22rem);
     column-gap: var(--s6);
-    row-gap: var(--s5);
+    row-gap: var(--s3);
     align-items: center;
   }
 
@@ -34,7 +49,6 @@
 .title {
   font-size: var(--text-lg);
   font-weight: 500;
-  padding-inline: var(--s5);
 }
 
 .list {

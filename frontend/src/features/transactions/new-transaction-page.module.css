@@ -1,3 +1,15 @@
+.page {
+  inline-size: 100%;
+  max-inline-size: 35rem;
+  margin-inline: auto;
+  padding-block-start: var(--s5);
+  padding-inline: var(--s3);
+
+  @media (min-width: 35rem) {
+    padding-inline: var(--s5);
+  }
+}
+
 .card {
   padding: var(--s5);
   background-color: var(--surface);
