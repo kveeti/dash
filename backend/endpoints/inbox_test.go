@@ -76,6 +76,21 @@ func TestInboxCategorizeCreatesTransactions(t *testing.T) {
 	require.Equal(t, int64(1234-10000), balances[groceries]["EUR"])
 }
 
+func TestInboxCategorizeToPerson(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	bob := createBucket(t, app, "person", "Bob")
+	doImport(t, app, bank, nordeaHeader+nordeaRow("2026/07/01", "-50,00", "Restaurant", "Dinner"))
+
+	rows := getInbox(t, app, "")
+	require.Len(t, rows, 1)
+	require.Equal(t, 1, categorizeInbox(t, app, []string{rows[0].ID}, bob))
+
+	balances := getBalances(t, app)
+	require.Equal(t, int64(-5000), balances[bank]["EUR"])
+	require.Equal(t, int64(5000), balances[bob]["EUR"])
+}
+
 func TestInboxCategorizeRejectsNonCategory(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")

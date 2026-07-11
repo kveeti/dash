@@ -8,13 +8,13 @@ import (
 	"time"
 )
 
-// userCreatableKinds are the bucket kinds a user may create directly. clearing
-// is auto-only; person buckets are created through the sharing flows.
+// userCreatableKinds are the bucket kinds a user may create directly.
 var userCreatableKinds = map[data.BucketKind]bool{
 	data.KindAsset:     true,
 	data.KindLiability: true,
 	data.KindExpense:   true,
 	data.KindIncome:    true,
+	data.KindPerson:    true,
 }
 
 type bucketResponse struct {

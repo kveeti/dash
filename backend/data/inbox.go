@@ -119,7 +119,7 @@ func (d *Data) CategorizeInboxRows(ctx context.Context, userID string, rowIDs []
 
 	var valid bool
 	if err := tx.QueryRowContext(ctx,
-		"select exists(select 1 from buckets where id = $1 and owner_user_id = $2 and kind in ('expense', 'income') and hidden = false)",
+		"select exists(select 1 from buckets where id = $1 and owner_user_id = $2 and kind in ('expense', 'income', 'person') and hidden = false)",
 		bucketID, userID).Scan(&valid); err != nil {
 		return 0, err
 	}

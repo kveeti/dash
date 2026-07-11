@@ -13,6 +13,7 @@ interface Props {
   value: string | null;
   onChange: (id: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
+  onCreatePerson?: (name: string) => Promise<Bucket>;
   /** Shown on the trigger when nothing is selected. */
   placeholder: string;
   /** Shown in the search input inside the popover. */
@@ -43,6 +44,7 @@ export function BucketCombobox(props: Props) {
             buckets={props.buckets}
             onChange={props.onChange}
             onCreate={props.onCreate}
+            onCreatePerson={props.onCreatePerson}
             searchPlaceholder={props.searchPlaceholder}
           />
         </Combobox.Content>
@@ -57,6 +59,7 @@ export function CategoryMenu(props: {
   buckets: Bucket[];
   onChange: (id: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
+  onCreatePerson?: (name: string) => Promise<Bucket>;
   searchPlaceholder: string;
 }) {
   return (
@@ -73,6 +76,7 @@ export function CategoryMenu(props: {
           buckets={props.buckets}
           onChange={props.onChange}
           onCreate={props.onCreate}
+          onCreatePerson={props.onCreatePerson}
         />
       </Command.List>
     </Command>
@@ -83,6 +87,7 @@ function Rows(props: {
   buckets: Bucket[];
   onChange: (id: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
+  onCreatePerson?: (name: string) => Promise<Bucket>;
 }) {
   const { close } = useCombobox();
   const search = useCommandState((s) => s.search);
@@ -93,7 +98,8 @@ function Rows(props: {
       <For each={props.buckets}>
         {(b) => (
           <Command.Item
-            value={b.name}
+            value={`${b.kind}:${b.name}`}
+            keywords={[b.name]}
             onSelect={() => {
               props.onChange(b.id);
               close();
@@ -104,17 +110,30 @@ function Rows(props: {
         )}
       </For>
       <Show when={name() !== ""}>
-        <Command.Item
-          forceMount
-          value={`__create__${name()}`}
-          onSelect={async () => {
-            const created = await props.onCreate(name());
-            props.onChange(created.id);
-            close();
-          }}
-        >
-          Create “{name()}”
-        </Command.Item>
+        <Command.Group value="create" forceMount>
+          <Command.Item
+            forceMount
+            onSelect={async () => {
+              const created = await props.onCreate(name());
+              props.onChange(created.id);
+              close();
+            }}
+          >
+            Create category “{name()}”
+          </Command.Item>
+          <Show when={props.onCreatePerson}>
+            <Command.Item
+              forceMount
+              onSelect={async () => {
+                const created = await props.onCreatePerson!(name());
+                props.onChange(created.id);
+                close();
+              }}
+            >
+              Create person “{name()}”
+            </Command.Item>
+          </Show>
+        </Command.Group>
       </Show>
     </>
   );

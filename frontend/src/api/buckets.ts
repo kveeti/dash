@@ -2,7 +2,12 @@ import { queryOptions } from "@tanstack/solid-query";
 
 import { api } from "./http";
 
-export type BucketKind = "asset" | "liability" | "expense" | "income";
+export type BucketKind =
+  | "asset"
+  | "liability"
+  | "expense"
+  | "income"
+  | "person";
 
 export interface Bucket {
   id: string;

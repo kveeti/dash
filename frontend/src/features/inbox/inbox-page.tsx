@@ -40,13 +40,15 @@ export default function InboxPage() {
 
   const items = () => inbox.data!.pages.flatMap((p) => p.rows);
 
-  const categories = () =>
+  const categoriesAndPeople = () =>
     buckets.data!.filter(
-      (b) => (b.kind === "expense" || b.kind === "income") && !b.hidden,
+      (b) =>
+        (b.kind === "expense" || b.kind === "income" || b.kind === "person") &&
+        !b.hidden,
     );
 
-  const onCreate = async (name: string) => {
-    const bucket = await createBucket({ kind: "expense", name });
+  const onCreate = (kind: "expense" | "person") => async (name: string) => {
+    const bucket = await createBucket({ kind, name });
     await queryClient.invalidateQueries({ queryKey: ["buckets"] });
     return bucket;
   };
@@ -160,15 +162,16 @@ export default function InboxPage() {
                             </Combobox.Trigger>
                             <Combobox.Content>
                               <CategoryMenu
-                                buckets={categories()}
+                                buckets={categoriesAndPeople()}
                                 onChange={(bucketId) =>
                                   categorize.mutate({
                                     ids: [row.id],
                                     bucketId,
                                   })
                                 }
-                                onCreate={onCreate}
-                                searchPlaceholder="Category"
+                                onCreate={onCreate("expense")}
+                                onCreatePerson={onCreate("person")}
+                                searchPlaceholder="Category or person"
                               />
                             </Combobox.Content>
                           </Combobox>
@@ -195,13 +198,14 @@ export default function InboxPage() {
           <FloatingBar
             show={selectMode()}
             count={selected().size}
-            categories={categories()}
+            categories={categoriesAndPeople()}
             onClear={clearSelection}
             onExit={exitSelect}
             onCategorize={(bucketId) =>
               categorize.mutate({ ids: [...selected()], bucketId })
             }
-            onCreate={onCreate}
+            onCreate={onCreate("expense")}
+            onCreatePerson={onCreate("person")}
           />
         </Match>
       </Switch>

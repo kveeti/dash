@@ -36,7 +36,8 @@ export function toTransactionRow(
   const kind = (p: Posting) => buckets.get(p.bucket_id)!.kind;
 
   const categoryLegs = txn.postings.filter(
-    (p) => kind(p) === "expense" || kind(p) === "income",
+    (p) =>
+      kind(p) === "expense" || kind(p) === "income" || kind(p) === "person",
   );
   if (categoryLegs.length === 1) {
     const leg = categoryLegs[0];

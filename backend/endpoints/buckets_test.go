@@ -77,10 +77,23 @@ func TestCreateAndListBucket(t *testing.T) {
 	require.Contains(t, names, "Groceries")
 }
 
+func TestCreatePersonBucket(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+
+	resp := authed(t, app, http.MethodPost, "/api/v1/buckets",
+		map[string]any{"kind": "person", "name": "Bob"})
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var created map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	require.Equal(t, "person", created["kind"])
+	require.Equal(t, "Bob", created["name"])
+}
+
 func TestCreateBucketRejectsBadKind(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 
-	for _, kind := range []string{"clearing", "person", "nonsense"} {
+	for _, kind := range []string{"clearing", "nonsense"} {
 		resp := authed(t, app, http.MethodPost, "/api/v1/buckets",
 			map[string]any{"kind": kind, "name": "x"})
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode, kind)

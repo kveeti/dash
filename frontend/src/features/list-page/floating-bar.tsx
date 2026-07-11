@@ -15,6 +15,7 @@ export function FloatingBar(props: {
   onExit: () => void;
   onCategorize: (bucketId: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
+  onCreatePerson?: (name: string) => Promise<Bucket>;
 }) {
   return (
     <Transition
@@ -53,8 +54,11 @@ export function FloatingBar(props: {
               value={null}
               onChange={props.onCategorize}
               onCreate={props.onCreate}
+              onCreatePerson={props.onCreatePerson}
               placeholder="Categorize…"
-              searchPlaceholder="Category"
+              searchPlaceholder={
+                props.onCreatePerson ? "Category or person" : "Category"
+              }
             />
 
             <Button
