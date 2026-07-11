@@ -43,9 +43,10 @@
 }
 
 [cmdk-overlay] {
+  z-index: 50;
   position: fixed;
   inset: 0;
-  background-color: var(--scrim);
+  background-color: var(--black-a6);
 
   &[data-expanded] {
     animation: cmdk-overlay-in 200ms ease-out;
@@ -57,14 +58,15 @@
 }
 
 [cmdk-dialog] {
+  z-index: 51;
   position: fixed;
   inset-block-start: 15vh;
   inset-inline: 0;
   margin-inline: auto;
   inline-size: min(90vw, 32rem);
 
-  background-color: var(--surface);
-  border: 1px solid var(--border-strong);
+  background-color: var(--popover);
+  border: var(--border-popover);
   border-radius: var(--s2);
   box-shadow: 0 var(--s2) var(--s6) var(--black-a5);
   overflow: hidden;
@@ -104,38 +106,30 @@
   /* As tall as fits below the trigger, snapped down so a clamped list always
      cuts its last row at --peek — the scroll affordance. The 3rem is the input
      + borders sitting above the list inside the popover. */
-  max-block-size: max(
-    calc(var(--item-h) * 1.5),
-    calc(
-      round(
-          down,
-          var(--kb-popper-content-available-height, 100vh) - 3rem -
-            var(--item-h) * var(--peek),
-          var(--item-h)
-        ) +
-        var(--item-h) * var(--peek)
-    )
-  );
+  max-block-size: max(calc(var(--item-h) * 1.5),
+      calc(round(down,
+          var(--kb-popper-content-available-height, 100vh) - 3rem - var(--item-h) * var(--peek),
+          var(--item-h)) + var(--item-h) * var(--peek)));
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 0 0.2rem 0.2rem;
   transition: block-size 240ms cubic-bezier(0.05, 0.95, 0.15, 1);
   scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
+  scrollbar-color: var(--line-strong) transparent;
 
   &::-webkit-scrollbar {
     inline-size: 8px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: var(--border-strong);
+    background-color: var(--line-strong);
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: content-box;
   }
 
   &::-webkit-scrollbar-thumb:hover {
-    background-color: var(--border-field);
+    background-color: var(--line-strong);
   }
 
   &[data-hide-scrollbar] {
@@ -165,7 +159,7 @@
   user-select: none;
 
   &[data-selected="true"] {
-    background-color: var(--hover-strong);
+    background-color: var(--popover-active);
   }
 
   &[data-disabled="true"] {
@@ -181,6 +175,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   [cmdk-overlay],
   [cmdk-dialog],
   [cmdk-list] {

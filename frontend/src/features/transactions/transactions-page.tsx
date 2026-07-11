@@ -153,33 +153,31 @@ export default function TransactionsPage() {
                     </Show>
 
                     <li class={shell.col}>
-                      <Show
-                        when={selectMode()}
-                        fallback={
-                          <div class={styles.row}>
-                            <Row txn={txn} buckets={bucketsById()} />
-                            <button
-                              type="button"
-                              class={styles.delete}
-                              onClick={() => onDelete(txn)}
-                            >
-                              delete
-                            </button>
-                          </div>
-                        }
+                      <div
+                        class={shell.rowWrap}
+                        classList={{ [shell.rowWrapSelect]: selectMode() }}
+                        onClick={() => selectMode() && toggle(txn.id)}
                       >
-                        <div
-                          class={shell.selectable}
-                          onClick={() => toggle(txn.id)}
-                        >
+                        <div class={shell.checkSlot}>
                           <Checkbox
                             checked={selected().has(txn.id)}
                             tabindex={-1}
                             style={{ "pointer-events": "none" }}
                           />
-                          <Row txn={txn} buckets={bucketsById()} />
                         </div>
-                      </Show>
+                        <div class={`${shell.slide} ${styles.rowContent}`}>
+                          <Row txn={txn} buckets={bucketsById()} />
+                          {/* <Show when={!selectMode()}> */}
+                          {/*   <button */}
+                          {/*     type="button" */}
+                          {/*     class={styles.delete} */}
+                          {/*     onClick={() => onDelete(txn)} */}
+                          {/*   > */}
+                          {/*     delete */}
+                          {/*   </button> */}
+                          {/* </Show> */}
+                        </div>
+                      </div>
                     </li>
                   </>
                 );
@@ -198,18 +196,17 @@ export default function TransactionsPage() {
             </button>
           </Show>
 
-          <Show when={selectMode()}>
-            <FloatingBar
-              count={selected().size}
-              categories={categories()}
-              onClear={clearSelection}
-              onExit={exitSelect}
-              onCategorize={(bucketId) =>
-                categorize.mutate({ ids: [...selected()], bucketId })
-              }
-              onCreate={onCreate}
-            />
-          </Show>
+          <FloatingBar
+            show={selectMode()}
+            count={selected().size}
+            categories={categories()}
+            onClear={clearSelection}
+            onExit={exitSelect}
+            onCategorize={(bucketId) =>
+              categorize.mutate({ ids: [...selected()], bucketId })
+            }
+            onCreate={onCreate}
+          />
         </Match>
       </Switch>
     </div>

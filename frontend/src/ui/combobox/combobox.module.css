@@ -6,9 +6,11 @@
 }
 
 .content {
+  z-index: 10;
   min-inline-size: 12rem;
-  background-color: var(--surface);
-  border: 1px solid var(--border-strong);
+  outline: none;
+  background-color: var(--popover);
+  border: var(--border-popover);
   border-radius: 0.75rem;
   box-shadow: 0 var(--s1) var(--s2) var(--black-a2);
   transform-origin: var(--kb-popover-content-transform-origin);
@@ -42,6 +44,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .content[data-expanded],
   .content[data-closed] {
     animation-duration: 1ms;

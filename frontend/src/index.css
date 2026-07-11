@@ -1,10 +1,11 @@
 @import url("./reset.css");
+@import url("./colors.css");
 @import url("./vars.css");
 
 @font-face {
   font-family: geist;
   font-style: normal;
-  font-weight: 100, 900;
+  font-weight: 100 900;
   font-display: swap;
   src: url("/fonts/geist.woff2") format("woff2");
   unicode-range:
@@ -21,6 +22,16 @@
 main {
   height: 100%;
   margin-inline: auto;
+
+  @media (min-width: 35rem) {
+    padding-left: calc(100vw - 100%);
+  }
+}
+
+a:focus-visible {
+  outline: 1.5px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 header,
@@ -40,10 +51,9 @@ h2 {
 }
 
 body {
-  /* background-image: linear-gradient(rgba(50, 50, 50, 0.2) 1px, transparent 1px);
-  background-size: 100% 1.5rem; */
   display: block;
   font-size: var(--text-base);
+  margin-block-end: 15rem;
 }
 
 html {

@@ -16,7 +16,7 @@
   user-select: none;
 
   &:focus-visible {
-    outline-color: var(--accent);
+    outline-color: var(--focus);
   }
 
   &:disabled {
@@ -27,8 +27,8 @@
 
 .primary {
   color: #fff;
-  background-image: linear-gradient(var(--accent), oklch(0.42 0.12 148));
-  border-color: oklch(0.4 0.11 148);
+  background-image: linear-gradient(var(--accent), var(--green-10));
+  border-color: var(--green-10);
   box-shadow:
     inset 0 1px 0 var(--white-a4),
     0 2px 4px var(--black-a3),
@@ -37,13 +37,14 @@
   &:focus-visible {
     outline-offset: 2px;
     outline-width: 1.5px;
+    outline-color: var(--green-10);
   }
 }
 
 .outline {
   color: var(--fg);
   background-color: transparent;
-  border-color: var(--border-strong);
+  border: var(--border-strong);
 }
 
 .ghost {
@@ -52,25 +53,25 @@
 }
 
 .destructive {
-  color: #fff;
-  background-color: var(--danger);
+  color: var(--red-11);
+  background-color: var(--red-5);
+  border-color: var(--red-7);
 
   &:focus-visible {
-    outline-color: var(--danger-border);
+    outline-offset: 2px;
+    outline-width: 1.5px;
+    outline-color: var(--red-9);
   }
 }
 
 @media (hover: hover) {
   .primary:not(:disabled):hover {
-    background-image: linear-gradient(
-      oklch(0.5 0.12 148),
-      oklch(0.37 0.12 148)
-    );
+    background-image: linear-gradient(var(--green-8), var(--green-8));
   }
 
   .outline:not(:disabled):hover {
     background-color: var(--bg);
-    border-color: var(--border-field);
+    border-color: var(--line-strong);
   }
 
   .ghost:not(:disabled):hover {
@@ -78,6 +79,6 @@
   }
 
   .destructive:not(:disabled):hover {
-    background-color: var(--danger-hover);
+    background-color: var(--red-8);
   }
 }

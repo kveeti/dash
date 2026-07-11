@@ -2,13 +2,13 @@
   position: relative;
   display: inline-flex;
   flex-shrink: 0;
-  inline-size: 1.15rem;
-  block-size: 1.15rem;
+  inline-size: var(--check-size);
+  block-size: var(--check-size);
 }
 
 /* The native input carries state + a11y; it's transparent but its hitbox is
    deliberately larger than the visual box. */
-.root > input {
+.root>input {
   position: absolute;
   inset: -0.6rem;
   inline-size: auto;
@@ -23,7 +23,7 @@
   inline-size: 100%;
   block-size: 100%;
   background-color: var(--bg);
-  border: 1px solid var(--border-field);
+  border: var(--border-strong);
   border-radius: 0.4rem;
   pointer-events: none;
 }
@@ -40,16 +40,16 @@
   opacity: 0;
 }
 
-.root > input:checked + .box {
+.root>input:checked+.box {
   background-color: var(--accent);
   border-color: var(--accent);
 }
 
-.root > input:checked + .box::after {
+.root>input:checked+.box::after {
   opacity: 1;
 }
 
-.root > input:focus-visible + .box {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.root>input:focus-visible+.box {
+  outline: 1.5px solid var(--focus);
+  outline-offset: 2px;
 }

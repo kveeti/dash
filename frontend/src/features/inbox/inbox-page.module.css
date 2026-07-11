@@ -1,8 +1,5 @@
-.row {
+.rowContent {
   display: flex;
-  align-items: center;
-  gap: var(--s3);
-  border-block-end: 1px solid var(--border);
 }
 
 button.rowTrigger {
@@ -21,6 +18,15 @@ button.rowTrigger {
   text-align: start;
   cursor: pointer;
   border-radius: var(--s2);
+}
+
+button.rowTrigger:focus-visible {
+  outline: 1.5px solid var(--focus);
+  outline-offset: -1.5px;
+}
+
+button.rowTrigger[data-expanded] {
+  background: var(--hover);
 }
 
 @media (hover: hover) {

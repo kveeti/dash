@@ -20,6 +20,7 @@
     "@solidjs/router": "^0.15.1",
     "@tanstack/solid-query": "^5.101.2",
     "solid-js": "^1.9.5",
+    "solid-transition-group": "^0.3.0",
     "valibot": "^1.4.2"
   },
   "devDependencies": {

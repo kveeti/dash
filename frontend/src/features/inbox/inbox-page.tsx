@@ -140,45 +140,40 @@ export default function InboxPage() {
                     </Show>
 
                     <li class={shell.col}>
-                      <Show
-                        when={selectMode()}
-                        fallback={
-                          <div class={styles.row}>
-                            <Combobox>
-                              <Combobox.Trigger class={styles.rowTrigger}>
-                                <Info row={row} />
-                                <Amount row={row} />
-                              </Combobox.Trigger>
-                              <Combobox.Content>
-                                <CategoryMenu
-                                  buckets={categories()}
-                                  onChange={(bucketId) =>
-                                    categorize.mutate({
-                                      ids: [row.id],
-                                      bucketId,
-                                    })
-                                  }
-                                  onCreate={onCreate}
-                                  searchPlaceholder="Category"
-                                />
-                              </Combobox.Content>
-                            </Combobox>
-                          </div>
-                        }
+                      <div
+                        class={shell.rowWrap}
+                        classList={{ [shell.rowWrapSelect]: selectMode() }}
+                        onClick={() => selectMode() && toggle(row.id)}
                       >
-                        <div
-                          class={shell.selectable}
-                          onClick={() => toggle(row.id)}
-                        >
+                        <div class={shell.checkSlot}>
                           <Checkbox
                             checked={selected().has(row.id)}
                             tabindex={-1}
                             style={{ "pointer-events": "none" }}
                           />
-                          <Info row={row} />
-                          <Amount row={row} />
                         </div>
-                      </Show>
+                        <div class={`${shell.slide} ${styles.rowContent}`}>
+                          <Combobox>
+                            <Combobox.Trigger class={styles.rowTrigger}>
+                              <Info row={row} />
+                              <Amount row={row} />
+                            </Combobox.Trigger>
+                            <Combobox.Content>
+                              <CategoryMenu
+                                buckets={categories()}
+                                onChange={(bucketId) =>
+                                  categorize.mutate({
+                                    ids: [row.id],
+                                    bucketId,
+                                  })
+                                }
+                                onCreate={onCreate}
+                                searchPlaceholder="Category"
+                              />
+                            </Combobox.Content>
+                          </Combobox>
+                        </div>
+                      </div>
                     </li>
                   </>
                 );
@@ -197,18 +192,17 @@ export default function InboxPage() {
             </button>
           </Show>
 
-          <Show when={selectMode()}>
-            <FloatingBar
-              count={selected().size}
-              categories={categories()}
-              onClear={clearSelection}
-              onExit={exitSelect}
-              onCategorize={(bucketId) =>
-                categorize.mutate({ ids: [...selected()], bucketId })
-              }
-              onCreate={onCreate}
-            />
-          </Show>
+          <FloatingBar
+            show={selectMode()}
+            count={selected().size}
+            categories={categories()}
+            onClear={clearSelection}
+            onExit={exitSelect}
+            onCategorize={(bucketId) =>
+              categorize.mutate({ ids: [...selected()], bucketId })
+            }
+            onCreate={onCreate}
+          />
         </Match>
       </Switch>
     </div>
