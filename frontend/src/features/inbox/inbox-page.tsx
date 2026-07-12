@@ -1,4 +1,4 @@
-import { useSearchParams } from "@solidjs/router";
+import { useNavigate, useSearchParams } from "@solidjs/router";
 import {
   useInfiniteQuery,
   useMutation,
@@ -7,7 +7,7 @@ import {
 } from "@tanstack/solid-query";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 
-import { bucketsQuery, createBucket } from "../../api/buckets";
+import { bucketsQuery, createBucket, type Bucket } from "../../api/buckets";
 import { categorizeInbox, inboxQuery, type InboxRow } from "../../api/inbox";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { Combobox } from "../../ui/combobox/combobox";
@@ -33,6 +33,7 @@ const longDateFmt = new Intl.DateTimeFormat(undefined, {
 
 export default function InboxPage() {
   const [params, setParams] = useSearchParams<{ q?: string }>();
+  const navigate = useNavigate();
 
   const inbox = useInfiniteQuery(() => inboxQuery(params.q ?? ""));
   const buckets = useQuery(bucketsQuery);
@@ -164,14 +165,14 @@ export default function InboxPage() {
                               <CategoryMenu
                                 buckets={categoriesAndPeople()}
                                 onChange={(bucketId) =>
-                                  categorize.mutate({
-                                    ids: [row.id],
-                                    bucketId,
-                                  })
+                                  categorize.mutate({ ids: [row.id], bucketId })
                                 }
                                 onCreate={onCreate("expense")}
                                 onCreatePerson={onCreate("person")}
-                                searchPlaceholder="Category or person"
+                                onMatchTransfer={() =>
+                                  navigate(`/inbox/${row.id}/match-transfer`)
+                                }
+                                searchPlaceholder="Category, person, or action"
                               />
                             </Combobox.Content>
                           </Combobox>

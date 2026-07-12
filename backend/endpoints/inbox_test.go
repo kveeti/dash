@@ -106,6 +106,44 @@ func TestInboxCategorizeRejectsNonCategory(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+func TestMatchInboxTransfer(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	checking := createBucket(t, app, "asset", "Checking")
+	savings := createBucket(t, app, "asset", "Savings")
+	doImport(t, app, checking, nordeaHeader+nordeaRow("2026/07/01", "-500,00", "Transfer", "Savings"))
+	doImport(t, app, savings, nordeaHeader+nordeaRow("2026/07/02", "500,00", "Transfer", "Checking"))
+
+	rows := getInbox(t, app, "")
+	require.Len(t, rows, 2)
+	var sourceID, matchID string
+	for _, row := range rows {
+		if row.Amount < 0 {
+			sourceID = row.ID
+		} else {
+			matchID = row.ID
+		}
+	}
+
+	resp := authed(t, app, http.MethodGet, "/api/v1/inbox/"+sourceID+"/transfer-matches", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var suggestions struct {
+		Matches []inboxRow `json:"matches"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&suggestions))
+	require.Len(t, suggestions.Matches, 1)
+	require.Equal(t, matchID, suggestions.Matches[0].ID)
+
+	resp = authed(t, app, http.MethodPost, "/api/v1/inbox/"+sourceID+"/match-transfer", map[string]any{"match_id": matchID})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Empty(t, getInbox(t, app, ""))
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
+	require.Len(t, decodeTxns(t, resp), 1)
+	balances := getBalances(t, app)
+	require.Equal(t, int64(-50000), balances[checking]["EUR"])
+	require.Equal(t, int64(50000), balances[savings]["EUR"])
+}
+
 func TestInboxSearch(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")

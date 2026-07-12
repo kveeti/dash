@@ -60,6 +60,7 @@ export function CategoryMenu(props: {
   onChange: (id: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
   onCreatePerson?: (name: string) => Promise<Bucket>;
+  onMatchTransfer?: () => void;
   searchPlaceholder: string;
 }) {
   return (
@@ -77,6 +78,7 @@ export function CategoryMenu(props: {
           onChange={props.onChange}
           onCreate={props.onCreate}
           onCreatePerson={props.onCreatePerson}
+          onMatchTransfer={props.onMatchTransfer}
         />
       </Command.List>
     </Command>
@@ -88,8 +90,9 @@ function Rows(props: {
   onChange: (id: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
   onCreatePerson?: (name: string) => Promise<Bucket>;
+  onMatchTransfer?: () => void;
 }) {
-  const { close } = useCombobox();
+  const combobox = useCombobox();
   const search = useCommandState((s) => s.search);
   const name = () => search().trim();
 
@@ -102,13 +105,20 @@ function Rows(props: {
             keywords={[b.name]}
             onSelect={() => {
               props.onChange(b.id);
-              close();
+              combobox?.close();
             }}
           >
             {b.name}
           </Command.Item>
         )}
       </For>
+      <Show when={props.onMatchTransfer}>
+        <Command.Group value="actions" forceMount>
+          <Command.Item forceMount onSelect={() => props.onMatchTransfer!()}>
+            Match transfer
+          </Command.Item>
+        </Command.Group>
+      </Show>
       <Show when={name() !== ""}>
         <Command.Group value="create" forceMount>
           <Command.Item
@@ -116,7 +126,7 @@ function Rows(props: {
             onSelect={async () => {
               const created = await props.onCreate(name());
               props.onChange(created.id);
-              close();
+              combobox?.close();
             }}
           >
             Create category “{name()}”
@@ -127,7 +137,7 @@ function Rows(props: {
               onSelect={async () => {
                 const created = await props.onCreatePerson!(name());
                 props.onChange(created.id);
-                close();
+                combobox?.close();
               }}
             >
               Create person “{name()}”

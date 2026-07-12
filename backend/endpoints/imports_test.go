@@ -180,6 +180,37 @@ func TestDeleteImportBatch(t *testing.T) {
 	require.Equal(t, 0, res.Duplicates)
 }
 
+func TestDeleteImportReturnsMatchedRowFromOtherBatchToInbox(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	checking := createBucket(t, app, "asset", "Checking")
+	savings := createBucket(t, app, "asset", "Savings")
+	checkingImport := doImport(t, app, checking, nordeaHeader+nordeaRow("2026/07/01", "-500,00", "Transfer", "Savings"))
+	doImport(t, app, savings, nordeaHeader+nordeaRow("2026/07/02", "500,00", "Transfer", "Checking"))
+
+	rows := getInbox(t, app, "")
+	require.Len(t, rows, 2)
+	var outgoing, incoming string
+	for _, row := range rows {
+		if row.Amount < 0 {
+			outgoing = row.ID
+		} else {
+			incoming = row.ID
+		}
+	}
+	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/"+outgoing+"/match-transfer", map[string]any{"match_id": incoming})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Empty(t, getInbox(t, app, ""))
+
+	resp = authed(t, app, http.MethodDelete, "/api/v1/imports/"+checkingImport.ID, nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	rows = getInbox(t, app, "")
+	require.Len(t, rows, 1)
+	require.Equal(t, int64(50000), rows[0].Amount)
+	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
+	require.Empty(t, decodeTxns(t, resp))
+}
+
 func TestImportCollectsRowErrors(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")

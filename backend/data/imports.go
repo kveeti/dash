@@ -482,6 +482,7 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 	audits := []string{
 		"select uuidv7(), $1, 'import_batches', b.id, 'delete', to_jsonb(b), now() from import_batches b where b.id = $2",
 		"select uuidv7(), $1, 'import_rows', r.id, 'delete', to_jsonb(r), now() from import_rows r where r.batch_id = $2",
+		"select uuidv7(), $1, 'import_rows', r.id, 'update', to_jsonb(r), now() from import_rows r where r.batch_id <> $2 and r.transaction_id in (" + txnScope + ")",
 		"select uuidv7(), $1, 'transactions', t.id, 'delete', to_jsonb(t), now() from transactions t where t.id in (" + txnScope + ")",
 		"select uuidv7(), $1, 'postings', p.id, 'delete', to_jsonb(p), now() from postings p where p.transaction_id in (" + txnScope + ")",
 	}
@@ -491,6 +492,13 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 			userID, batchID); err != nil {
 			return err
 		}
+	}
+
+	// A matched transfer can span batches. Return its other row to the inbox.
+	if _, err := tx.ExecContext(ctx,
+		"update import_rows set status = 'pending', transaction_id = null where batch_id <> $1 and transaction_id in (select transaction_id from import_rows where batch_id = $1 and transaction_id is not null)",
+		batchID); err != nil {
+		return err
 	}
 
 	// transactions first (postings cascade), then rows, then the batch.

@@ -1,4 +1,8 @@
-import { infiniteQueryOptions, keepPreviousData } from "@tanstack/solid-query";
+import {
+  infiniteQueryOptions,
+  keepPreviousData,
+  queryOptions,
+} from "@tanstack/solid-query";
 
 import { api } from "./http";
 
@@ -9,6 +13,7 @@ export interface InboxRow {
   currency: string;
   counterparty: string;
   description: string;
+  account: string;
 }
 
 interface Cursor {
@@ -40,6 +45,23 @@ export const inboxQuery = (q: string) =>
     getNextPageParam: (last: InboxPage) => last.next_cursor,
     placeholderData: keepPreviousData,
   });
+
+export const transferMatchesQuery = (id: string, q: string) =>
+  queryOptions({
+    queryKey: ["inbox", id, "transfer-matches", q],
+    queryFn: () =>
+      api<{ source: InboxRow; matches: InboxRow[] }>(
+        `/api/v1/inbox/${id}/transfer-matches${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      ),
+    placeholderData: keepPreviousData,
+  });
+
+export function matchInboxTransfer(id: string, matchId: string) {
+  return api<{ matched: boolean }>(`/api/v1/inbox/${id}/match-transfer`, {
+    method: "POST",
+    body: JSON.stringify({ match_id: matchId }),
+  });
+}
 
 export function categorizeInbox(
   rowIds: string[],

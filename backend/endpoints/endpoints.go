@@ -40,6 +40,8 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 
 	mux.HandleFunc("GET /api/v1/inbox", NewHandler(HandleListInbox(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/inbox/categorize", NewHandler(HandleCategorizeInbox(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/inbox/{id}/transfer-matches", NewHandler(HandleGetTransferMatches(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/inbox/{id}/match-transfer", NewHandler(HandleMatchInboxTransfer(state, getUserID)))
 
 	mux.HandleFunc("POST /api/v1/imports", NewHandler(HandleCreateImport(state, getUserID)))
 	mux.HandleFunc("GET /api/v1/imports", NewHandler(HandleListImports(state, getUserID)))
