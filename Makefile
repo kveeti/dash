@@ -1,6 +1,8 @@
+ifndef IN_NIX_SHELL
 ifneq (,$(wildcard ./.env))
 	include .env
 	export
+endif
 endif
 
 .PHONY: all
@@ -18,6 +20,7 @@ frontdev:
 
 dev: backdev frontdev
 
+devi: export OIDC_ISSUER=$(DEVIDP_ISSUER)
 devi: devidp backdev frontdev
 
 build-frontend:

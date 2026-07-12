@@ -50,8 +50,9 @@ type pending struct {
 }
 
 func main() {
-	addr := env("DEVIDP_ADDR", ":5557")
-	issuer := env("DEVIDP_ISSUER", "http://localhost:5557")
+	port := env("DEVIDP_PORT", "5557")
+	addr := env("DEVIDP_ADDR", ":"+port)
+	issuer := env("DEVIDP_ISSUER", "http://localhost:"+port)
 
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

@@ -43,8 +43,37 @@
           shellHook = ''
             echo "Setting up ${pkgs.postgresql_18.name}"
 
-            export PGPORT=5556
+            if [ -f .env ]; then
+              set -a
+              source .env
+              set +a
+            fi
+
+            free_port() {
+              local port="$1"
+              shift
+              while (echo >/dev/tcp/localhost/"$port") 2>/dev/null || [[ " $* " == *" $port "* ]]; do
+                port=$((port + 1))
+              done
+              echo "$port"
+            }
+
             export PGDATA="$PWD/.pg"
+            export PORT="$(free_port "''${PORT:-8000}")"
+            export VITE_PORT="$(free_port "''${VITE_PORT:-3000}" "$PORT")"
+            export DEVIDP_PORT="$(free_port "''${DEVIDP_PORT:-5557}" "$PORT" "$VITE_PORT")"
+            if pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
+              export PGPORT="$(awk 'NR == 4 { print; exit }' "$PGDATA/postmaster.pid")"
+            else
+              export PGPORT="$(free_port "''${PGPORT:-5556}" "$PORT" "$VITE_PORT" "$DEVIDP_PORT")"
+            fi
+
+            export BACKEND_URL="http://localhost:$PORT"
+            export DEV_VITE_URL="http://localhost:$VITE_PORT"
+            export DEVIDP_ISSUER="http://localhost:$DEVIDP_PORT"
+            export DB_URL="postgres://postgres:postgres@localhost:$PGPORT/postgres"
+
+            echo "Ports: backend $PORT, frontend $VITE_PORT, IdP $DEVIDP_PORT, Postgres $PGPORT"
 
             mkdir -p "$PGDATA"
             export PGHOST="$PGDATA"
@@ -55,7 +84,9 @@
               cat "$postgresConf" >> "$PGDATA/postgresql.conf"
             fi
 
-            pg_ctl -D "$PGDATA" -o "-k $PGDATA" start
+            if ! pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
+              pg_ctl -D "$PGDATA" -o "-k $PGDATA" start
+            fi
 
             alias fin="pg_ctl -D $PGDATA stop && exit"
             alias pg="psql -U postgres -d postgres"

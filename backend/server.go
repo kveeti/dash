@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
+
 	"money/backend/auth"
 	"money/backend/config"
 	"money/backend/data"
 	"money/backend/endpoints"
 	"money/backend/state"
-	"os"
-	"os/signal"
 )
 
 func App(config *config.Config, started chan struct{}) {
@@ -36,7 +37,7 @@ func App(config *config.Config, started chan struct{}) {
 
 	router := endpoints.GetRouter(state.NewState(d, config, oidc), frontendFS())
 
-	s := NewHttpServer(router, ":8000")
+	s := NewHttpServer(router, ":"+config.Port)
 	if err := s.Start(); err != nil {
 		panic(fmt.Errorf("error starting server: %w", err))
 	}

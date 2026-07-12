@@ -5,10 +5,9 @@ import solidPlugin from "vite-plugin-solid";
 export default defineConfig({
   plugins: [devtools(), solidPlugin()],
   server: {
-    port: 3000,
-    // The browser always talks to the backend (:8000), which reverse-proxies
-    // here. Tell the HMR client to dial the proxy, not Vite directly.
-    hmr: { clientPort: 8000 },
+    port: Number(process.env.VITE_PORT ?? 3000),
+    // The browser talks to the backend, which reverse-proxies Vite.
+    hmr: { clientPort: Number(process.env.PORT ?? 8000) },
   },
   clearScreen: false,
   build: {

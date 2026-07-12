@@ -7,6 +7,7 @@ import (
 
 type Config struct {
 	IsProd     bool
+	Port       string
 	BackendUrl string
 	// FrontUrl is empty when the frontend is served from the same origin as the
 	// backend. When set (separate origin, e.g. a dev server) it enables CORS and
@@ -46,8 +47,14 @@ func (c *Config) EffectiveFrontUrl() string {
 }
 
 func LoadConfig() (*Config, error) {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
+
 	config := &Config{
 		IsProd:      os.Getenv("IS_PROD") == "1",
+		Port:        port,
 		BackendUrl:  os.Getenv("BACKEND_URL"),
 		FrontUrl:    os.Getenv("FRONT_URL"),
 		DevViteUrl:  os.Getenv("DEV_VITE_URL"),
