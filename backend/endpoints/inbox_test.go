@@ -133,6 +133,12 @@ func TestMatchInboxTransfer(t *testing.T) {
 	require.Len(t, suggestions.Matches, 1)
 	require.Equal(t, matchID, suggestions.Matches[0].ID)
 
+	resp = authed(t, app, http.MethodGet, "/api/v1/inbox/"+matchID+"/transfer-matches", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&suggestions))
+	require.Len(t, suggestions.Matches, 1)
+	require.Equal(t, sourceID, suggestions.Matches[0].ID)
+
 	resp = authed(t, app, http.MethodPost, "/api/v1/inbox/"+sourceID+"/match-transfer", map[string]any{"match_id": matchID})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Empty(t, getInbox(t, app, ""))

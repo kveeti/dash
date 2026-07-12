@@ -48,7 +48,7 @@ export const inboxQuery = (q: string) =>
 
 export const transferMatchesQuery = (id: string, q: string) =>
   queryOptions({
-    queryKey: ["inbox", id, "transfer-matches", q],
+    queryKey: ["inbox-transfer-matches", id, q],
     queryFn: () =>
       api<{ source: InboxRow; matches: InboxRow[] }>(
         `/api/v1/inbox/${id}/transfer-matches${q ? `?q=${encodeURIComponent(q)}` : ""}`,
