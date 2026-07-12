@@ -31,8 +31,8 @@ func mapImportErr(err error) error {
 
 // HandleCreateImport lands the upload durably and returns immediately; parsing
 // and promotion happen in the background worker. It caps the body, validates the
-// bucket, peeks the header to reject a non-Nordea file, then buffers to a temp
-// file (so the slow upload holds no DB connection) before storing it.
+// bucket, checks the selected format's header, then buffers to a temp file (so
+// the slow upload holds no DB connection) before storing it.
 func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)
@@ -47,7 +47,8 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			}
 			return NewErr("invalid multipart form", http.StatusBadRequest)
 		}
-		if r.FormValue("format") != "nordea" {
+		format := r.FormValue("format")
+		if format != "nordea" && format != "op" && format != "revolut" {
 			return NewErr("unsupported format", http.StatusBadRequest)
 		}
 		bucketID := r.FormValue("bucket_id")
@@ -55,6 +56,9 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			return NewErr("bucket_id is required", http.StatusBadRequest)
 		}
 		timezone := r.FormValue("timezone")
+		if format == "revolut" {
+			timezone = "UTC"
+		}
 		if _, err := time.LoadLocation(timezone); err != nil || timezone == "" {
 			return NewErr("valid timezone is required", http.StatusBadRequest)
 		}
@@ -76,8 +80,13 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			}
 			return NewErr("could not read file", http.StatusBadRequest)
 		}
-		if !data.ValidNordeaHeader(firstLine) {
-			return NewErr("not a Nordea CSV export", http.StatusBadRequest)
+		validHeader := map[string]func(string) bool{
+			"nordea":  data.ValidNordeaHeader,
+			"op":      data.ValidOPHeader,
+			"revolut": data.ValidRevolutHeader,
+		}[format]
+		if !validHeader(firstLine) {
+			return NewErr("CSV header does not match selected format", http.StatusBadRequest)
 		}
 
 		tmp, err := os.CreateTemp("", "import-*.csv")
@@ -100,7 +109,7 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			return NewUnexpectedErr("temp seek: %w", err)
 		}
 
-		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, "nordea", header.Filename, timezone, tmp)
+		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, format, header.Filename, timezone, tmp)
 		if err != nil {
 			return mapImportErr(err)
 		}

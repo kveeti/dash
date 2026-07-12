@@ -15,7 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const nordeaHeader = "Kirjauspäivä;Määrä;Maksaja;Maksunsaaja;Nimi;Otsikko;Viesti;Viitenumero;Saldo;Valuutta;\n"
+const (
+	nordeaHeader  = "Kirjauspäivä;Määrä;Maksaja;Maksunsaaja;Nimi;Otsikko;Viesti;Viitenumero;Saldo;Valuutta;\n"
+	opHeader      = "\"Kirjauspäivä\";\"Arvopäivä\";\"Määrä EUROA\";\"Laji\";\"Selitys\";\"Saaja/Maksaja\";\"Saajan tilinumero\";\"Saajan pankin BIC\";\"Viite\";\"Viesti\";\"Arkistointitunnus\"\n"
+	revolutHeader = "Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n"
+)
 
 func nordeaRow(date, amount, payee, message string) string {
 	return date + ";" + amount + ";;;;" + payee + ";" + message + ";;;EUR\n"
@@ -29,11 +33,18 @@ func nordeaRowBal(date, amount, payee, message, balance string) string {
 
 func importCSV(t *testing.T, app *testApp, bucketID, csv string) *http.Response {
 	t.Helper()
+	return importCSVFormat(t, app, bucketID, "nordea", csv)
+}
+
+func importCSVFormat(t *testing.T, app *testApp, bucketID, format, csv string) *http.Response {
+	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	require.NoError(t, mw.WriteField("bucket_id", bucketID))
-	require.NoError(t, mw.WriteField("format", "nordea"))
-	require.NoError(t, mw.WriteField("timezone", "Europe/Helsinki"))
+	require.NoError(t, mw.WriteField("format", format))
+	if format != "revolut" {
+		require.NoError(t, mw.WriteField("timezone", "Europe/Helsinki"))
+	}
 	fw, err := mw.CreateFormFile("file", "export.csv")
 	require.NoError(t, err)
 	_, err = fw.Write([]byte(csv))
@@ -59,7 +70,12 @@ type importResult struct {
 // final report.
 func doImport(t *testing.T, app *testApp, bucketID, csv string) batchReport {
 	t.Helper()
-	resp := importCSV(t, app, bucketID, csv)
+	return doImportFormat(t, app, bucketID, "nordea", csv)
+}
+
+func doImportFormat(t *testing.T, app *testApp, bucketID, format, csv string) batchReport {
+	t.Helper()
+	resp := importCSVFormat(t, app, bucketID, format, csv)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var out importResult
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
@@ -98,6 +114,42 @@ func TestImportNordea(t *testing.T) {
 	require.Equal(t, int64(-1234), byParty["K-Market"].Amount)
 	require.Equal(t, "Salary", byParty["Employer"].Description)
 	require.Equal(t, int64(10000), byParty["Employer"].Amount)
+}
+
+func TestImportOP(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+
+	csv := opHeader +
+		"2026-07-01;2026-07-01;-12,34;Korttimaksu;Ruoka;K-Market;FI123;;;Viesti: Groceries;A1\n" +
+		"2026-07-02;2026-07-02;100,00;Tilisiirto;Palkka;Employer;;;;Salary;A2\n"
+	res := doImportFormat(t, app, bank, "op", csv)
+	require.Equal(t, 2, res.Imported)
+	require.Empty(t, res.ParseErrors)
+
+	byParty := inboxByParty(getInbox(t, app, ""))
+	require.Equal(t, int64(-1234), byParty["K-Market"].Amount)
+	require.Equal(t, "Selitys: Ruoka, Saajan tilinumero: FI123, Viesti: Groceries", byParty["K-Market"].Description)
+	require.Equal(t, int64(10000), byParty["Employer"].Amount)
+}
+
+func TestImportRevolut(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+
+	csv := revolutHeader +
+		"CARD_PAYMENT,Current,2026-07-01 12:30:00,2026-07-01 12:31:00,Cafe,-10.00,0.50,EUR,COMPLETED,90.00\n" +
+		"CARD_PAYMENT,Current,2026-07-02 12:30:00,,Pending,-5.00,0,EUR,PENDING,85.00\n"
+	res := doImportFormat(t, app, bank, "revolut", csv)
+	require.Equal(t, 1, res.Imported)
+	require.Empty(t, res.ParseErrors)
+
+	rows := getInbox(t, app, "")
+	require.Len(t, rows, 1)
+	require.Equal(t, "Cafe", rows[0].Counterparty)
+	require.Equal(t, "2026-07-01T12:30:00Z", rows[0].Date)
+	require.Equal(t, int64(-1050), rows[0].Amount)
+	require.Equal(t, "Type: CARD_PAYMENT, Fee: 0.50", rows[0].Description)
 }
 
 func TestImportIdenticalRowsBothImport(t *testing.T) {

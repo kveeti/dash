@@ -100,12 +100,15 @@ type importParser interface {
 }
 
 // parserFor builds the parser for a source. loc is the timezone the batch was
-// uploaded with; parsers for date-only formats (Nordea) interpret their plain
-// dates as midnight in it. A parser for a timestamped format would ignore loc.
+// uploaded with; parsers interpret dates as midnight in it.
 func parserFor(source string, r io.Reader, loc *time.Location) (importParser, error) {
 	switch source {
 	case "nordea":
 		return NewNordeaParser(r, loc), nil
+	case "op":
+		return NewOPParser(r, loc), nil
+	case "revolut":
+		return NewRevolutParser(r, loc), nil
 	default:
 		return nil, fmt.Errorf("unsupported import source %q", source)
 	}

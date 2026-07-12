@@ -126,40 +126,46 @@ function ImportForm() {
         </FormField>
 
         <FormField of={form} path={["format"]}>
-          {(field) => (
-            <Field class={inputStyles.horizontal} label="Format">
-              <InputGroup>
-                <select
-                  {...field.props}
-                  style={{ flex: "1" }}
-                  value={field.input ?? ""}
-                >
-                  <option value="nordea">Nordea</option>
-                </select>
-              </InputGroup>
-            </Field>
-          )}
-        </FormField>
+          {(formatField) => (
+            <>
+              <Field class={inputStyles.horizontal} label="Format">
+                <InputGroup>
+                  <select
+                    {...formatField.props}
+                    style={{ flex: "1" }}
+                    value={formatField.input ?? ""}
+                  >
+                    <option value="nordea">Nordea</option>
+                    <option value="op">OP</option>
+                    <option value="revolut">Revolut</option>
+                  </select>
+                </InputGroup>
+              </Field>
 
-        <FormField of={form} path={["timezone"]}>
-          {(field) => (
-            <Field
-              class={inputStyles.horizontal}
-              label="Dates in timezone"
-              error={field.errors?.[0]}
-            >
-              <InputGroup>
-                <select
-                  {...field.props}
-                  style={{ flex: "1" }}
-                  value={field.input ?? ""}
-                >
-                  <For each={timezones}>
-                    {(tz) => <option value={tz}>{tz}</option>}
-                  </For>
-                </select>
-              </InputGroup>
-            </Field>
+              <Show when={formatField.input !== "revolut"}>
+                <FormField of={form} path={["timezone"]}>
+                  {(field) => (
+                    <Field
+                      class={inputStyles.horizontal}
+                      label="Dates in timezone"
+                      error={field.errors?.[0]}
+                    >
+                      <InputGroup>
+                        <select
+                          {...field.props}
+                          style={{ flex: "1" }}
+                          value={field.input ?? ""}
+                        >
+                          <For each={timezones}>
+                            {(tz) => <option value={tz}>{tz}</option>}
+                          </For>
+                        </select>
+                      </InputGroup>
+                    </Field>
+                  )}
+                </FormField>
+              </Show>
+            </>
           )}
         </FormField>
 

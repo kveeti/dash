@@ -109,18 +109,7 @@ var nordeaHeaderCols = []string{
 // UTF-8 BOM, latin-1 encoding and the export's trailing ';'. Lets the ingest
 // handler reject a non-Nordea file before storing it.
 func ValidNordeaHeader(line string) bool {
-	line = decodeField(strings.TrimRight(line, "\r\n"))
-	line = strings.TrimPrefix(line, string(rune(0xFEFF)))
-	cols := strings.Split(line, ";")
-	if len(cols) < len(nordeaHeaderCols) {
-		return false
-	}
-	for i, want := range nordeaHeaderCols {
-		if strings.TrimSpace(cols[i]) != want {
-			return false
-		}
-	}
-	return true
+	return validHeader(line, ";", nordeaHeaderCols)
 }
 
 func parseNordeaRow(cols []string, loc *time.Location) (ParsedRow, error) {
