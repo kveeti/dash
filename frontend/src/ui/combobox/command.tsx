@@ -460,12 +460,17 @@ const Command: Component<CommandRootProps> = (props) => {
   }
 
   function getValidItems() {
+    const visualOrder = (item: Element) => {
+      const group = item.closest(GROUP_SELECTOR);
+      if (!group) return state.filtered.order[item.id] ?? 0;
+      return (
+        (state.filtered.order[group.id] ?? 10000) * 10000 +
+        (state.filtered.order[item.id] ?? 0)
+      );
+    };
     return Array.from(
       listInnerRef()?.querySelectorAll(VALID_ITEM_SELECTOR) || [],
-    ).sort(
-      (a, b) =>
-        (state.filtered.order[a.id] ?? 0) - (state.filtered.order[b.id] ?? 0),
-    );
+    ).sort((a, b) => visualOrder(a) - visualOrder(b));
   }
 
   function updateSelectedToIndex(index: number) {
