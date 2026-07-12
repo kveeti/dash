@@ -8,7 +8,7 @@
 
 /* The native input carries state + a11y; it's transparent but its hitbox is
    deliberately larger than the visual box. */
-.root>input {
+.root > input {
   position: absolute;
   inset: -0.6rem;
   inline-size: auto;
@@ -40,16 +40,16 @@
   opacity: 0;
 }
 
-.root>input:checked+.box {
+.root > input:checked + .box {
   background-color: var(--accent);
   border-color: var(--accent);
 }
 
-.root>input:checked+.box::after {
+.root > input:checked + .box::after {
   opacity: 1;
 }
 
-.root>input:focus-visible+.box {
+.root > input:focus-visible + .box {
   outline: 1.5px solid var(--focus);
   outline-offset: 2px;
 }

@@ -11,7 +11,7 @@ type ComboboxCtx = {
   close: () => void;
 };
 const ComboboxContext = createContext<ComboboxCtx>();
-export const useCombobox = () => useContext(ComboboxContext)!;
+export const useCombobox = () => useContext(ComboboxContext);
 
 function Root(props: { children: JSX.Element }) {
   const [open, setOpen] = createSignal(false);

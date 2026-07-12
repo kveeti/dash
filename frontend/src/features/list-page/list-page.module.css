@@ -53,7 +53,7 @@
 }
 
 /* divider sits on top of each row; removed on the first row of a day */
-.datePos+li>* {
+.datePos + li > * {
   border-block-start: none;
 }
 
@@ -96,7 +96,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   .checkSlot,
   .slide {
     transition-duration: 1ms;

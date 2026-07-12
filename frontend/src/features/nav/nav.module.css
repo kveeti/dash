@@ -28,7 +28,7 @@ nav {
       list-style: none;
       display: flex;
 
-      .link>a {
+      .link > a {
         font-size: var(--text-sm);
         padding-inline: var(--s3);
         height: 100%;

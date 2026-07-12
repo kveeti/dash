@@ -61,7 +61,7 @@
     justify-content: flex-start;
   }
 
-  .horizontal> :not(.labelRow):not(.error) {
+  .horizontal > :not(.labelRow):not(.error) {
     grid-row: 2;
     grid-column: 2;
   }
@@ -73,7 +73,7 @@
 
 /* Shared surface for every single-field control (plain input + group segments). */
 .control,
-.group>* {
+.group > * {
   padding-inline: 0.7rem;
   color: var(--fg);
   background-color: var(--field);
@@ -84,17 +84,17 @@
 }
 
 .control:not(.invalid) .placeholder,
-.group:not(.invalid)>input::placeholder {
+.group:not(.invalid) > input::placeholder {
   color: var(--fg-subtle);
 }
 
-.control.invalid>.placeholder,
-.group.invalid>input::placeholder {
+.control.invalid > .placeholder,
+.group.invalid > input::placeholder {
   color: var(--red-11);
 }
 
 .control:focus-visible,
-.group>*:focus-visible {
+.group > *:focus-visible {
   outline-color: var(--focus);
 }
 
@@ -114,14 +114,13 @@
 }
 
 @media (hover: hover) {
-
   .control:not(:focus):not(.invalid):hover,
-  .group>*:not(:focus):not(.invalid):hover {
+  .group > *:not(:focus):not(.invalid):hover {
     outline-color: var(--line-strong);
   }
 
   .control:not(:focus).invalid:hover,
-  .group>*:not(:focus).invalid:hover {
+  .group > *:not(:focus).invalid:hover {
     outline-color: var(--red-8);
   }
 }
@@ -134,34 +133,34 @@
   inline-size: 100%;
   block-size: 2.25rem;
 
-  &>* {
+  & > * {
     min-inline-size: 0;
   }
 
-  &>*:focus-visible {
+  & > *:focus-visible {
     position: relative;
     z-index: 1;
   }
 
-  &> :not(:first-child) {
+  & > :not(:first-child) {
     margin-inline-start: -1px;
   }
 
-  &> :first-child {
+  & > :first-child {
     border-start-start-radius: 0.75rem;
     border-end-start-radius: 0.75rem;
   }
 
-  &> :last-child {
+  & > :last-child {
     border-start-end-radius: 0.75rem;
     border-end-end-radius: 0.75rem;
   }
 
-  &>input {
+  & > input {
     flex: 1;
   }
 
-  &>select {
+  & > select {
     cursor: pointer;
     appearance: none;
     padding-inline-end: 2.2rem;
