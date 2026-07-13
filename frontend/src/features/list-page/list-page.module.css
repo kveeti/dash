@@ -144,6 +144,16 @@
   min-inline-size: 0;
 }
 
+.activeFilter {
+  border: 0;
+  border-radius: 999px;
+  padding: var(--s1) var(--s2);
+  background: var(--gray-4);
+  color: var(--fg);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .floatingbarPos {
   z-index: 3;
   position: fixed;

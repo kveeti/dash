@@ -1,4 +1,4 @@
-import { onCleanup } from "solid-js";
+import { onCleanup, Show } from "solid-js";
 
 import { Checkbox } from "../../ui/checkbox/checkbox";
 
@@ -11,6 +11,8 @@ export function Filterbar(props: {
   onSelectMode: (on: boolean) => void;
   search: string;
   onSearch: (value: string | undefined) => void;
+  tag?: string;
+  onClearTag?: () => void;
 }) {
   let debounce: ReturnType<typeof setTimeout>;
   onCleanup(() => clearTimeout(debounce));
@@ -23,6 +25,14 @@ export function Filterbar(props: {
           checked={props.selectMode}
           onChange={(e) => props.onSelectMode(e.currentTarget.checked)}
         />
+        <Show when={props.tag}>
+          <button
+            class={styles.activeFilter}
+            onClick={() => props.onClearTag?.()}
+          >
+            #{props.tag} ×
+          </button>
+        </Show>
         <input
           class={inputStyles.control}
           type="search"

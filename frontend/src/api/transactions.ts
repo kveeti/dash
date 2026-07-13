@@ -1,4 +1,8 @@
-import { infiniteQueryOptions, keepPreviousData } from "@tanstack/solid-query";
+import {
+  infiniteQueryOptions,
+  keepPreviousData,
+  queryOptions,
+} from "@tanstack/solid-query";
 
 import { api } from "./http";
 
@@ -14,6 +18,7 @@ export interface Transaction {
   date: string;
   counterparty: string;
   description: string;
+  tags: string[];
   postings: Posting[];
 }
 
@@ -37,11 +42,19 @@ const transactionsPage = (pageParam: Cursor | null, extra = "") => {
   );
 };
 
-export const transactionsQuery = (q: string) =>
+export const transactionsQuery = (q: string, tag: string) =>
   infiniteQueryOptions({
-    queryKey: ["transactions", "list", q],
+    queryKey: ["transactions", "list", q, tag],
     queryFn: ({ pageParam }: { pageParam: Cursor | null }) =>
-      transactionsPage(pageParam, q ? `q=${encodeURIComponent(q)}` : ""),
+      transactionsPage(
+        pageParam,
+        [
+          q ? `q=${encodeURIComponent(q)}` : "",
+          tag ? `tag=${encodeURIComponent(tag)}` : "",
+        ]
+          .filter(Boolean)
+          .join("&"),
+      ),
     initialPageParam: null as Cursor | null,
     getNextPageParam: (last: TransactionsPage) => last.next_cursor,
     placeholderData: keepPreviousData,
@@ -75,6 +88,29 @@ export function bulkCategorize(
       transaction_ids: transactionIds,
       bucket_id: bucketId,
     }),
+  });
+}
+
+export const tagsQuery = (q = "") =>
+  queryOptions({
+    queryKey: ["tags", q],
+    queryFn: () =>
+      api<{ tags: string[] }>(
+        `/api/v1/tags${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      ),
+  });
+
+export function addTransactionTag(transactionIds: string[], tag: string) {
+  return api<{ tagged: number }>("/api/v1/transactions/tags", {
+    method: "POST",
+    body: JSON.stringify({ transaction_ids: transactionIds, tag }),
+  });
+}
+
+export function removeTransactionTag(transactionIds: string[], tag: string) {
+  return api<{ untagged: number }>("/api/v1/transactions/tags", {
+    method: "DELETE",
+    body: JSON.stringify({ transaction_ids: transactionIds, tag }),
   });
 }
 

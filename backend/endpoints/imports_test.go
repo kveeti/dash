@@ -232,6 +232,36 @@ func TestDeleteImportBatch(t *testing.T) {
 	require.Equal(t, 0, res.Duplicates)
 }
 
+func TestDeleteImportRemovesTaggedTransaction(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	batch := doImport(t, app, bank, nordeaHeader+nordeaRow("2026/07/01", "-12,34", "K-Market", "Groceries"))
+	rows := getInbox(t, app, "")
+	require.Len(t, rows, 1)
+	require.Equal(t, 1, categorizeInbox(t, app, []string{rows[0].ID}, groceries))
+
+	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
+	txns := decodeTxns(t, resp)
+	require.Len(t, txns, 1)
+	txnID := txns[0]["id"].(string)
+	resp = authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
+		"transaction_ids": []string{txnID}, "tag": "imported",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp = authed(t, app, http.MethodDelete, "/api/v1/imports/"+batch.ID, nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
+	require.Empty(t, decodeTxns(t, resp))
+	resp = authed(t, app, http.MethodGet, "/api/v1/tags", nil)
+	var tags struct {
+		Tags []string `json:"tags"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&tags))
+	require.Empty(t, tags.Tags)
+}
+
 func TestDeleteImportReturnsMatchedRowFromOtherBatchToInbox(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	checking := createBucket(t, app, "asset", "Checking")

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/oauth2-proxy/mockoidc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -190,6 +191,107 @@ func TestSearchByCounterparty(t *testing.T) {
 
 // BulkCategorize recategorizes existing transactions (transactions page), repointing
 // each one's single expense/income leg to a new category.
+func TestTransactionTags(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	first := createTransaction(t, app, []map[string]any{
+		{"bucket_id": bank, "amount": -500, "currency": "EUR"},
+		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
+	})
+	createTransaction(t, app, []map[string]any{
+		{"bucket_id": bank, "amount": -700, "currency": "EUR"},
+		{"bucket_id": groceries, "amount": 700, "currency": "EUR"},
+	})
+
+	body := map[string]any{"transaction_ids": []string{first}, "tag": "  Summer Holiday  "}
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", body)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp = authed(t, app, http.MethodPost, "/api/v1/transactions/tags", body)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/transactions?tag=SUMMER%20HOLIDAY", nil)
+	txns := decodeTxns(t, resp)
+	require.Len(t, txns, 1)
+	require.Equal(t, first, txns[0]["id"])
+	require.Equal(t, []any{"summer holiday"}, txns[0]["tags"])
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/tags?q=holiday", nil)
+	var tags struct {
+		Tags []string `json:"tags"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&tags))
+	require.Equal(t, []string{"summer holiday"}, tags.Tags)
+
+	resp = authed(t, app, http.MethodDelete, "/api/v1/transactions/tags", map[string]any{
+		"transaction_ids": []string{first}, "tag": "SUMMER HOLIDAY",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp = authed(t, app, http.MethodGet, "/api/v1/transactions?tag=summer%20holiday", nil)
+	require.Empty(t, decodeTxns(t, resp))
+}
+
+func TestTransactionTagRejectsEmpty(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
+		"transaction_ids": []string{}, "tag": "  ",
+	})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestCannotTagAnotherUsersTransaction(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	txn := createTransaction(t, app, []map[string]any{
+		{"bucket_id": bank, "amount": -500, "currency": "EUR"},
+		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
+	})
+
+	app.mock.QueueUser(&mockoidc.MockUser{
+		Subject: "another-user", Email: "other@example.com", EmailVerified: true,
+	})
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
+		"transaction_ids": []string{txn}, "tag": "private",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var result map[string]int
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
+	require.Zero(t, result["tagged"])
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/transactions?tag=private", nil)
+	require.Empty(t, decodeTxns(t, resp))
+}
+
+func TestTransactionTagsSurviveEdit(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	txn := createTransaction(t, app, []map[string]any{
+		{"bucket_id": bank, "amount": -500, "currency": "EUR"},
+		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
+	})
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
+		"transaction_ids": []string{txn}, "tag": "holiday",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp = authed(t, app, http.MethodPatch, "/api/v1/transactions/"+txn, map[string]any{
+		"date": "2026-07-02T00:00:00Z", "description": "edited",
+		"postings": []map[string]any{
+			{"bucket_id": bank, "amount": -700, "currency": "EUR"},
+			{"bucket_id": groceries, "amount": 700, "currency": "EUR"},
+		},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var updated map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updated))
+	require.Equal(t, []any{"holiday"}, updated["tags"])
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/transactions?tag=holiday", nil)
+	require.Len(t, decodeTxns(t, resp), 1)
+}
+
 func TestBulkCategorize(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
@@ -360,14 +462,24 @@ func TestDeleteTransaction(t *testing.T) {
 		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
 		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
 	})
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
+		"transaction_ids": []string{id}, "tag": "temporary",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	resp := authed(t, app, http.MethodDelete, "/api/v1/transactions/"+id, nil)
+	resp = authed(t, app, http.MethodDelete, "/api/v1/transactions/"+id, nil)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
 	txns := decodeTxns(t, resp)
 	require.Empty(t, txns)
 
+	resp = authed(t, app, http.MethodGet, "/api/v1/tags", nil)
+	var tags struct {
+		Tags []string `json:"tags"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&tags))
+	require.Empty(t, tags.Tags)
 	require.Empty(t, getBalances(t, app))
 }
 

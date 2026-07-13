@@ -15,6 +15,32 @@
   font-size: var(--text-sm);
 }
 
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+  margin-top: var(--s1);
+}
+
+.tag {
+  display: inline-flex;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--gray-4);
+
+  button {
+    border: 0;
+    padding: 0.1rem var(--s2);
+    background: none;
+    color: var(--fg-muted);
+    cursor: pointer;
+  }
+
+  button + button {
+    padding-inline-start: 0;
+  }
+}
+
 .amount {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

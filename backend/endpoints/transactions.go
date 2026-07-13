@@ -31,6 +31,7 @@ type transactionResponse struct {
 	Date         string            `json:"date"`
 	Counterparty string            `json:"counterparty"`
 	Description  string            `json:"description"`
+	Tags         []string          `json:"tags"`
 	Postings     []postingResponse `json:"postings"`
 }
 
@@ -85,7 +86,7 @@ func mapTransactionErr(err error) error {
 	switch {
 	case errors.Is(err, data.ErrNotFound):
 		return NewErr(err.Error(), http.StatusNotFound)
-	case errors.Is(err, data.ErrUnbalanced), errors.Is(err, data.ErrInvalidPostings), errors.Is(err, data.ErrInvalidBucket), errors.Is(err, data.ErrInvalidCategory):
+	case errors.Is(err, data.ErrUnbalanced), errors.Is(err, data.ErrInvalidPostings), errors.Is(err, data.ErrInvalidBucket), errors.Is(err, data.ErrInvalidCategory), errors.Is(err, data.ErrInvalidTag):
 		return NewErr(err.Error(), http.StatusBadRequest)
 	default:
 		return NewUnexpectedErr("transaction error: %w", err)
@@ -98,6 +99,7 @@ func writeTransaction(w http.ResponseWriter, status int, txn *data.Transaction, 
 		Date:         formatDate(txn.Date),
 		Counterparty: txn.Counterparty,
 		Description:  txn.Description,
+		Tags:         txn.Tags,
 		Postings:     make([]postingResponse, len(postings)),
 	}
 	for i, p := range postings {
@@ -199,8 +201,9 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 		}
 
 		q := r.URL.Query().Get("q")
+		tag := r.URL.Query().Get("tag")
 
-		txns, postings, err := state.Data.ListTransactions(r.Context(), userID, cursorDate, cursorID, q)
+		txns, postings, err := state.Data.ListTransactions(r.Context(), userID, cursorDate, cursorID, q, tag)
 		if err != nil {
 			return NewUnexpectedErr("error listing transactions: %w", err)
 		}
@@ -211,7 +214,7 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 			for j, p := range postings[t.ID] {
 				ps[j] = toPostingResponse(p)
 			}
-			out.Transactions[i] = transactionResponse{ID: t.ID, Date: formatDate(t.Date), Counterparty: t.Counterparty, Description: t.Description, Postings: ps}
+			out.Transactions[i] = transactionResponse{ID: t.ID, Date: formatDate(t.Date), Counterparty: t.Counterparty, Description: t.Description, Tags: t.Tags, Postings: ps}
 		}
 		if len(txns) == data.TransactionPageSize {
 			last := txns[len(txns)-1]

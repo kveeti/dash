@@ -127,6 +127,15 @@ create table if not exists postings (
 create index if not exists idx_postings_transaction on postings(transaction_id);
 create index if not exists idx_postings_bucket on postings(bucket_id);
 
+create table if not exists transaction_tags (
+    id uuid primary key,
+    transaction_id uuid not null references transactions(id) on delete cascade,
+    tag text not null,
+    created_at timestamptz not null,
+    unique (transaction_id, tag)
+);
+create index if not exists idx_transaction_tags_tag on transaction_tags(tag, transaction_id);
+
 create table if not exists import_batches (
     id uuid primary key,
     user_id uuid not null references users(id),

@@ -4,6 +4,7 @@ import { Transition } from "solid-transition-group";
 import { type Bucket } from "../../api/buckets";
 import { Button } from "../../ui/button/button";
 import { BucketCombobox } from "../transactions/bucket-combobox";
+import { TagCombobox } from "../transactions/tag-combobox";
 
 import styles from "./list-page.module.css";
 
@@ -16,6 +17,8 @@ export function FloatingBar(props: {
   onCategorize: (bucketId: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
   onCreatePerson?: (name: string) => Promise<Bucket>;
+  tags?: string[];
+  onTag?: (tag: string) => void;
 }) {
   return (
     <Transition
@@ -60,6 +63,14 @@ export function FloatingBar(props: {
                 props.onCreatePerson ? "Category or person" : "Category"
               }
             />
+
+            <Show when={props.tags && props.onTag}>
+              <TagCombobox
+                class={styles.barPicker}
+                tags={props.tags!}
+                onChange={props.onTag!}
+              />
+            </Show>
 
             <Button
               onClick={props.onExit}

@@ -33,6 +33,9 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/v1/transactions", NewHandler(HandleListTransactions(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/transactions", NewHandler(HandleCreateTransaction(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/transactions/categorize", NewHandler(HandleBulkCategorize(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/transactions/tags", NewHandler(HandleAddTransactionTag(state, getUserID)))
+	mux.HandleFunc("DELETE /api/v1/transactions/tags", NewHandler(HandleRemoveTransactionTag(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/tags", NewHandler(HandleListTags(state, getUserID)))
 	mux.HandleFunc("PATCH /api/v1/transactions/{id}", NewHandler(HandleUpdateTransaction(state, getUserID)))
 	mux.HandleFunc("DELETE /api/v1/transactions/{id}", NewHandler(HandleDeleteTransaction(state, getUserID)))
 

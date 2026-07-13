@@ -28,6 +28,7 @@ type Transaction struct {
 	Date         time.Time
 	Counterparty string
 	Description  string
+	Tags         []string
 	CreatedAt    time.Time
 }
 
@@ -65,6 +66,7 @@ func (d *Data) CreateTransaction(ctx context.Context, txn Transaction, postings 
 	if err := insertTransactionTx(ctx, tx, &txn, postings); err != nil {
 		return nil, nil, err
 	}
+	txn.Tags = []string{}
 
 	if err := tx.Commit(); err != nil {
 		return nil, nil, err
@@ -156,10 +158,14 @@ func (d *Data) UpdateTransaction(ctx context.Context, userID, txnID string, date
 		}
 	}
 
+	tags, err := loadTransactionTags(ctx, tx, txnID)
+	if err != nil {
+		return nil, nil, err
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, nil, err
 	}
-	updated := Transaction{ID: txnID, OwnerUserID: userID, Date: date, Counterparty: counterparty, Description: description, CreatedAt: old.CreatedAt}
+	updated := Transaction{ID: txnID, OwnerUserID: userID, Date: date, Counterparty: counterparty, Description: description, Tags: tags, CreatedAt: old.CreatedAt}
 	return &updated, postings, nil
 }
 
@@ -232,6 +238,9 @@ func (d *Data) DeleteTransaction(ctx context.Context, userID, txnID string) erro
 		return err
 	}
 
+	if err := deleteTransactionTags(ctx, tx, userID, txnID); err != nil {
+		return err
+	}
 	if err := deletePostings(ctx, tx, userID, txnID); err != nil {
 		return err
 	}
@@ -334,7 +343,7 @@ const TransactionPageSize = 100
 // first (page CTE) so a limit never splits a transaction's postings, and both
 // the page selection and the posting join filter through visiblePostings so no
 // non-visible leg leaks.
-func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate time.Time, cursorID string, q string) ([]Transaction, map[string][]Posting, error) {
+func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate time.Time, cursorID string, q, tag string) ([]Transaction, map[string][]Posting, error) {
 	args := []any{userID}
 	cursorClause := ""
 	if cursorID != "" {
@@ -347,12 +356,18 @@ func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate t
 		searchClause = "and (t.counterparty ilike $" + n + " or t.description ilike $" + n + ")"
 		args = append(args, "%"+q+"%")
 	}
+	tagClause := ""
+	if tag = normalizeTag(tag); tag != "" {
+		n := strconv.Itoa(len(args) + 1)
+		tagClause = "and exists (select 1 from transaction_tags tt where tt.transaction_id = t.id and tt.tag = $" + n + ")"
+		args = append(args, tag)
+	}
 	rows, err := d.db.QueryContext(ctx,
 		`with page as (
 			select distinct t.id, t.owner_user_id, t.date, t.counterparty, t.description, t.created_at
 			from transactions t
 			join postings p on p.transaction_id = t.id
-			where `+visiblePostings+` `+cursorClause+` `+searchClause+`
+			where `+visiblePostings+` `+cursorClause+` `+searchClause+` `+tagClause+`
 			order by t.date desc, t.id desc
 			limit `+strconv.Itoa(TransactionPageSize)+`
 		)
@@ -381,9 +396,36 @@ func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate t
 		txnID = t.ID
 		if !seen[txnID] {
 			seen[txnID] = true
+			t.Tags = []string{}
 			txns = append(txns, t)
 		}
 		postings[txnID] = append(postings[txnID], p)
 	}
-	return txns, postings, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	if len(txns) == 0 {
+		return txns, postings, nil
+	}
+
+	ids := make([]string, len(txns))
+	byID := make(map[string]int, len(txns))
+	for i := range txns {
+		ids[i] = txns[i].ID
+		byID[txns[i].ID] = i
+	}
+	tagRows, err := d.db.QueryContext(ctx, "select transaction_id, tag from transaction_tags where transaction_id = any($1::uuid[]) order by tag", ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tagRows.Close()
+	for tagRows.Next() {
+		var transactionID, tag string
+		if err := tagRows.Scan(&transactionID, &tag); err != nil {
+			return nil, nil, err
+		}
+		i := byID[transactionID]
+		txns[i].Tags = append(txns[i].Tags, tag)
+	}
+	return txns, postings, tagRows.Err()
 }

@@ -486,6 +486,7 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 		"select uuidv7(), $1, 'import_batches', b.id, 'delete', to_jsonb(b), now() from import_batches b where b.id = $2",
 		"select uuidv7(), $1, 'import_rows', r.id, 'delete', to_jsonb(r), now() from import_rows r where r.batch_id = $2",
 		"select uuidv7(), $1, 'import_rows', r.id, 'update', to_jsonb(r), now() from import_rows r where r.batch_id <> $2 and r.transaction_id in (" + txnScope + ")",
+		"select uuidv7(), $1, 'transaction_tags', tt.id, 'delete', to_jsonb(tt), now() from transaction_tags tt where tt.transaction_id in (" + txnScope + ")",
 		"select uuidv7(), $1, 'transactions', t.id, 'delete', to_jsonb(t), now() from transactions t where t.id in (" + txnScope + ")",
 		"select uuidv7(), $1, 'postings', p.id, 'delete', to_jsonb(p), now() from postings p where p.transaction_id in (" + txnScope + ")",
 	}

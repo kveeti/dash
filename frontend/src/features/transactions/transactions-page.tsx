@@ -9,8 +9,11 @@ import { createSignal, For, Match, Show, Switch } from "solid-js";
 
 import { bucketsQuery, createBucket, type Bucket } from "../../api/buckets";
 import {
+  addTransactionTag,
   bulkCategorize,
   deleteTransaction,
+  removeTransactionTag,
+  tagsQuery,
   transactionsQuery,
   type Transaction,
 } from "../../api/transactions";
@@ -46,12 +49,13 @@ const longDateFmt = new Intl.DateTimeFormat(undefined, {
 });
 
 export default function TransactionsPage() {
-  const [params, setParams] = useSearchParams<{ q?: string }>();
+  const [params, setParams] = useSearchParams<{ q?: string; tag?: string }>();
 
   const transactions = useInfiniteQuery(() =>
-    transactionsQuery(params.q ?? ""),
+    transactionsQuery(params.q ?? "", params.tag ?? ""),
   );
   const buckets = useQuery(bucketsQuery);
+  const tags = useQuery(() => tagsQuery());
   const queryClient = useQueryClient();
 
   const allTxns = () => transactions.data!.pages.flatMap((p) => p.transactions);
@@ -107,6 +111,25 @@ export default function TransactionsPage() {
     },
   }));
 
+  const tag = useMutation(() => ({
+    mutationFn: ({ ids, value }: { ids: string[]; value: string }) =>
+      addTransactionTag(ids, value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
+      exitSelect();
+    },
+  }));
+
+  const untag = useMutation(() => ({
+    mutationFn: ({ id, value }: { id: string; value: string }) =>
+      removeTransactionTag([id], value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["tags"] });
+    },
+  }));
+
   const thisYear = new Date().getFullYear();
   let prevDateFormatted: string | null = null;
 
@@ -118,18 +141,23 @@ export default function TransactionsPage() {
         onSelectMode={(on) => (on ? setSelectMode(true) : exitSelect())}
         search={params.q ?? ""}
         onSearch={(value) => setParams({ q: value }, { replace: true })}
+        tag={params.tag}
+        onClearTag={() => setParams({ tag: undefined }, { replace: true })}
       />
 
       <Switch>
-        <Match when={transactions.isPending || buckets.isPending}>
+        <Match
+          when={transactions.isPending || buckets.isPending || tags.isPending}
+        >
           <p class={shell.col}>loading…</p>
         </Match>
-        <Match when={transactions.isError || buckets.isError}>
+        <Match when={transactions.isError || buckets.isError || tags.isError}>
           <p class={shell.col}>
-            error: {(transactions.error ?? buckets.error)?.message}
+            error:{" "}
+            {(transactions.error ?? buckets.error ?? tags.error)?.message}
           </p>
         </Match>
-        <Match when={transactions.data && buckets.data}>
+        <Match when={transactions.data && buckets.data && tags.data}>
           <ul class={shell.list}>
             <For
               each={allTxns()}
@@ -166,7 +194,16 @@ export default function TransactionsPage() {
                           />
                         </div>
                         <div class={`${shell.slide} ${styles.rowContent}`}>
-                          <Row txn={txn} buckets={bucketsById()} />
+                          <Row
+                            txn={txn}
+                            buckets={bucketsById()}
+                            onFilterTag={(value) =>
+                              setParams({ tag: value }, { replace: true })
+                            }
+                            onRemoveTag={(value) =>
+                              untag.mutate({ id: txn.id, value })
+                            }
+                          />
                           {/* <Show when={!selectMode()}> */}
                           {/*   <button */}
                           {/*     type="button" */}
@@ -206,6 +243,8 @@ export default function TransactionsPage() {
               categorize.mutate({ ids: [...selected()], bucketId })
             }
             onCreate={onCreate}
+            tags={tags.data!.tags}
+            onTag={(value) => tag.mutate({ ids: [...selected()], value })}
           />
         </Match>
       </Switch>
@@ -213,7 +252,12 @@ export default function TransactionsPage() {
   );
 }
 
-function Row(props: { txn: Transaction; buckets: Map<string, Bucket> }) {
+function Row(props: {
+  txn: Transaction;
+  buckets: Map<string, Bucket>;
+  onFilterTag: (tag: string) => void;
+  onRemoveTag: (tag: string) => void;
+}) {
   const row = () => toTransactionRow(props.txn, props.buckets);
 
   return (
@@ -235,6 +279,11 @@ function Row(props: { txn: Transaction; buckets: Map<string, Bucket> }) {
                 {" "}
                 <span class={styles.secondary}>· {r().account}</span>
               </Show>
+              <TagList
+                tags={props.txn.tags}
+                onFilter={props.onFilterTag}
+                onRemove={props.onRemoveTag}
+              />
             </span>
             <span
               class={styles.amount}
@@ -253,6 +302,11 @@ function Row(props: { txn: Transaction; buckets: Map<string, Bucket> }) {
               <span class={styles.secondary}>
                 {r().from} → {r().to}
               </span>
+              <TagList
+                tags={props.txn.tags}
+                onFilter={props.onFilterTag}
+                onRemove={props.onRemoveTag}
+              />
             </span>
             <span class={styles.amount}>
               {formatAmount(r().amount, r().currency)}
@@ -274,9 +328,40 @@ function Row(props: { txn: Transaction; buckets: Map<string, Bucket> }) {
                 )}
               </For>
             </span>
+            <TagList
+              tags={props.txn.tags}
+              onFilter={props.onFilterTag}
+              onRemove={props.onRemoveTag}
+            />
           </span>
         )}
       </Match>
     </Switch>
+  );
+}
+
+function TagList(props: {
+  tags: string[];
+  onFilter: (tag: string) => void;
+  onRemove: (tag: string) => void;
+}) {
+  return (
+    <Show when={props.tags.length}>
+      <span class={styles.tags}>
+        <For each={props.tags}>
+          {(tag) => (
+            <span class={styles.tag}>
+              <button onClick={() => props.onFilter(tag)}>#{tag}</button>
+              <button
+                aria-label={`Remove ${tag} tag`}
+                onClick={() => props.onRemove(tag)}
+              >
+                ×
+              </button>
+            </span>
+          )}
+        </For>
+      </span>
+    </Show>
   );
 }
