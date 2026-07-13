@@ -8,6 +8,7 @@ import styles from "./nav.module.css";
 const pages = [
   { label: "inbox", href: "/inbox" },
   { label: "transactions", href: "/transactions" },
+  { label: "stats", href: "/stats" },
   { label: "import", href: "/imports" },
 ];
 

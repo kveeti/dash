@@ -10,7 +10,11 @@
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
-    "lint:fix": "oxlint --fix"
+    "lint:fix": "oxlint --fix",
+    "e2e": "pnpm run build && playwright test",
+    "e2e:server": "exec ../scripts/e2e-server.sh",
+    "e2e:fixtures": "playwright test --config playwright.fixtures.config.ts",
+    "e2e:fixtures:server": "vite --config vite.fixtures.config.ts --port 3210"
   },
   "dependencies": {
     "@formisch/solid": "1.0.0-rc.0",

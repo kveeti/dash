@@ -14,6 +14,7 @@ const NewTransactionPage = lazy(
   () => import("./features/transactions/new-transaction-page"),
 );
 const ImportsPage = lazy(() => import("./features/imports/imports-page"));
+const StatsPage = lazy(() => import("./features/stats/stats-page"));
 const ImportReportPage = lazy(
   () => import("./features/imports/import-report-page"),
 );
@@ -55,6 +56,16 @@ export const routes: RouteDefinition[] = [
       <Layout>
         <Suspense fallback={<p>loading…</p>}>
           <NewTransactionPage />
+        </Suspense>
+      </Layout>
+    ),
+  },
+  {
+    path: "/stats",
+    component: () => (
+      <Layout>
+        <Suspense fallback={<p>loading…</p>}>
+          <StatsPage />
         </Suspense>
       </Layout>
     ),

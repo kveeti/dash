@@ -127,6 +127,14 @@ create table if not exists postings (
 create index if not exists idx_postings_transaction on postings(transaction_id);
 create index if not exists idx_postings_bucket on postings(bucket_id);
 
+create table if not exists rates (
+    date date not null,
+    currency text not null,
+    rate numeric not null check (rate > 0),
+    primary key (date, currency)
+);
+create index if not exists idx_rates_currency_date on rates(currency, date desc);
+
 create table if not exists transaction_tags (
     id uuid primary key,
     transaction_id uuid not null references transactions(id) on delete cascade,

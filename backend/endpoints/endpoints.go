@@ -40,6 +40,7 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/transactions/{id}", NewHandler(HandleDeleteTransaction(state, getUserID)))
 
 	mux.HandleFunc("GET /api/v1/balances", NewHandler(HandleGetBalances(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/stats", NewHandler(HandleGetStats(state, getUserID)))
 
 	mux.HandleFunc("GET /api/v1/inbox", NewHandler(HandleListInbox(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/inbox/categorize", NewHandler(HandleCategorizeInbox(state, getUserID)))

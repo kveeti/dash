@@ -205,6 +205,13 @@
 
   --accent: var(--green-9);
   --positive: var(--green-11);
+  --negative: var(--red-11);
+
+  --chart: var(--green-9);
+  --chart-track: var(--gray-a3);
+  --positive-surface: var(--green-4);
+  --negative-surface: var(--red-3);
+  --neutral-surface: var(--gray-a3);
 
   @media (prefers-color-scheme: dark) {
     --bg: var(--gray-1);

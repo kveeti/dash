@@ -22,10 +22,12 @@ export type TransactionRow =
     };
 
 export function formatAmount(amount: number, currency: string): string {
-  return new Intl.NumberFormat(undefined, {
+  const formatter = new Intl.NumberFormat(undefined, {
     style: "currency",
     currency,
-  }).format(amount / 100);
+  });
+  const digits = formatter.resolvedOptions().maximumFractionDigits;
+  return formatter.format(amount / 10 ** digits);
 }
 
 export function toTransactionRow(

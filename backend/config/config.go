@@ -21,8 +21,9 @@ type Config struct {
 
 	// ImportStore selects where uploaded import files are kept: "disk" (under
 	// ImportDir) or "postgres" (default, bytea).
-	ImportStore string
-	ImportDir   string
+	ImportStore     string
+	ImportDir       string
+	DisableRateSync bool
 
 	OIDC OIDCConfig
 }
@@ -53,14 +54,15 @@ func LoadConfig() (*Config, error) {
 	}
 
 	config := &Config{
-		IsProd:      os.Getenv("IS_PROD") == "1",
-		Port:        port,
-		BackendUrl:  os.Getenv("BACKEND_URL"),
-		FrontUrl:    os.Getenv("FRONT_URL"),
-		DevViteUrl:  os.Getenv("DEV_VITE_URL"),
-		DbUrl:       os.Getenv("DB_URL"),
-		ImportStore: os.Getenv("IMPORT_STORE"),
-		ImportDir:   os.Getenv("IMPORT_DIR"),
+		IsProd:          os.Getenv("IS_PROD") == "1",
+		Port:            port,
+		BackendUrl:      os.Getenv("BACKEND_URL"),
+		FrontUrl:        os.Getenv("FRONT_URL"),
+		DevViteUrl:      os.Getenv("DEV_VITE_URL"),
+		DbUrl:           os.Getenv("DB_URL"),
+		ImportStore:     os.Getenv("IMPORT_STORE"),
+		ImportDir:       os.Getenv("IMPORT_DIR"),
+		DisableRateSync: os.Getenv("DISABLE_RATE_SYNC") == "1",
 		OIDC: OIDCConfig{
 			Issuer:       os.Getenv("OIDC_ISSUER"),
 			ClientID:     os.Getenv("OIDC_CLIENT_ID"),

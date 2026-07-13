@@ -34,6 +34,9 @@ func App(config *config.Config, started chan struct{}) {
 	workerCtx, stopWorkers := context.WithCancel(context.Background())
 	defer stopWorkers()
 	d.StartImportWorkers(workerCtx)
+	if !config.DisableRateSync {
+		d.StartRateSync(workerCtx)
+	}
 
 	router := endpoints.GetRouter(state.NewState(d, config, oidc), frontendFS())
 
