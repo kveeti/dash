@@ -15,6 +15,7 @@ type inboxRowResponse struct {
 	Counterparty string `json:"counterparty"`
 	Description  string `json:"description"`
 	Account      string `json:"account"`
+	Kind         string `json:"kind,omitempty"`
 }
 
 type inboxResponse struct {
@@ -63,13 +64,13 @@ func inboxRowToResponse(row data.InboxRow) inboxRowResponse {
 	return inboxRowResponse{ID: row.ID, Date: formatDate(row.Date), Amount: row.Amount, Currency: row.Currency, Counterparty: row.Counterparty, Description: row.Description, Account: row.Account}
 }
 
-func HandleGetTransferMatches(state *state.State, getUserID GetUserID) Handler {
+func HandleGetInboxMatches(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)
 		if err != nil {
 			return err
 		}
-		source, matches, err := state.Data.GetTransferMatches(r.Context(), userID, r.PathValue("id"), r.URL.Query().Get("q"))
+		source, matches, err := state.Data.GetInboxMatches(r.Context(), userID, r.PathValue("id"), r.URL.Query().Get("q"))
 		if err != nil {
 			return mapTransactionErr(err)
 		}
@@ -78,14 +79,15 @@ func HandleGetTransferMatches(state *state.State, getUserID GetUserID) Handler {
 			Matches []inboxRowResponse `json:"matches"`
 		}{Source: inboxRowToResponse(source), Matches: make([]inboxRowResponse, len(matches))}
 		for i, row := range matches {
-			out.Matches[i] = inboxRowToResponse(row)
+			out.Matches[i] = inboxRowToResponse(row.InboxRow)
+			out.Matches[i].Kind = row.Kind
 		}
 		Json(w, out)
 		return nil
 	}
 }
 
-func HandleMatchInboxTransfer(state *state.State, getUserID GetUserID) Handler {
+func HandleMatchInboxRows(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)
 		if err != nil {
@@ -97,7 +99,7 @@ func HandleMatchInboxTransfer(state *state.State, getUserID GetUserID) Handler {
 		if json.NewDecoder(r.Body).Decode(&body) != nil || body.MatchID == "" {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
-		if err := state.Data.MatchInboxTransfer(r.Context(), userID, r.PathValue("id"), body.MatchID); err != nil {
+		if err := state.Data.MatchInboxRows(r.Context(), userID, r.PathValue("id"), body.MatchID); err != nil {
 			return mapTransactionErr(err)
 		}
 		Json(w, map[string]bool{"matched": true})

@@ -16,6 +16,10 @@ export interface InboxRow {
   account: string;
 }
 
+export interface InboxMatch extends InboxRow {
+  kind: "transfer" | "exchange";
+}
+
 interface Cursor {
   date: string;
   id: string;
@@ -46,18 +50,19 @@ export const inboxQuery = (q: string) =>
     placeholderData: keepPreviousData,
   });
 
-export const transferMatchesQuery = (id: string, q: string) =>
+export const inboxMatchesQuery = (id: string, q: string) =>
   queryOptions({
-    queryKey: ["inbox-transfer-matches", id, q],
+    queryKey: ["inbox-matches", id, q],
     queryFn: () =>
-      api<{ source: InboxRow; matches: InboxRow[] }>(
-        `/api/v1/inbox/${id}/transfer-matches${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+      api<{ source: InboxRow; matches: InboxMatch[] }>(
+        `/api/v1/inbox/${id}/matches${q ? `?q=${encodeURIComponent(q)}` : ""}`,
       ),
-    placeholderData: keepPreviousData,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === id ? previous : undefined,
   });
 
-export function matchInboxTransfer(id: string, matchId: string) {
-  return api<{ matched: boolean }>(`/api/v1/inbox/${id}/match-transfer`, {
+export function matchInboxRows(id: string, matchId: string) {
+  return api<{ matched: boolean }>(`/api/v1/inbox/${id}/match`, {
     method: "POST",
     body: JSON.stringify({ match_id: matchId }),
   });

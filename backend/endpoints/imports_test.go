@@ -22,7 +22,11 @@ const (
 )
 
 func nordeaRow(date, amount, payee, message string) string {
-	return date + ";" + amount + ";;;;" + payee + ";" + message + ";;;EUR\n"
+	return nordeaRowCurrency(date, amount, payee, message, "EUR")
+}
+
+func nordeaRowCurrency(date, amount, payee, message, currency string) string {
+	return date + ";" + amount + ";;;;" + payee + ";" + message + ";;;" + currency + "\n"
 }
 
 // nordeaRowBal is nordeaRow with a running balance in the Saldo column (col 8),
@@ -279,7 +283,7 @@ func TestDeleteImportReturnsMatchedRowFromOtherBatchToInbox(t *testing.T) {
 			incoming = row.ID
 		}
 	}
-	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/"+outgoing+"/match-transfer", map[string]any{"match_id": incoming})
+	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/"+outgoing+"/match", map[string]any{"match_id": incoming})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Empty(t, getInbox(t, app, ""))
 

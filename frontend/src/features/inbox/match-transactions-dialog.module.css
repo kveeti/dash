@@ -1,0 +1,105 @@
+.dialog:global([cmdk-dialog]) {
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.source,
+.panel {
+  background: var(--popover);
+  border: var(--border-popover);
+  border-radius: 0.75rem;
+  box-shadow: 0 var(--s2) var(--s6) var(--black-a5);
+}
+
+.source {
+  min-block-size: 4rem;
+  padding-inline: var(--s3);
+  margin-block-end: var(--s2);
+}
+
+.panel {
+  --command-max-height: 20lh;
+
+  overflow: hidden;
+}
+
+.inputWrap {
+  position: relative;
+}
+
+.inputWrap :global([cmdk-input]) {
+  padding-inline-end: 5rem;
+}
+
+.loading {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--s3);
+  display: flex;
+  align-items: center;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+
+.command :global([cmdk-list]) {
+  --item-h: 3.5rem;
+}
+
+.transactionRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--s3);
+  row-gap: 0;
+  align-content: center;
+  align-items: baseline;
+  padding-block: var(--s1);
+}
+
+.matchRow {
+  block-size: var(--item-h);
+  padding-block: 0.125rem;
+}
+
+.who {
+  min-inline-size: 0;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  text-align: end;
+  white-space: nowrap;
+}
+
+.amount {
+  color: var(--fg-muted);
+  text-align: end;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.status,
+.error {
+  padding: var(--s3);
+  color: var(--fg-muted);
+}
+
+.error {
+  padding-block-start: 0;
+}

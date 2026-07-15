@@ -14,19 +14,20 @@ var revolutHeaderCols = []string{
 }
 
 type RevolutParser struct {
-	reader *csv.Reader
-	loc    *time.Location
-	line   int
-	row    ParsedRow
-	errs   []RowError
-	err    error
+	reader     *csv.Reader
+	loc        *time.Location
+	currencies map[string]int
+	line       int
+	row        ParsedRow
+	errs       []RowError
+	err        error
 }
 
-func NewRevolutParser(r io.Reader, loc *time.Location) *RevolutParser {
+func NewRevolutParser(r io.Reader, loc *time.Location, currencies map[string]int) *RevolutParser {
 	reader := csv.NewReader(r)
 	reader.FieldsPerRecord = -1
 	reader.LazyQuotes = true
-	return &RevolutParser{reader: reader, loc: loc}
+	return &RevolutParser{reader: reader, loc: loc, currencies: currencies}
 }
 
 func (p *RevolutParser) Next() bool {
@@ -50,7 +51,7 @@ func (p *RevolutParser) Next() bool {
 		for i, field := range rec {
 			rec[i] = decodeField(field)
 		}
-		row, completed, err := parseRevolutRow(rec, p.loc)
+		row, completed, err := parseRevolutRow(rec, p.loc, p.currencies)
 		if err != nil {
 			p.errs = append(p.errs, RowError{p.line, err.Error()})
 			continue
@@ -71,7 +72,7 @@ func ValidRevolutHeader(line string) bool {
 	return validHeader(line, ",", revolutHeaderCols)
 }
 
-func parseRevolutRow(cols []string, _ *time.Location) (ParsedRow, bool, error) {
+func parseRevolutRow(cols []string, _ *time.Location, currencies map[string]int) (ParsedRow, bool, error) {
 	col := func(i int) string {
 		if i < len(cols) {
 			return strings.TrimSpace(cols[i])
@@ -87,17 +88,17 @@ func parseRevolutRow(cols []string, _ *time.Location) (ParsedRow, bool, error) {
 	if err != nil {
 		return ParsedRow{}, false, fmt.Errorf("invalid date: %s", dateText)
 	}
-	currency, err := normalizeCurrency(col(7))
+	currency, exponent, err := normalizeCurrency(col(7), currencies)
 	if err != nil {
 		return ParsedRow{}, false, err
 	}
-	amount, err := parseAmountToMinor(col(5), currencyExponents[currency])
+	amount, err := parseAmountToMinor(col(5), exponent)
 	if err != nil {
 		return ParsedRow{}, false, err
 	}
 	fee := int64(0)
 	if col(6) != "" {
-		fee, err = parseAmountToMinor(col(6), currencyExponents[currency])
+		fee, err = parseAmountToMinor(col(6), exponent)
 		if err != nil {
 			return ParsedRow{}, false, err
 		}

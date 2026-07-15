@@ -107,7 +107,8 @@ func (d *Data) upsertRates(ctx context.Context, rates []Rate) error {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `insert into rates (date, currency, rate)
-			select date, currency, rate from rate_stage
+			select s.date, s.currency, s.rate from rate_stage s
+			join currencies c on c.code = s.currency
 			on conflict (date, currency) do update set rate = excluded.rate
 			where rates.rate is distinct from excluded.rate`); err != nil {
 			return err

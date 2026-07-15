@@ -16,6 +16,11 @@
   transform-origin: var(--kb-popover-content-transform-origin);
 }
 
+.content :global([cmdk-input]) {
+  border-block-end: var(--border-popover);
+  margin-block-end: 0.25rem;
+}
+
 /* Kobalte mounts/unmounts content and holds it during the exit via animationend
  * (solid-presence) — so keyframes, not transitions. forceMount would enable
  * interruptible transitions but leaves a phantom layer in Kobalte's layerStack,

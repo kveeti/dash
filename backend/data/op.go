@@ -15,20 +15,21 @@ var opHeaderCols = []string{
 }
 
 type OPParser struct {
-	reader *csv.Reader
-	loc    *time.Location
-	line   int
-	row    ParsedRow
-	errs   []RowError
-	err    error
+	reader     *csv.Reader
+	loc        *time.Location
+	currencies map[string]int
+	line       int
+	row        ParsedRow
+	errs       []RowError
+	err        error
 }
 
-func NewOPParser(r io.Reader, loc *time.Location) *OPParser {
+func NewOPParser(r io.Reader, loc *time.Location, currencies map[string]int) *OPParser {
 	reader := csv.NewReader(r)
 	reader.Comma = ';'
 	reader.FieldsPerRecord = -1
 	reader.LazyQuotes = true
-	return &OPParser{reader: reader, loc: loc}
+	return &OPParser{reader: reader, loc: loc, currencies: currencies}
 }
 
 func (p *OPParser) Next() bool {
@@ -52,7 +53,7 @@ func (p *OPParser) Next() bool {
 		for i, field := range rec {
 			rec[i] = decodeField(field)
 		}
-		row, err := parseOPRow(rec, p.loc)
+		row, err := parseOPRow(rec, p.loc, p.currencies)
 		if err != nil {
 			p.errs = append(p.errs, RowError{p.line, err.Error()})
 			continue
@@ -70,7 +71,7 @@ func ValidOPHeader(line string) bool {
 	return validHeader(line, ";", opHeaderCols)
 }
 
-func parseOPRow(cols []string, loc *time.Location) (ParsedRow, error) {
+func parseOPRow(cols []string, loc *time.Location, currencies map[string]int) (ParsedRow, error) {
 	col := func(i int) string {
 		if i < len(cols) {
 			return strings.TrimSpace(cols[i])
@@ -82,7 +83,11 @@ func parseOPRow(cols []string, loc *time.Location) (ParsedRow, error) {
 	if err != nil {
 		return ParsedRow{}, fmt.Errorf("invalid date: %s", col(0))
 	}
-	amount, err := parseAmountToMinor(col(2), currencyExponents["EUR"])
+	_, exponent, err := normalizeCurrency("EUR", currencies)
+	if err != nil {
+		return ParsedRow{}, err
+	}
+	amount, err := parseAmountToMinor(col(2), exponent)
 	if err != nil {
 		return ParsedRow{}, err
 	}

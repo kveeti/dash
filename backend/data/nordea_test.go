@@ -12,6 +12,8 @@ import (
 
 const testHeader = "Kirjauspäivä;Määrä;Arvopäivä;Maksupäivä;Tapahtuma;Saaja/Maksaja;Viesti;Viitenumero;Tilinumero;Valuutta\n"
 
+var testCurrencies = map[string]int{"EUR": 2, "JPY": 0}
+
 // row builds a Nordea line: date;amount;;;;payee;message;reference;;currency
 func row(date, amount, payee, message, reference, currency string) string {
 	return strings.Join([]string{date, amount, "", "", "", payee, message, reference, "", currency}, ";") + "\n"
@@ -19,7 +21,7 @@ func row(date, amount, payee, message, reference, currency string) string {
 
 func parseAll(t *testing.T, r io.Reader) (*NordeaParser, []ParsedRow) {
 	t.Helper()
-	p := NewNordeaParser(r, time.UTC)
+	p := NewNordeaParser(r, time.UTC, testCurrencies)
 	var rows []ParsedRow
 	for p.Next() {
 		rows = append(rows, p.Row())
@@ -53,7 +55,7 @@ func TestNordeaDateInTimezone(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Helsinki")
 	require.NoError(t, err)
 
-	p := NewNordeaParser(strings.NewReader(testHeader+row("2026/07/01", "1,00", "X", "", "", "EUR")), loc)
+	p := NewNordeaParser(strings.NewReader(testHeader+row("2026/07/01", "1,00", "X", "", "", "EUR")), loc, testCurrencies)
 	require.True(t, p.Next())
 
 	// Midnight Helsinki (summer, UTC+3) is 2026-06-30T21:00:00Z.

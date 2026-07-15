@@ -336,6 +336,17 @@ func TestBulkCategorizeRejectsNonCategory(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+func TestRejectsUnsupportedCurrency(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	resp := postTransaction(t, app, []map[string]any{
+		{"bucket_id": bank, "amount": -1000, "currency": "XYZ"},
+		{"bucket_id": groceries, "amount": 1000, "currency": "XYZ"},
+	})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
 func TestRejectsUnbalancedTransaction(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")

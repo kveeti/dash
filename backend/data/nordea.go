@@ -11,13 +11,6 @@ import (
 	"unicode/utf8"
 )
 
-// Supported currencies and their minor-unit exponents. A code outside this list
-// fails the row (not the batch) so the user sees which currency to add.
-var currencyExponents = map[string]int{
-	"EUR": 2, "USD": 2, "GBP": 2, "JPY": 0, "CHF": 2,
-	"AUD": 2, "CAD": 2, "SEK": 2, "NOK": 2, "DKK": 2, "PLN": 2,
-}
-
 type ParsedRow struct {
 	Date           time.Time
 	Amount         int64
@@ -43,23 +36,24 @@ var (
 // line a header) one at a time. Per-row parse errors are collected with their
 // 1-based line and never abort; an underlying reader error is fatal (Err).
 type NordeaParser struct {
-	reader *csv.Reader
-	loc    *time.Location
-	line   int
-	row    ParsedRow
-	errs   []RowError
-	err    error
+	reader     *csv.Reader
+	loc        *time.Location
+	currencies map[string]int
+	line       int
+	row        ParsedRow
+	errs       []RowError
+	err        error
 }
 
 // NewNordeaParser reads a Nordea export whose rows carry plain dates; loc is the
 // timezone those dates are interpreted in (midnight local), so the stored
 // timestamptz lands on the right day for the account holder.
-func NewNordeaParser(r io.Reader, loc *time.Location) *NordeaParser {
+func NewNordeaParser(r io.Reader, loc *time.Location, currencies map[string]int) *NordeaParser {
 	reader := csv.NewReader(r)
 	reader.Comma = ';'
 	reader.FieldsPerRecord = -1
 	reader.LazyQuotes = true
-	return &NordeaParser{reader: reader, loc: loc}
+	return &NordeaParser{reader: reader, loc: loc, currencies: currencies}
 }
 
 func (p *NordeaParser) Next() bool {
@@ -83,7 +77,7 @@ func (p *NordeaParser) Next() bool {
 		for i, field := range rec {
 			rec[i] = decodeField(field)
 		}
-		row, perr := parseNordeaRow(rec, p.loc)
+		row, perr := parseNordeaRow(rec, p.loc, p.currencies)
 		if perr != nil {
 			p.errs = append(p.errs, RowError{p.line, perr.Error()})
 			continue
@@ -112,7 +106,7 @@ func ValidNordeaHeader(line string) bool {
 	return validHeader(line, ";", nordeaHeaderCols)
 }
 
-func parseNordeaRow(cols []string, loc *time.Location) (ParsedRow, error) {
+func parseNordeaRow(cols []string, loc *time.Location, currencies map[string]int) (ParsedRow, error) {
 	col := func(i int) string {
 		if i < len(cols) {
 			return strings.TrimSpace(cols[i])
@@ -132,11 +126,11 @@ func parseNordeaRow(cols []string, loc *time.Location) (ParsedRow, error) {
 		return ParsedRow{}, fmt.Errorf("invalid date: %s", col(0))
 	}
 
-	currency, err := normalizeCurrency(col(9))
+	currency, exponent, err := normalizeCurrency(col(9), currencies)
 	if err != nil {
 		return ParsedRow{}, err
 	}
-	amount, err := parseAmountToMinor(col(1), currencyExponents[currency])
+	amount, err := parseAmountToMinor(col(1), exponent)
 	if err != nil {
 		return ParsedRow{}, err
 	}
@@ -169,15 +163,16 @@ func parseNordeaRow(cols []string, loc *time.Location) (ParsedRow, error) {
 	}, nil
 }
 
-func normalizeCurrency(raw string) (string, error) {
+func normalizeCurrency(raw string, currencies map[string]int) (string, int, error) {
 	code := strings.ToUpper(strings.TrimSpace(raw))
 	if code == "" {
-		return "EUR", nil
+		code = "EUR"
 	}
-	if _, ok := currencyExponents[code]; !ok {
-		return "", fmt.Errorf("currency %s is not supported", code)
+	exponent, ok := currencies[code]
+	if !ok {
+		return "", 0, fmt.Errorf("currency %s is not supported", code)
 	}
-	return code, nil
+	return code, exponent, nil
 }
 
 // parseAmountToMinor turns "-12,34" / "1 234.56" into signed minor units using

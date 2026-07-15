@@ -8,8 +8,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"golang.org/x/text/currency"
 )
 
 type DateRange struct {
@@ -62,8 +60,11 @@ with requested_ranges(label, from_date, to_date) as (
     group by r.label, p.bucket_id, b.kind, (t.date at time zone $9)::date, upper(p.currency)
 )
 select n.label, n.bucket_id, n.kind, n.date, n.currency, n.amount,
+       source_currency.exponent, home_currency.exponent,
        x.date, x.source_rate::text, x.home_rate::text
 from native n
+join currencies source_currency on source_currency.code = n.currency
+join currencies home_currency on home_currency.code = $8
 left join lateral (
     select source.date, source.rate as source_rate, home.rate as home_rate
     from rates source
@@ -117,15 +118,6 @@ func rateArgs(userID string, current, comparison DateRange, full *DateRange, hom
 	return args
 }
 
-func currencyScale(code string) (int, error) {
-	unit, err := currency.ParseISO(code)
-	if err != nil {
-		return 0, err
-	}
-	scale, _ := currency.Standard.Rounding(unit)
-	return scale, nil
-}
-
 func pow10(n int) *big.Int {
 	return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(n)), nil)
 }
@@ -170,10 +162,6 @@ func (d *Data) GetStats(ctx context.Context, userID string, current, comparison 
 		return nil, ErrNotFound
 	}
 	home := strings.ToUpper(user.HomeCurrency)
-	homeScale, err := currencyScale(home)
-	if err != nil {
-		return nil, fmt.Errorf("invalid home currency %q: %w", home, err)
-	}
 
 	amounts := map[statKey]*big.Rat{}
 	missing := map[string]map[string]bool{}
@@ -191,9 +179,10 @@ func (d *Data) GetStats(ctx context.Context, userID string, current, comparison 
 		var label, bucketID, kind, source string
 		var date time.Time
 		var amount int64
+		var sourceScale, homeScale int
 		var rateDate sql.NullTime
 		var sourceText, homeText sql.NullString
-		if err := rows.Scan(&label, &bucketID, &kind, &date, &source, &amount, &rateDate, &sourceText, &homeText); err != nil {
+		if err := rows.Scan(&label, &bucketID, &kind, &date, &source, &amount, &sourceScale, &homeScale, &rateDate, &sourceText, &homeText); err != nil {
 			return nil, err
 		}
 
@@ -201,12 +190,6 @@ func (d *Data) GetStats(ctx context.Context, userID string, current, comparison 
 		if amounts[key] == nil {
 			amounts[key] = new(big.Rat)
 		}
-		sourceScale, err := currencyScale(source)
-		if err != nil {
-			missing[label][source] = true
-			continue
-		}
-
 		var sourceRate, homeRate *big.Rat
 		if source != home {
 			if !rateDate.Valid || !sourceText.Valid || !homeText.Valid {

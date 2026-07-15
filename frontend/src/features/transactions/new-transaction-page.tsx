@@ -2,6 +2,7 @@ import {
   createForm,
   Field as FormField,
   Form,
+  setErrors,
   setInput,
 } from "@formisch/solid";
 import { useNavigate } from "@solidjs/router";
@@ -10,6 +11,7 @@ import { createSignal, For, Show } from "solid-js";
 import * as v from "valibot";
 
 import { bucketsQuery, createBucket, type BucketKind } from "../../api/buckets";
+import { currenciesQuery } from "../../api/currencies";
 import { createTransaction } from "../../api/transactions";
 import { meQuery } from "../../api/user";
 import { Button } from "../../ui/button/button";
@@ -28,9 +30,7 @@ const schema = v.object({
   amount: v.pipe(
     v.string(),
     v.nonEmpty("Enter an amount"),
-    v.regex(/^\d+(\.\d{1,2})?$/, "Enter a valid amount"),
-    v.transform((s) => Math.round(parseFloat(s) * 100)),
-    v.minValue(1, "Amount must be positive"),
+    v.regex(/^\d+(\.\d+)?$/, "Enter a valid amount"),
   ),
   currency: v.pipe(
     v.string(),
@@ -43,6 +43,7 @@ const schema = v.object({
 
 export default function NewTransactionPage() {
   const buckets = useQuery(bucketsQuery);
+  const currencies = useQuery(currenciesQuery);
   const me = useQuery(meQuery);
 
   return (
@@ -50,7 +51,10 @@ export default function NewTransactionPage() {
       <h1 style={{ "font-size": "1.2rem", "font-weight": "500" }}>
         New transaction
       </h1>
-      <Show when={buckets.data && me.data} fallback={<p>loading…</p>}>
+      <Show
+        when={buckets.data && currencies.data && me.data}
+        fallback={<p>loading…</p>}
+      >
         <TransactionForm />
       </Show>
     </div>
@@ -61,6 +65,7 @@ function TransactionForm() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const buckets = useQuery(bucketsQuery);
+  const currencies = useQuery(currenciesQuery);
   const me = useQuery(meQuery);
 
   const [mode, setMode] = createSignal<"expense" | "income">("expense");
@@ -82,9 +87,13 @@ function TransactionForm() {
   const categories = () => buckets.data?.filter((b) => b.kind === mode()) ?? [];
 
   const currencyOptions = () => {
-    const common = ["EUR", "USD", "GBP", "SEK", "NOK", "DKK", "CHF", "JPY"];
     const home = me.data!.home_currency;
-    return common.includes(home) ? common : [home, ...common];
+    return [
+      home,
+      ...currencies
+        .data!.map((currency) => currency.code)
+        .filter((code) => code !== home),
+    ];
   };
 
   const onCreate = (kind: BucketKind) => async (name: string) => {
@@ -102,7 +111,31 @@ function TransactionForm() {
   }));
 
   const onSubmit = async (values: v.InferOutput<typeof schema>) => {
-    const accountAmount = mode() === "expense" ? -values.amount : values.amount;
+    const exponent = currencies.data!.find(
+      (currency) => currency.code === values.currency,
+    )!.exponent;
+    const [whole, fraction = ""] = values.amount.split(".");
+    if (fraction.length > exponent) {
+      setErrors(form, {
+        path: ["amount"],
+        errors: [
+          exponent === 0
+            ? `${values.currency} does not use decimal places`
+            : `Use at most ${exponent} decimal places`,
+        ],
+      });
+      return;
+    }
+    const amount = Number(whole + fraction.padEnd(exponent, "0"));
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      setErrors(form, {
+        path: ["amount"],
+        errors: ["Enter an amount greater than zero"],
+      });
+      return;
+    }
+    setErrors(form, { path: ["amount"], errors: null });
+    const accountAmount = mode() === "expense" ? -amount : amount;
     try {
       await mutation.mutateAsync({
         date: new Date(values.date + "T00:00:00").toISOString(),

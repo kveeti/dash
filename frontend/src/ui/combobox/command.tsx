@@ -715,10 +715,6 @@ const Item: ParentComponent<CommandItemProps> = (props) => {
     props.onSelect?.(value());
   }
 
-  // Mouse selects on pointerdown (Linear-style snappiness); touch/pen keep click
-  // so a scroll-drag on a list item doesn't select. Flag dedupes the mouse click.
-  let pointerSelected = false;
-
   function select() {
     store.setState("value", value(), true);
   }
@@ -749,25 +745,7 @@ const Item: ParentComponent<CommandItemProps> = (props) => {
             ? undefined
             : select
         }
-        onPointerDown={(e) => {
-          if (
-            localProps.disabled ||
-            e.button !== 0 ||
-            e.pointerType !== "mouse"
-          )
-            return;
-          e.preventDefault();
-          pointerSelected = true;
-          onSelect();
-        }}
-        onClick={() => {
-          if (localProps.disabled) return;
-          if (pointerSelected) {
-            pointerSelected = false;
-            return;
-          }
-          onSelect();
-        }}
+        onClick={localProps.disabled ? undefined : onSelect}
       >
         {props.children}
       </div>

@@ -4,9 +4,6 @@ import { lazy, Suspense } from "solid-js";
 import { Layout } from "./features/layout";
 
 const InboxPage = lazy(() => import("./features/inbox/inbox-page"));
-const MatchTransferPage = lazy(
-  () => import("./features/inbox/match-transfer-page"),
-);
 const TransactionsPage = lazy(
   () => import("./features/transactions/transactions-page"),
 );
@@ -26,16 +23,6 @@ export const routes: RouteDefinition[] = [
       <Layout>
         <Suspense fallback={<p>loading…</p>}>
           <InboxPage />
-        </Suspense>
-      </Layout>
-    ),
-  },
-  {
-    path: "/inbox/:id/match-transfer",
-    component: () => (
-      <Layout>
-        <Suspense fallback={<p>loading…</p>}>
-          <MatchTransferPage />
         </Suspense>
       </Layout>
     ),

@@ -86,7 +86,7 @@ func mapTransactionErr(err error) error {
 	switch {
 	case errors.Is(err, data.ErrNotFound):
 		return NewErr(err.Error(), http.StatusNotFound)
-	case errors.Is(err, data.ErrUnbalanced), errors.Is(err, data.ErrInvalidPostings), errors.Is(err, data.ErrInvalidBucket), errors.Is(err, data.ErrInvalidCategory), errors.Is(err, data.ErrInvalidTag):
+	case errors.Is(err, data.ErrUnbalanced), errors.Is(err, data.ErrInvalidPostings), errors.Is(err, data.ErrInvalidBucket), errors.Is(err, data.ErrInvalidCategory), errors.Is(err, data.ErrInvalidCurrency), errors.Is(err, data.ErrInvalidTag):
 		return NewErr(err.Error(), http.StatusBadRequest)
 	default:
 		return NewUnexpectedErr("transaction error: %w", err)

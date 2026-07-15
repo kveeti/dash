@@ -19,6 +19,7 @@ var (
 	ErrInvalidPostings = errors.New("transaction needs at least two postings with nonzero amounts")
 	ErrInvalidBucket   = errors.New("posting references a bucket you do not own")
 	ErrInvalidCategory = errors.New("bucket is not a category you own")
+	ErrInvalidCurrency = errors.New("unsupported currency")
 	ErrNotFound        = errors.New("transaction not found")
 )
 
@@ -53,6 +54,9 @@ func (d *Data) CreateTransaction(ctx context.Context, txn Transaction, postings 
 	}
 	defer tx.Rollback()
 
+	if err := validatePostingCurrencies(ctx, tx, postings); err != nil {
+		return nil, nil, err
+	}
 	owned, err := ownedBucketIDs(ctx, tx, txn.OwnerUserID)
 	if err != nil {
 		return nil, nil, err
@@ -117,6 +121,9 @@ func (d *Data) UpdateTransaction(ctx context.Context, userID, txnID string, date
 	}
 	defer tx.Rollback()
 
+	if err := validatePostingCurrencies(ctx, tx, postings); err != nil {
+		return nil, nil, err
+	}
 	old, err := loadOwnedTransaction(ctx, tx, userID, txnID)
 	if err != nil {
 		return nil, nil, err

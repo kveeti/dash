@@ -17,6 +17,15 @@ export type TransactionRow =
       currency: string;
     }
   | {
+      kind: "exchange";
+      from: string;
+      to: string;
+      fromAmount: number;
+      fromCurrency: string;
+      toAmount: number;
+      toCurrency: string;
+    }
+  | {
       kind: "generic";
       legs: { name: string; amount: number; currency: string }[];
     };
@@ -70,6 +79,36 @@ export function toTransactionRow(
       amount: Math.abs(neg.amount),
       currency: neg.currency,
     };
+  }
+
+  const clearingLegs = txn.postings.filter((p) => kind(p) === "clearing");
+  const moneyLegs = txn.postings.filter((p) => kind(p) !== "clearing");
+  if (
+    clearingLegs.length === 2 &&
+    moneyLegs.length === 2 &&
+    moneyLegs.every((p) => kind(p) === "asset" || kind(p) === "liability") &&
+    moneyLegs[0].currency !== moneyLegs[1].currency &&
+    moneyLegs.every((money) =>
+      clearingLegs.some(
+        (clearing) =>
+          clearing.currency === money.currency &&
+          clearing.amount === -money.amount,
+      ),
+    )
+  ) {
+    const neg = moneyLegs.find((p) => p.amount < 0);
+    const pos = moneyLegs.find((p) => p.amount > 0);
+    if (neg && pos) {
+      return {
+        kind: "exchange",
+        from: name(neg),
+        to: name(pos),
+        fromAmount: neg.amount,
+        fromCurrency: neg.currency,
+        toAmount: pos.amount,
+        toCurrency: pos.currency,
+      };
+    }
   }
 
   return {

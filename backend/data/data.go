@@ -62,12 +62,21 @@ func connectPostgres(ctx context.Context, dbURL string) (*sql.DB, error) {
 }
 
 const schema = `
+create table if not exists currencies (
+    code text primary key check (code ~ '^[A-Z]{3}$'),
+    exponent smallint not null check (exponent between 0 and 6)
+);
+insert into currencies (code, exponent) values
+    ('EUR', 2), ('USD', 2), ('GBP', 2), ('JPY', 0), ('CHF', 2),
+    ('AUD', 2), ('CAD', 2), ('SEK', 2), ('NOK', 2), ('DKK', 2), ('PLN', 2)
+on conflict (code) do update set exponent = excluded.exponent;
+
 create table if not exists users (
     id uuid primary key,
     subject text not null,
     issuer text not null,
     email text not null,
-    home_currency text not null default 'EUR',
+    home_currency text not null default 'EUR' references currencies(code),
     created_at timestamptz not null,
     unique (issuer, subject)
 );
@@ -120,7 +129,7 @@ create table if not exists postings (
     transaction_id uuid not null references transactions(id) on delete cascade,
     bucket_id uuid not null references buckets(id),
     amount bigint not null,
-    currency text not null,
+    currency text not null references currencies(code),
     mirror_id uuid,
     created_at timestamptz not null
 );
@@ -129,7 +138,7 @@ create index if not exists idx_postings_bucket on postings(bucket_id);
 
 create table if not exists rates (
     date date not null,
-    currency text not null,
+    currency text not null references currencies(code),
     rate numeric not null check (rate > 0),
     primary key (date, currency)
 );
@@ -173,7 +182,7 @@ create table if not exists import_rows (
     batch_id uuid not null references import_batches(id),
     date timestamptz not null,
     amount bigint not null,
-    currency text not null,
+    currency text not null references currencies(code),
     raw_description text not null,
     raw jsonb not null,
     dedup_hash text not null,

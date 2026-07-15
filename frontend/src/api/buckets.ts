@@ -7,7 +7,8 @@ export type BucketKind =
   | "liability"
   | "expense"
   | "income"
-  | "person";
+  | "person"
+  | "clearing";
 
 export interface Bucket {
   id: string;

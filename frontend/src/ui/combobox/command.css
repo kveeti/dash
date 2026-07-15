@@ -46,7 +46,7 @@
   z-index: 50;
   position: fixed;
   inset: 0;
-  background-color: var(--black-a6);
+  background-color: var(--black-a4);
 
   &[data-expanded] {
     animation: cmdk-overlay-in 200ms ease-out;
@@ -95,6 +95,10 @@
   &::placeholder {
     color: var(--fg-subtle);
   }
+}
+
+[cmdk-dialog] [cmdk-input] {
+  height: 2.75rem;
 }
 
 [cmdk-list] {

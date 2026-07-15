@@ -60,25 +60,19 @@ export function CategoryMenu(props: {
   onChange: (id: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
   onCreatePerson?: (name: string) => Promise<Bucket>;
-  onMatchTransfer?: () => void;
+  onMatchTransactions?: () => void;
   searchPlaceholder: string;
 }) {
   return (
     <Command>
-      <Command.Input
-        style={{
-          "border-bottom": "var(--border-popover)",
-          "margin-bottom": "0.25rem",
-        }}
-        placeholder={props.searchPlaceholder}
-      />
+      <Command.Input placeholder={props.searchPlaceholder} />
       <Command.List hideScrollbar>
         <Rows
           buckets={props.buckets}
           onChange={props.onChange}
           onCreate={props.onCreate}
           onCreatePerson={props.onCreatePerson}
-          onMatchTransfer={props.onMatchTransfer}
+          onMatchTransactions={props.onMatchTransactions}
         />
       </Command.List>
     </Command>
@@ -90,7 +84,7 @@ function Rows(props: {
   onChange: (id: string) => void;
   onCreate: (name: string) => Promise<Bucket>;
   onCreatePerson?: (name: string) => Promise<Bucket>;
-  onMatchTransfer?: () => void;
+  onMatchTransactions?: () => void;
 }) {
   const combobox = useCombobox();
   const search = useCommandState((s) => s.search);
@@ -112,10 +106,15 @@ function Rows(props: {
           </Command.Item>
         )}
       </For>
-      <Show when={props.onMatchTransfer}>
+      <Show when={props.onMatchTransactions}>
         <Command.Group value="actions" forceMount>
-          <Command.Item forceMount onSelect={() => props.onMatchTransfer!()}>
-            Match transfer
+          <Command.Item
+            forceMount
+            onSelect={() => {
+              props.onMatchTransactions!();
+            }}
+          >
+            Match transactions
           </Command.Item>
         </Command.Group>
       </Show>

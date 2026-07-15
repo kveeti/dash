@@ -1,4 +1,4 @@
-import { useNavigate, useSearchParams } from "@solidjs/router";
+import { useSearchParams } from "@solidjs/router";
 import {
   useInfiniteQuery,
   useMutation,
@@ -7,7 +7,7 @@ import {
 } from "@tanstack/solid-query";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 
-import { bucketsQuery, createBucket, type Bucket } from "../../api/buckets";
+import { bucketsQuery, createBucket } from "../../api/buckets";
 import { categorizeInbox, inboxQuery, type InboxRow } from "../../api/inbox";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { Combobox } from "../../ui/combobox/combobox";
@@ -15,6 +15,7 @@ import { Filterbar } from "../list-page/filterbar";
 import { FloatingBar } from "../list-page/floating-bar";
 import { CategoryMenu } from "../transactions/bucket-combobox";
 import { formatAmount } from "../transactions/transaction-row";
+import { MatchTransactionsDialog } from "./match-transactions-dialog";
 
 import shell from "../list-page/list-page.module.css";
 import styles from "./inbox-page.module.css";
@@ -32,8 +33,17 @@ const longDateFmt = new Intl.DateTimeFormat(undefined, {
 });
 
 export default function InboxPage() {
-  const [params, setParams] = useSearchParams<{ q?: string }>();
-  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams<{
+    q?: string;
+    match?: string;
+  }>();
+  const openMatch = (id: string) => {
+    setParams({ match: id }, { scroll: false });
+  };
+
+  const closeMatch = () => {
+    setParams({ match: undefined }, { replace: true, scroll: false });
+  };
 
   const inbox = useInfiniteQuery(() => inboxQuery(params.q ?? ""));
   const buckets = useQuery(bucketsQuery);
@@ -169,9 +179,7 @@ export default function InboxPage() {
                                 }
                                 onCreate={onCreate("expense")}
                                 onCreatePerson={onCreate("person")}
-                                onMatchTransfer={() =>
-                                  navigate(`/inbox/${row.id}/match-transfer`)
-                                }
+                                onMatchTransactions={() => openMatch(row.id)}
                                 searchPlaceholder="Category, person, or action"
                               />
                             </Combobox.Content>
@@ -210,6 +218,8 @@ export default function InboxPage() {
           />
         </Match>
       </Switch>
+
+      <MatchTransactionsDialog id={params.match} onClose={closeMatch} />
     </div>
   );
 }

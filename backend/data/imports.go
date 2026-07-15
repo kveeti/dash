@@ -101,14 +101,14 @@ type importParser interface {
 
 // parserFor builds the parser for a source. loc is the timezone the batch was
 // uploaded with; parsers interpret dates as midnight in it.
-func parserFor(source string, r io.Reader, loc *time.Location) (importParser, error) {
+func parserFor(source string, r io.Reader, loc *time.Location, currencies map[string]int) (importParser, error) {
 	switch source {
 	case "nordea":
-		return NewNordeaParser(r, loc), nil
+		return NewNordeaParser(r, loc, currencies), nil
 	case "op":
-		return NewOPParser(r, loc), nil
+		return NewOPParser(r, loc, currencies), nil
 	case "revolut":
-		return NewRevolutParser(r, loc), nil
+		return NewRevolutParser(r, loc, currencies), nil
 	default:
 		return nil, fmt.Errorf("unsupported import source %q", source)
 	}
@@ -367,13 +367,17 @@ func (d *Data) runStage(ctx context.Context, batch ImportBatch) (int, int, []Row
 	if err != nil {
 		return 0, 0, nil, fmt.Errorf("invalid batch timezone %q: %w", batch.Timezone, err)
 	}
+	currencies, err := d.currencyExponents(ctx)
+	if err != nil {
+		return 0, 0, nil, err
+	}
 	var lastErr error
 	for attempt := 0; attempt < importMaxAttempts; attempt++ {
 		blob, err := d.files.Open(ctx, batch.ID)
 		if err != nil {
 			return 0, 0, nil, err
 		}
-		parser, err := parserFor(batch.Source, blob, loc)
+		parser, err := parserFor(batch.Source, blob, loc, currencies)
 		if err != nil {
 			blob.Close()
 			return 0, 0, nil, err

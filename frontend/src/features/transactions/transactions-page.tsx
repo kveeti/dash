@@ -12,7 +12,6 @@ import {
   addTransactionTag,
   bulkCategorize,
   deleteTransaction,
-  removeTransactionTag,
   tagsQuery,
   transactionsQuery,
   type Transaction,
@@ -121,15 +120,6 @@ export default function TransactionsPage() {
     },
   }));
 
-  const untag = useMutation(() => ({
-    mutationFn: ({ id, value }: { id: string; value: string }) =>
-      removeTransactionTag([id], value),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["tags"] });
-    },
-  }));
-
   const thisYear = new Date().getFullYear();
   let prevDateFormatted: string | null = null;
 
@@ -200,9 +190,6 @@ export default function TransactionsPage() {
                             onFilterTag={(value) =>
                               setParams({ tag: value }, { replace: true })
                             }
-                            onRemoveTag={(value) =>
-                              untag.mutate({ id: txn.id, value })
-                            }
                           />
                           {/* <Show when={!selectMode()}> */}
                           {/*   <button */}
@@ -256,112 +243,112 @@ function Row(props: {
   txn: Transaction;
   buckets: Map<string, Bucket>;
   onFilterTag: (tag: string) => void;
-  onRemoveTag: (tag: string) => void;
 }) {
   const row = () => toTransactionRow(props.txn, props.buckets);
 
   return (
     <Switch>
       <Match when={asKind("simple")(row())}>
-        {(r) => (
-          <>
-            <span class={styles.primary}>
-              {r().category}
-              <Show when={props.txn.counterparty}>
-                {" "}
-                <span class={styles.secondary}>{props.txn.counterparty}</span>
-              </Show>
-              <Show when={props.txn.description}>
-                {" "}
-                <span class={styles.secondary}>{props.txn.description}</span>
-              </Show>
-              <Show when={r().account}>
-                {" "}
-                <span class={styles.secondary}>· {r().account}</span>
-              </Show>
-              <TagList
-                tags={props.txn.tags}
-                onFilter={props.onFilterTag}
-                onRemove={props.onRemoveTag}
-              />
-            </span>
-            <span
-              class={styles.amount}
-              classList={{ [styles.positive]: r().amount >= 0 }}
-            >
-              {formatAmount(r().amount, r().currency)}
-            </span>
-          </>
-        )}
+        {(r) => {
+          const who = () => props.txn.counterparty || props.txn.description;
+          return (
+            <>
+              <span class={styles.who}>{who()}</span>
+              <span
+                class={styles.amount}
+                classList={{ [styles.positive]: r().amount >= 0 }}
+              >
+                {formatAmount(r().amount, r().currency)}
+              </span>
+              <div class={styles.metaRow}>
+                <span class={styles.meta}>
+                  {r().category}
+                  <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
+                </span>
+                <Show when={r().account}>
+                  <span class={styles.account}>{r().account}</span>
+                </Show>
+              </div>
+            </>
+          );
+        }}
       </Match>
       <Match when={asKind("transfer")(row())}>
         {(r) => (
           <>
-            <span class={styles.primary}>
-              Transfer{" "}
-              <span class={styles.secondary}>
-                {r().from} → {r().to}
-              </span>
-              <TagList
-                tags={props.txn.tags}
-                onFilter={props.onFilterTag}
-                onRemove={props.onRemoveTag}
-              />
+            <span class={styles.who}>
+              <span class={styles.swap} />
+              {r().from} → {r().to}
             </span>
-            <span class={styles.amount}>
+            <span class={`${styles.amount} ${styles.muted}`}>
               {formatAmount(r().amount, r().currency)}
+            </span>
+            <span class={styles.meta}>
+              Transfer
+              <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
+            </span>
+          </>
+        )}
+      </Match>
+      <Match when={asKind("exchange")(row())}>
+        {(r) => (
+          <>
+            <span class={styles.who}>
+              <span class={styles.swap} />
+              <Show when={r().from !== r().to} fallback={r().from}>
+                {r().from} → {r().to}
+              </Show>
+            </span>
+            <span class={`${styles.amount} ${styles.muted}`}>
+              {formatAmount(r().fromAmount, r().fromCurrency)} →{" "}
+              {formatAmount(r().toAmount, r().toCurrency)}
+            </span>
+            <span class={styles.meta}>
+              Exchange
+              <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
             </span>
           </>
         )}
       </Match>
       <Match when={asKind("generic")(row())}>
-        {(r) => (
-          <span class={styles.primary}>
-            <Show when={props.txn.description}>{props.txn.description} </Show>
-            <span class={styles.secondary}>
-              <For each={r().legs}>
-                {(leg, i) => (
-                  <>
-                    <Show when={i() > 0}>, </Show>
-                    {leg.name} {formatAmount(leg.amount, leg.currency)}
-                  </>
-                )}
-              </For>
-            </span>
-            <TagList
-              tags={props.txn.tags}
-              onFilter={props.onFilterTag}
-              onRemove={props.onRemoveTag}
-            />
-          </span>
-        )}
+        {(r) => {
+          const who = () =>
+            props.txn.counterparty || props.txn.description || "Transaction";
+          return (
+            <>
+              <span class={styles.who}>{who()}</span>
+              <span />
+              <span class={styles.meta}>
+                <For each={r().legs}>
+                  {(leg, i) => (
+                    <>
+                      <Show when={i() > 0}>, </Show>
+                      {leg.name} {formatAmount(leg.amount, leg.currency)}
+                    </>
+                  )}
+                </For>
+                <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
+              </span>
+            </>
+          );
+        }}
       </Match>
     </Switch>
   );
 }
 
-function TagList(props: {
-  tags: string[];
-  onFilter: (tag: string) => void;
-  onRemove: (tag: string) => void;
-}) {
+function TagList(props: { tags: string[]; onFilter: (tag: string) => void }) {
   return (
-    <Show when={props.tags.length}>
-      <span class={styles.tags}>
-        <For each={props.tags}>
-          {(tag) => (
-            <span class={styles.tag}>
-              <button onClick={() => props.onFilter(tag)}>#{tag}</button>
-              <button
-                aria-label={`Remove ${tag} tag`}
-                onClick={() => props.onRemove(tag)}
-              >
-                ×
-              </button>
-            </span>
-          )}
-        </For>
-      </span>
-    </Show>
+    <For each={props.tags}>
+      {(tag) => (
+        <button
+          type="button"
+          class={styles.tag}
+          onClick={() => props.onFilter(tag)}
+        >
+          #{tag}
+        </button>
+      )}
+    </For>
   );
 }
