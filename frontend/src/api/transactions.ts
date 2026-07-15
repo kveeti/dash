@@ -2,10 +2,21 @@ import {
   infiniteQueryOptions,
   keepPreviousData,
   queryOptions,
+  useQueryClient,
 } from "@tanstack/solid-query";
 
 import type { BucketKind } from "./buckets";
 import { api } from "./http";
+
+export const transactionKeys = {
+  all: ["transactions"] as const,
+  list: (q: string, tag: string) =>
+    [...transactionKeys.all, "list", q, tag] as const,
+};
+
+export const tagKeys = {
+  all: ["tags"] as const,
+};
 
 export interface Posting {
   id: string;
@@ -49,7 +60,7 @@ const transactionsPage = (pageParam: Cursor | null, extra = "") => {
 
 export const transactionsQuery = (q: string, tag: string) =>
   infiniteQueryOptions({
-    queryKey: ["transactions", "list", q, tag],
+    queryKey: transactionKeys.list(q, tag),
     queryFn: ({ pageParam }: { pageParam: Cursor | null }) =>
       transactionsPage(
         pageParam,
@@ -71,6 +82,16 @@ export interface PostingInput {
   currency: string;
 }
 
+export function createTransactionMutation() {
+  const queryClient = useQueryClient();
+  return {
+    mutationFn: createTransaction,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+    },
+  };
+}
+
 export function createTransaction(input: {
   date: string;
   counterparty: string;
@@ -81,6 +102,17 @@ export function createTransaction(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function bulkCategorizeMutation() {
+  const queryClient = useQueryClient();
+  return {
+    mutationFn: ({ ids, bucketId }: { ids: string[]; bucketId: string }) =>
+      bulkCategorize(ids, bucketId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+    },
+  };
 }
 
 export function bulkCategorize(
@@ -98,12 +130,24 @@ export function bulkCategorize(
 
 export const tagsQuery = (q = "") =>
   queryOptions({
-    queryKey: ["tags", q],
+    queryKey: [...tagKeys.all, q],
     queryFn: () =>
       api<{ tags: string[] }>(
         `/api/v1/tags${q ? `?q=${encodeURIComponent(q)}` : ""}`,
       ),
   });
+
+export function addTransactionTagMutation() {
+  const queryClient = useQueryClient();
+  return {
+    mutationFn: ({ ids, value }: { ids: string[]; value: string }) =>
+      addTransactionTag(ids, value),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+      queryClient.invalidateQueries({ queryKey: tagKeys.all });
+    },
+  };
+}
 
 export function addTransactionTag(transactionIds: string[], tag: string) {
   return api<{ tagged: number }>("/api/v1/transactions/tags", {

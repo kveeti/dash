@@ -1,29 +1,21 @@
 import { useSearchParams } from "@solidjs/router";
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/solid-query";
-import { createSignal, For, Match, Show, Switch } from "solid-js";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/solid-query";
+import { createMemo, For, Match, Show, Switch } from "solid-js";
 
-import { bucketsQuery, createBucket } from "../../api/buckets";
+import { bucketsQuery, useCreateBucket } from "../../api/buckets";
 import {
-  addTransactionTag,
-  bulkCategorize,
-  deleteTransaction,
+  addTransactionTagMutation,
+  bulkCategorizeMutation,
   tagsQuery,
   transactionsQuery,
   type Transaction,
 } from "../../api/transactions";
+import { formatAmount, formatListDate } from "../../lib/format";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { Filterbar } from "../list-page/filterbar";
 import { FloatingBar } from "../list-page/floating-bar";
-import {
-  formatAmount,
-  toTransactionRow,
-  type TransactionRow,
-} from "./transaction-row";
+import { createSelection } from "../list-page/selection";
+import { toTransactionRow, type TransactionRow } from "./transaction-row";
 
 import shell from "../list-page/list-page.module.css";
 import styles from "./transactions-page.module.css";
@@ -35,18 +27,6 @@ const asKind =
       ? (row as Extract<TransactionRow, { kind: K }>)
       : undefined;
 
-const shortDateFmt = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-
-const longDateFmt = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
 export default function TransactionsPage() {
   const [params, setParams] = useSearchParams<{ q?: string; tag?: string }>();
 
@@ -55,70 +35,28 @@ export default function TransactionsPage() {
   );
   const buckets = useQuery(bucketsQuery);
   const tags = useQuery(() => tagsQuery());
-  const queryClient = useQueryClient();
+  const createBucket = useCreateBucket();
 
   const allTxns = () => transactions.data!.pages.flatMap((p) => p.transactions);
 
-  const mutation = useMutation(() => ({
-    mutationFn: deleteTransaction,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["transactions"] }),
-  }));
-
-  const onDelete = (txn: Transaction) => {
-    if (window.confirm("Delete this transaction?")) mutation.mutate(txn.id);
-  };
-
-  const [selectMode, setSelectMode] = createSignal(false);
-  const [selected, setSelected] = createSignal(new Set<string>());
-
-  const clearSelection = () => setSelected(new Set<string>());
-
-  const exitSelect = () => {
-    setSelectMode(false);
-    clearSelection();
-  };
-
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const {
+    selectMode,
+    setSelectMode,
+    selected,
+    toggle,
+    clearSelection,
+    exitSelect,
+  } = createSelection();
 
   const categories = () =>
     buckets.data!.filter(
       (b) => (b.kind === "expense" || b.kind === "income") && !b.hidden,
     );
 
-  const onCreate = async (name: string) => {
-    const bucket = await createBucket({ kind: "expense", name });
-    await queryClient.invalidateQueries({ queryKey: ["buckets"] });
-    return bucket;
-  };
+  const onCreate = (name: string) => createBucket({ kind: "expense", name });
 
-  const categorize = useMutation(() => ({
-    mutationFn: ({ ids, bucketId }: { ids: string[]; bucketId: string }) =>
-      bulkCategorize(ids, bucketId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      exitSelect();
-    },
-  }));
-
-  const tag = useMutation(() => ({
-    mutationFn: ({ ids, value }: { ids: string[]; value: string }) =>
-      addTransactionTag(ids, value),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["tags"] });
-      exitSelect();
-    },
-  }));
-
-  const thisYear = new Date().getFullYear();
-  let prevDateFormatted: string | null = null;
+  const categorize = useMutation(bulkCategorizeMutation);
+  const tag = useMutation(addTransactionTagMutation);
 
   return (
     <div class={shell.wrapper}>
@@ -150,14 +88,11 @@ export default function TransactionsPage() {
               each={allTxns()}
               fallback={<p class={shell.col}>no transactions yet</p>}
             >
-              {(txn) => {
-                const dateConverted = new Date(txn.date);
-                const showYear = dateConverted.getFullYear() !== thisYear;
-                const dateFormatted = showYear
-                  ? longDateFmt.format(dateConverted)
-                  : shortDateFmt.format(dateConverted);
-                const showDateHeader = dateFormatted !== prevDateFormatted;
-                prevDateFormatted = dateFormatted;
+              {(txn, i) => {
+                const dateFormatted = formatListDate(txn.date);
+                const prev = allTxns()[i() - 1];
+                const showDateHeader =
+                  !prev || formatListDate(prev.date) !== dateFormatted;
 
                 return (
                   <>
@@ -187,15 +122,6 @@ export default function TransactionsPage() {
                               setParams({ tag: value }, { replace: true })
                             }
                           />
-                          {/* <Show when={!selectMode()}> */}
-                          {/*   <button */}
-                          {/*     type="button" */}
-                          {/*     class={styles.delete} */}
-                          {/*     onClick={() => onDelete(txn)} */}
-                          {/*   > */}
-                          {/*     delete */}
-                          {/*   </button> */}
-                          {/* </Show> */}
                         </div>
                       </div>
                     </li>
@@ -223,11 +149,19 @@ export default function TransactionsPage() {
             onClear={clearSelection}
             onExit={exitSelect}
             onCategorize={(bucketId) =>
-              categorize.mutate({ ids: [...selected()], bucketId })
+              categorize.mutate(
+                { ids: [...selected()], bucketId },
+                { onSuccess: exitSelect },
+              )
             }
             onCreate={onCreate}
             tags={tags.data!.tags}
-            onTag={(value) => tag.mutate({ ids: [...selected()], value })}
+            onTag={(value) =>
+              tag.mutate(
+                { ids: [...selected()], value },
+                { onSuccess: exitSelect },
+              )
+            }
           />
         </Match>
       </Switch>
@@ -236,7 +170,7 @@ export default function TransactionsPage() {
 }
 
 function Row(props: { txn: Transaction; onFilterTag: (tag: string) => void }) {
-  const row = () => toTransactionRow(props.txn);
+  const row = createMemo(() => toTransactionRow(props.txn));
 
   return (
     <Switch>

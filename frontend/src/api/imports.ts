@@ -1,6 +1,16 @@
-import { infiniteQueryOptions, queryOptions } from "@tanstack/solid-query";
+import {
+  infiniteQueryOptions,
+  queryOptions,
+  useQueryClient,
+} from "@tanstack/solid-query";
 
 import { api } from "./http";
+import { transactionKeys } from "./transactions";
+
+export const importKeys = {
+  all: ["imports"] as const,
+  batch: (id: string) => [...importKeys.all, id] as const,
+};
 
 export type ImportStatus = "uploaded" | "processing" | "done" | "failed";
 
@@ -31,7 +41,7 @@ export interface ImportResult {
 
 export const importsQuery = () =>
   queryOptions({
-    queryKey: ["imports"],
+    queryKey: importKeys.all,
     queryFn: () => api<ImportBatchSummary[]>("/api/v1/imports"),
   });
 
@@ -40,7 +50,7 @@ export const importsQuery = () =>
 // paginated endpoint.
 export const importQuery = (id: string) =>
   queryOptions({
-    queryKey: ["imports", id],
+    queryKey: importKeys.batch(id),
     queryFn: () => api<ImportBatchSummary>(`/api/v1/imports/${id}`),
   });
 
@@ -74,7 +84,7 @@ interface DuplicatePage {
 // next_cursor is null once the list is exhausted.
 export const duplicatesQuery = (id: string) =>
   infiniteQueryOptions({
-    queryKey: ["imports", id, "duplicates"],
+    queryKey: [...importKeys.batch(id), "duplicates"],
     queryFn: ({ pageParam }) =>
       api<DuplicatePage>(
         `/api/v1/imports/${id}/duplicates?limit=50${pageParam ? `&cursor=${pageParam}` : ""}`,
@@ -82,6 +92,17 @@ export const duplicatesQuery = (id: string) =>
     initialPageParam: "",
     getNextPageParam: (last) => last.next_cursor,
   });
+
+export function createImportMutation() {
+  const queryClient = useQueryClient();
+  return {
+    mutationFn: createImport,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: importKeys.all });
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+    },
+  };
+}
 
 export async function createImport(input: {
   file: File;
@@ -100,8 +121,30 @@ export async function createImport(input: {
   });
 }
 
+export function forceImportRowMutation(batchId: string) {
+  const queryClient = useQueryClient();
+  return {
+    mutationFn: forceImportRow,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: importKeys.batch(batchId) });
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+    },
+  };
+}
+
 export function forceImportRow(id: string): Promise<void> {
   return api<void>(`/api/v1/imports/rows/${id}/import`, { method: "POST" });
+}
+
+export function deleteImportMutation() {
+  const queryClient = useQueryClient();
+  return {
+    mutationFn: deleteImport,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: importKeys.all });
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+    },
+  };
 }
 
 export function deleteImport(id: string): Promise<void> {

@@ -2,9 +2,15 @@ import {
   infiniteQueryOptions,
   keepPreviousData,
   queryOptions,
+  useQueryClient,
 } from "@tanstack/solid-query";
 
 import { api } from "./http";
+import { transactionKeys } from "./transactions";
+
+export const inboxKeys = {
+  all: ["inbox"] as const,
+};
 
 export interface InboxRow {
   id: string;
@@ -42,7 +48,7 @@ const inboxPage = (pageParam: Cursor | null, q: string) => {
 
 export const inboxQuery = (q: string) =>
   infiniteQueryOptions({
-    queryKey: ["inbox", q],
+    queryKey: [...inboxKeys.all, q],
     queryFn: ({ pageParam }: { pageParam: Cursor | null }) =>
       inboxPage(pageParam, q),
     initialPageParam: null as Cursor | null,
@@ -61,11 +67,35 @@ export const inboxMatchesQuery = (id: string, q: string) =>
       previousQuery?.queryKey[1] === id ? previous : undefined,
   });
 
+export function matchInboxRowsMutation() {
+  const queryClient = useQueryClient();
+  return {
+    mutationFn: ({ id, matchId }: { id: string; matchId: string }) =>
+      matchInboxRows(id, matchId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+    },
+  };
+}
+
 export function matchInboxRows(id: string, matchId: string) {
   return api<{ matched: boolean }>(`/api/v1/inbox/${id}/match`, {
     method: "POST",
     body: JSON.stringify({ match_id: matchId }),
   });
+}
+
+export function categorizeInboxMutation() {
+  const queryClient = useQueryClient();
+  return {
+    mutationFn: ({ ids, bucketId }: { ids: string[]; bucketId: string }) =>
+      categorizeInbox(ids, bucketId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+    },
+  };
 }
 
 export function categorizeInbox(

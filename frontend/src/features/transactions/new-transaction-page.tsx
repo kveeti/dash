@@ -6,13 +6,17 @@ import {
   setInput,
 } from "@formisch/solid";
 import { useNavigate } from "@solidjs/router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
-import { createSignal, For, Show } from "solid-js";
+import { useMutation, useQuery } from "@tanstack/solid-query";
+import { createSignal, For, Match, Show, Switch } from "solid-js";
 import * as v from "valibot";
 
-import { bucketsQuery, createBucket, type BucketKind } from "../../api/buckets";
+import {
+  bucketsQuery,
+  useCreateBucket,
+  type BucketKind,
+} from "../../api/buckets";
 import { currenciesQuery } from "../../api/currencies";
-import { createTransaction } from "../../api/transactions";
+import { createTransactionMutation } from "../../api/transactions";
 import { meQuery } from "../../api/user";
 import { Button } from "../../ui/button/button";
 import { Field, Input, InputGroup } from "../../ui/input/input";
@@ -48,22 +52,24 @@ export default function NewTransactionPage() {
 
   return (
     <div class={styles.page}>
-      <h1 style={{ "font-size": "1.2rem", "font-weight": "500" }}>
-        New transaction
-      </h1>
-      <Show
-        when={buckets.data && currencies.data && me.data}
-        fallback={<p>loading…</p>}
-      >
-        <TransactionForm />
-      </Show>
+      <h1 class={styles.title}>New transaction</h1>
+      <Switch fallback={<p>loading…</p>}>
+        <Match when={buckets.isError || currencies.isError || me.isError}>
+          <p>
+            error: {(buckets.error ?? currencies.error ?? me.error)?.message}
+          </p>
+        </Match>
+        <Match when={buckets.data && currencies.data && me.data}>
+          <TransactionForm />
+        </Match>
+      </Switch>
     </div>
   );
 }
 
 function TransactionForm() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const createBucket = useCreateBucket();
   const buckets = useQuery(bucketsQuery);
   const currencies = useQuery(currenciesQuery);
   const me = useQuery(meQuery);
@@ -96,19 +102,10 @@ function TransactionForm() {
     ];
   };
 
-  const onCreate = (kind: BucketKind) => async (name: string) => {
-    const bucket = await createBucket({ kind, name });
-    await queryClient.invalidateQueries({ queryKey: ["buckets"] });
-    return bucket;
-  };
+  const onCreate = (kind: BucketKind) => (name: string) =>
+    createBucket({ kind, name });
 
-  const mutation = useMutation(() => ({
-    mutationFn: createTransaction,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      navigate("/transactions");
-    },
-  }));
+  const mutation = useMutation(createTransactionMutation);
 
   const onSubmit = async (values: v.InferOutput<typeof schema>) => {
     const exponent = currencies.data!.find(
@@ -154,6 +151,7 @@ function TransactionForm() {
           },
         ],
       });
+      navigate("/transactions");
     } catch {
       // surfaced via mutation.isError below
     }
@@ -271,26 +269,15 @@ function TransactionForm() {
           <p>error: {mutation.error?.message}</p>
         </Show>
 
-        <div
-          style={{
-            display: "flex",
-            "flex-direction": "row-reverse",
-            gap: "1rem",
-          }}
-        >
+        <div class={styles.buttonRow}>
           <Button
             type="submit"
             disabled={form.isSubmitting}
-            style={{ width: "100%" }}
+            class={styles.submit}
           >
             Save
           </Button>
-          <Button
-            type="reset"
-            variant="outline"
-            disabled={form.isSubmitting}
-            style={{ width: "unset" }}
-          >
+          <Button type="reset" variant="outline" disabled={form.isSubmitting}>
             Reset
           </Button>
         </div>

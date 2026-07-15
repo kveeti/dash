@@ -1,6 +1,10 @@
-import { queryOptions } from "@tanstack/solid-query";
+import { queryOptions, useQueryClient } from "@tanstack/solid-query";
 
 import { api } from "./http";
+
+export const bucketKeys = {
+  all: ["buckets"] as const,
+};
 
 export type BucketKind =
   | "asset"
@@ -20,7 +24,7 @@ export interface Bucket {
 
 export const bucketsQuery = () =>
   queryOptions({
-    queryKey: ["buckets"],
+    queryKey: bucketKeys.all,
     queryFn: () => api<Bucket[]>("/api/v1/buckets"),
   });
 
@@ -33,4 +37,17 @@ export function createBucket(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export function useCreateBucket() {
+  const queryClient = useQueryClient();
+  return async (input: {
+    kind: BucketKind;
+    name: string;
+    parent_id?: string;
+  }): Promise<Bucket> => {
+    const bucket = await createBucket(input);
+    await queryClient.invalidateQueries({ queryKey: bucketKeys.all });
+    return bucket;
+  };
 }

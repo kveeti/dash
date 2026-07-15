@@ -8,7 +8,9 @@ import {
   type StatsAmount,
   type StatsComparison,
   type StatsPeriod,
+  type Valuation,
 } from "../../api/stats";
+import { formatMinor, formatPercent, formatWhole } from "../../lib/format";
 
 import inputStyles from "../../ui/input/input.module.css";
 import styles from "./stats-page.module.css";
@@ -66,38 +68,6 @@ function formatRange(range: { from: string; to: string }) {
   return `${from}–${dateFormat.format(utcDate(range.to))}`;
 }
 
-function amountFormatter(currency: string, sign = false) {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    ...(sign ? { signDisplay: "always" as const } : {}),
-  });
-}
-
-function formatMinor(amount: number, currency: string, sign = false) {
-  const formatter = amountFormatter(currency, sign);
-  const digits = formatter.resolvedOptions().maximumFractionDigits;
-  return formatter.format(amount / 10 ** digits);
-}
-
-function formatWhole(amount: number, currency: string) {
-  const digits =
-    amountFormatter(currency).resolvedOptions().maximumFractionDigits;
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount / 10 ** digits);
-}
-
-function formatPercent(value: number) {
-  return new Intl.NumberFormat(undefined, {
-    style: "percent",
-    maximumFractionDigits: 0,
-    signDisplay: "always",
-  }).format(value);
-}
-
 type CategoryValue = {
   id: string;
   name: string;
@@ -152,12 +122,14 @@ function categoryGroups(
     out.push({
       id: bucket.id,
       name: bucket.name,
-      current:
-        (own?.current ?? 0) +
-        childValues.reduce((sum, child) => sum + child.current, 0),
-      comparison:
-        (own?.comparison ?? 0) +
-        childValues.reduce((sum, child) => sum + child.comparison, 0),
+      current: childValues.reduce(
+        (sum, child) => sum + child.current,
+        own?.current ?? 0,
+      ),
+      comparison: childValues.reduce(
+        (sum, child) => sum + child.comparison,
+        own?.comparison ?? 0,
+      ),
       children: childValues,
       direct,
     });
@@ -190,6 +162,7 @@ export default function StatsPage() {
         (params.to ?? today).slice(0, 4));
   const comparison = (): StatsComparison =>
     params.compare === "year" && canCompareYear() ? "year" : "previous";
+  const navPeriod = () => period() as Exclude<StatsPeriod, "custom">;
   const anchor = () => params.anchor ?? today;
   const from = () => params.from ?? monthStart;
   const to = () => params.to ?? today;
@@ -298,11 +271,7 @@ export default function StatsPage() {
             aria-label="Previous period"
             onClick={() =>
               setParams({
-                anchor: movePeriod(
-                  anchor(),
-                  period() as Exclude<StatsPeriod, "custom">,
-                  -1,
-                ),
+                anchor: movePeriod(anchor(), navPeriod(), -1),
               })
             }
           />
@@ -310,21 +279,14 @@ export default function StatsPage() {
             class={styles.next}
             classList={{
               [styles.ghost]: !(
-                periodStart(
-                  anchor(),
-                  period() as Exclude<StatsPeriod, "custom">,
-                ) <
-                periodStart(today, period() as Exclude<StatsPeriod, "custom">)
+                periodStart(anchor(), navPeriod()) <
+                periodStart(today, navPeriod())
               ),
             }}
             aria-label="Next period"
             onClick={() =>
               setParams({
-                anchor: movePeriod(
-                  anchor(),
-                  period() as Exclude<StatsPeriod, "custom">,
-                  1,
-                ),
+                anchor: movePeriod(anchor(), navPeriod(), 1),
               })
             }
           />
@@ -363,63 +325,65 @@ export default function StatsPage() {
             error: {(stats.error ?? buckets.error)?.message}
           </p>
         </Match>
-        <Match when={stats.data && buckets.data}>
-          <div classList={{ [styles.stale]: stats.isPlaceholderData }}>
-            <div class={styles.heading}>
-              <h1>{formatRange(stats.data!.ranges.current)}</h1>
-              <p>compared with {formatRange(stats.data!.ranges.comparison)}</p>
-            </div>
+        <Match when={buckets.data && stats.data}>
+          {(data) => (
+            <div classList={{ [styles.stale]: stats.isPlaceholderData }}>
+              <div class={styles.heading}>
+                <h1>{formatRange(data().ranges.current)}</h1>
+                <p>compared with {formatRange(data().ranges.comparison)}</p>
+              </div>
 
-            <section class={styles.summary} aria-label="Summary">
-              <Summary
-                label="Expenses"
-                value={stats.data!.summary.expenses}
-                currency={stats.data!.home_currency}
+              <section class={styles.summary} aria-label="Summary">
+                <Summary
+                  label="Expenses"
+                  value={data().summary.expenses}
+                  currency={data().home_currency}
+                  incomplete={incomplete()}
+                  goodWhenUp={false}
+                />
+                <Summary
+                  label="Income"
+                  value={data().summary.income}
+                  currency={data().home_currency}
+                  incomplete={incomplete()}
+                  goodWhenUp
+                />
+                <Summary
+                  label="Net"
+                  value={data().summary.net}
+                  currency={data().home_currency}
+                  incomplete={incomplete()}
+                  goodWhenUp
+                  noPercent
+                />
+              </section>
+
+              <ValuationNotice valuation={data().valuation} />
+
+              <Show when={expenses().length === 0 && income().length === 0}>
+                <p class={styles.empty}>No transactions in this period.</p>
+              </Show>
+
+              <CategorySection
+                title="Expenses"
+                categories={expenses()}
+                currency={data().home_currency}
+                expanded={expanded()}
+                onToggle={toggle}
                 incomplete={incomplete()}
                 goodWhenUp={false}
               />
-              <Summary
-                label="Income"
-                value={stats.data!.summary.income}
-                currency={stats.data!.home_currency}
+              <CategorySection
+                title="Income"
+                categories={income()}
+                currency={data().home_currency}
+                expanded={expanded()}
+                onToggle={toggle}
                 incomplete={incomplete()}
                 goodWhenUp
               />
-              <Summary
-                label="Net"
-                value={stats.data!.summary.net}
-                currency={stats.data!.home_currency}
-                incomplete={incomplete()}
-                goodWhenUp
-                noPercent
-              />
-            </section>
-
-            <ValuationNotice valuation={stats.data!.valuation} />
-
-            <Show when={expenses().length === 0 && income().length === 0}>
-              <p class={styles.empty}>No transactions in this period.</p>
-            </Show>
-
-            <CategorySection
-              title="Expenses"
-              categories={expenses()}
-              currency={stats.data!.home_currency}
-              expanded={expanded()}
-              onToggle={toggle}
-              incomplete={incomplete()}
-              goodWhenUp={false}
-            />
-            <CategorySection
-              title="Income"
-              categories={income()}
-              currency={stats.data!.home_currency}
-              expanded={expanded()}
-              onToggle={toggle}
-              incomplete={incomplete()}
-              goodWhenUp
-            />
-          </div>
+            </div>
+          )}
         </Match>
       </Switch>
     </div>
@@ -487,18 +451,7 @@ function Summary(props: {
 }
 
 function ValuationNotice(props: {
-  valuation: {
-    current: {
-      fallback_transactions: number;
-      maximum_fallback_days: number;
-      unvalued_currencies: string[];
-    };
-    comparison: {
-      fallback_transactions: number;
-      maximum_fallback_days: number;
-      unvalued_currencies: string[];
-    };
-  };
+  valuation: { current: Valuation; comparison: Valuation };
 }) {
   const values = () => [props.valuation.current, props.valuation.comparison];
   const fallbackCount = () =>

@@ -26,6 +26,9 @@ devi: devidp backdev frontdev
 build-frontend:
 	@cd frontend && pnpm install && pnpm run build
 
+e2e:
+	@cd frontend && pnpm run e2e
+
 # Builds the frontend into backend/webdist, then the backend binary with it embedded.
 build: build-frontend
 	@cd backend && go build -o ../dist/dash .

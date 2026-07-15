@@ -2,11 +2,11 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const isForm = init?.body instanceof FormData;
   const res = await fetch(path, {
     credentials: "include",
+    ...init,
     headers: {
       ...(isForm ? {} : { "content-type": "application/json" }),
       ...init?.headers,
     },
-    ...init,
   });
 
   const text = await res.text();

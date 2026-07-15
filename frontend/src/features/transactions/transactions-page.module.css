@@ -77,15 +77,3 @@
 .positive {
   color: var(--positive);
 }
-
-.delete {
-  background: none;
-  border: none;
-  color: var(--fg-subtle);
-  cursor: pointer;
-  padding: 0;
-}
-
-.delete:hover {
-  color: var(--red-11);
-}

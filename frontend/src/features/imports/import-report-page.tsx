@@ -1,30 +1,37 @@
 import { A, useNavigate, useParams } from "@solidjs/router";
 import {
+  type Query,
   useInfiniteQuery,
   useMutation,
   useQuery,
-  useQueryClient,
 } from "@tanstack/solid-query";
 import { For, Match, Show, Switch } from "solid-js";
 
 import {
-  deleteImport,
+  deleteImportMutation,
   duplicatesQuery,
-  forceImportRow,
+  forceImportRowMutation,
   importQuery,
+  type ImportBatchSummary,
 } from "../../api/imports";
+import { formatAmount } from "../../lib/format";
 import { Button } from "../../ui/button/button";
-import { formatAmount } from "../transactions/transaction-row";
 
 import styles from "./imports.module.css";
 
 export default function ImportReportPage() {
   const params = useParams();
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const batch = useQuery(() => ({
     ...importQuery(params.id),
-    refetchInterval: (q: { state: { data?: { status?: string } } }) =>
+    refetchInterval: (
+      q: Query<
+        ImportBatchSummary,
+        Error,
+        ImportBatchSummary,
+        readonly ["imports", string]
+      >,
+    ) =>
       q.state.data?.status === "done" || q.state.data?.status === "failed"
         ? false
         : 800,
@@ -39,24 +46,8 @@ export default function ImportReportPage() {
   }));
   const dupeRows = () => dupes.data?.pages.flatMap((p) => p.rows) ?? [];
 
-  const forceMutation = useMutation(() => ({
-    mutationFn: forceImportRow,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["imports", params.id] });
-      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      await queryClient.invalidateQueries({ queryKey: ["balances"] });
-    },
-  }));
-
-  const deleteMutation = useMutation(() => ({
-    mutationFn: deleteImport,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["imports"] });
-      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      await queryClient.invalidateQueries({ queryKey: ["balances"] });
-      navigate("/imports");
-    },
-  }));
+  const forceMutation = useMutation(() => forceImportRowMutation(params.id));
+  const deleteMutation = useMutation(deleteImportMutation);
 
   const onUndo = () => {
     const n = batch.data?.imported ?? 0;
@@ -65,7 +56,9 @@ export default function ImportReportPage() {
         `Delete this import batch and its ${n} transaction${n === 1 ? "" : "s"}?`,
       )
     )
-      deleteMutation.mutate(params.id);
+      deleteMutation.mutate(params.id, {
+        onSuccess: () => navigate("/imports"),
+      });
   };
 
   return (

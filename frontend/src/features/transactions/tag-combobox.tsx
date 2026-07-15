@@ -4,6 +4,7 @@ import { Combobox, useCombobox } from "../../ui/combobox/combobox";
 import { Command, useCommandState } from "../../ui/combobox/command";
 
 import inputStyles from "../../ui/input/input.module.css";
+import styles from "./tag-combobox.module.css";
 
 export function TagCombobox(props: {
   tags: string[];
@@ -20,10 +21,7 @@ export function TagCombobox(props: {
           <Command>
             <Command.Input
               placeholder="Find or create tag"
-              style={{
-                "border-bottom": "var(--border-popover)",
-                "margin-bottom": "0.25rem",
-              }}
+              class={styles.input}
             />
             <Command.List hideScrollbar>
               <TagRows tags={props.tags} onChange={props.onChange} />

@@ -37,6 +37,21 @@
   }
 }
 
+.select {
+  flex: 1;
+}
+
+.buttonRow {
+  display: flex;
+  flex-direction: row-reverse;
+  gap: var(--s4);
+  margin-block-start: var(--s4);
+}
+
+.submit {
+  width: 100%;
+}
+
 .label {
   font-size: var(--text-sm);
   color: var(--fg-muted);

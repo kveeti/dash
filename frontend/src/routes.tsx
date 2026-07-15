@@ -1,5 +1,5 @@
 import { type RouteDefinition, Navigate } from "@solidjs/router";
-import { lazy, Suspense } from "solid-js";
+import { type Component, lazy, Suspense } from "solid-js";
 
 import { Layout } from "./features/layout";
 
@@ -16,67 +16,21 @@ const ImportReportPage = lazy(
   () => import("./features/imports/import-report-page"),
 );
 
+const page = (Page: Component) => () => (
+  <Layout>
+    <Suspense fallback={<p>loading…</p>}>
+      <Page />
+    </Suspense>
+  </Layout>
+);
+
 export const routes: RouteDefinition[] = [
-  {
-    path: "/inbox",
-    component: () => (
-      <Layout>
-        <Suspense fallback={<p>loading…</p>}>
-          <InboxPage />
-        </Suspense>
-      </Layout>
-    ),
-  },
-  {
-    path: "/transactions",
-    component: () => (
-      <Layout>
-        <Suspense fallback={<p>transactions page loading...</p>}>
-          <TransactionsPage />
-        </Suspense>
-      </Layout>
-    ),
-  },
-  {
-    path: "/transactions/new",
-    component: () => (
-      <Layout>
-        <Suspense fallback={<p>loading…</p>}>
-          <NewTransactionPage />
-        </Suspense>
-      </Layout>
-    ),
-  },
-  {
-    path: "/stats",
-    component: () => (
-      <Layout>
-        <Suspense fallback={<p>loading…</p>}>
-          <StatsPage />
-        </Suspense>
-      </Layout>
-    ),
-  },
-  {
-    path: "/imports",
-    component: () => (
-      <Layout>
-        <Suspense fallback={<p>loading…</p>}>
-          <ImportsPage />
-        </Suspense>
-      </Layout>
-    ),
-  },
-  {
-    path: "/imports/:id",
-    component: () => (
-      <Layout>
-        <Suspense fallback={<p>loading…</p>}>
-          <ImportReportPage />
-        </Suspense>
-      </Layout>
-    ),
-  },
+  { path: "/inbox", component: page(InboxPage) },
+  { path: "/transactions", component: page(TransactionsPage) },
+  { path: "/transactions/new", component: page(NewTransactionPage) },
+  { path: "/stats", component: page(StatsPage) },
+  { path: "/imports", component: page(ImportsPage) },
+  { path: "/imports/:id", component: page(ImportReportPage) },
   {
     path: "**",
     component: () => <Navigate href="/transactions" />,

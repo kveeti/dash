@@ -1,35 +1,16 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
+import { useMutation, useQuery } from "@tanstack/solid-query";
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
 
 import {
   inboxMatchesQuery,
-  matchInboxRows,
+  matchInboxRowsMutation,
   type InboxMatch,
   type InboxRow,
 } from "../../api/inbox";
+import { formatAmount, formatListDate } from "../../lib/format";
 import { Command } from "../../ui/combobox/command";
-import { formatAmount } from "../transactions/transaction-row";
 
 import styles from "./match-transactions-dialog.module.css";
-
-const shortDateFmt = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-
-const longDateFmt = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  return date.getFullYear() === new Date().getFullYear()
-    ? shortDateFmt.format(date)
-    : longDateFmt.format(date);
-}
 
 export function MatchTransactionsDialog(props: {
   id?: string;
@@ -50,15 +31,7 @@ export function MatchTransactionsDialog(props: {
     ...inboxMatchesQuery(activeID(), search()),
     enabled: Boolean(props.id),
   }));
-  const queryClient = useQueryClient();
-  const match = useMutation(() => ({
-    mutationFn: (matchId: string) => matchInboxRows(activeID(), matchId),
-    onSuccess: () => {
-      props.onClose();
-      queryClient.invalidateQueries({ queryKey: ["inbox"] });
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-    },
-  }));
+  const match = useMutation(matchInboxRowsMutation);
 
   createEffect(() => {
     if (!props.id) return;
@@ -105,7 +78,12 @@ export function MatchTransactionsDialog(props: {
                     <Command.Item
                       class={`${styles.transactionRow} ${styles.matchRow}`}
                       value={row.id}
-                      onSelect={() => match.mutate(row.id)}
+                      onSelect={() =>
+                        match.mutate(
+                          { id: activeID(), matchId: row.id },
+                          { onSuccess: () => props.onClose() },
+                        )
+                      }
                     >
                       <span class={styles.who}>
                         {row.counterparty || row.description || "—"}
@@ -113,7 +91,7 @@ export function MatchTransactionsDialog(props: {
                       <MatchAmount source={data().source} match={row} />
                       <span class={styles.meta}>
                         {row.kind === "exchange" ? "Exchange" : "Transfer"} ·{" "}
-                        {formatDate(row.date)}
+                        {formatListDate(row.date)}
                       </span>
                       <span class={styles.account}>{row.account}</span>
                     </Command.Item>
@@ -160,7 +138,7 @@ function Source(props: { row: InboxRow }) {
       <span class={styles.amount}>
         {formatAmount(props.row.amount, props.row.currency)}
       </span>
-      <span class={styles.meta}>{formatDate(props.row.date)}</span>
+      <span class={styles.meta}>{formatListDate(props.row.date)}</span>
       <span class={styles.account}>{props.row.account}</span>
     </section>
   );

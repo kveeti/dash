@@ -29,15 +29,6 @@ export type TransactionRow =
       legs: { name: string; amount: number; currency: string }[];
     };
 
-export function formatAmount(amount: number, currency: string): string {
-  const formatter = new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-  });
-  const digits = formatter.resolvedOptions().maximumFractionDigits;
-  return formatter.format(amount / 10 ** digits);
-}
-
 export function toTransactionRow(txn: Transaction): TransactionRow {
   const name = (p: Posting) => p.bucket.name;
   const kind = (p: Posting) => p.bucket.kind;

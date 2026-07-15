@@ -1,36 +1,24 @@
 import { useSearchParams } from "@solidjs/router";
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/solid-query";
-import { createSignal, For, Match, Show, Switch } from "solid-js";
+import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/solid-query";
+import { For, Match, Show, Switch } from "solid-js";
 
-import { bucketsQuery, createBucket } from "../../api/buckets";
-import { categorizeInbox, inboxQuery, type InboxRow } from "../../api/inbox";
+import { bucketsQuery, useCreateBucket } from "../../api/buckets";
+import {
+  categorizeInboxMutation,
+  inboxQuery,
+  type InboxRow,
+} from "../../api/inbox";
+import { formatAmount, formatListDate } from "../../lib/format";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { Combobox } from "../../ui/combobox/combobox";
 import { Filterbar } from "../list-page/filterbar";
 import { FloatingBar } from "../list-page/floating-bar";
+import { createSelection } from "../list-page/selection";
 import { CategoryMenu } from "../transactions/bucket-combobox";
-import { formatAmount } from "../transactions/transaction-row";
 import { MatchTransactionsDialog } from "./match-transactions-dialog";
 
 import shell from "../list-page/list-page.module.css";
 import styles from "./inbox-page.module.css";
-
-const shortDateFmt = new Intl.DateTimeFormat(undefined, {
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
-
-const longDateFmt = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
 
 export default function InboxPage() {
   const [params, setParams] = useSearchParams<{
@@ -47,7 +35,7 @@ export default function InboxPage() {
 
   const inbox = useInfiniteQuery(() => inboxQuery(params.q ?? ""));
   const buckets = useQuery(bucketsQuery);
-  const queryClient = useQueryClient();
+  const createBucket = useCreateBucket();
 
   const items = () => inbox.data!.pages.flatMap((p) => p.rows);
 
@@ -58,51 +46,20 @@ export default function InboxPage() {
         !b.hidden,
     );
 
-  const onCreate = (kind: "expense" | "person") => async (name: string) => {
-    const bucket = await createBucket({ kind, name });
-    await queryClient.invalidateQueries({ queryKey: ["buckets"] });
-    return bucket;
-  };
+  const onCreate = (kind: "expense" | "person") => (name: string) =>
+    createBucket({ kind, name });
 
-  const [selectMode, setSelectMode] = createSignal(false);
-  const [selected, setSelected] = createSignal(new Set<string>());
+  const {
+    selectMode,
+    setSelectMode,
+    selected,
+    toggle,
+    clearSelection,
+    exitSelect,
+    drop,
+  } = createSelection();
 
-  const clearSelection = () => setSelected(new Set<string>());
-
-  const exitSelect = () => {
-    setSelectMode(false);
-    clearSelection();
-  };
-
-  const dropSelected = (ids: string[]) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.delete(id);
-      return next;
-    });
-
-  const refresh = (ids: string[]) => {
-    queryClient.invalidateQueries({ queryKey: ["inbox"] });
-    queryClient.invalidateQueries({ queryKey: ["transactions"] });
-    dropSelected(ids);
-  };
-
-  const categorize = useMutation(() => ({
-    mutationFn: ({ ids, bucketId }: { ids: string[]; bucketId: string }) =>
-      categorizeInbox(ids, bucketId),
-    onSuccess: (_data, { ids }) => refresh(ids),
-  }));
-
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const thisYear = new Date().getFullYear();
-  let prevDateFormatted: string | null = null;
+  const categorize = useMutation(categorizeInboxMutation);
 
   return (
     <div class={shell.wrapper}>
@@ -135,14 +92,11 @@ export default function InboxPage() {
                 </p>
               }
             >
-              {(row) => {
-                const dateConverted = new Date(row.date);
-                const showYear = dateConverted.getFullYear() !== thisYear;
-                const dateFormatted = showYear
-                  ? longDateFmt.format(dateConverted)
-                  : shortDateFmt.format(dateConverted);
-                const showDateHeader = dateFormatted !== prevDateFormatted;
-                prevDateFormatted = dateFormatted;
+              {(row, i) => {
+                const dateFormatted = formatListDate(row.date);
+                const prev = items()[i() - 1];
+                const showDateHeader =
+                  !prev || formatListDate(prev.date) !== dateFormatted;
 
                 return (
                   <>
@@ -175,7 +129,10 @@ export default function InboxPage() {
                               <CategoryMenu
                                 buckets={categoriesAndPeople()}
                                 onChange={(bucketId) =>
-                                  categorize.mutate({ ids: [row.id], bucketId })
+                                  categorize.mutate(
+                                    { ids: [row.id], bucketId },
+                                    { onSuccess: () => drop([row.id]) },
+                                  )
                                 }
                                 onCreate={onCreate("expense")}
                                 onCreatePerson={onCreate("person")}
@@ -210,9 +167,13 @@ export default function InboxPage() {
             categories={categoriesAndPeople()}
             onClear={clearSelection}
             onExit={exitSelect}
-            onCategorize={(bucketId) =>
-              categorize.mutate({ ids: [...selected()], bucketId })
-            }
+            onCategorize={(bucketId) => {
+              const ids = [...selected()];
+              categorize.mutate(
+                { ids, bucketId },
+                { onSuccess: () => drop(ids) },
+              );
+            }}
             onCreate={onCreate("expense")}
             onCreatePerson={onCreate("person")}
           />

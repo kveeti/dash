@@ -1,11 +1,11 @@
 import { createForm, Field as FormField, Form } from "@formisch/solid";
 import { A, useNavigate } from "@solidjs/router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query";
+import { useMutation, useQuery } from "@tanstack/solid-query";
 import { For, Match, Show, Switch } from "solid-js";
 import * as v from "valibot";
 
-import { bucketsQuery, createBucket } from "../../api/buckets";
-import { createImport, importsQuery } from "../../api/imports";
+import { bucketsQuery, useCreateBucket } from "../../api/buckets";
+import { createImportMutation, importsQuery } from "../../api/imports";
 import { Button } from "../../ui/button/button";
 import { Field, InputGroup } from "../../ui/input/input";
 import { BucketCombobox } from "../transactions/bucket-combobox";
@@ -52,7 +52,7 @@ export default function ImportsPage() {
 
 function ImportForm() {
   const buckets = useQuery(bucketsQuery);
-  const queryClient = useQueryClient();
+  const createBucket = useCreateBucket();
   const navigate = useNavigate();
 
   const form = createForm({
@@ -65,30 +65,19 @@ function ImportForm() {
       (b) => (b.kind === "asset" || b.kind === "liability") && !b.hidden,
     ) ?? [];
 
-  const onCreate = async (name: string) => {
-    const bucket = await createBucket({ kind: "asset", name });
-    await queryClient.invalidateQueries({ queryKey: ["buckets"] });
-    return bucket;
-  };
+  const onCreate = (name: string) => createBucket({ kind: "asset", name });
 
-  const mutation = useMutation(() => ({
-    mutationFn: createImport,
-    onSuccess: async (res) => {
-      await queryClient.invalidateQueries({ queryKey: ["imports"] });
-      await queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      await queryClient.invalidateQueries({ queryKey: ["balances"] });
-      navigate(`/imports/${res.batch_id}`);
-    },
-  }));
+  const mutation = useMutation(createImportMutation);
 
   const onSubmit = async (values: v.InferOutput<typeof schema>) => {
     try {
-      await mutation.mutateAsync({
+      const res = await mutation.mutateAsync({
         file: values.file,
         bucketId: values.bucket,
         format: values.format,
         timezone: values.timezone,
       });
+      navigate(`/imports/${res.batch_id}`);
     } catch {
       // surfaced via mutation.isError below
     }
@@ -132,7 +121,7 @@ function ImportForm() {
                 <InputGroup>
                   <select
                     {...formatField.props}
-                    style={{ flex: "1" }}
+                    class={styles.select}
                     value={formatField.input ?? ""}
                   >
                     <option value="nordea">Nordea</option>
@@ -153,7 +142,7 @@ function ImportForm() {
                       <InputGroup>
                         <select
                           {...field.props}
-                          style={{ flex: "1" }}
+                          class={styles.select}
                           value={field.input ?? ""}
                         >
                           <For each={timezones}>
@@ -173,27 +162,15 @@ function ImportForm() {
           <p>error: {mutation.error?.message}</p>
         </Show>
 
-        <div
-          style={{
-            display: "flex",
-            "flex-direction": "row-reverse",
-            gap: "1rem",
-            "margin-block-start": "1rem",
-          }}
-        >
+        <div class={styles.buttonRow}>
           <Button
             type="submit"
             disabled={form.isSubmitting}
-            style={{ width: "100%" }}
+            class={styles.submit}
           >
             Import
           </Button>
-          <Button
-            type="reset"
-            variant="ghost"
-            disabled={form.isSubmitting}
-            style={{ width: "unset" }}
-          >
+          <Button type="reset" variant="ghost" disabled={form.isSubmitting}>
             Reset
           </Button>
         </div>

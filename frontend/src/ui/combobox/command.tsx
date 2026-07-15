@@ -176,11 +176,10 @@ type State = {
 
 type Store = {
   state: State;
-  snapshot: () => State;
   setState: <K extends keyof State>(
     key: K,
     value: State[K],
-    opts?: any,
+    opts?: boolean,
   ) => void;
 };
 
@@ -202,14 +201,11 @@ const defaultFilter: NonNullable<CommandRootProps["filter"]> = (
   keywords,
 ) => score(value, search, keywords);
 
-// @ts-ignore
-const CommandContext = createContext<Context>(undefined);
+const CommandContext = createContext<Context>();
 const useCommand = () => useContext(CommandContext)!;
-// @ts-ignore
-const StoreContext = createContext<Store>(undefined);
+const StoreContext = createContext<Store>();
 const useStore = () => useContext(StoreContext)!;
-// @ts-ignore
-const GroupContext = createContext<Accessor<Group>>(undefined);
+const GroupContext = createContext<Accessor<Group>>();
 
 const Command: Component<CommandRootProps> = (props) => {
   const [state, setState] = createStore<State>({
@@ -303,7 +299,6 @@ const Command: Component<CommandRootProps> = (props) => {
 
   const store: Store = {
     state,
-    snapshot: () => trackDeep(state),
     setState: (key, value, opts) => {
       if (Object.is(state[key], value)) return;
       setState(key, value);
@@ -558,8 +553,7 @@ const Command: Component<CommandRootProps> = (props) => {
       {...etc}
       cmdk-root=""
       onKeyDown={(e) => {
-        //@ts-ignore
-        etc.onKeyDown?.(e);
+        if (typeof etc.onKeyDown === "function") etc.onKeyDown(e);
 
         if (!e.defaultPrevented) {
           switch (e.key) {
@@ -892,12 +886,10 @@ const Input: Component<CommandInputProps> = (props) => {
       value={isControlled() ? props.value : search()}
       onInput={(e) => {
         if (!isControlled()) {
-          //@ts-ignore
-          store.setState("search", e.target.value);
+          store.setState("search", e.currentTarget.value);
         }
 
-        //@ts-ignore
-        localProps.onValueChange?.(e.target.value);
+        localProps.onValueChange?.(e.currentTarget.value);
       }}
     />
   );
@@ -939,10 +931,10 @@ const List: ParentComponent<CommandListProps> = (props) => {
       });
     });
     observer.observe(el);
-    return () => {
+    onCleanup(() => {
       cancelAnimationFrame(animationFrame);
       observer.unobserve(el);
-    };
+    });
   });
 
   return (
@@ -957,15 +949,13 @@ const List: ParentComponent<CommandListProps> = (props) => {
       aria-label={localProps.label}
       id={context.listId}
     >
-      {SlottableWithNestedChildren(props, (child) => (
-        <div
-          ref={mergeRefs((el) => (height = el), context.setListInnerRef)}
-          cmdk-list-sizer=""
-          style={{ display: "flex", "flex-direction": "column" }}
-        >
-          {child}
-        </div>
-      ))}
+      <div
+        ref={mergeRefs((el) => (height = el), context.setListInnerRef)}
+        cmdk-list-sizer=""
+        style={{ display: "flex", "flex-direction": "column" }}
+      >
+        {props.children}
+      </div>
     </div>
   );
 };
@@ -1052,9 +1042,7 @@ const Loading: ParentComponent<CommandLoadingProps> = (props) => {
       aria-valuemax={100}
       aria-label={localProps.label}
     >
-      {SlottableWithNestedChildren(props, (child) => (
-        <div aria-hidden>{child}</div>
-      ))}
+      <div aria-hidden>{props.children}</div>
     </div>
   );
 };
@@ -1142,21 +1130,6 @@ const useScheduleLayoutEffect = () => {
     ss(s() + 1);
   };
 };
-
-function SlottableWithNestedChildren(
-  props: { asChild?: boolean; children?: JSX.Element },
-  render: (child: JSX.Element) => JSX.Element,
-) {
-  //? Removed because I don't know what it does. Some kind of polymorphism
-  /*if (props.asChild && React.isValidElement(children)) {
-    return React.cloneElement(
-      renderChildren(children),
-      { ref: (children as any).ref },
-      render(children.props.children),
-    )
-  }*/
-  return render(props.children);
-}
 
 const srOnlyStyles = {
   position: "absolute",
