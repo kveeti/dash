@@ -53,6 +53,17 @@ func postTransaction(t *testing.T, app *testApp, postings []map[string]any) *htt
 	})
 }
 
+func requirePostingBucket(t *testing.T, postings []postingResponse, id, name string, kind data.BucketKind) {
+	t.Helper()
+	for _, posting := range postings {
+		if posting.Bucket.ID == id {
+			require.Equal(t, postingBucketResponse{ID: id, Name: name, Kind: kind}, posting.Bucket)
+			return
+		}
+	}
+	t.Fatalf("no posting for bucket %s", id)
+}
+
 func createTransaction(t *testing.T, app *testApp, postings []map[string]any) string {
 	t.Helper()
 	resp := postTransaction(t, app, postings)
@@ -72,13 +83,19 @@ func TestCreateBalancedTransaction(t *testing.T) {
 		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
 	})
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var created transactionResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
+	requirePostingBucket(t, created.Postings, bank, "Bank", data.KindAsset)
+	requirePostingBucket(t, created.Postings, groceries, "Groceries", data.KindExpense)
 
 	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 1)
-	require.Equal(t, "2026-07-01T00:00:00Z", txns[0]["date"])
-	require.Len(t, txns[0]["postings"], 2)
+	var listed transactionsResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&listed))
+	require.Len(t, listed.Transactions, 1)
+	require.Equal(t, "2026-07-01T00:00:00Z", listed.Transactions[0].Date)
+	requirePostingBucket(t, listed.Transactions[0].Postings, bank, "Bank", data.KindAsset)
+	requirePostingBucket(t, listed.Transactions[0].Postings, groceries, "Groceries", data.KindExpense)
 }
 
 func TestCounterpartyRoundTrips(t *testing.T) {
@@ -115,6 +132,10 @@ func TestCounterpartyRoundTrips(t *testing.T) {
 		},
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var updated transactionResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updated))
+	requirePostingBucket(t, updated.Postings, bank, "Bank", data.KindAsset)
+	requirePostingBucket(t, updated.Postings, groceries, "Groceries", data.KindExpense)
 
 	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
 	txns = decodeTxns(t, resp)

@@ -33,9 +33,16 @@ type Transaction struct {
 	CreatedAt    time.Time
 }
 
+type PostingBucket struct {
+	ID   string
+	Name string
+	Kind BucketKind
+}
+
 type Posting struct {
 	ID       string
 	BucketID string
+	Bucket   PostingBucket `json:"-"`
 	Amount   int64
 	Currency string
 	MirrorID *string
@@ -57,14 +64,16 @@ func (d *Data) CreateTransaction(ctx context.Context, txn Transaction, postings 
 	if err := validatePostingCurrencies(ctx, tx, postings); err != nil {
 		return nil, nil, err
 	}
-	owned, err := ownedBucketIDs(ctx, tx, txn.OwnerUserID)
+	owned, err := ownedBuckets(ctx, tx, txn.OwnerUserID)
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, p := range postings {
-		if !owned[p.BucketID] {
+	for i := range postings {
+		bucket, ok := owned[postings[i].BucketID]
+		if !ok {
 			return nil, nil, ErrInvalidBucket
 		}
+		postings[i].Bucket = bucket
 	}
 
 	if err := insertTransactionTx(ctx, tx, &txn, postings); err != nil {
@@ -129,14 +138,16 @@ func (d *Data) UpdateTransaction(ctx context.Context, userID, txnID string, date
 		return nil, nil, err
 	}
 
-	owned, err := ownedBucketIDs(ctx, tx, userID)
+	owned, err := ownedBuckets(ctx, tx, userID)
 	if err != nil {
 		return nil, nil, err
 	}
-	for _, p := range postings {
-		if !owned[p.BucketID] {
+	for i := range postings {
+		bucket, ok := owned[postings[i].BucketID]
+		if !ok {
 			return nil, nil, ErrInvalidBucket
 		}
+		postings[i].Bucket = bucket
 	}
 
 	if err := auditWrite(ctx, tx, userID, "transactions", txnID, "update", old); err != nil {
@@ -324,20 +335,20 @@ func validatePostings(postings []Posting) error {
 	return nil
 }
 
-func ownedBucketIDs(ctx context.Context, tx *sql.Tx, ownerID string) (map[string]bool, error) {
-	rows, err := tx.QueryContext(ctx, "select id from buckets where owner_user_id = $1", ownerID)
+func ownedBuckets(ctx context.Context, tx *sql.Tx, ownerID string) (map[string]PostingBucket, error) {
+	rows, err := tx.QueryContext(ctx, "select id, name, kind from buckets where owner_user_id = $1", ownerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	owned := map[string]bool{}
+	owned := map[string]PostingBucket{}
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var bucket PostingBucket
+		if err := rows.Scan(&bucket.ID, &bucket.Name, &bucket.Kind); err != nil {
 			return nil, err
 		}
-		owned[id] = true
+		owned[bucket.ID] = bucket
 	}
 	return owned, rows.Err()
 }
@@ -379,9 +390,10 @@ func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate t
 			limit `+strconv.Itoa(TransactionPageSize)+`
 		)
 		select page.id, page.owner_user_id, page.date, page.counterparty, page.description, page.created_at,
-		       p.id, p.bucket_id, p.amount, p.currency, p.mirror_id
+		       p.id, p.bucket_id, b.name, b.kind, p.amount, p.currency, p.mirror_id
 		from page
 		join postings p on p.transaction_id = page.id
+		join buckets b on b.id = p.bucket_id
 		where `+visiblePostings+`
 		order by page.date desc, page.id desc, p.created_at`, args...)
 	if err != nil {
@@ -397,9 +409,10 @@ func (d *Data) ListTransactions(ctx context.Context, userID string, cursorDate t
 		var p Posting
 		var txnID string
 		if err := rows.Scan(&t.ID, &t.OwnerUserID, &t.Date, &t.Counterparty, &t.Description, &t.CreatedAt,
-			&p.ID, &p.BucketID, &p.Amount, &p.Currency, &p.MirrorID); err != nil {
+			&p.ID, &p.Bucket.ID, &p.Bucket.Name, &p.Bucket.Kind, &p.Amount, &p.Currency, &p.MirrorID); err != nil {
 			return nil, nil, err
 		}
+		p.BucketID = p.Bucket.ID
 		txnID = t.ID
 		if !seen[txnID] {
 			seen[txnID] = true

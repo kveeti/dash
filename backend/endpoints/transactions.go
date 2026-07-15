@@ -19,11 +19,17 @@ type postingBody struct {
 	Currency string `json:"currency"`
 }
 
+type postingBucketResponse struct {
+	ID   string          `json:"id"`
+	Name string          `json:"name"`
+	Kind data.BucketKind `json:"kind"`
+}
+
 type postingResponse struct {
-	ID       string `json:"id"`
-	BucketID string `json:"bucket_id"`
-	Amount   int64  `json:"amount"`
-	Currency string `json:"currency"`
+	ID       string                `json:"id"`
+	Bucket   postingBucketResponse `json:"bucket"`
+	Amount   int64                 `json:"amount"`
+	Currency string                `json:"currency"`
 }
 
 type transactionResponse struct {
@@ -58,7 +64,12 @@ func parseCursor(r *http.Request) (time.Time, string, error) {
 }
 
 func toPostingResponse(p data.Posting) postingResponse {
-	return postingResponse{ID: p.ID, BucketID: p.BucketID, Amount: p.Amount, Currency: p.Currency}
+	return postingResponse{
+		ID:       p.ID,
+		Bucket:   postingBucketResponse{ID: p.Bucket.ID, Name: p.Bucket.Name, Kind: p.Bucket.Kind},
+		Amount:   p.Amount,
+		Currency: p.Currency,
+	}
 }
 
 func decodeTransactionBody(r *http.Request) (time.Time, string, string, []data.Posting, error) {

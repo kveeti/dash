@@ -1,4 +1,3 @@
-import type { Bucket } from "../../api/buckets";
 import type { Posting, Transaction } from "../../api/transactions";
 
 export type TransactionRow =
@@ -39,12 +38,9 @@ export function formatAmount(amount: number, currency: string): string {
   return formatter.format(amount / 10 ** digits);
 }
 
-export function toTransactionRow(
-  txn: Transaction,
-  buckets: Map<string, Bucket>,
-): TransactionRow {
-  const name = (p: Posting) => buckets.get(p.bucket_id)!.name;
-  const kind = (p: Posting) => buckets.get(p.bucket_id)!.kind;
+export function toTransactionRow(txn: Transaction): TransactionRow {
+  const name = (p: Posting) => p.bucket.name;
+  const kind = (p: Posting) => p.bucket.kind;
 
   const categoryLegs = txn.postings.filter(
     (p) =>

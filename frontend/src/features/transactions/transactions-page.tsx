@@ -7,7 +7,7 @@ import {
 } from "@tanstack/solid-query";
 import { createSignal, For, Match, Show, Switch } from "solid-js";
 
-import { bucketsQuery, createBucket, type Bucket } from "../../api/buckets";
+import { bucketsQuery, createBucket } from "../../api/buckets";
 import {
   addTransactionTag,
   bulkCategorize,
@@ -58,9 +58,6 @@ export default function TransactionsPage() {
   const queryClient = useQueryClient();
 
   const allTxns = () => transactions.data!.pages.flatMap((p) => p.transactions);
-
-  const bucketsById = () =>
-    new Map(buckets.data!.map((b) => [b.id, b] as [string, Bucket]));
 
   const mutation = useMutation(() => ({
     mutationFn: deleteTransaction,
@@ -186,7 +183,6 @@ export default function TransactionsPage() {
                         <div class={`${shell.slide} ${styles.rowContent}`}>
                           <Row
                             txn={txn}
-                            buckets={bucketsById()}
                             onFilterTag={(value) =>
                               setParams({ tag: value }, { replace: true })
                             }
@@ -239,12 +235,8 @@ export default function TransactionsPage() {
   );
 }
 
-function Row(props: {
-  txn: Transaction;
-  buckets: Map<string, Bucket>;
-  onFilterTag: (tag: string) => void;
-}) {
-  const row = () => toTransactionRow(props.txn, props.buckets);
+function Row(props: { txn: Transaction; onFilterTag: (tag: string) => void }) {
+  const row = () => toTransactionRow(props.txn);
 
   return (
     <Switch>

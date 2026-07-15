@@ -4,11 +4,16 @@ import {
   queryOptions,
 } from "@tanstack/solid-query";
 
+import type { BucketKind } from "./buckets";
 import { api } from "./http";
 
 export interface Posting {
   id: string;
-  bucket_id: string;
+  bucket: {
+    id: string;
+    name: string;
+    kind: BucketKind;
+  };
   amount: number;
   currency: string;
 }
