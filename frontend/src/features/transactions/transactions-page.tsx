@@ -44,6 +44,16 @@ export default function TransactionsPage() {
   };
 
   const selection = useSelection();
+  const transactions = useInfiniteTransactionsQuery({
+    searchQuery: searchQuery || undefined,
+    tag: tag || undefined,
+  });
+  const txns =
+    transactions.data?.pages.flatMap((page) => page.transactions) ?? [];
+  const visibleIds = txns.map((txn) => txn.id);
+  const allVisibleSelected =
+    visibleIds.length > 0 &&
+    visibleIds.every((id) => selection.selected.has(id));
 
   return (
     <div className={listShell.wrapper}>
@@ -53,17 +63,19 @@ export default function TransactionsPage() {
         onSelectMode={(on) =>
           on ? selection.setSelectMode(true) : selection.exitSelect()
         }
+        allVisibleSelected={allVisibleSelected}
+        onToggleAll={() =>
+          allVisibleSelected
+            ? selection.drop(visibleIds)
+            : selection.select(visibleIds)
+        }
         search={searchQuery || undefined}
         onSearch={(value) => setParam("q", value)}
         tag={tag || undefined}
         onClearTag={() => setParam("tag", undefined)}
       />
 
-      <List
-        selection={selection}
-        searchQuery={searchQuery || undefined}
-        tag={tag || undefined}
-      />
+      <List selection={selection} transactions={transactions} txns={txns} />
 
       <FloatingBar selection={selection} />
     </div>
@@ -72,25 +84,19 @@ export default function TransactionsPage() {
 
 function List(props: {
   selection: UseSelectionReturn;
-  searchQuery?: string;
-  tag?: string;
+  transactions: ReturnType<typeof useInfiniteTransactionsQuery>;
+  txns: Transaction[];
 }) {
   const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
 
-  const transactions = useInfiniteTransactionsQuery({
-    searchQuery: props.searchQuery,
-    tag: props.tag,
-  });
-
-  if (transactions.isLoading || i18nLoading) {
+  if (props.transactions.isLoading || i18nLoading) {
     return <ListSkeleton twoLine />;
   }
-  if (transactions.isError || i18nError) {
+  if (props.transactions.isError || i18nError) {
     return <p className={listShell.col}>error loading transactions</p>;
   }
 
-  const txns = transactions.data.pages.flatMap((p) => p.transactions);
-  if (!txns.length) {
+  if (!props.txns.length) {
     return <p className={listShell.col}>no transactions yet</p>;
   }
 
@@ -106,7 +112,7 @@ function List(props: {
   return (
     <>
       <ul className={listShell.list}>
-        {txns.map((txn) => {
+        {props.txns.map((txn) => {
           const dateFormatted = filterDate(txn.date);
           const showDateHeader = dateFormatted !== prevDate;
           prevDate = dateFormatted;
@@ -151,15 +157,16 @@ function List(props: {
         })}
       </ul>
 
-      {transactions.hasNextPage && (
+      {props.transactions.hasNextPage && (
         <button
           type="button"
           className={listShell.col}
           onClick={() => {
-            if (!transactions.isFetchingNextPage) transactions.fetchNextPage();
+            if (!props.transactions.isFetchingNextPage)
+              props.transactions.fetchNextPage();
           }}
         >
-          {transactions.isFetchingNextPage ? "loading…" : "Load older"}
+          {props.transactions.isFetchingNextPage ? "loading…" : "Load older"}
         </button>
       )}
     </>

@@ -19,6 +19,9 @@ export function useSelection() {
       return next;
     });
 
+  const select = (ids: string[]) =>
+    setSelected((prev) => new Set([...prev, ...ids]));
+
   const drop = (ids: string[]) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -31,6 +34,7 @@ export function useSelection() {
     setSelectMode,
     selected,
     toggle,
+    select,
     clearSelection,
     exitSelect,
     drop,

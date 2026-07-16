@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 
 import inputStyles from "../../ui/input/input.module.css";
@@ -9,6 +10,8 @@ export function Filterbar(props: {
   selectLabel: string;
   selectMode: boolean;
   onSelectMode: (on: boolean) => void;
+  allVisibleSelected: boolean;
+  onToggleAll: () => void;
   search?: string;
   onSearch: (value: string | undefined) => void;
   tag?: string;
@@ -25,6 +28,16 @@ export function Filterbar(props: {
           checked={props.selectMode}
           onChange={(e) => props.onSelectMode(e.currentTarget.checked)}
         />
+        {props.selectMode && (
+          <Button
+            type="button"
+            variant="ghost"
+            style={{ padding: "0.5rem" }}
+            onClick={props.onToggleAll}
+          >
+            {props.allVisibleSelected ? "Deselect all" : "Select all"}
+          </Button>
+        )}
         {props.tag && (
           <button
             className={styles.activeFilter}

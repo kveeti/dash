@@ -129,7 +129,7 @@
   width: 100%;
   margin-inline: auto;
   display: flex;
-  gap: var(--s4);
+  gap: var(--s2);
   align-items: center;
   height: var(--filter-bar-height);
 

@@ -32,6 +32,12 @@ import styles from "./inbox-page.module.css";
 export default function InboxPage() {
   const searchQuery = useSearchParam("q");
   const selection = useSelection();
+  const inboxQuery = useInfiniteInboxQuery({ searchQuery });
+  const inboxItems = inboxQuery.data?.pages.flatMap((p) => p.rows) ?? [];
+  const visibleIds = inboxItems.map((item) => item.id);
+  const allVisibleSelected =
+    visibleIds.length > 0 &&
+    visibleIds.every((id) => selection.selected.has(id));
 
   return (
     <div className={listShell.wrapper}>
@@ -41,12 +47,23 @@ export default function InboxPage() {
         onSelectMode={(on) =>
           on ? selection.setSelectMode(true) : selection.exitSelect()
         }
+        allVisibleSelected={allVisibleSelected}
+        onToggleAll={() =>
+          allVisibleSelected
+            ? selection.drop(visibleIds)
+            : selection.select(visibleIds)
+        }
         search={searchQuery || undefined}
         onSearch={(value) => setSearchParam("q", value, { replace: true })}
       />
 
       <MatchTransactions>
-        <List selection={selection} searchQuery={searchQuery} />
+        <List
+          selection={selection}
+          searchQuery={searchQuery}
+          inboxQuery={inboxQuery}
+          inboxItems={inboxItems}
+        />
       </MatchTransactions>
 
       <FloatingBar selection={selection} />
@@ -57,20 +74,18 @@ export default function InboxPage() {
 function List(props: {
   selection: UseSelectionReturn;
   searchQuery: string | null;
+  inboxQuery: ReturnType<typeof useInfiniteInboxQuery>;
+  inboxItems: InboxItem[];
 }) {
   const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
   const matchContext = useMatchTransactions();
 
-  const inboxQuery = useInfiniteInboxQuery({ searchQuery: props.searchQuery });
-
-  if (inboxQuery.isLoading || i18nLoading) {
+  if (props.inboxQuery.isLoading || i18nLoading) {
     return <ListSkeleton />;
   }
-  if (inboxQuery.isError || i18nError) {
+  if (props.inboxQuery.isError || i18nError) {
     return <p className={listShell.col}>error loading inbox</p>;
   }
-
-  const inboxItems = inboxQuery.data?.pages.flatMap((p) => p.rows) ?? [];
 
   let prevDate: string | null = null;
 
@@ -84,9 +99,9 @@ function List(props: {
 
   return (
     <BucketComboRoot onMatchAction={matchContext.openMatchingTo}>
-      {inboxItems?.length ? (
+      {props.inboxItems.length ? (
         <ul className={listShell.list}>
-          {inboxItems.map((item) => {
+          {props.inboxItems.map((item) => {
             const dateFormatted = formatDate(item.date);
             const showDateHeader = dateFormatted !== prevDate;
             prevDate = dateFormatted;
