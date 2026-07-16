@@ -41,8 +41,6 @@
           '';
 
           shellHook = ''
-            echo "Setting up ${pkgs.postgresql_18.name}"
-
             if [ -f .env ]; then
               set -a
               source .env
@@ -62,31 +60,29 @@
             export PORT="$(free_port "''${PORT:-8000}")"
             export VITE_PORT="$(free_port "''${VITE_PORT:-3000}" "$PORT")"
             export DEVIDP_PORT="$(free_port "''${DEVIDP_PORT:-5557}" "$PORT" "$VITE_PORT")"
+
             if pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
               export PGPORT="$(awk 'NR == 4 { print; exit }' "$PGDATA/postmaster.pid")"
             else
+              echo "Setting up ${pkgs.postgresql_18.name}"
               export PGPORT="$(free_port "''${PGPORT:-5556}" "$PORT" "$VITE_PORT" "$DEVIDP_PORT")"
+
+              if [ ! -f "$PGDATA/PG_VERSION" ]; then
+                echo "Initializing database..."
+                initdb -D "$PGDATA" -U postgres
+                cat "$postgresConf" >> "$PGDATA/postgresql.conf"
+              fi
+
+              pg_ctl -D "$PGDATA" -o "-k $PGDATA" start
             fi
 
+            export PGHOST="$PGDATA"
             export BACKEND_URL="http://localhost:$PORT"
             export DEV_VITE_URL="http://localhost:$VITE_PORT"
             export DEVIDP_ISSUER="http://localhost:$DEVIDP_PORT"
             export DB_URL="postgres://postgres:postgres@localhost:$PGPORT/postgres"
 
             echo "Ports: backend $PORT, frontend $VITE_PORT, IdP $DEVIDP_PORT, Postgres $PGPORT"
-
-            mkdir -p "$PGDATA"
-            export PGHOST="$PGDATA"
-
-            if [ ! -f "$PGDATA/PG_VERSION" ]; then
-              echo "Initializing database..."
-              pg_ctl initdb -D "$PGDATA" -o "-U postgres"
-              cat "$postgresConf" >> "$PGDATA/postgresql.conf"
-            fi
-
-            if ! pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
-              pg_ctl -D "$PGDATA" -o "-k $PGDATA" start
-            fi
 
             alias fin="pg_ctl -D $PGDATA stop && exit"
             alias pg="psql -U postgres -d postgres"
