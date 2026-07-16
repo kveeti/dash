@@ -37,11 +37,6 @@
 
 .tabs {
   grid-column: 1 / -1;
-
-  /* desktop controls are a flex column: tabs first, custom dates below them */
-  @media (min-width: 35rem) {
-    order: -1;
-  }
 }
 
 .customDates {

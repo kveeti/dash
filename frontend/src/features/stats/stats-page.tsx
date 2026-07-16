@@ -213,7 +213,22 @@ export default function StatsPage() {
   return (
     <div className={styles.page}>
       <header className={styles.controls}>
-        {period === "custom" && (
+        <div className={styles.tabs} aria-label="Stats period">
+          {(["week", "month", "year", "custom"] as StatsPeriod[]).map(
+            (value) => (
+              <button
+                key={value}
+                data-label={value}
+                className={period === value ? styles.active : undefined}
+                onClick={() => setPeriod(value)}
+              >
+                {value}
+              </button>
+            ),
+          )}
+        </div>
+
+        {period === "custom" ? (
           <div className={styles.customDates}>
             <input
               className={inputStyles.control}
@@ -233,39 +248,24 @@ export default function StatsPage() {
               onInput={(event) => update({ to: event.currentTarget.value })}
             />
           </div>
+        ) : (
+          <div className={styles.periodNav}>
+            <button
+              className={styles.prev}
+              aria-label="Previous period"
+              onClick={() =>
+                update({ anchor: movePeriod(anchor, navPeriod, -1) })
+              }
+            />
+            <button
+              className={`${styles.next}${canGoNext ? "" : ` ${styles.ghost}`}`}
+              aria-label="Next period"
+              onClick={() =>
+                update({ anchor: movePeriod(anchor, navPeriod, 1) })
+              }
+            />
+          </div>
         )}
-
-        <div className={styles.tabs} aria-label="Stats period">
-          {(["week", "month", "year", "custom"] as StatsPeriod[]).map(
-            (value) => (
-              <button
-                key={value}
-                data-label={value}
-                className={period === value ? styles.active : undefined}
-                onClick={() => setPeriod(value)}
-              >
-                {value}
-              </button>
-            ),
-          )}
-        </div>
-
-        <div
-          className={`${styles.periodNav}${period === "custom" ? ` ${styles.ghost}` : ""}`}
-        >
-          <button
-            className={styles.prev}
-            aria-label="Previous period"
-            onClick={() =>
-              update({ anchor: movePeriod(anchor, navPeriod, -1) })
-            }
-          />
-          <button
-            className={`${styles.next}${canGoNext ? "" : ` ${styles.ghost}`}`}
-            aria-label="Next period"
-            onClick={() => update({ anchor: movePeriod(anchor, navPeriod, 1) })}
-          />
-        </div>
 
         <div
           className={`${styles.compare}${canCompareYear ? "" : ` ${styles.ghost}`}`}
