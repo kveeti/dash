@@ -160,6 +160,28 @@ function ImportForm() {
   );
 }
 
+const skeletonRows = [
+  { name: "13rem", meta: "16rem" },
+  { name: "9rem", meta: "20rem" },
+  { name: "11rem", meta: "14rem" },
+];
+
+function PastImportsSkeleton() {
+  return (
+    <ul className={styles.list} aria-hidden="true">
+      {skeletonRows.map((row, i) => (
+        <li key={i} className={styles.skeletonBatch}>
+          <span className={styles.skeletonBar} style={{ inlineSize: row.name }} />
+          <span
+            className={`${styles.skeletonBar} ${styles.skeletonMeta}`}
+            style={{ inlineSize: row.meta }}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function PastImports() {
   const imports = useImportsQuery();
   const buckets = useBucketsQuery();
@@ -167,7 +189,7 @@ function PastImports() {
   const bucketName = (id: string) =>
     buckets.data?.find((b) => b.id === id)?.name ?? id;
 
-  if (imports.isPending || buckets.isPending) return <p>loading…</p>;
+  if (imports.isPending || buckets.isPending) return <PastImportsSkeleton />;
   if (imports.isError) return <p>error: {imports.error.message}</p>;
   if (!imports.data.length) return <p>no imports yet</p>;
 

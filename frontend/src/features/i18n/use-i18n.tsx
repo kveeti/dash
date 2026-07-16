@@ -1,5 +1,6 @@
 import { type ReactNode, useMemo } from "react";
 
+import { useCurrenciesQuery } from "../../api/currencies";
 import { createContext } from "../../lib/create-context";
 
 const [useContext, context] = createContext<ReturnType<typeof useI18nValue>>();
@@ -7,18 +8,21 @@ const [useContext, context] = createContext<ReturnType<typeof useI18nValue>>();
 type Currencies = Array<{ code: string; exponent: number }>;
 
 export const useI18n = useContext;
-export function I18n({
-  children,
-  currencies,
-}: {
-  children: ReactNode;
-  currencies: Currencies;
-}) {
-  const value = useI18nValue({ currencies });
+export function I18n({ children }: { children: ReactNode }) {
+  const currencies = useCurrenciesQuery();
+  const value = useI18nValue({
+    currencies: currencies.data ?? [],
+    isLoading: currencies.isLoading,
+    isError: currencies.isError,
+  });
   return <context.Provider value={value}>{children}</context.Provider>;
 }
 
-function useI18nValue(props: { currencies: Currencies }) {
+function useI18nValue(props: {
+  currencies: Currencies;
+  isLoading: boolean;
+  isError: boolean;
+}) {
   const locale = "fi-FI";
   const timeZone = undefined;
   const hourCycle: 12 | 24 = 24;
@@ -93,6 +97,8 @@ function useI18nValue(props: { currencies: Currencies }) {
   }, [props.currencies, locale]);
 
   return {
+    isLoading: props.isLoading,
+    isError: props.isError,
     f: {
       amount: (amount: number, isoCurrency: string) =>
         formattersByCurrency[isoCurrency].amount(amount),

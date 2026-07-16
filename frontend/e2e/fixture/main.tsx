@@ -10,7 +10,7 @@ import "../../src/index.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={new QueryClient()}>
-      <I18n currencies={[{ code: "EUR", exponent: 2 }]}>
+      <I18n>
         <InboxPage />
       </I18n>
     </QueryClientProvider>

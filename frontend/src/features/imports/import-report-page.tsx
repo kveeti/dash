@@ -11,8 +11,34 @@ import { useI18n } from "../i18n/use-i18n";
 
 import styles from "./imports.module.css";
 
+function ReportSkeleton() {
+  return (
+    <div aria-hidden="true">
+      <h1 className={styles.title}>
+        <span
+          className={styles.skeletonBar}
+          style={{ display: "block", inlineSize: "12rem" }}
+        />
+      </h1>
+      <p className={styles.counts}>
+        <span
+          className={styles.skeletonBar}
+          style={{ display: "block", inlineSize: "16rem" }}
+        />
+      </p>
+      <ul className={styles.list}>
+        {["18rem", "14rem", "20rem"].map((width, i) => (
+          <li key={i} className={styles.dupe}>
+            <span className={styles.skeletonBar} style={{ inlineSize: width }} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function ImportReportPage() {
-  const { f } = useI18n();
+  const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
   const params = useParams();
   const id = params.id!;
   const [, navigate] = useLocation();
@@ -38,8 +64,9 @@ export default function ImportReportPage() {
       deleteMutation.mutate(id, { onSuccess: () => navigate("/imports") });
   };
 
-  if (batch.isPending) return <p>loading…</p>;
-  if (batch.isError) return <p>error: {batch.error.message}</p>;
+  if (batch.isPending || i18nLoading) return <ReportSkeleton />;
+  if (batch.isError || i18nError)
+    return <p>error: {batch.error?.message ?? "loading currencies failed"}</p>;
 
   const data = batch.data;
 

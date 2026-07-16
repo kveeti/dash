@@ -13,6 +13,7 @@ import {
   FloatingBarWrap,
   SelectionCountButton,
 } from "../../lib/list-shell/floating-bar";
+import { ListSkeleton } from "../../lib/list-shell/list-skeleton";
 import {
   useSelection,
   type UseSelectionReturn,
@@ -74,17 +75,17 @@ function List(props: {
   searchQuery?: string;
   tag?: string;
 }) {
-  const { f } = useI18n();
+  const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
 
   const transactions = useInfiniteTransactionsQuery({
     searchQuery: props.searchQuery,
     tag: props.tag,
   });
 
-  if (transactions.isPending) {
-    return <p className={listShell.col}>loading…</p>;
+  if (transactions.isLoading || i18nLoading) {
+    return <ListSkeleton twoLine />;
   }
-  if (transactions.isError) {
+  if (transactions.isError || i18nError) {
     return <p className={listShell.col}>error loading transactions</p>;
   }
 

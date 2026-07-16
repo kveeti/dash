@@ -143,3 +143,31 @@
   font-size: var(--text-sm);
   color: var(--negative);
 }
+
+@keyframes skeletonPulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.skeletonBar {
+  background: var(--hover);
+  border-radius: var(--r1);
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+  block-size: 1em;
+}
+
+.skeletonBatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  padding-block: var(--s3);
+}
+
+.skeletonBatch:not(:last-child) {
+  border-block-end: var(--border-divider);
+}
+
+.skeletonMeta {
+  block-size: 0.8em;
+}

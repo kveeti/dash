@@ -53,7 +53,7 @@
 }
 
 /* divider sits on top of each row; removed on the first row of a day */
-.datePos + li > * {
+.datePos+li>* {
   border-block-start: none;
 }
 
@@ -96,6 +96,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .checkSlot,
   .slide {
     transition-duration: 1ms;
@@ -169,9 +170,8 @@
 
   opacity: 1;
   transform: translateY(0);
-  transition:
-    opacity 280ms cubic-bezier(0.34, 2.5, 0.64, 1),
-    transform 280ms cubic-bezier(0.34, 2.5, 0.64, 1);
+  transition: opacity 280ms cubic-bezier(0.34, 2.5, 0.64, 1),
+  transform 280ms cubic-bezier(0.34, 2.5, 0.64, 1);
 }
 
 .floatingbarPos[data-show="false"] {
@@ -185,6 +185,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .floatingbarPos,
   .floatingbarPos[data-show="false"] {
     transform: none;
@@ -236,4 +237,69 @@
 .barPicker {
   flex: 1;
   min-inline-size: 0;
+}
+
+.skeletonList {
+  --pulse-duration: 2s;
+  --from-color: color-mix(in oklch, var(--gray-2), var(--gray-3));
+  --to-color: color-mix(in oklch, var(--gray-1), var(--gray-2));
+}
+
+@keyframes skeletonPulse {
+  50% {
+    background-color: var(--to-color);
+  }
+}
+
+.skeletonBar {
+  background-color: var(--from-color);
+  border-radius: var(--r1);
+  animation: skeletonPulse var(--pulse-duration) ease-in-out infinite;
+}
+
+.skeletonDate {
+  display: block;
+  block-size: 1.7rem;
+  max-inline-size: 35rem;
+  margin-inline: auto;
+  margin-block: 0.25rem;
+  border-radius: var(--r1);
+  background-color: var(--from-color);
+  animation: skeletonPulse var(--pulse-duration) ease-in-out infinite;
+}
+
+.skeletonRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  padding-block: var(--s2);
+  border-block-start: var(--border-divider);
+}
+
+.datePos+li>.skeletonRow {
+  border-block-start: none;
+}
+
+.skeletonLines {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* margin-block reproduces each real text line's leading (line-height 1.5) */
+.skeletonRow .skeletonText {
+  block-size: 1rem;
+  margin-block: 0.25rem;
+}
+
+.skeletonRow .skeletonMeta {
+  block-size: 0.8125rem;
+  margin-block: 0.203125rem;
+}
+
+.skeletonRow .skeletonAmount {
+  inline-size: 4rem;
+  block-size: 1rem;
+  margin-block-start: 0.25rem;
 }

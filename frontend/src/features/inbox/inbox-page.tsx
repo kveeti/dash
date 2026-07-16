@@ -11,6 +11,7 @@ import {
   FloatingBarWrap,
   SelectionCountButton,
 } from "../../lib/list-shell/floating-bar";
+import { ListSkeleton } from "../../lib/list-shell/list-skeleton";
 import {
   useSelection,
   type UseSelectionReturn,
@@ -57,15 +58,15 @@ function List(props: {
   selection: UseSelectionReturn;
   searchQuery: string | null;
 }) {
-  const { f } = useI18n();
+  const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
   const matchContext = useMatchTransactions();
 
   const inboxQuery = useInfiniteInboxQuery({ searchQuery: props.searchQuery });
 
-  if (inboxQuery.isLoading) {
-    return <p className={listShell.col}>loading…</p>;
+  if (inboxQuery.isLoading || i18nLoading) {
+    return <ListSkeleton />;
   }
-  if (inboxQuery.isError) {
+  if (inboxQuery.isError || i18nError) {
     return <p className={listShell.col}>error loading inbox</p>;
   }
 

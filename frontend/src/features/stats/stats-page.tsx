@@ -139,6 +139,7 @@ function categoryGroups(
 }
 
 export default function StatsPage() {
+  const { isLoading: i18nLoading, isError: i18nError } = useI18n();
   const today = dateString(new Date());
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const monthStart = `${today.slice(0, 7)}-01`;
@@ -289,11 +290,13 @@ export default function StatsPage() {
         </div>
       </header>
 
-      {stats.isPending || buckets.isPending ? (
+      {stats.isPending || buckets.isPending || i18nLoading ? (
         <StatsSkeleton />
-      ) : stats.isError || buckets.isError ? (
+      ) : stats.isError || buckets.isError || i18nError ? (
         <p className={styles.error}>
-          error: {(stats.error ?? buckets.error)?.message}
+          error:{" "}
+          {(stats.error ?? buckets.error)?.message ??
+            "loading currencies failed"}
         </p>
       ) : (
         buckets.data &&

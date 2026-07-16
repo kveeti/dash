@@ -35,6 +35,9 @@ function makeRows(count: number) {
 async function mockApi(page: Page, rowCount: number) {
   let categorizedId: string | null = null;
 
+  await page.route("**/api/v1/currencies", (route) =>
+    route.fulfill({ json: [{ code: "EUR", exponent: 2 }] }),
+  );
   await page.route("**/api/v1/buckets", (route) =>
     route.fulfill({ json: buckets }),
   );
