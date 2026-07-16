@@ -1,18 +1,24 @@
 import {
-  infiniteQueryOptions,
   keepPreviousData,
-  queryOptions,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
   useQueryClient,
-} from "@tanstack/solid-query";
+  type InfiniteData,
+} from "@tanstack/react-query";
 
-import { api } from "./http";
-import { transactionKeys } from "./transactions";
+import { api } from "./api";
+import { bucketKeys, type Bucket } from "./buckets";
 
 export const inboxKeys = {
   all: ["inbox"] as const,
+  list: ({ searchQuery }: { searchQuery: string | null }) => [
+    "inbox",
+    searchQuery,
+  ],
 };
 
-export interface InboxRow {
+export interface InboxItem {
   id: string;
   date: string;
   amount: number;
@@ -22,88 +28,166 @@ export interface InboxRow {
   account: string;
 }
 
-export interface InboxMatch extends InboxRow {
+export interface InboxMatch extends InboxItem {
   kind: "transfer" | "exchange";
 }
 
-interface Cursor {
-  date: string;
-  id: string;
-}
-
 interface InboxPage {
-  rows: InboxRow[];
-  next_cursor: Cursor | null;
+  rows: InboxItem[];
+  next_cursor: { date: string; id: string } | null;
 }
 
-const inboxPage = (pageParam: Cursor | null, q: string) => {
-  const parts = [
-    pageParam ? `before_date=${pageParam.date}&before_id=${pageParam.id}` : "",
-    q ? `q=${encodeURIComponent(q)}` : "",
-  ].filter(Boolean);
-  return api<InboxPage>(
-    `/api/v1/inbox${parts.length ? `?${parts.join("&")}` : ""}`,
-  );
-};
+export function useInfiniteInboxQuery(props: { searchQuery: string | null }) {
+  return useInfiniteQuery({
+    queryKey: inboxKeys.list({ searchQuery: props.searchQuery }),
+    queryFn: async ({ pageParam }: { pageParam: InboxPage["next_cursor"] }) => {
+      const params = new URLSearchParams();
+      if (pageParam) {
+        params.set("before_date", pageParam.date);
+        params.set("before_id", pageParam.id);
+      }
 
-export const inboxQuery = (q: string) =>
-  infiniteQueryOptions({
-    queryKey: [...inboxKeys.all, q],
-    queryFn: ({ pageParam }: { pageParam: Cursor | null }) =>
-      inboxPage(pageParam, q),
-    initialPageParam: null as Cursor | null,
+      if (props.searchQuery) {
+        params.set("q", encodeURIComponent(props.searchQuery));
+      }
+
+      return api<InboxPage>(
+        `/api/v1/inbox${params.size ? `?${params.toString()}` : ""}`,
+      );
+    },
+    initialPageParam: null,
     getNextPageParam: (last: InboxPage) => last.next_cursor,
     placeholderData: keepPreviousData,
   });
+}
 
-export const inboxMatchesQuery = (id: string, q: string) =>
-  queryOptions({
-    queryKey: ["inbox-matches", id, q],
-    queryFn: () =>
-      api<{ source: InboxRow; matches: InboxMatch[] }>(
-        `/api/v1/inbox/${id}/matches${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+export type InboxCategoryTarget =
+  | { type: "bucket"; bucketId: string }
+  | {
+      type: "new-bucket";
+      kind: "expense" | "income" | "person";
+      name: string;
+    };
+
+export function useCategorizeInboxMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { rowIds: string[]; target: InboxCategoryTarget }) =>
+      api<{ categorized: number; bucket?: Bucket }>(
+        "/api/v1/inbox/categorize",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            row_ids: input.rowIds,
+            ...(input.target.type === "bucket"
+              ? { bucket_id: input.target.bucketId }
+              : {
+                  bucket: {
+                    kind: input.target.kind,
+                    name: input.target.name,
+                  },
+                }),
+          }),
+        },
       ),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: inboxKeys.all });
+      const previous = queryClient.getQueriesData<InfiniteData<InboxPage>>({
+        queryKey: inboxKeys.all,
+      });
+
+      queryClient.setQueriesData<InfiniteData<InboxPage>>(
+        { queryKey: inboxKeys.all },
+        (data) =>
+          data && {
+            ...data,
+            pages: data.pages.map((page) => ({
+              ...page,
+              rows: page.rows.filter((row) => !input.rowIds.includes(row.id)),
+            })),
+          },
+      );
+
+      return { previous };
+    },
+    onSuccess: (result) => {
+      const bucket = result.bucket;
+      if (bucket) {
+        queryClient.setQueryData<Bucket[]>(bucketKeys.all, (current = []) => [
+          ...current,
+          bucket,
+        ]);
+      }
+    },
+    onError: (_error, _input, context) => {
+      for (const [queryKey, data] of context?.previous ?? []) {
+        queryClient.setQueryData(queryKey, data);
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: inboxKeys.all }),
+  });
+}
+
+export function useMatchInboxMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; matchId: string }) =>
+      api<{ matched: true }>(`/api/v1/inbox/${input.id}/match`, {
+        method: "POST",
+        body: JSON.stringify({ match_id: input.matchId }),
+      }),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: inboxKeys.all });
+      const previous = queryClient.getQueriesData<InfiniteData<InboxPage>>({
+        queryKey: inboxKeys.all,
+      });
+
+      queryClient.setQueriesData<InfiniteData<InboxPage>>(
+        { queryKey: inboxKeys.all },
+        (data) =>
+          data && {
+            ...data,
+            pages: data.pages.map((page) => ({
+              ...page,
+              rows: page.rows.filter(
+                (row) => row.id !== input.id && row.id !== input.matchId,
+              ),
+            })),
+          },
+      );
+
+      return { previous };
+    },
+    onError: (_error, _input, context) => {
+      for (const [queryKey, data] of context?.previous ?? []) {
+        queryClient.setQueryData(queryKey, data);
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: inboxKeys.all }),
+  });
+}
+
+export function useInboxMatchesQuery(props: {
+  id: string;
+  searchQuery: string;
+}) {
+  return useQuery({
+    enabled: Boolean(props.id),
+    queryKey: ["inbox-matches", props.id, props.searchQuery],
+    queryFn: () => {
+      const params = new URLSearchParams();
+
+      if (props.searchQuery) {
+        params.set("q", encodeURIComponent(props.searchQuery));
+      }
+
+      return api<{ source: InboxItem; matches: InboxMatch[] }>(
+        `/api/v1/inbox/${props.id}/matches${params.size ? `?${params.toString()}` : ""}`,
+      );
+    },
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === id ? previous : undefined,
-  });
-
-export function matchInboxRowsMutation() {
-  const queryClient = useQueryClient();
-  return {
-    mutationFn: ({ id, matchId }: { id: string; matchId: string }) =>
-      matchInboxRows(id, matchId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: inboxKeys.all });
-      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
-    },
-  };
-}
-
-export function matchInboxRows(id: string, matchId: string) {
-  return api<{ matched: boolean }>(`/api/v1/inbox/${id}/match`, {
-    method: "POST",
-    body: JSON.stringify({ match_id: matchId }),
-  });
-}
-
-export function categorizeInboxMutation() {
-  const queryClient = useQueryClient();
-  return {
-    mutationFn: ({ ids, bucketId }: { ids: string[]; bucketId: string }) =>
-      categorizeInbox(ids, bucketId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: inboxKeys.all });
-      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
-    },
-  };
-}
-
-export function categorizeInbox(
-  rowIds: string[],
-  bucketId: string,
-): Promise<{ categorized: number }> {
-  return api<{ categorized: number }>("/api/v1/inbox/categorize", {
-    method: "POST",
-    body: JSON.stringify({ row_ids: rowIds, bucket_id: bucketId }),
+      previousQuery?.queryKey[1] === props.id ? previous : undefined,
   });
 }

@@ -168,6 +168,15 @@
   }
 }
 
+.barError {
+  max-width: 37rem;
+  margin: 0 auto var(--s2);
+  padding-inline: var(--s3);
+  text-align: center;
+  font-size: var(--text-sm);
+  color: var(--red-11);
+}
+
 .floatingbar {
   width: 100%;
   max-width: 37rem;

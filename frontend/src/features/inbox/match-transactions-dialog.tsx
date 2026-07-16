@@ -1,145 +1,207 @@
-import { useMutation, useQuery } from "@tanstack/solid-query";
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { Combobox } from "@base-ui/react/combobox";
+import { Dialog } from "@base-ui/react/dialog";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useSearchParams } from "wouter";
 
 import {
-  inboxMatchesQuery,
-  matchInboxRowsMutation,
+  useInboxMatchesQuery,
+  useMatchInboxMutation,
+  type InboxItem,
   type InboxMatch,
-  type InboxRow,
 } from "../../api/inbox";
-import { formatAmount, formatListDate } from "../../lib/format";
-import { Command } from "../../ui/combobox/command";
+import { useI18n } from "../i18n/use-i18n";
 
 import styles from "./match-transactions-dialog.module.css";
 
-export function MatchTransactionsDialog(props: {
-  id?: string;
-  onClose: () => void;
+export function MatchTransactions() {
+  const [params, setParams] = useSearchParams();
+  const paramId = params.get("match") ?? "";
+
+  function onClose() {
+    const next = new URLSearchParams(params);
+    next.delete("match");
+    setParams(next, { replace: true });
+  }
+
+  return (
+    <MatchTransactionsDialog isOpen={!!paramId} onClose={onClose}>
+      <MatchTransactionsContent paramId={paramId} onClose={onClose} />
+    </MatchTransactionsDialog>
+  );
+}
+
+function MatchTransactionsContent(props: {
+  paramId: string;
+  onClose: () => any;
 }) {
-  const [id, setID] = createSignal("");
-  const [query, setQuery] = createSignal("");
-  const [search, setSearch] = createSignal("");
+  const [input, setInput] = useState("");
+  const [search, setSearch] = useState("");
+  const paramId = useRef(props.paramId);
 
-  createEffect(() => {
-    const value = query();
-    const timeout = window.setTimeout(() => setSearch(value), 250);
-    onCleanup(() => window.clearTimeout(timeout));
+  const match = useMatchInboxMutation();
+
+  function onMatch(item: InboxMatch) {
+    match.mutate({ id: paramId.current, matchId: item.id });
+    props.onClose();
+  }
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setSearch(input), 250);
+    return () => window.clearTimeout(timeout);
+  }, [input]);
+
+  const matches = useInboxMatchesQuery({
+    id: paramId.current,
+    searchQuery: search,
   });
-
-  const activeID = () => props.id ?? id();
-  const matches = useQuery(() => ({
-    ...inboxMatchesQuery(activeID(), search()),
-    enabled: Boolean(props.id),
-  }));
-  const match = useMutation(matchInboxRowsMutation);
-
-  createEffect(() => {
-    if (!props.id) return;
-    setID(props.id);
-    setQuery("");
-    setSearch("");
-    match.reset();
-  });
+  const source = matches.data?.source;
+  const items = matches.data?.matches ?? [];
 
   return (
-    <Command.Dialog
-      label="Match transactions"
-      open={Boolean(props.id)}
-      onOpenChange={(open) => !open && props.onClose()}
-      shouldFilter={false}
-      class={styles.command}
-      contentClassName={styles.dialog}
-    >
-      <Show when={matches.isSuccess && matches.data}>
-        {(data) => <Source row={data().source} />}
-      </Show>
+    <div>
+      {source && <Source row={source} />}
 
-      <div class={styles.panel}>
-        <div class={styles.inputWrap}>
-          <Command.Input
+      <Combobox.Root<InboxMatch>
+        filteredItems={items}
+        value={null}
+        inline
+        open={true}
+        inputValue={input}
+        itemToStringLabel={(item) =>
+          item.counterparty || item.description || ""
+        }
+        onInputValueChange={(nextValue, details) => {
+          if (details.reason !== "item-press") setInput(nextValue);
+        }}
+        onValueChange={(item) => {
+          if (item) onMatch(item);
+        }}
+        // 'always' = "highlight the first item as soon as the list opens".
+        // Supported by the underlying AriaCombobox and forwarded untouched,
+        // but Combobox's public type narrows the prop to boolean.
+        autoHighlight={"always" as unknown as boolean}
+      >
+        <div className={styles.inputWrap}>
+          <Combobox.Input
+            className={styles.input}
             placeholder="Search possible matches"
-            value={query()}
-            onValueChange={setQuery}
+            aria-label="Search possible matches"
           />
-          <Show when={matches.isFetching}>
-            <span class={styles.loading}>loading…</span>
-          </Show>
-        </div>
-        <Show when={matches.isError}>
-          <p class={styles.status}>{matches.error?.message}</p>
-        </Show>
-        <Show when={matches.isSuccess && matches.data}>
-          {(data) => (
-            <>
-              <Command.List>
-                <Command.Empty>No possible matches found.</Command.Empty>
-                <For each={data().matches}>
-                  {(row) => (
-                    <Command.Item
-                      class={`${styles.transactionRow} ${styles.matchRow}`}
-                      value={row.id}
-                      onSelect={() =>
-                        match.mutate(
-                          { id: activeID(), matchId: row.id },
-                          { onSuccess: () => props.onClose() },
-                        )
-                      }
-                    >
-                      <span class={styles.who}>
-                        {row.counterparty || row.description || "—"}
-                      </span>
-                      <MatchAmount source={data().source} match={row} />
-                      <span class={styles.meta}>
-                        {row.kind === "exchange" ? "Exchange" : "Transfer"} ·{" "}
-                        {formatListDate(row.date)}
-                      </span>
-                      <span class={styles.account}>{row.account}</span>
-                    </Command.Item>
-                  )}
-                </For>
-              </Command.List>
-              <Show when={match.isError}>
-                <p class={styles.error}>{match.error?.message}</p>
-              </Show>
-            </>
+          {matches.isFetching && (
+            <span className={styles.loading}>loading…</span>
           )}
-        </Show>
-      </div>
-    </Command.Dialog>
+        </div>
+
+        {matches.isError ? (
+          <p className={styles.status}>Couldn’t load matches</p>
+        ) : (
+          <>
+            <Combobox.Empty>
+              <p className={styles.empty}>No possible matches found.</p>
+            </Combobox.Empty>
+            <Combobox.List className={styles.list}>
+              {(item: InboxMatch) => (
+                <MatchRow key={item.id} item={item} source={source} />
+              )}
+            </Combobox.List>
+          </>
+        )}
+      </Combobox.Root>
+    </div>
   );
 }
 
-function MatchAmount(props: { source: InboxRow; match: InboxMatch }) {
-  const outgoing = () => (props.source.amount < 0 ? props.source : props.match);
-  const incoming = () => (props.source.amount > 0 ? props.source : props.match);
+function MatchTransactionsDialog(props: {
+  isOpen: boolean;
+  onClose: () => any;
+  children: ReactNode;
+}) {
   return (
-    <Show
-      when={props.match.kind === "exchange"}
-      fallback={
-        <span class={styles.amount}>
-          {formatAmount(Math.abs(props.source.amount), props.source.currency)}
-        </span>
-      }
+    <Dialog.Root
+      open={props.isOpen}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) props.onClose();
+      }}
     >
-      <span class={styles.amount}>
-        {formatAmount(outgoing().amount, outgoing().currency)} →{" "}
-        {formatAmount(incoming().amount, incoming().currency)}
-      </span>
-    </Show>
+      <Dialog.Portal>
+        <Dialog.Backdrop className={styles.backdrop} />
+        <Dialog.Popup className={styles.popup}>
+          <Dialog.Title className={styles.srOnly}>
+            Match transactions
+          </Dialog.Title>
+
+          {props.children}
+        </Dialog.Popup>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
-function Source(props: { row: InboxRow }) {
+function MatchRow(props: { item: InboxMatch; source: InboxItem | undefined }) {
+  const { item, source } = props;
   return (
-    <section class={`${styles.source} ${styles.transactionRow}`}>
-      <span class={styles.who}>
-        {props.row.counterparty || props.row.description || "—"}
+    <Combobox.Item value={item} className={styles.item}>
+      <span className={styles.who}>
+        {item.counterparty || item.description || "—"}
       </span>
-      <span class={styles.amount}>
-        {formatAmount(props.row.amount, props.row.currency)}
+      <MatchAmount source={source} match={item} />
+      <span className={styles.meta}>
+        {item.kind === "exchange" ? "Exchange" : "Transfer"} ·{" "}
+        <ListDate date={item.date} />
       </span>
-      <span class={styles.meta}>{formatListDate(props.row.date)}</span>
-      <span class={styles.account}>{props.row.account}</span>
+      <span className={styles.account}>{item.account}</span>
+    </Combobox.Item>
+  );
+}
+
+function MatchAmount(props: {
+  source: InboxItem | undefined;
+  match: InboxMatch;
+}) {
+  const { f } = useI18n();
+  const { source, match } = props;
+  if (!source) return null;
+
+  if (match.kind !== "exchange") {
+    return (
+      <span className={styles.amount}>
+        {f.amount(Math.abs(source.amount), source.currency)}
+      </span>
+    );
+  }
+
+  const outgoing = source.amount < 0 ? source : match;
+  const incoming = source.amount < 0 ? match : source;
+  return (
+    <span className={styles.amount}>
+      {f.amount(outgoing.amount, outgoing.currency)} →{" "}
+      {f.amount(incoming.amount, incoming.currency)}
+    </span>
+  );
+}
+
+function Source(props: { row: InboxItem }) {
+  const { f } = useI18n();
+  const { row } = props;
+  return (
+    <section className={styles.source}>
+      <span className={styles.who}>
+        {row.counterparty || row.description || "—"}
+      </span>
+      <span className={styles.amount}>
+        {f.amount(row.amount, row.currency)}
+      </span>
+      <span className={styles.meta}>
+        <ListDate date={row.date} />
+      </span>
+      <span className={styles.account}>{row.account}</span>
     </section>
   );
+}
+
+function ListDate(props: { date: string }) {
+  const { f } = useI18n();
+  const date = new Date(props.date);
+  const isCurrentYear = new Date().getFullYear() === date.getFullYear();
+  return <>{isCurrentYear ? f.shortDate(date) : f.longDate(date)}</>;
 }

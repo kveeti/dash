@@ -1,211 +1,170 @@
-import { useSearchParams } from "@solidjs/router";
-import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/solid-query";
-import { For, Match, Show, Switch } from "solid-js";
+import { Fragment, useState } from "react";
+import { useSearchParams } from "wouter";
 
-import { bucketsQuery, useCreateBucket } from "../../api/buckets";
-import {
-  categorizeInboxMutation,
-  inboxQuery,
-  type InboxRow,
-} from "../../api/inbox";
-import { formatAmount, formatListDate } from "../../lib/format";
-import { Checkbox } from "../../ui/checkbox/checkbox";
-import { Combobox } from "../../ui/combobox/combobox";
-import { Filterbar } from "../list-page/filterbar";
-import { FloatingBar } from "../list-page/floating-bar";
-import { createSelection } from "../list-page/selection";
-import { CategoryMenu } from "../transactions/bucket-combobox";
-import { MatchTransactionsDialog } from "./match-transactions-dialog";
+import { useInfiniteInboxQuery, type InboxItem } from "../../api/inbox";
+import { useI18n } from "../i18n/use-i18n";
+import { BucketComboRoot, BucketComboTrigger } from "./bucket-combo";
+import { MatchTransactions } from "./match-transactions-dialog";
 
-import shell from "../list-page/list-page.module.css";
+import listShellStyles from "../../lib/list-shell/list-shell.module.css";
 import styles from "./inbox-page.module.css";
 
 export default function InboxPage() {
-  const [params, setParams] = useSearchParams<{
-    q?: string;
-    match?: string;
-  }>();
-  const openMatch = (id: string) => {
-    setParams({ match: id }, { scroll: false });
+  const [params] = useSearchParams();
+  const searchQuery = params.get("q");
+
+  return <InboxList searchQuery={searchQuery} />;
+}
+
+function InboxList(props: { searchQuery: string | null }) {
+  const { f } = useI18n();
+  const selection = useSelection();
+  const [params, setParams] = useSearchParams();
+
+  const openMatch = (rowId: string) => {
+    const next = new URLSearchParams(params);
+    next.set("match", rowId);
+    setParams(next);
   };
 
-  const closeMatch = () => {
-    setParams({ match: undefined }, { replace: true, scroll: false });
-  };
+  const inboxQuery = useInfiniteInboxQuery({ searchQuery: props.searchQuery });
+  if (inboxQuery.isLoading) {
+    return "loading...";
+  } else if (inboxQuery.isError) {
+    return "Error loading inbox";
+  }
 
-  const inbox = useInfiniteQuery(() => inboxQuery(params.q ?? ""));
-  const buckets = useQuery(bucketsQuery);
-  const createBucket = useCreateBucket();
+  const inboxItems = inboxQuery.data?.pages.flatMap((p) => p.rows) ?? [];
 
-  const items = () => inbox.data!.pages.flatMap((p) => p.rows);
+  let prevFormattedDate: string | null = null;
+  const currentYear = new Date().getFullYear();
 
-  const categoriesAndPeople = () =>
-    buckets.data!.filter(
-      (b) =>
-        (b.kind === "expense" || b.kind === "income" || b.kind === "person") &&
-        !b.hidden,
+  // The empty state stays inside BucketComboRoot: unmounting it would kill the
+  // popup's close animation when the last row is categorized away.
+  if (!inboxItems.length) {
+    return (
+      <>
+        <BucketComboRoot onMatchAction={openMatch}>
+          {props.searchQuery ? "no results" : "nothing to categorize"}
+        </BucketComboRoot>
+        <MatchTransactions />
+      </>
     );
+  }
 
-  const onCreate = (kind: "expense" | "person") => (name: string) =>
-    createBucket({ kind, name });
+  return (
+    <BucketComboRoot onMatchAction={openMatch}>
+      <MatchTransactions />
+      <ul className={listShellStyles.list}>
+        {inboxItems.map((item) => {
+          const date = new Date(item.date);
+          const isCurrentYear = currentYear === date.getFullYear();
+          const dateFormatted = isCurrentYear
+            ? f.shortDate(date)
+            : f.longDate(date);
+          const showDateHeader = dateFormatted !== prevFormattedDate;
+          prevFormattedDate = dateFormatted;
 
-  const {
-    selectMode,
-    setSelectMode,
-    selected,
+          return (
+            <Fragment key={item.id}>
+              {showDateHeader && (
+                <li role="presentation" className={listShellStyles.datePos}>
+                  <h2 className={listShellStyles.date}>{dateFormatted}</h2>
+                </li>
+              )}
+
+              <Item item={item} selection={selection} />
+            </Fragment>
+          );
+        })}
+      </ul>
+    </BucketComboRoot>
+  );
+}
+
+function Item(props: { item: InboxItem; selection: UseSelection }) {
+  const itemId = props.item.id;
+  const { f } = useI18n();
+
+  return (
+    <li className={listShellStyles.col}>
+      <div
+        className={`${listShellStyles.rowWrap}${props.selection.isSelecting ? listShellStyles.rowWrapSelect : ""}`}
+        onClick={() =>
+          props.selection.isSelecting && props.selection.toggle(itemId)
+        }
+      >
+        <div className={listShellStyles.checkSlot}>
+          {/* <Checkbox */}
+          {/*   checked={props.selection.has(itemId)} */}
+          {/*   tabindex={-1} */}
+          {/*   style={{ "pointer-events": "none" }} */}
+          {/* /> */}
+        </div>
+        <div className={`${listShellStyles.slide} ${styles.rowContent}`}>
+          <BucketComboTrigger rowId={itemId} className={styles.rowTrigger}>
+            <div className={styles.info}>
+              <span className={styles.primary}>
+                {props.item.counterparty || props.item.description || "—"}
+                {props.item.counterparty && props.item.description && (
+                  <>
+                    {" "}
+                    <span className={styles.secondary}>
+                      {props.item.description}
+                    </span>
+                  </>
+                )}
+              </span>
+            </div>
+            <span
+              className={`${styles.amount}${props.item.amount >= 0 ? styles.positive : ""}`}
+            >
+              {f.amount(props.item.amount, props.item.currency)}
+            </span>
+          </BucketComboTrigger>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function useSelection() {
+  const [isEnabled, setIsEnabled] = useState(false);
+  const [selectedRows, setSelectedRows] = useState(new Set<string>());
+
+  const clearSelection = () => setSelectedRows(new Set<string>());
+
+  const exitSelect = () => {
+    setIsEnabled(false);
+    clearSelection();
+  };
+
+  const toggle = (id: string) =>
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const drop = (ids: string[]) =>
+    setSelectedRows((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
+
+  const has = selectedRows.has;
+
+  return {
+    isSelecting: isEnabled,
+    rows: selectedRows,
+    has,
     toggle,
     clearSelection,
     exitSelect,
     drop,
-  } = createSelection();
-
-  const categorize = useMutation(categorizeInboxMutation);
-
-  return (
-    <div class={shell.wrapper}>
-      <Filterbar
-        selectLabel="Select rows"
-        selectMode={selectMode()}
-        onSelectMode={(on) => (on ? setSelectMode(true) : exitSelect())}
-        search={params.q ?? ""}
-        onSearch={(value) => setParams({ q: value }, { replace: true })}
-      />
-
-      <Switch>
-        <Match when={inbox.isPending || buckets.isPending}>
-          <p class={shell.col}>loading…</p>
-        </Match>
-
-        <Match when={inbox.isError || buckets.isError}>
-          <p class={shell.col}>
-            error: {(inbox.error ?? buckets.error)?.message}
-          </p>
-        </Match>
-
-        <Match when={inbox.data && buckets.data}>
-          <ul class={shell.list}>
-            <For
-              each={items()}
-              fallback={
-                <p class={shell.col}>
-                  {params.q ? "no results" : "nothing to categorize 🎉"}
-                </p>
-              }
-            >
-              {(row, i) => {
-                const dateFormatted = formatListDate(row.date);
-                const prev = items()[i() - 1];
-                const showDateHeader =
-                  !prev || formatListDate(prev.date) !== dateFormatted;
-
-                return (
-                  <>
-                    <Show when={showDateHeader}>
-                      <li role="presentation" class={shell.datePos}>
-                        <h2 class={shell.date}>{dateFormatted}</h2>
-                      </li>
-                    </Show>
-
-                    <li class={shell.col}>
-                      <div
-                        class={shell.rowWrap}
-                        classList={{ [shell.rowWrapSelect]: selectMode() }}
-                        onClick={() => selectMode() && toggle(row.id)}
-                      >
-                        <div class={shell.checkSlot}>
-                          <Checkbox
-                            checked={selected().has(row.id)}
-                            tabindex={-1}
-                            style={{ "pointer-events": "none" }}
-                          />
-                        </div>
-                        <div class={`${shell.slide} ${styles.rowContent}`}>
-                          <Combobox>
-                            <Combobox.Trigger class={styles.rowTrigger}>
-                              <Info row={row} />
-                              <Amount row={row} />
-                            </Combobox.Trigger>
-                            <Combobox.Content>
-                              <CategoryMenu
-                                buckets={categoriesAndPeople()}
-                                onChange={(bucketId) =>
-                                  categorize.mutate(
-                                    { ids: [row.id], bucketId },
-                                    { onSuccess: () => drop([row.id]) },
-                                  )
-                                }
-                                onCreate={onCreate("expense")}
-                                onCreatePerson={onCreate("person")}
-                                onMatchTransactions={() => openMatch(row.id)}
-                                searchPlaceholder="Category, person, or action"
-                              />
-                            </Combobox.Content>
-                          </Combobox>
-                        </div>
-                      </div>
-                    </li>
-                  </>
-                );
-              }}
-            </For>
-          </ul>
-
-          <Show when={inbox.hasNextPage}>
-            <button
-              type="button"
-              class={shell.col}
-              onClick={() => inbox.fetchNextPage()}
-              disabled={inbox.isFetchingNextPage}
-            >
-              {inbox.isFetchingNextPage ? "loading…" : "Load more"}
-            </button>
-          </Show>
-
-          <FloatingBar
-            show={selectMode()}
-            count={selected().size}
-            categories={categoriesAndPeople()}
-            onClear={clearSelection}
-            onExit={exitSelect}
-            onCategorize={(bucketId) => {
-              const ids = [...selected()];
-              categorize.mutate(
-                { ids, bucketId },
-                { onSuccess: () => drop(ids) },
-              );
-            }}
-            onCreate={onCreate("expense")}
-            onCreatePerson={onCreate("person")}
-          />
-        </Match>
-      </Switch>
-
-      <MatchTransactionsDialog id={params.match} onClose={closeMatch} />
-    </div>
-  );
+  };
 }
 
-function Info(props: { row: InboxRow }) {
-  return (
-    <div class={styles.info}>
-      <span class={styles.primary}>
-        {props.row.counterparty || props.row.description || "—"}
-        <Show when={props.row.counterparty && props.row.description}>
-          {" "}
-          <span class={styles.secondary}>{props.row.description}</span>
-        </Show>
-      </span>
-    </div>
-  );
-}
-
-function Amount(props: { row: InboxRow }) {
-  return (
-    <span
-      class={styles.amount}
-      classList={{ [styles.positive]: props.row.amount >= 0 }}
-    >
-      {formatAmount(props.row.amount, props.row.currency)}
-    </span>
-  );
-}
+type UseSelection = ReturnType<typeof useSelection>;

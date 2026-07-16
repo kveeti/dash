@@ -83,6 +83,62 @@ func TestInboxCategorizeCreatesTransactions(t *testing.T) {
 	require.Equal(t, int64(1234-10000), balances[groceries]["EUR"])
 }
 
+func TestInboxCategorizeCreatesBucket(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	doImport(t, app, bank, nordeaHeader+nordeaRow("2026/07/01", "-12,34", "K-Market", "Groceries"))
+
+	rows := getInbox(t, app, "")
+	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/categorize", map[string]any{
+		"row_ids": []string{rows[0].ID},
+		"bucket":  map[string]any{"kind": "expense", "name": "Groceries"},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var out struct {
+		Categorized int            `json:"categorized"`
+		Bucket      bucketResponse `json:"bucket"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Equal(t, 1, out.Categorized)
+	require.Equal(t, data.KindExpense, out.Bucket.Kind)
+	require.Equal(t, "Groceries", out.Bucket.Name)
+
+	balances := getBalances(t, app)
+	require.Equal(t, int64(-1234), balances[bank]["EUR"])
+	require.Equal(t, int64(1234), balances[out.Bucket.ID]["EUR"])
+}
+
+func TestInboxCategorizeDoesNotCreateBucketWithoutRows(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/categorize", map[string]any{
+		"row_ids": []string{data.NewPrivateID()},
+		"bucket":  map[string]any{"kind": "expense", "name": "Groceries"},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var out struct {
+		Categorized int             `json:"categorized"`
+		Bucket      *bucketResponse `json:"bucket"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Zero(t, out.Categorized)
+	require.Nil(t, out.Bucket)
+
+	buckets := decodeBuckets(t, authed(t, app, http.MethodGet, "/api/v1/buckets", nil))
+	require.Len(t, buckets, 1)
+}
+
+func TestInboxCategorizeRejectsInvalidTarget(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	for _, body := range []map[string]any{
+		{"row_ids": []string{data.NewPrivateID()}},
+		{"row_ids": []string{data.NewPrivateID()}, "bucket_id": data.NewPrivateID(), "bucket": map[string]any{"kind": "expense", "name": "Food"}},
+		{"row_ids": []string{data.NewPrivateID()}, "bucket": map[string]any{"kind": "asset", "name": "Bank"}},
+	} {
+		resp := authed(t, app, http.MethodPost, "/api/v1/inbox/categorize", body)
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	}
+}
+
 func TestInboxCategorizeToPerson(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")

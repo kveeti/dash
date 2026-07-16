@@ -291,6 +291,14 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 }
 
 func (d *Data) CategorizeInboxRows(ctx context.Context, userID string, rowIDs []string, bucketID string) (int, error) {
+	return d.categorizeInboxRows(ctx, userID, rowIDs, bucketID, nil)
+}
+
+func (d *Data) CreateBucketAndCategorizeInboxRows(ctx context.Context, userID string, rowIDs []string, bucket Bucket) (int, error) {
+	return d.categorizeInboxRows(ctx, userID, rowIDs, bucket.ID, &bucket)
+}
+
+func (d *Data) categorizeInboxRows(ctx context.Context, userID string, rowIDs []string, bucketID string, bucket *Bucket) (int, error) {
 	if len(rowIDs) == 0 {
 		return 0, nil
 	}
@@ -300,19 +308,32 @@ func (d *Data) CategorizeInboxRows(ctx context.Context, userID string, rowIDs []
 	}
 	defer tx.Rollback()
 
-	var valid bool
-	if err := tx.QueryRowContext(ctx,
-		"select exists(select 1 from buckets where id = $1 and owner_user_id = $2 and kind in ('expense', 'income', 'person') and hidden = false)",
-		bucketID, userID).Scan(&valid); err != nil {
-		return 0, err
-	}
-	if !valid {
-		return 0, ErrInvalidCategory
+	if bucket == nil {
+		var valid bool
+		if err := tx.QueryRowContext(ctx,
+			"select exists(select 1 from buckets where id = $1 and owner_user_id = $2 and kind in ('expense', 'income', 'person') and hidden = false)",
+			bucketID, userID).Scan(&valid); err != nil {
+			return 0, err
+		}
+		if !valid {
+			return 0, ErrInvalidCategory
+		}
+	} else {
+		validKind := bucket.Kind == KindExpense || bucket.Kind == KindIncome || bucket.Kind == KindPerson
+		if bucket.OwnerUserID != userID || !validKind || bucket.Hidden {
+			return 0, ErrInvalidCategory
+		}
+		if err := insertBucketTx(ctx, tx, *bucket); err != nil {
+			return 0, err
+		}
 	}
 
 	var n int
 	if err := tx.QueryRowContext(ctx, categorizeInboxSQL, userID, rowIDs, bucketID).Scan(&n); err != nil {
 		return 0, err
+	}
+	if bucket != nil && n == 0 {
+		return 0, nil
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err

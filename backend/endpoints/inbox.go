@@ -5,6 +5,7 @@ import (
 	"money/backend/data"
 	"money/backend/state"
 	"net/http"
+	"time"
 )
 
 type inboxRowResponse struct {
@@ -116,16 +117,61 @@ func HandleCategorizeInbox(state *state.State, getUserID GetUserID) Handler {
 		var body struct {
 			RowIDs   []string `json:"row_ids"`
 			BucketID string   `json:"bucket_id"`
+			Bucket   *struct {
+				Kind data.BucketKind `json:"kind"`
+				Name string          `json:"name"`
+			} `json:"bucket"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
-
-		n, err := state.Data.CategorizeInboxRows(r.Context(), userID, body.RowIDs, body.BucketID)
-		if err != nil {
-			return mapTransactionErr(err)
+		if (body.BucketID == "") == (body.Bucket == nil) {
+			return NewErr("provide either bucket_id or bucket", http.StatusBadRequest)
 		}
-		Json(w, map[string]int{"categorized": n})
+
+		var bucket *data.Bucket
+		var n int
+		if body.Bucket != nil {
+			validKind := body.Bucket.Kind == data.KindExpense || body.Bucket.Kind == data.KindIncome || body.Bucket.Kind == data.KindPerson
+			if !validKind {
+				return NewErr("invalid bucket kind", http.StatusBadRequest)
+			}
+			if body.Bucket.Name == "" {
+				return NewErr("name is required", http.StatusBadRequest)
+			}
+
+			created := data.Bucket{
+				ID:          data.NewPrivateID(),
+				OwnerUserID: userID,
+				Kind:        body.Bucket.Kind,
+				Name:        body.Bucket.Name,
+				CreatedAt:   time.Now(),
+			}
+			var err error
+			n, err = state.Data.CreateBucketAndCategorizeInboxRows(r.Context(), userID, body.RowIDs, created)
+			if err != nil {
+				return mapTransactionErr(err)
+			}
+			if n > 0 {
+				bucket = &created
+			}
+		} else {
+			var err error
+			n, err = state.Data.CategorizeInboxRows(r.Context(), userID, body.RowIDs, body.BucketID)
+			if err != nil {
+				return mapTransactionErr(err)
+			}
+		}
+
+		out := struct {
+			Categorized int             `json:"categorized"`
+			Bucket      *bucketResponse `json:"bucket,omitempty"`
+		}{Categorized: n}
+		if bucket != nil {
+			response := toBucketResponse(*bucket)
+			out.Bucket = &response
+		}
+		Json(w, out)
 		return nil
 	}
 }

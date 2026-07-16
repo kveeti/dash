@@ -1,9 +1,10 @@
-import devtools from "solid-devtools/vite";
+import babel from "@rolldown/plugin-babel";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import solidPlugin from "vite-plugin-solid";
 
+// https://vite.dev/config/
 export default defineConfig({
-  plugins: [devtools(), solidPlugin()],
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] })],
   server: {
     port: Number(process.env.VITE_PORT ?? 3000),
     // The browser talks to the backend, which reverse-proxies Vite.
