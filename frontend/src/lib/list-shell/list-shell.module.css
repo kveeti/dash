@@ -52,6 +52,10 @@
   margin-top: -0.25rem;
 }
 
+.listSelect {
+  user-select: none;
+}
+
 /* divider sits on top of each row; removed on the first row of a day */
 .datePos+li>* {
   border-block-start: none;

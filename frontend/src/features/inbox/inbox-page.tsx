@@ -63,6 +63,7 @@ export default function InboxPage() {
           searchQuery={searchQuery}
           inboxQuery={inboxQuery}
           inboxItems={inboxItems}
+          visibleIds={visibleIds}
         />
       </MatchTransactions>
 
@@ -76,6 +77,7 @@ function List(props: {
   searchQuery: string | null;
   inboxQuery: ReturnType<typeof useInfiniteInboxQuery>;
   inboxItems: InboxItem[];
+  visibleIds: string[];
 }) {
   const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
   const matchContext = useMatchTransactions();
@@ -100,7 +102,9 @@ function List(props: {
   return (
     <BucketComboRoot onMatchAction={matchContext.openMatchingTo}>
       {props.inboxItems.length ? (
-        <ul className={listShell.list}>
+        <ul
+          className={`${listShell.list} ${props.selection.selectMode ? listShell.listSelect : ""}`}
+        >
           {props.inboxItems.map((item) => {
             const dateFormatted = formatDate(item.date);
             const showDateHeader = dateFormatted !== prevDate;
@@ -114,7 +118,11 @@ function List(props: {
                   </li>
                 )}
 
-                <Item item={item} selection={props.selection} />
+                <Item
+                  item={item}
+                  selection={props.selection}
+                  visibleIds={props.visibleIds}
+                />
               </Fragment>
             );
           })}
@@ -128,7 +136,11 @@ function List(props: {
   );
 }
 
-function Item(props: { item: InboxItem; selection: UseSelectionReturn }) {
+function Item(props: {
+  item: InboxItem;
+  selection: UseSelectionReturn;
+  visibleIds: string[];
+}) {
   const itemId = props.item.id;
   const { f } = useI18n();
 
@@ -136,9 +148,12 @@ function Item(props: { item: InboxItem; selection: UseSelectionReturn }) {
     <li className={listShell.col}>
       <div
         className={`${listShell.rowWrap} ${props.selection.selectMode ? listShell.rowWrapSelect : ""}`}
-        onClick={() =>
-          props.selection.selectMode && props.selection.toggle(itemId)
-        }
+        onClick={(event) => {
+          if (!props.selection.selectMode) return;
+          if (event.shiftKey)
+            props.selection.selectThrough(itemId, props.visibleIds);
+          else props.selection.toggle(itemId);
+        }}
       >
         <div className={listShell.checkSlot}>
           <Checkbox

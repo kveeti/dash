@@ -100,6 +100,7 @@ function List(props: {
     return <p className={listShell.col}>no transactions yet</p>;
   }
 
+  const visibleIds = props.txns.map((txn) => txn.id);
   let prevDate: string | null = null;
 
   const filterDate = (date: string) => {
@@ -111,7 +112,9 @@ function List(props: {
 
   return (
     <>
-      <ul className={listShell.list}>
+      <ul
+        className={`${listShell.list} ${props.selection.selectMode ? listShell.listSelect : ""}`}
+      >
         {props.txns.map((txn) => {
           const dateFormatted = filterDate(txn.date);
           const showDateHeader = dateFormatted !== prevDate;
@@ -128,9 +131,12 @@ function List(props: {
               <li className={listShell.col}>
                 <div
                   className={`${listShell.rowWrap} ${props.selection.selectMode ? listShell.rowWrapSelect : ""}`}
-                  onClick={() =>
-                    props.selection.selectMode && props.selection.toggle(txn.id)
-                  }
+                  onClick={(event) => {
+                    if (!props.selection.selectMode) return;
+                    if (event.shiftKey)
+                      props.selection.selectThrough(txn.id, visibleIds);
+                    else props.selection.toggle(txn.id);
+                  }}
                 >
                   <div className={listShell.checkSlot}>
                     <Checkbox
