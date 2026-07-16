@@ -1,13 +1,15 @@
-import { type JSX, splitProps } from "solid-js";
+import type { InputHTMLAttributes } from "react";
 
 import styles from "./checkbox.module.css";
 
-export function Checkbox(props: JSX.InputHTMLAttributes<HTMLInputElement>) {
-  const [local, rest] = splitProps(props, ["class"]);
+export function Checkbox({
+  className,
+  ...rest
+}: InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <span class={`${styles.root} ${local.class ?? ""}`}>
+    <span className={`${styles.root} ${className ?? ""}`}>
       <input type="checkbox" {...rest} />
-      <span class={styles.box} aria-hidden="true" />
+      <span className={styles.box} aria-hidden="true" />
     </span>
   );
 }

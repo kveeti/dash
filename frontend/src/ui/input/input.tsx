@@ -1,52 +1,49 @@
-import { type JSX, Show, splitProps } from "solid-js";
-import { Dynamic } from "solid-js/web";
+import type { InputHTMLAttributes, ReactNode } from "react";
 
 import styles from "./input.module.css";
 
 interface FieldProps {
   label?: string;
   error?: string;
-  class?: string;
+  className?: string;
   /** Wrapper element; use "div" when the control isn't a native input. */
   as?: "label" | "div";
-  children: JSX.Element;
+  children: ReactNode;
 }
 
-export function Field(props: FieldProps) {
+export function Field({ as: As = "label", ...props }: FieldProps) {
   return (
-    <Dynamic
-      component={props.as ?? "label"}
-      class={`${styles.field} ${props.class ?? ""}`}
-    >
-      <Show when={props.label}>
-        <span class={styles.labelRow}>
-          <span class={styles.label}>{props.label}</span>
+    <As className={`${styles.field} ${props.className ?? ""}`}>
+      {props.label && (
+        <span className={styles.labelRow}>
+          <span className={styles.label}>{props.label}</span>
         </span>
-      </Show>
-      <span class={styles.error}>{props.error}</span>
+      )}
+      <span className={styles.error}>{props.error}</span>
       {props.children}
-    </Dynamic>
+    </As>
   );
 }
 
-export function InputGroup(props: { class?: string; children: JSX.Element }) {
+export function InputGroup(props: { className?: string; children: ReactNode }) {
   return (
-    <div class={`${styles.group} ${props.class ?? ""}`}>{props.children}</div>
+    <div className={`${styles.group} ${props.className ?? ""}`}>
+      {props.children}
+    </div>
   );
 }
 
-interface Props extends JSX.InputHTMLAttributes<HTMLInputElement> {
+interface Props extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
 }
 
-export function Input(props: Props) {
-  const [local, rest] = splitProps(props, ["label", "error", "class"]);
+export function Input({ label, error, className, ...rest }: Props) {
   return (
-    <Field label={local.label} error={local.error} class={local.class}>
+    <Field label={label} error={error} className={className}>
       <input
         {...rest}
-        class={`${styles.control} ${local.error ? styles.invalid : ""}`}
+        className={`${styles.control} ${error ? styles.invalid : ""}`}
       />
     </Field>
   );

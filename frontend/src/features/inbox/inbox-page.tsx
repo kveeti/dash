@@ -1,107 +1,138 @@
-import { Fragment, useState } from "react";
-import { useSearchParams } from "wouter";
+import { Fragment } from "react";
 
-import { useInfiniteInboxQuery, type InboxItem } from "../../api/inbox";
+import {
+  useCategorizeInboxMutation,
+  useInfiniteInboxQuery,
+  type InboxItem,
+} from "../../api/inbox";
+import { Filterbar } from "../../lib/list-shell/filterbar";
+import {
+  CloseButton,
+  FloatingBarWrap,
+  SelectionCountButton,
+} from "../../lib/list-shell/floating-bar";
+import {
+  useSelection,
+  type UseSelectionReturn,
+} from "../../lib/list-shell/selection";
+import { setSearchParam, useSearchParam } from "../../lib/search-param";
+import { Checkbox } from "../../ui/checkbox/checkbox";
+import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
 import { BucketComboRoot, BucketComboTrigger } from "./bucket-combo";
-import { MatchTransactions } from "./match-transactions-dialog";
+import {
+  MatchTransactions,
+  useMatchTransactions,
+} from "./match-transactions-dialog";
 
-import listShellStyles from "../../lib/list-shell/list-shell.module.css";
+import listShell from "../../lib/list-shell/list-shell.module.css";
 import styles from "./inbox-page.module.css";
 
 export default function InboxPage() {
-  const [params] = useSearchParams();
-  const searchQuery = params.get("q");
+  const searchQuery = useSearchParam("q");
+  const selection = useSelection();
 
-  return <InboxList searchQuery={searchQuery} />;
+  return (
+    <div className={listShell.wrapper}>
+      <Filterbar
+        selectLabel="Select rows"
+        selectMode={selection.selectMode}
+        onSelectMode={(on) =>
+          on ? selection.setSelectMode(true) : selection.exitSelect()
+        }
+        search={searchQuery || undefined}
+        onSearch={(value) => setSearchParam("q", value, { replace: true })}
+      />
+
+      <MatchTransactions>
+        <List selection={selection} searchQuery={searchQuery} />
+      </MatchTransactions>
+
+      <FloatingBar selection={selection} />
+    </div>
+  );
 }
 
-function InboxList(props: { searchQuery: string | null }) {
+function List(props: {
+  selection: UseSelectionReturn;
+  searchQuery: string | null;
+}) {
   const { f } = useI18n();
-  const selection = useSelection();
-  const [params, setParams] = useSearchParams();
-
-  const openMatch = (rowId: string) => {
-    const next = new URLSearchParams(params);
-    next.set("match", rowId);
-    setParams(next);
-  };
+  const matchContext = useMatchTransactions();
 
   const inboxQuery = useInfiniteInboxQuery({ searchQuery: props.searchQuery });
+
   if (inboxQuery.isLoading) {
-    return "loading...";
-  } else if (inboxQuery.isError) {
-    return "Error loading inbox";
+    return <p className={listShell.col}>loading…</p>;
+  }
+  if (inboxQuery.isError) {
+    return <p className={listShell.col}>error loading inbox</p>;
   }
 
   const inboxItems = inboxQuery.data?.pages.flatMap((p) => p.rows) ?? [];
 
-  let prevFormattedDate: string | null = null;
-  const currentYear = new Date().getFullYear();
+  let prevDate: string | null = null;
 
-  // The empty state stays inside BucketComboRoot: unmounting it would kill the
-  // popup's close animation when the last row is categorized away.
-  if (!inboxItems.length) {
-    return (
-      <>
-        <BucketComboRoot onMatchAction={openMatch}>
-          {props.searchQuery ? "no results" : "nothing to categorize"}
-        </BucketComboRoot>
-        <MatchTransactions />
-      </>
-    );
-  }
+  const currentYear = new Date().getFullYear();
+  const formatDate = (value: string) => {
+    const date = new Date(value);
+    return currentYear === date.getFullYear()
+      ? f.shortDate(date)
+      : f.longDate(date);
+  };
 
   return (
-    <BucketComboRoot onMatchAction={openMatch}>
-      <MatchTransactions />
-      <ul className={listShellStyles.list}>
-        {inboxItems.map((item) => {
-          const date = new Date(item.date);
-          const isCurrentYear = currentYear === date.getFullYear();
-          const dateFormatted = isCurrentYear
-            ? f.shortDate(date)
-            : f.longDate(date);
-          const showDateHeader = dateFormatted !== prevFormattedDate;
-          prevFormattedDate = dateFormatted;
+    <BucketComboRoot onMatchAction={matchContext.openMatchingTo}>
+      {inboxItems?.length ? (
+        <ul className={listShell.list}>
+          {inboxItems.map((item) => {
+            const dateFormatted = formatDate(item.date);
+            const showDateHeader = dateFormatted !== prevDate;
+            prevDate = dateFormatted;
 
-          return (
-            <Fragment key={item.id}>
-              {showDateHeader && (
-                <li role="presentation" className={listShellStyles.datePos}>
-                  <h2 className={listShellStyles.date}>{dateFormatted}</h2>
-                </li>
-              )}
+            return (
+              <Fragment key={item.id}>
+                {showDateHeader && (
+                  <li role="presentation" className={listShell.datePos}>
+                    <h2 className={listShell.date}>{dateFormatted}</h2>
+                  </li>
+                )}
 
-              <Item item={item} selection={selection} />
-            </Fragment>
-          );
-        })}
-      </ul>
+                <Item item={item} selection={props.selection} />
+              </Fragment>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className={listShell.col}>
+          {props.searchQuery ? "no results" : "nothing to categorize"}
+        </p>
+      )}
     </BucketComboRoot>
   );
 }
 
-function Item(props: { item: InboxItem; selection: UseSelection }) {
+function Item(props: { item: InboxItem; selection: UseSelectionReturn }) {
   const itemId = props.item.id;
   const { f } = useI18n();
 
   return (
-    <li className={listShellStyles.col}>
+    <li className={listShell.col}>
       <div
-        className={`${listShellStyles.rowWrap}${props.selection.isSelecting ? listShellStyles.rowWrapSelect : ""}`}
+        className={`${listShell.rowWrap} ${props.selection.selectMode ? listShell.rowWrapSelect : ""}`}
         onClick={() =>
-          props.selection.isSelecting && props.selection.toggle(itemId)
+          props.selection.selectMode && props.selection.toggle(itemId)
         }
       >
-        <div className={listShellStyles.checkSlot}>
-          {/* <Checkbox */}
-          {/*   checked={props.selection.has(itemId)} */}
-          {/*   tabindex={-1} */}
-          {/*   style={{ "pointer-events": "none" }} */}
-          {/* /> */}
+        <div className={listShell.checkSlot}>
+          <Checkbox
+            checked={props.selection.selected.has(itemId)}
+            tabIndex={-1}
+            style={{ pointerEvents: "none" }}
+            readOnly
+          />
         </div>
-        <div className={`${listShellStyles.slide} ${styles.rowContent}`}>
+        <div className={`${listShell.slide} ${styles.rowContent}`}>
           <BucketComboTrigger rowId={itemId} className={styles.rowTrigger}>
             <div className={styles.info}>
               <span className={styles.primary}>
@@ -128,43 +159,32 @@ function Item(props: { item: InboxItem; selection: UseSelection }) {
   );
 }
 
-function useSelection() {
-  const [isEnabled, setIsEnabled] = useState(false);
-  const [selectedRows, setSelectedRows] = useState(new Set<string>());
+function FloatingBar(props: { selection: UseSelectionReturn }) {
+  const categorize = useCategorizeInboxMutation();
 
-  const clearSelection = () => setSelectedRows(new Set<string>());
-
-  const exitSelect = () => {
-    setIsEnabled(false);
-    clearSelection();
-  };
-
-  const toggle = (id: string) =>
-    setSelectedRows((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const drop = (ids: string[]) =>
-    setSelectedRows((prev) => {
-      const next = new Set(prev);
-      for (const id of ids) next.delete(id);
-      return next;
-    });
-
-  const has = selectedRows.has;
-
-  return {
-    isSelecting: isEnabled,
-    rows: selectedRows,
-    has,
-    toggle,
-    clearSelection,
-    exitSelect,
-    drop,
-  };
+  return (
+    <FloatingBarWrap show={props.selection.selectMode}>
+      <SelectionCountButton
+        count={props.selection.selected.size}
+        onClick={props.selection.clearSelection}
+      />
+      <div className={listShell.barPicker}>
+        <BucketPicker
+          kinds={["expense", "income", "person"]}
+          createKinds={["expense", "person"]}
+          value={null}
+          placeholder="Category or person"
+          onPick={(bucket) => {
+            const ids = [...props.selection.selected];
+            categorize.mutate({
+              rowIds: ids,
+              target: { type: "bucket", bucketId: bucket.id },
+            });
+            props.selection.drop(ids);
+          }}
+        />
+      </div>
+      <CloseButton onClick={props.selection.exitSelect} />
+    </FloatingBarWrap>
+  );
 }
-
-type UseSelection = ReturnType<typeof useSelection>;

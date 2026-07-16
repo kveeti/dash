@@ -1,21 +1,18 @@
-import { type JSX, splitProps } from "solid-js";
+import type { ButtonHTMLAttributes } from "react";
 
 import styles from "./button.module.css";
 
 type Variant = "primary" | "outline" | "ghost" | "destructive";
 
-interface Props extends JSX.ButtonHTMLAttributes<HTMLButtonElement> {
+interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
 }
 
-export function Button(props: Props) {
-  const [local, rest] = splitProps(props, ["class", "variant", "children"]);
+export function Button({ variant = "primary", className, ...rest }: Props) {
   return (
     <button
       {...rest}
-      class={`${styles.button} ${styles[local.variant ?? "primary"]} ${local.class ?? ""}`}
-    >
-      {local.children}
-    </button>
+      className={`${styles.button} ${styles[variant]} ${className ?? ""}`}
+    />
   );
 }

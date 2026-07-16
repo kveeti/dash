@@ -166,6 +166,32 @@
   @media (min-width: 35rem) {
     bottom: 0;
   }
+
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 280ms cubic-bezier(0.34, 2.5, 0.64, 1),
+    transform 280ms cubic-bezier(0.34, 2.5, 0.64, 1);
+}
+
+.floatingbarPos[data-show="false"] {
+  opacity: 0;
+  transform: translateY(6px);
+  visibility: hidden;
+  transition:
+    opacity 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    visibility 0s 140ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .floatingbarPos,
+  .floatingbarPos[data-show="false"] {
+    transform: none;
+    transition:
+      opacity 80ms ease,
+      visibility 0s 80ms;
+  }
 }
 
 .barError {
@@ -210,42 +236,4 @@
 .barPicker {
   flex: 1;
   min-inline-size: 0;
-}
-
-.barEnterActive {
-  animation: bar-in 280ms cubic-bezier(0.34, 2.5, 0.64, 1);
-}
-
-.barExitActive {
-  animation: bar-out 140ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes bar-in {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-}
-
-@keyframes bar-out {
-  to {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .barEnterActive {
-    animation: bar-fade 80ms ease reverse;
-  }
-
-  .barExitActive {
-    animation: bar-fade 80ms ease;
-  }
-}
-
-@keyframes bar-fade {
-  to {
-    opacity: 0;
-  }
 }

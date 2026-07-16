@@ -1,7 +1,6 @@
 import { Combobox } from "@base-ui/react/combobox";
 import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useSearchParams } from "wouter";
 
 import {
   useInboxMatchesQuery,
@@ -9,24 +8,53 @@ import {
   type InboxItem,
   type InboxMatch,
 } from "../../api/inbox";
+import { createContext } from "../../lib/create-context";
+import { setSearchParam, useSearchParam } from "../../lib/search-param";
 import { useI18n } from "../i18n/use-i18n";
 
 import styles from "./match-transactions-dialog.module.css";
 
-export function MatchTransactions() {
-  const [params, setParams] = useSearchParams();
-  const paramId = params.get("match") ?? "";
+const [useContext, context] =
+  createContext<ReturnType<typeof useMatchTransactionsValue>>();
+export const useMatchTransactions = useContext;
 
-  function onClose() {
-    const next = new URLSearchParams(params);
-    next.delete("match");
-    setParams(next, { replace: true });
-  }
+const paramName = "match-to";
+
+function useMatchTransactionsValue() {
+  const matchingToId = useSearchParam(paramName);
+
+  return {
+    matchingTo: matchingToId,
+    openMatchingTo: (matchToId: string) => {
+      if (!matchToId) throw new Error("No 'matchToId' provided!");
+
+      setSearchParam(paramName, matchToId);
+    },
+    close: () => {
+      setSearchParam(paramName, undefined);
+    },
+  };
+}
+
+export function MatchTransactions(props: { children: ReactNode }) {
+  const contextValue = useMatchTransactionsValue();
 
   return (
-    <MatchTransactionsDialog isOpen={!!paramId} onClose={onClose}>
-      <MatchTransactionsContent paramId={paramId} onClose={onClose} />
-    </MatchTransactionsDialog>
+    <context.Provider value={contextValue}>
+      {props.children}
+      <MatchTransactionsDialog
+        isOpen={!!contextValue.matchingTo}
+        onClose={contextValue.close}
+      >
+        <MatchTransactionsContent
+          // @ts-expect-error -
+          // Dialog won't render children unless isOpen is true.
+          // isOpen is only true when there's a matchingTo
+          paramId={contextValue.matchingTo}
+          onClose={contextValue.close}
+        />
+      </MatchTransactionsDialog>
+    </context.Provider>
   );
 }
 

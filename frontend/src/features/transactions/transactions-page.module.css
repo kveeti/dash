@@ -1,0 +1,79 @@
+.rowContent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--s3);
+  row-gap: 0;
+  align-items: baseline;
+  padding-block: var(--s2);
+}
+
+.who {
+  font-weight: 500;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  grid-column: 1 / -1;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metaRow {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--s3);
+  align-items: baseline;
+}
+
+.metaRow .meta {
+  grid-column: auto;
+}
+
+.account {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.tag {
+  border: 0;
+  padding: 0;
+  margin-inline-start: var(--s2);
+  background: none;
+  color: var(--fg-muted);
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.swap::before {
+  content: "";
+  display: inline-block;
+  inline-size: 1em;
+  block-size: 1em;
+  margin-inline-end: var(--s1);
+  vertical-align: -0.12em;
+  background-color: var(--fg-muted);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M8 3 4 7l4 4'/%3E%3Cpath d='M4 7h16'/%3E%3Cpath d='m16 21 4-4-4-4'/%3E%3Cpath d='M20 17H4'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--fg-muted);
+}
+
+.positive {
+  color: var(--positive);
+}

@@ -28,19 +28,6 @@ function useI18nValue(props: { currencies: Currencies }) {
     [locale, timeZone],
   );
 
-  const amountFormatter = useMemo(
-    () =>
-      new Intl.NumberFormat(locale, {
-        signDisplay: "auto",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-        currencyDisplay: "symbol",
-        style: "currency",
-        currency: "EUR",
-      }),
-    [locale],
-  );
-
   const shortDateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
@@ -68,16 +55,38 @@ function useI18nValue(props: { currencies: Currencies }) {
   });
 
   const formattersByCurrency = useMemo(() => {
-    const formatters: Record<string, (amount: number) => string> = {};
+    const formatters: Record<
+      string,
+      {
+        amount: (amount: number) => string;
+        signedAmount: (amount: number) => string;
+        wholeAmount: (amount: number) => string;
+      }
+    > = {};
 
     for (const { code, exponent } of props.currencies) {
       if (formatters[code])
         throw new Error(`Formatter for ${code} already defined`);
-      const formatter = new Intl.NumberFormat(locale, {
+      const amount = new Intl.NumberFormat(locale, {
         style: "currency",
         currency: code,
       });
-      formatters[code] = (amount) => formatter.format(amount / 10 ** exponent);
+      const signedAmount = new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency: code,
+        signDisplay: "always",
+      });
+      const wholeAmount = new Intl.NumberFormat(locale, {
+        style: "currency",
+        currency: code,
+        maximumFractionDigits: 0,
+      });
+      const divisor = 10 ** exponent;
+      formatters[code] = {
+        amount: (value) => amount.format(value / divisor),
+        signedAmount: (value) => signedAmount.format(value / divisor),
+        wholeAmount: (value) => wholeAmount.format(value / divisor),
+      };
     }
 
     return formatters;
@@ -86,7 +95,11 @@ function useI18nValue(props: { currencies: Currencies }) {
   return {
     f: {
       amount: (amount: number, isoCurrency: string) =>
-        formattersByCurrency[isoCurrency](amount),
+        formattersByCurrency[isoCurrency].amount(amount),
+      signedAmount: (amount: number, isoCurrency: string) =>
+        formattersByCurrency[isoCurrency].signedAmount(amount),
+      wholeAmount: (amount: number, isoCurrency: string) =>
+        formattersByCurrency[isoCurrency].wholeAmount(amount),
       percent: percentFormatter.format,
       shortDate: shortDateFormatter.format,
       longDate: longDateFormatter.format,
