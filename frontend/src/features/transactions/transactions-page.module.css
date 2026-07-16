@@ -8,7 +8,8 @@
 }
 
 .who {
-  font-weight: 500;
+  font-size: var(--text-base);
+  font-weight: 400;
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -17,8 +18,9 @@
 
 .meta {
   grid-column: 1 / -1;
-  color: var(--fg);
+  color: var(--fg-muted);
   font-size: var(--text-sm);
+  font-weight: 400;
   min-inline-size: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -40,6 +42,7 @@
 .account {
   color: var(--fg-muted);
   font-size: var(--text-sm);
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -66,7 +69,9 @@
 }
 
 .amount {
+  font-size: var(--text-base);
   font-variant-numeric: tabular-nums;
+  font-weight: 400;
   white-space: nowrap;
 }
 

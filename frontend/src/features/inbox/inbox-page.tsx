@@ -135,24 +135,16 @@ function Item(props: { item: InboxItem; selection: UseSelectionReturn }) {
         </div>
         <div className={`${listShell.slide} ${styles.rowContent}`}>
           <BucketComboTrigger rowId={itemId} className={styles.rowTrigger}>
-            <div className={styles.info}>
-              <span className={styles.primary}>
-                {props.item.counterparty || props.item.description || "—"}
-                {props.item.counterparty && props.item.description && (
-                  <>
-                    {" "}
-                    <span className={styles.secondary}>
-                      {props.item.description}
-                    </span>
-                  </>
-                )}
-              </span>
-            </div>
+            <span className={styles.primary}>
+              {props.item.counterparty || "—"}
+            </span>
             <span
-              className={`${styles.amount}${props.item.amount >= 0 ? styles.positive : ""}`}
+              className={`${styles.amount} ${props.item.amount >= 0 ? styles.positive : ""}`}
             >
               {f.amount(props.item.amount, props.item.currency)}
             </span>
+            <span className={styles.secondary}>{props.item.description}</span>
+            <span className={styles.account}>{props.item.account}</span>
           </BucketComboTrigger>
         </div>
       </div>
@@ -172,7 +164,7 @@ function FloatingBar(props: { selection: UseSelectionReturn }) {
       <div className={listShell.barPicker}>
         <BucketPicker
           kinds={["expense", "income", "person"]}
-          createKinds={["expense", "person"]}
+          createKinds={["expense", "income", "person"]}
           value={null}
           placeholder="Category or person"
           onPick={(bucket) => {
