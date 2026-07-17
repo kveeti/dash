@@ -78,7 +78,7 @@
   display: flex;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 220ms cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .rowWrapSelect .checkSlot {
@@ -87,7 +87,7 @@
 
 .slide {
   contain: layout;
-  transition: padding-inline-start 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: padding-inline-start 220ms cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .rowWrapSelect .slide {
@@ -149,6 +149,30 @@
   min-inline-size: 0;
 }
 
+.selectControls {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+
+.selectAllSlot {
+  flex: none;
+  overflow: hidden;
+}
+
+.selectAllInner {
+  padding-inline-start: var(--s2);
+}
+
+.selectAllButton {
+  position: relative;
+  padding-inline: 0.5rem;
+}
+
+.selectAllLabel {
+  display: block;
+}
+
 .activeFilter {
   border: 0;
   border-radius: 999px;
@@ -183,8 +207,8 @@
   transform: translateY(6px);
   visibility: hidden;
   transition:
-    opacity 140ms cubic-bezier(0.16, 1, 0.3, 1),
-    transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 140ms cubic-bezier(0.25, 0.8, 0.25, 1),
+    transform 140ms cubic-bezier(0.25, 0.8, 0.25, 1),
     visibility 0s 140ms;
 }
 

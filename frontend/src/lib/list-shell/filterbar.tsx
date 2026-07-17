@@ -1,3 +1,9 @@
+import {
+  AnimatePresence,
+  motion,
+  useIsPresent,
+  useReducedMotion,
+} from "motion/react";
 import { useEffect, useRef } from "react";
 
 import { Button } from "../../ui/button/button";
@@ -18,26 +24,32 @@ export function Filterbar(props: {
   onClearTag?: () => void;
 }) {
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const reduceMotion = useReducedMotion();
   useEffect(() => () => clearTimeout(debounce.current), []);
+
+  const transition = reduceMotion
+    ? { duration: 0 }
+    : { duration: 0.22, ease: [0.25, 0.8, 0.25, 1] as const };
 
   return (
     <div className={styles.filterbarPos}>
       <div className={styles.filterbar}>
-        <Checkbox
-          aria-label={props.selectLabel}
-          checked={props.selectMode}
-          onChange={(e) => props.onSelectMode(e.currentTarget.checked)}
-        />
-        {props.selectMode && (
-          <Button
-            type="button"
-            variant="ghost"
-            style={{ padding: "0.5rem" }}
-            onClick={props.onToggleAll}
-          >
-            {props.allVisibleSelected ? "Deselect all" : "Select all"}
-          </Button>
-        )}
+        <div className={styles.selectControls}>
+          <Checkbox
+            aria-label={props.selectLabel}
+            checked={props.selectMode}
+            onChange={(e) => props.onSelectMode(e.currentTarget.checked)}
+          />
+          <AnimatePresence initial={false}>
+            {props.selectMode && (
+              <SelectAllButton
+                allVisibleSelected={props.allVisibleSelected}
+                onClick={props.onToggleAll}
+                transition={transition}
+              />
+            )}
+          </AnimatePresence>
+        </div>
         {props.tag && (
           <button
             className={styles.activeFilter}
@@ -59,5 +71,53 @@ export function Filterbar(props: {
         />
       </div>
     </div>
+  );
+}
+
+function SelectAllButton(props: {
+  allVisibleSelected: boolean;
+  onClick: () => void;
+  transition: {
+    duration: number;
+    ease?: readonly [number, number, number, number];
+  };
+}) {
+  const isPresent = useIsPresent();
+  const label = props.allVisibleSelected ? "Deselect all" : "Select all";
+
+  return (
+    <motion.div
+      className={styles.selectAllSlot}
+      initial={{ width: 0 }}
+      animate={{ width: "auto" }}
+      exit={{ width: 0 }}
+      layout="size"
+      transition={{ ...props.transition, layout: props.transition }}
+      inert={!isPresent}
+    >
+      <div className={styles.selectAllInner}>
+        <Button
+          type="button"
+          variant="ghost"
+          className={styles.selectAllButton}
+          aria-label={label}
+          onClick={props.onClick}
+        >
+          <AnimatePresence initial={false} mode="popLayout">
+            <motion.span
+              key={label}
+              className={styles.selectAllLabel}
+              aria-hidden
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={props.transition}
+            >
+              {label}
+            </motion.span>
+          </AnimatePresence>
+        </Button>
+      </div>
+    </motion.div>
   );
 }
