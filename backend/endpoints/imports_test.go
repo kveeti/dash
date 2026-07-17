@@ -373,11 +373,15 @@ func TestListImports(t *testing.T) {
 
 	resp := authed(t, app, http.MethodGet, "/api/v1/imports", nil)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var batches []map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&batches))
-	require.Len(t, batches, 1)
-	require.Equal(t, "export.csv", batches[0]["filename"])
-	require.Equal(t, float64(1), batches[0]["imported"])
+	var page struct {
+		Rows       []map[string]any `json:"rows"`
+		NextCursor *cursor          `json:"next_cursor"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&page))
+	require.Len(t, page.Rows, 1)
+	require.Nil(t, page.NextCursor)
+	require.Equal(t, "export.csv", page.Rows[0]["filename"])
+	require.Equal(t, float64(1), page.Rows[0]["imported"])
 }
 
 // batchReport mirrors the counts-only poll payload — the report endpoint never

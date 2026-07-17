@@ -59,6 +59,7 @@ button.rowTrigger[data-popup-open] {
 
 .amount,
 .account {
+  text-align: end;
   white-space: nowrap;
 }
 

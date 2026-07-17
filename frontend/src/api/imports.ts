@@ -10,6 +10,7 @@ import { transactionKeys } from "./transactions";
 
 export const importKeys = {
   all: ["imports"] as const,
+  list: () => [...importKeys.all, "list"] as const,
   batch: (id: string) => [...importKeys.all, id] as const,
 };
 
@@ -66,10 +67,22 @@ interface DuplicatePage {
   next_cursor: string | null;
 }
 
-export function useImportsQuery() {
-  return useQuery({
-    queryKey: importKeys.all,
-    queryFn: () => api<ImportBatchSummary[]>("/api/v1/imports"),
+interface ImportsPage {
+  rows: ImportBatchSummary[];
+  next_cursor: { date: string; id: string } | null;
+}
+
+export function useInfiniteImportsQuery() {
+  return useInfiniteQuery({
+    queryKey: importKeys.list(),
+    queryFn: ({ pageParam }: { pageParam: ImportsPage["next_cursor"] }) => {
+      const query = pageParam
+        ? `?before_date=${encodeURIComponent(pageParam.date)}&before_id=${pageParam.id}`
+        : "";
+      return api<ImportsPage>(`/api/v1/imports${query}`);
+    },
+    initialPageParam: null,
+    getNextPageParam: (last: ImportsPage) => last.next_cursor,
   });
 }
 

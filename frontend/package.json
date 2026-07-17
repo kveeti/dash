@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "e2e": "playwright test",
+    "e2e:server": "exec ../scripts/e2e-server.sh",
     "preview": "vite preview",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check"

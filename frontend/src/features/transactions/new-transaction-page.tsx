@@ -59,7 +59,7 @@ export default function NewTransactionPage() {
   );
 }
 
-function TransactionForm(props: { homeCurrency: string }) {
+export function TransactionForm(props: { homeCurrency: string }) {
   const [, navigate] = useLocation();
   const buckets = useBucketsQuery();
   const currencies = useCurrenciesQuery();

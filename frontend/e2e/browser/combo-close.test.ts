@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test.use({ baseURL: "http://127.0.0.1:3001" });
+
 const buckets = [
   "Restaurants",
   "Subscriptions",
@@ -111,19 +113,6 @@ async function categorizeAndSample(page: Page, rowName: string) {
   );
 }
 
-function report(samples: Sample[]) {
-  const condensed = samples.filter((s, i) => {
-    const prev = samples[i - 1];
-    return (
-      !prev ||
-      Object.entries(s).some(
-        ([k, v]) => k !== "t" && v !== prev[k as keyof Sample],
-      )
-    );
-  });
-  console.log(JSON.stringify(condensed));
-}
-
 function expectAnimatedOutInPlace(samples: Sample[]) {
   const ending = samples.filter((s) => s.attrs.includes("data-ending-style"));
   expect(ending.length).toBeGreaterThan(1);
@@ -142,7 +131,6 @@ test("categorizing a row animates the popup out in place", async ({ page }) => {
   await mockApi(page, 3);
   await page.goto("/e2e/fixture/");
   const samples = await categorizeAndSample(page, "Row 2");
-  report(samples);
   expectAnimatedOutInPlace(samples);
 });
 
@@ -152,7 +140,6 @@ test("categorizing the last row animates the popup out in place", async ({
   await mockApi(page, 1);
   await page.goto("/e2e/fixture/");
   const samples = await categorizeAndSample(page, "Row 1");
-  report(samples);
   expectAnimatedOutInPlace(samples);
 });
 
@@ -202,7 +189,6 @@ test("control: escape-close animation profile", async ({ page }) => {
   const samples = await page.evaluate(
     () => (window as unknown as { __samples: Sample[] }).__samples,
   );
-  report(samples);
   expectAnimatedOutInPlace(samples);
 });
 
@@ -249,7 +235,6 @@ test("opening does not flash an oversized list", async ({ page }) => {
   const samples = await page.evaluate(
     () => (window as unknown as { __samples: Sample[] }).__samples,
   );
-  report(samples);
 
   const visible = samples.filter(
     (s) => s.mounted && Number(s.popupOpacity) > 0.05,

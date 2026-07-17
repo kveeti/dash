@@ -2,12 +2,11 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-database="dash_e2e"
-pg_port="${PGPORT:-5557}"
-backend_port="${E2E_PORT:-8200}"
-idp_port="${E2E_DEVIDP_PORT:-5758}"
-admin_url="postgres://postgres:postgres@127.0.0.1:$pg_port/postgres"
-database_url="postgres://postgres:postgres@127.0.0.1:$pg_port/$database"
+database="dash_e2e_$$"
+backend_port=8200
+idp_port=5758
+admin_url="postgres://postgres:postgres@127.0.0.1:5556/postgres"
+database_url="postgres://postgres:postgres@127.0.0.1:5556/$database"
 bin_dir="$(mktemp -d)"
 pids=()
 
@@ -28,12 +27,11 @@ trap cleanup EXIT INT TERM
   go build -o "$bin_dir/devidp" ./cmd/devidp
 )
 
-psql "$admin_url" -v ON_ERROR_STOP=1 -c "drop database if exists $database with (force)" >/dev/null
 psql "$admin_url" -v ON_ERROR_STOP=1 -c "create database $database" >/dev/null
 
 DEVIDP_ADDR="127.0.0.1:$idp_port" \
 DEVIDP_ISSUER="http://127.0.0.1:$idp_port" \
-"$bin_dir/devidp" &
+"$bin_dir/devidp" >"$bin_dir/devidp.log" 2>&1 &
 idp_pid=$!
 pids+=("$idp_pid")
 
@@ -42,6 +40,7 @@ for _ in {1..100}; do
     break
   fi
   if ! kill -0 "$idp_pid" 2>/dev/null; then
+    cat "$bin_dir/devidp.log" >&2
     exit 1
   fi
   sleep 0.1
@@ -50,7 +49,7 @@ done
 PORT="$backend_port" \
 BACKEND_URL="http://127.0.0.1:$backend_port" \
 FRONT_URL= \
-DEV_VITE_URL= \
+DEV_VITE_URL=http://127.0.0.1:3001 \
 DB_URL="$database_url" \
 IMPORT_STORE=postgres \
 DISABLE_RATE_SYNC=1 \
@@ -59,8 +58,13 @@ OIDC_CLIENT_ID=dash \
 OIDC_CLIENT_SECRET=dash \
 OIDC_REDIRECT_URL= \
 IS_PROD=0 \
-"$bin_dir/dash" &
+"$bin_dir/dash" >"$bin_dir/backend.log" 2>&1 &
 backend_pid=$!
 pids+=("$backend_pid")
 
+set +e
 wait "$backend_pid"
+status=$?
+set -e
+cat "$bin_dir/backend.log" >&2
+exit "$status"

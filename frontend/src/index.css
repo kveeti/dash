@@ -34,12 +34,6 @@ a:focus-visible {
   border-radius: 2px;
 }
 
-header,
-aside,
-footer {
-  padding: var(--s5);
-}
-
 h1 {
   font-size: var(--text-xl);
   line-height: 1.2;

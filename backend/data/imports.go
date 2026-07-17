@@ -531,16 +531,24 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 	return nil
 }
 
-func (d *Data) ListImports(ctx context.Context, userID string) ([]ImportBatch, error) {
+func (d *Data) ListImports(ctx context.Context, userID string, cursorCreatedAt time.Time, cursorID string, limit int) ([]ImportBatch, error) {
+	args := []any{userID}
+	cursorClause := ""
+	if cursorID != "" {
+		cursorClause = "and (b.created_at, b.id) < ($2::timestamptz, $3::uuid)"
+		args = append(args, cursorCreatedAt, cursorID)
+	}
+
 	rows, err := d.db.QueryContext(ctx,
 		`select b.id, b.bucket_id, b.filename, b.created_at, b.status,
 		        count(*) filter (where r.status <> 'duplicate'),
 		        count(*) filter (where r.status = 'duplicate')
 		 from import_batches b
 		 left join import_rows r on r.batch_id = b.id
-		 where b.user_id = $1
+		 where b.user_id = $1 `+cursorClause+`
 		 group by b.id
-		 order by b.created_at desc`, userID)
+		 order by b.created_at desc, b.id desc
+		 limit `+strconv.Itoa(limit), args...)
 	if err != nil {
 		return nil, err
 	}

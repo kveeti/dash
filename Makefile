@@ -5,7 +5,7 @@ ifneq (,$(wildcard ./.env))
 endif
 endif
 
-.PHONY: all
+.PHONY: all e2e
 MAKEFLAGS += -j
 
 backdev:

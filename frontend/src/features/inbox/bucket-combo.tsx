@@ -209,7 +209,7 @@ export function BucketComboRoot(props: {
             >
               <Combobox.Input
                 className={styles.input}
-                placeholder="Category, person, or action"
+                placeholder="Filter actions..."
                 aria-label="Filter categories, people, and actions"
               />
 

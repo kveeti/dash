@@ -1,7 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 
-test.use({ baseURL: "http://localhost:8001" });
-
 const nordeaHeader =
   "Kirjauspäivä;Määrä;Maksaja;Maksunsaaja;Nimi;Otsikko;Viesti;Viitenumero;Saldo;Valuutta;\n";
 
@@ -125,17 +123,6 @@ test("real app: categorizing a row animates the popup out in place", async ({
   const samples = await page.evaluate(
     () => (window as unknown as { __samples: Sample[] }).__samples,
   );
-  const condensed = samples.filter((s, i) => {
-    const prev = samples[i - 1];
-    return (
-      !prev ||
-      Object.entries(s).some(
-        ([k, v]) => k !== "t" && v !== prev[k as keyof Sample],
-      )
-    );
-  });
-  console.log(JSON.stringify(condensed));
-
   const ending = samples.filter((s) => s.attrs.includes("data-ending-style"));
   expect(ending.length).toBeGreaterThan(1);
   expect(

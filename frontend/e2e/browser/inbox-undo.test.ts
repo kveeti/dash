@@ -1,6 +1,9 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
-test.use({ viewport: { width: 390, height: 844 } });
+test.use({
+  baseURL: "http://127.0.0.1:3001",
+  viewport: { width: 390, height: 844 },
+});
 
 const rows = ["One", "Two", "Three"].map((counterparty, i) => ({
   id: `r${i + 1}`,

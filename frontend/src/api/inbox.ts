@@ -57,9 +57,7 @@ export function useInfiniteInboxQuery(props: { searchQuery: string | null }) {
         params.set("before_id", pageParam.id);
       }
 
-      if (props.searchQuery) {
-        params.set("q", encodeURIComponent(props.searchQuery));
-      }
+      if (props.searchQuery) params.set("q", props.searchQuery);
 
       return api<InboxPage>(
         `/api/v1/inbox${params.size ? `?${params.toString()}` : ""}`,
@@ -189,9 +187,7 @@ export function useInboxMatchesQuery(props: {
     queryFn: () => {
       const params = new URLSearchParams();
 
-      if (props.searchQuery) {
-        params.set("q", encodeURIComponent(props.searchQuery));
-      }
+      if (props.searchQuery) params.set("q", props.searchQuery);
 
       return api<{ source: InboxItem; matches: InboxMatch[] }>(
         `/api/v1/inbox/${props.id}/matches${params.size ? `?${params.toString()}` : ""}`,

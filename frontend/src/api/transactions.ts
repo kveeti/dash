@@ -70,9 +70,8 @@ export function useInfiniteTransactionsQuery(props: {
         params.set("before_date", pageParam.date);
         params.set("before_id", pageParam.id);
       }
-      if (props.searchQuery)
-        params.set("q", encodeURIComponent(props.searchQuery));
-      if (props.tag) params.set("tag", encodeURIComponent(props.tag));
+      if (props.searchQuery) params.set("q", props.searchQuery);
+      if (props.tag) params.set("tag", props.tag);
 
       return api<TransactionsPage>(
         `/api/v1/transactions${params.size ? `?${params.toString()}` : ""}`,

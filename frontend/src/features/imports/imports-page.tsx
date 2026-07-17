@@ -1,12 +1,19 @@
 import { Field as FormField, Form, useForm } from "@formisch/react";
+import { useEffect, useRef } from "react";
 import * as v from "valibot";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 
 import { useBucketsQuery } from "../../api/buckets";
-import { useCreateImportMutation, useImportsQuery } from "../../api/imports";
+import { useCurrenciesQuery } from "../../api/currencies";
+import {
+  useCreateImportMutation,
+  useInfiniteImportsQuery,
+} from "../../api/imports";
+import { useMeQuery } from "../../api/user";
 import { Button } from "../../ui/button/button";
 import { Field, InputGroup } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
+import { TransactionForm } from "../transactions/new-transaction-page";
 
 import inputStyles from "../../ui/input/input.module.css";
 import styles from "./imports.module.css";
@@ -40,17 +47,21 @@ export default function ImportsPage() {
         </div>
       </div>
 
-      <div>
+      <section>
         <h1 className={styles.title}>Past imports</h1>
         <PastImports />
-      </div>
+      </section>
+
+      <section>
+        <h1 className={styles.title}>Import manually</h1>
+        <ManualImport />
+      </section>
     </div>
   );
 }
 
 function ImportForm() {
   const buckets = useBucketsQuery();
-  const [, navigate] = useLocation();
   const mutation = useCreateImportMutation();
 
   const form = useForm({
@@ -61,13 +72,12 @@ function ImportForm() {
   const onSubmit = async (values: v.InferOutput<typeof schema>) => {
     if (mutation.isPending) return;
     try {
-      const res = await mutation.mutateAsync({
+      await mutation.mutateAsync({
         file: values.file,
         bucketId: values.bucket,
         format: values.format,
         timezone: values.timezone,
       });
-      navigate(`/imports/${res.batch_id}`);
     } catch {
       // surfaced via mutation.isError below
     }
@@ -82,7 +92,12 @@ function ImportForm() {
             label="File"
             error={field.errors?.[0]}
           >
-            <input {...field.props} type="file" accept=".csv,text/csv" />
+            <input
+              {...field.props}
+              className={inputStyles.control}
+              type="file"
+              accept=".csv,text/csv"
+            />
           </Field>
         )}
       </FormField>
@@ -186,32 +201,85 @@ function PastImportsSkeleton() {
 }
 
 function PastImports() {
-  const imports = useImportsQuery();
+  const imports = useInfiniteImportsQuery();
   const buckets = useBucketsQuery();
+  const batches = imports.data?.pages.flatMap((page) => page.rows) ?? [];
 
   const bucketName = (id: string) =>
     buckets.data?.find((b) => b.id === id)?.name ?? id;
 
   if (imports.isPending || buckets.isPending) return <PastImportsSkeleton />;
   if (imports.isError) return <p>error: {imports.error.message}</p>;
-  if (!imports.data.length) return <p>no imports yet</p>;
+  if (!batches.length) return <p>no imports yet</p>;
 
   return (
-    <ul className={styles.list}>
-      {imports.data.map((batch) => (
-        <li key={batch.id} className={styles.batch}>
-          <Link href={`/imports/${batch.id}`}>{batch.filename}</Link>
-          <span className={styles.meta}>
-            {bucketName(batch.bucket_id)} ·{" "}
-            {dateFormat.format(new Date(batch.created_at))} ·{" "}
-            {batch.status === "done"
-              ? `${batch.imported} imported · ${batch.duplicates} duplicates`
-              : batch.status === "failed"
-                ? "failed"
-                : "processing…"}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div className={styles.listScroller}>
+      <ul className={styles.list}>
+        {batches.map((batch) => {
+          const processing =
+            batch.status === "uploaded" || batch.status === "processing";
+          return (
+            <li
+              key={batch.id}
+              className={`${styles.batch}${processing ? ` ${styles.processing}` : ""}`}
+            >
+              <Link href={`/imports/${batch.id}`} className={styles.batchLink}>
+                {batch.filename}
+              </Link>
+              <span className={styles.filename}>{batch.filename}</span>
+              <span className={styles.meta}>
+                {bucketName(batch.bucket_id)} ·{" "}
+                {dateFormat.format(new Date(batch.created_at))}
+              </span>
+              <span className={styles.status}>
+                {batch.status === "done"
+                  ? `${batch.imported} imported · ${batch.duplicates} duplicates`
+                  : batch.status === "failed"
+                    ? "Failed"
+                    : "Processing… refresh for updates"}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      <LoadMore imports={imports} />
+    </div>
   );
+}
+
+function LoadMore(props: {
+  imports: ReturnType<typeof useInfiniteImportsQuery>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !props.imports.hasNextPage) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !props.imports.isFetchingNextPage) {
+        void props.imports.fetchNextPage();
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [props.imports]);
+
+  if (!props.imports.hasNextPage) return null;
+  return (
+    <div ref={ref} className={styles.loadMore}>
+      {props.imports.isFetchingNextPage ? "Loading…" : "Load more"}
+    </div>
+  );
+}
+
+function ManualImport() {
+  const currencies = useCurrenciesQuery();
+  const me = useMeQuery();
+
+  if (currencies.isError || me.isError) {
+    return <p>error: {(currencies.error ?? me.error)?.message}</p>;
+  }
+  if (!currencies.data || !me.data) return <p>loading…</p>;
+
+  return <TransactionForm homeCurrency={me.data.home_currency} />;
 }

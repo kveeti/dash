@@ -13,7 +13,10 @@ import (
 	"time"
 )
 
-const duplicatesPageSize = 50
+const (
+	duplicatesPageSize = 50
+	importsPageSize    = 5
+)
 
 // maxImportBytes caps the upload body; a var so tests can lower it.
 var maxImportBytes int64 = 64 << 20
@@ -134,14 +137,18 @@ func HandleListImports(state *state.State, getUserID GetUserID) Handler {
 			return err
 		}
 
-		batches, err := state.Data.ListImports(r.Context(), userID)
+		cursorDate, cursorID, err := parseCursor(r)
+		if err != nil {
+			return err
+		}
+		batches, err := state.Data.ListImports(r.Context(), userID, cursorDate, cursorID, importsPageSize)
 		if err != nil {
 			return NewUnexpectedErr("error listing imports: %w", err)
 		}
 
-		out := make([]JSON, len(batches))
+		rows := make([]JSON, len(batches))
 		for i, b := range batches {
-			out[i] = JSON{
+			rows[i] = JSON{
 				"id":         b.ID,
 				"bucket_id":  b.BucketID,
 				"filename":   b.Filename,
@@ -151,7 +158,12 @@ func HandleListImports(state *state.State, getUserID GetUserID) Handler {
 				"duplicates": b.Duplicates,
 			}
 		}
-		Json(w, out)
+		var nextCursor *cursor
+		if len(batches) == importsPageSize {
+			last := batches[len(batches)-1]
+			nextCursor = &cursor{Date: formatDate(last.CreatedAt), ID: last.ID}
+		}
+		Json(w, JSON{"rows": rows, "next_cursor": nextCursor})
 		return nil
 	}
 }

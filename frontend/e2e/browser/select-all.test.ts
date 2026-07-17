@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+test.use({ baseURL: "http://127.0.0.1:3001" });
+
 const inboxRows = Array.from({ length: 5 }, (_, i) => ({
   id: `r${i + 1}`,
   counterparty: `Inbox row ${i + 1}`,

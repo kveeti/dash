@@ -1,9 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-test.use({
-  baseURL: process.env.E2E_BASE_URL ?? "http://localhost:8001",
-  viewport: { width: 390, height: 844 },
-});
+test.use({ viewport: { width: 390, height: 844 } });
 
 const nordeaHeader =
   "Kirjauspäivä;Määrä;Maksaja;Maksunsaaja;Nimi;Otsikko;Viesti;Viitenumero;Saldo;Valuutta;\n";

@@ -328,7 +328,6 @@ export default function StatsPage() {
                 currency={stats.data.home_currency}
                 incomplete={incomplete}
                 goodWhenUp
-                noPercent
               />
             </section>
 
@@ -390,15 +389,11 @@ function Summary(props: {
   currency: string;
   incomplete: boolean;
   goodWhenUp: boolean;
-  noPercent?: boolean;
 }) {
   const { f } = useI18n();
   const difference = props.value.current - props.value.comparison;
   const showPercent =
-    !props.noPercent &&
-    !props.incomplete &&
-    props.value.comparison > 0 &&
-    difference !== 0;
+    !props.incomplete && props.value.comparison !== 0 && difference !== 0;
 
   return (
     <article className={styles.summaryItem}>
@@ -412,7 +407,7 @@ function Summary(props: {
           <span
             className={`${styles.chip} ${difference > 0 === props.goodWhenUp ? styles.chipGood : styles.chipBad}`}
           >
-            {f.percent(difference / props.value.comparison)}
+            {f.percent(difference / Math.abs(props.value.comparison))}
           </span>
         )}
 
