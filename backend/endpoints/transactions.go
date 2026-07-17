@@ -185,6 +185,27 @@ func HandleBulkCategorize(state *state.State, getUserID GetUserID) Handler {
 	}
 }
 
+func HandleRemoveTransactions(state *state.State, getUserID GetUserID) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		userID, err := getUserID(r)
+		if err != nil {
+			return err
+		}
+		var body struct {
+			TransactionIDs []string `json:"transaction_ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			return NewErr("invalid request body", http.StatusBadRequest)
+		}
+		removed, restored, err := state.Data.RemoveTransactions(r.Context(), userID, body.TransactionIDs)
+		if err != nil {
+			return mapTransactionErr(err)
+		}
+		Json(w, map[string]int{"removed": removed, "restored": restored})
+		return nil
+	}
+}
+
 func HandleDeleteTransaction(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)

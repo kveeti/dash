@@ -515,6 +515,30 @@ func TestDeleteTransaction(t *testing.T) {
 	require.Empty(t, getBalances(t, app))
 }
 
+func TestBulkRemovePermanentlyDeletesManualTransaction(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	id := createTransaction(t, app, []map[string]any{
+		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
+		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
+	})
+
+	resp := authed(t, app, http.MethodDelete, "/api/v1/transactions", map[string]any{
+		"transaction_ids": []string{id},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var out struct {
+		Removed  int `json:"removed"`
+		Restored int `json:"restored"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Equal(t, 1, out.Removed)
+	require.Zero(t, out.Restored)
+	require.Empty(t, decodeTxns(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil)))
+	require.Empty(t, getInbox(t, app, ""))
+}
+
 func TestDeleteNotFound(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	resp := authed(t, app, http.MethodDelete, "/api/v1/transactions/00000000-0000-0000-0000-000000000000", nil)

@@ -35,6 +35,34 @@ func getInbox(t *testing.T, app *testApp, query string) []inboxRow {
 	return out.Rows
 }
 
+func categorizeInboxTransactions(t *testing.T, app *testApp, rowIDs []string, bucketID string) []string {
+	t.Helper()
+	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/categorize", map[string]any{
+		"row_ids":   rowIDs,
+		"bucket_id": bucketID,
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var out struct {
+		Categorized    int             `json:"categorized"`
+		TransactionIDs json.RawMessage `json:"transaction_ids"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Nil(t, out.TransactionIDs)
+
+	rows, err := app.d.Users.Query("select transaction_id from import_rows where id = any($1::uuid[]) order by id", rowIDs)
+	require.NoError(t, err)
+	defer rows.Close()
+	var transactionIDs []string
+	for rows.Next() {
+		var id string
+		require.NoError(t, rows.Scan(&id))
+		transactionIDs = append(transactionIDs, id)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, out.Categorized, len(transactionIDs))
+	return transactionIDs
+}
+
 func inboxByParty(rows []inboxRow) map[string]inboxRow {
 	m := map[string]inboxRow{}
 	for _, r := range rows {
@@ -50,9 +78,11 @@ func categorizeInbox(t *testing.T, app *testApp, rowIDs []string, bucketID strin
 		"bucket_id": bucketID,
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var out map[string]int
+	var out struct {
+		Categorized int `json:"categorized"`
+	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
-	return out["categorized"]
+	return out.Categorized
 }
 
 // Categorizing pending inbox rows creates ledger transactions with an asset leg on
@@ -81,6 +111,167 @@ func TestInboxCategorizeCreatesTransactions(t *testing.T) {
 	balances := getBalances(t, app)
 	require.Equal(t, int64(-1234+10000), balances[bank]["EUR"])
 	require.Equal(t, int64(1234-10000), balances[groceries]["EUR"])
+}
+
+func TestRemoveTransactionsRestoresImportedRows(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	doImport(t, app, bank, nordeaHeader+
+		nordeaRow("2026/07/01", "-12,34", "K-Market", "Groceries")+
+		nordeaRow("2026/07/02", "-5,00", "Cafe", "Coffee"))
+
+	rows := getInbox(t, app, "")
+	rowIDs := []string{rows[0].ID, rows[1].ID}
+	transactionIDs := categorizeInboxTransactions(t, app, rowIDs, groceries)
+	require.Len(t, transactionIDs, 2)
+
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
+		"transaction_ids": []string{transactionIDs[0]}, "tag": "temporary",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp = authed(t, app, http.MethodDelete, "/api/v1/transactions", map[string]any{
+		"transaction_ids": transactionIDs,
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var removed struct {
+		Removed  int `json:"removed"`
+		Restored int `json:"restored"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&removed))
+	require.Equal(t, 2, removed.Removed)
+	require.Equal(t, 2, removed.Restored)
+	require.Len(t, getInbox(t, app, ""), 2)
+	require.Empty(t, decodeTxns(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil)))
+	require.Empty(t, getBalances(t, app))
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/tags", nil)
+	var tags struct {
+		Tags []string `json:"tags"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&tags))
+	require.Empty(t, tags.Tags)
+}
+
+func TestRemoveMatchedTransactionRestoresBothRows(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	checking := createBucket(t, app, "asset", "Checking")
+	savings := createBucket(t, app, "asset", "Savings")
+	doImport(t, app, checking, nordeaHeader+nordeaRow("2026/07/01", "-500,00", "Transfer", "Savings"))
+	doImport(t, app, savings, nordeaHeader+nordeaRow("2026/07/02", "500,00", "Transfer", "Checking"))
+
+	rows := getInbox(t, app, "")
+	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/"+rows[0].ID+"/match", map[string]any{"match_id": rows[1].ID})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var matched struct {
+		Matched       bool            `json:"matched"`
+		TransactionID json.RawMessage `json:"transaction_id"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&matched))
+	require.True(t, matched.Matched)
+	require.Nil(t, matched.TransactionID)
+	var transactionID string
+	require.NoError(t, app.d.Users.QueryRow("select transaction_id from import_rows where id = $1", rows[0].ID).Scan(&transactionID))
+
+	resp = authed(t, app, http.MethodDelete, "/api/v1/transactions", map[string]any{
+		"transaction_ids": []string{transactionID},
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Len(t, getInbox(t, app, ""), 2)
+	require.Empty(t, decodeTxns(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil)))
+}
+
+func TestRestoreInboxRows(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	groceries := createBucket(t, app, "expense", "Groceries")
+	doImport(t, app, bank, nordeaHeader+nordeaRow("2026/07/01", "-12,34", "K-Market", "Groceries"))
+
+	row := getInbox(t, app, "")[0]
+	transactionIDs := categorizeInboxTransactions(t, app, []string{row.ID}, groceries)
+	require.Len(t, transactionIDs, 1)
+	transactionID := transactionIDs[0]
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
+		"transaction_ids": transactionIDs, "tag": "temporary",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp = authed(t, app, http.MethodPost, "/api/v1/inbox/restore", map[string]any{"row_ids": []string{row.ID}})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var out struct {
+		Restored int `json:"restored"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	require.Equal(t, 1, out.Restored)
+	require.Len(t, getInbox(t, app, ""), 1)
+	require.Empty(t, decodeTxns(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil)))
+
+	var transactionDeletes, postingDeletes, tagDeletes, rowUpdates int
+	require.NoError(t, app.d.Users.QueryRow(`select count(*) from audit_logs
+		where table_name = 'transactions' and operation = 'delete' and row_id = $1`, transactionID).Scan(&transactionDeletes))
+	require.NoError(t, app.d.Users.QueryRow(`select count(*) from audit_logs
+		where table_name = 'postings' and operation = 'delete' and before->>'transaction_id' = $1`, transactionID).Scan(&postingDeletes))
+	require.NoError(t, app.d.Users.QueryRow(`select count(*) from audit_logs
+		where table_name = 'transaction_tags' and operation = 'delete' and before->>'transaction_id' = $1`, transactionID).Scan(&tagDeletes))
+	require.NoError(t, app.d.Users.QueryRow(`select count(*) from audit_logs
+		where table_name = 'import_rows' and operation = 'update' and row_id = $1`, row.ID).Scan(&rowUpdates))
+	require.Equal(t, 1, transactionDeletes)
+	require.Equal(t, 2, postingDeletes)
+	require.Equal(t, 1, tagDeletes)
+	require.Equal(t, 2, rowUpdates)
+}
+
+func TestRestoreInboxMatchReturnsBothRows(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	checking := createBucket(t, app, "asset", "Checking")
+	savings := createBucket(t, app, "asset", "Savings")
+	doImport(t, app, checking, nordeaHeader+nordeaRow("2026/07/01", "-500,00", "Transfer", "Savings"))
+	doImport(t, app, savings, nordeaHeader+nordeaRow("2026/07/02", "500,00", "Transfer", "Checking"))
+
+	rows := getInbox(t, app, "")
+	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/"+rows[0].ID+"/match", map[string]any{"match_id": rows[1].ID})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp = authed(t, app, http.MethodPost, "/api/v1/inbox/restore", map[string]any{"row_ids": []string{rows[0].ID}})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Len(t, getInbox(t, app, ""), 2)
+}
+
+func TestRestoreInboxRejectsAnotherUsersRows(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	otherUserID := data.NewPrivateID()
+	require.NoError(t, app.d.CreateUser(context.Background(), data.User{
+		ID: otherUserID, Subject: "restore-other", Issuer: "test", Email: "restore-other@example.com", CreatedAt: time.Now(),
+	}))
+	assetID := data.NewPrivateID()
+	categoryID := data.NewPrivateID()
+	require.NoError(t, app.d.CreateBucket(context.Background(), data.Bucket{
+		ID: assetID, OwnerUserID: otherUserID, Kind: data.KindAsset, Name: "Other asset", CreatedAt: time.Now(),
+	}))
+	require.NoError(t, app.d.CreateBucket(context.Background(), data.Bucket{
+		ID: categoryID, OwnerUserID: otherUserID, Kind: data.KindExpense, Name: "Other expense", CreatedAt: time.Now(),
+	}))
+	batchID := data.NewPrivateID()
+	rowID := data.NewPrivateID()
+	_, err := app.d.Users.Exec(`insert into import_batches
+		(id, user_id, bucket_id, source, filename, timezone, created_at, status)
+		values ($1, $2, $3, 'nordea', 'other.csv', 'Europe/Helsinki', now(), 'done')`, batchID, otherUserID, assetID)
+	require.NoError(t, err)
+	_, err = app.d.Users.Exec(`insert into import_rows
+		(id, batch_id, date, amount, currency, raw_description, raw, dedup_hash, status)
+		values ($1, $2, '2026-06-30T21:00:00Z', -500, 'EUR', '', '{"payee":"Other row"}', $3, 'pending')`, rowID, batchID, rowID)
+	require.NoError(t, err)
+	categorized, err := app.d.CategorizeInboxRows(context.Background(), otherUserID, []string{rowID}, categoryID)
+	require.NoError(t, err)
+	require.Equal(t, 1, categorized)
+
+	resp := authed(t, app, http.MethodPost, "/api/v1/inbox/restore", map[string]any{"row_ids": []string{rowID}})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var status string
+	var transactionID string
+	require.NoError(t, app.d.Users.QueryRow("select status, transaction_id from import_rows where id = $1", rowID).Scan(&status, &transactionID))
+	require.Equal(t, "categorized", status)
+	require.NotEmpty(t, transactionID)
 }
 
 func TestInboxCategorizeCreatesBucket(t *testing.T) {

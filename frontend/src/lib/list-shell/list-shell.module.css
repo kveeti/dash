@@ -57,7 +57,7 @@
 }
 
 /* divider sits on top of each row; removed on the first row of a day */
-.datePos+li>* {
+.datePos + li > * {
   border-block-start: none;
 }
 
@@ -100,7 +100,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   .checkSlot,
   .slide {
     transition-duration: 1ms;
@@ -198,8 +197,9 @@
 
   opacity: 1;
   transform: translateY(0);
-  transition: opacity 280ms cubic-bezier(0.34, 2.5, 0.64, 1),
-  transform 280ms cubic-bezier(0.34, 2.5, 0.64, 1);
+  transition:
+    opacity 280ms cubic-bezier(0.34, 2.5, 0.64, 1),
+    transform 280ms cubic-bezier(0.34, 2.5, 0.64, 1);
 }
 
 .floatingbarPos[data-show="false"] {
@@ -213,7 +213,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-
   .floatingbarPos,
   .floatingbarPos[data-show="false"] {
     transform: none;
@@ -304,7 +303,7 @@
   border-block-start: var(--border-divider);
 }
 
-.datePos+li>.skeletonRow {
+.datePos + li > .skeletonRow {
   border-block-start: none;
 }
 

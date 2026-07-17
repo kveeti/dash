@@ -13,6 +13,7 @@ import {
 } from "../../api/inbox";
 import { createContext } from "../../lib/create-context";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
+import { useInboxUndo } from "./inbox-undo-context";
 
 import styles from "./bucket-combo.module.css";
 
@@ -65,7 +66,8 @@ export function BucketComboRoot(props: {
 }) {
   const { contains } = Combobox.useFilter();
   const bucketsQuery = useBucketsQuery();
-  const { mutate } = useCategorizeInboxMutation();
+  const { mutateAsync } = useCategorizeInboxMutation();
+  const undo = useInboxUndo();
   const [open, setOpen] = useState(false);
   const [session, setSession] = useState<BucketComboSession | null>(null);
   const [input, setInput] = useState("");
@@ -158,7 +160,9 @@ export function BucketComboRoot(props: {
             name: item.bucketName,
           };
 
-    mutate({ rowIds: [session.rowId], target });
+    void undo.run([session.rowId], "Categorized transaction", () =>
+      mutateAsync({ rowIds: [session.rowId], target }),
+    );
   }
 
   function reset() {

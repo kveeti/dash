@@ -242,34 +242,101 @@ func (d *Data) BulkCategorize(ctx context.Context, userID string, txnIDs []strin
 	return int(n), nil
 }
 
-// DeleteTransaction removes a transaction and its postings, recording a
-// before-image of every deleted row in the audit log.
-func (d *Data) DeleteTransaction(ctx context.Context, userID, txnID string) error {
+// RemoveTransactions deletes owned transactions. Imported transactions return
+// all their source rows to the inbox; manually created transactions are simply
+// deleted. Every change is audited in the same database transaction.
+func (d *Data) RemoveTransactions(ctx context.Context, userID string, txnIDs []string) (int, int, error) {
+	if len(txnIDs) == 0 {
+		return 0, 0, nil
+	}
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, 0, err
 	}
 	defer tx.Rollback()
 
-	old, err := loadOwnedTransaction(ctx, tx, userID, txnID)
+	rows, err := tx.QueryContext(ctx,
+		"select id from transactions where owner_user_id = $1 and id = any($2::uuid[]) for update",
+		userID, txnIDs)
+	if err != nil {
+		return 0, 0, err
+	}
+	var ownedIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, 0, err
+		}
+		ownedIDs = append(ownedIDs, id)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, 0, err
+	}
+	if err := rows.Err(); err != nil {
+		return 0, 0, err
+	}
+	if len(ownedIDs) == 0 {
+		return 0, 0, nil
+	}
+
+	restored, err := removeTransactionsTx(ctx, tx, userID, ownedIDs)
+	if err != nil {
+		return 0, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, err
+	}
+	return len(ownedIDs), restored, nil
+}
+
+func removeTransactionsTx(ctx context.Context, tx *sql.Tx, userID string, transactionIDs []string) (int, error) {
+	if _, err := tx.ExecContext(ctx, `insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at)
+		select uuidv7(), $1, 'import_rows', id, 'update', to_jsonb(import_rows), now()
+		from import_rows where transaction_id = any($2::uuid[])`, userID, transactionIDs); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx,
+		"update import_rows set status = 'pending', transaction_id = null where transaction_id = any($1::uuid[])", transactionIDs)
+	if err != nil {
+		return 0, err
+	}
+	restored, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+
+	if _, err := tx.ExecContext(ctx, `with doomed as (select * from transaction_tags where transaction_id = any($2::uuid[])),
+		 audit as (insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at)
+			select uuidv7(), $1, 'transaction_tags', id, 'delete', to_jsonb(doomed), now() from doomed)
+		 delete from transaction_tags where id in (select id from doomed)`, userID, transactionIDs); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `with doomed as (select * from postings where transaction_id = any($2::uuid[])),
+		 audit as (insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at)
+			select uuidv7(), $1, 'postings', id, 'delete', to_jsonb(doomed), now() from doomed)
+		 delete from postings where id in (select id from doomed)`, userID, transactionIDs); err != nil {
+		return 0, err
+	}
+	if _, err := tx.ExecContext(ctx, `with doomed as (select * from transactions where id = any($2::uuid[])),
+		 audit as (insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at)
+			select uuidv7(), $1, 'transactions', id, 'delete', to_jsonb(doomed), now() from doomed)
+		 delete from transactions where id in (select id from doomed)`, userID, transactionIDs); err != nil {
+		return 0, err
+	}
+
+	return int(restored), nil
+}
+
+func (d *Data) DeleteTransaction(ctx context.Context, userID, txnID string) error {
+	removed, _, err := d.RemoveTransactions(ctx, userID, []string{txnID})
 	if err != nil {
 		return err
 	}
-
-	if err := deleteTransactionTags(ctx, tx, userID, txnID); err != nil {
-		return err
+	if removed == 0 {
+		return ErrNotFound
 	}
-	if err := deletePostings(ctx, tx, userID, txnID); err != nil {
-		return err
-	}
-	if err := auditWrite(ctx, tx, userID, "transactions", txnID, "delete", old); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, "delete from transactions where id = $1", txnID); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	return nil
 }
 
 func loadOwnedTransaction(ctx context.Context, tx *sql.Tx, userID, txnID string) (*Transaction, error) {

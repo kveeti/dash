@@ -29,7 +29,10 @@ function ReportSkeleton() {
       <ul className={styles.list}>
         {["18rem", "14rem", "20rem"].map((width, i) => (
           <li key={i} className={styles.dupe}>
-            <span className={styles.skeletonBar} style={{ inlineSize: width }} />
+            <span
+              className={styles.skeletonBar}
+              style={{ inlineSize: width }}
+            />
           </li>
         ))}
       </ul>

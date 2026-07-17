@@ -171,7 +171,10 @@ function PastImportsSkeleton() {
     <ul className={styles.list} aria-hidden="true">
       {skeletonRows.map((row, i) => (
         <li key={i} className={styles.skeletonBatch}>
-          <span className={styles.skeletonBar} style={{ inlineSize: row.name }} />
+          <span
+            className={styles.skeletonBar}
+            style={{ inlineSize: row.name }}
+          />
           <span
             className={`${styles.skeletonBar} ${styles.skeletonMeta}`}
             style={{ inlineSize: row.meta }}

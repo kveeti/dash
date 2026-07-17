@@ -33,6 +33,7 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 
 	mux.HandleFunc("GET /api/v1/transactions", NewHandler(HandleListTransactions(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/transactions", NewHandler(HandleCreateTransaction(state, getUserID)))
+	mux.HandleFunc("DELETE /api/v1/transactions", NewHandler(HandleRemoveTransactions(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/transactions/categorize", NewHandler(HandleBulkCategorize(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/transactions/tags", NewHandler(HandleAddTransactionTag(state, getUserID)))
 	mux.HandleFunc("DELETE /api/v1/transactions/tags", NewHandler(HandleRemoveTransactionTag(state, getUserID)))
@@ -45,6 +46,7 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 
 	mux.HandleFunc("GET /api/v1/inbox", NewHandler(HandleListInbox(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/inbox/categorize", NewHandler(HandleCategorizeInbox(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/inbox/restore", NewHandler(HandleRestoreInbox(state, getUserID)))
 	mux.HandleFunc("GET /api/v1/inbox/{id}/matches", NewHandler(HandleGetInboxMatches(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/inbox/{id}/match", NewHandler(HandleMatchInboxRows(state, getUserID)))
 

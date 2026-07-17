@@ -168,13 +168,38 @@ export function useRemoveTransactionTagMutation() {
   });
 }
 
+export function removeTransactions(ids: string[]) {
+  return api<{ removed: number; restored: number }>("/api/v1/transactions", {
+    method: "DELETE",
+    body: JSON.stringify({ transaction_ids: ids }),
+  });
+}
+
+export function useRemoveTransactionsMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: removeTransactions,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: tagKeys.all });
+    },
+  });
+}
+
 export function useDeleteTransactionMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (id: string) =>
       api<void>(`/api/v1/transactions/${id}`, { method: "DELETE" }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: transactionKeys.all }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+      queryClient.invalidateQueries({ queryKey: ["inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: tagKeys.all });
+    },
   });
 }

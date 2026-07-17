@@ -287,7 +287,59 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 	if _, err := tx.ExecContext(ctx, `update import_rows set status = 'categorized', transaction_id = $1 where id = any($2::uuid[])`, txn.ID, ids); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *Data) RestoreInboxRows(ctx context.Context, userID string, rowIDs []string) (int, error) {
+	if len(rowIDs) == 0 {
+		return 0, nil
+	}
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx, `select t.id
+		from transactions t
+		where t.owner_user_id = $1 and exists (
+			select 1 from import_rows r
+			join import_batches b on b.id = r.batch_id
+			where r.id = any($2::uuid[]) and b.user_id = $1 and r.transaction_id = t.id
+		) for update`, userID, rowIDs)
+	if err != nil {
+		return 0, err
+	}
+	var transactionIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		transactionIDs = append(transactionIDs, id)
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	if len(transactionIDs) == 0 {
+		return 0, nil
+	}
+
+	restored, err := removeTransactionsTx(ctx, tx, userID, transactionIDs)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return restored, nil
 }
 
 func (d *Data) CategorizeInboxRows(ctx context.Context, userID string, rowIDs []string, bucketID string) (int, error) {
@@ -328,15 +380,15 @@ func (d *Data) categorizeInboxRows(ctx context.Context, userID string, rowIDs []
 		}
 	}
 
-	var n int
-	if err := tx.QueryRowContext(ctx, categorizeInboxSQL, userID, rowIDs, bucketID).Scan(&n); err != nil {
+	var categorized int
+	if err := tx.QueryRowContext(ctx, categorizeInboxSQL, userID, rowIDs, bucketID).Scan(&categorized); err != nil {
 		return 0, err
 	}
-	if bucket != nil && n == 0 {
+	if bucket != nil && categorized == 0 {
 		return 0, nil
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
-	return n, nil
+	return categorized, nil
 }

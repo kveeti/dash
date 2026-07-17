@@ -21,6 +21,8 @@ import { Checkbox } from "../../ui/checkbox/checkbox";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
 import { BucketComboRoot, BucketComboTrigger } from "./bucket-combo";
+import { InboxUndoBar, InboxUndoProvider } from "./inbox-undo";
+import { useInboxUndo } from "./inbox-undo-context";
 import {
   MatchTransactions,
   useMatchTransactions,
@@ -30,8 +32,18 @@ import listShell from "../../lib/list-shell/list-shell.module.css";
 import styles from "./inbox-page.module.css";
 
 export default function InboxPage() {
-  const searchQuery = useSearchParam("q");
   const selection = useSelection();
+
+  return (
+    <InboxUndoProvider selection={selection}>
+      <InboxPageContent selection={selection} />
+    </InboxUndoProvider>
+  );
+}
+
+function InboxPageContent(props: { selection: UseSelectionReturn }) {
+  const searchQuery = useSearchParam("q");
+  const selection = props.selection;
   const inboxQuery = useInfiniteInboxQuery({ searchQuery });
   const inboxItems = inboxQuery.data?.pages.flatMap((p) => p.rows) ?? [];
   const visibleIds = inboxItems.map((item) => item.id);
@@ -68,6 +80,7 @@ export default function InboxPage() {
       </MatchTransactions>
 
       <FloatingBar selection={selection} />
+      <InboxUndoBar hide={selection.selectMode} />
     </div>
   );
 }
@@ -184,6 +197,7 @@ function Item(props: {
 
 function FloatingBar(props: { selection: UseSelectionReturn }) {
   const categorize = useCategorizeInboxMutation();
+  const undo = useInboxUndo();
 
   return (
     <FloatingBarWrap show={props.selection.selectMode}>
@@ -199,11 +213,16 @@ function FloatingBar(props: { selection: UseSelectionReturn }) {
           placeholder="Category or person"
           onPick={(bucket) => {
             const ids = [...props.selection.selected];
-            categorize.mutate({
-              rowIds: ids,
-              target: { type: "bucket", bucketId: bucket.id },
-            });
-            props.selection.drop(ids);
+            void undo.run(
+              ids,
+              `Categorized ${ids.length} transaction${ids.length === 1 ? "" : "s"}`,
+              () =>
+                categorize.mutateAsync({
+                  rowIds: ids,
+                  target: { type: "bucket", bucketId: bucket.id },
+                }),
+            );
+            props.selection.exitSelect();
           }}
         />
       </div>

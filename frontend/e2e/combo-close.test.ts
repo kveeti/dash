@@ -49,7 +49,9 @@ async function mockApi(page: Page, rowCount: number) {
     categorizedId = (route.request().postDataJSON() as { row_ids: string[] })
       .row_ids[0];
     await new Promise((r) => setTimeout(r, 20));
-    await route.fulfill({ json: { categorized: 1 } });
+    await route.fulfill({
+      json: { categorized: 1 },
+    });
   });
 }
 

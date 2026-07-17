@@ -9,6 +9,7 @@ import {
 
 import { api } from "./api";
 import { bucketKeys, type Bucket } from "./buckets";
+import { restoreQueries, type QuerySnapshot } from "./query-snapshot";
 
 export const inboxKeys = {
   all: ["inbox"] as const,
@@ -32,9 +33,18 @@ export interface InboxMatch extends InboxItem {
   kind: "transfer" | "exchange";
 }
 
-interface InboxPage {
+export interface InboxPage {
   rows: InboxItem[];
   next_cursor: { date: string; id: string } | null;
+}
+
+export type InboxCacheSnapshot = QuerySnapshot<InfiniteData<InboxPage>>;
+
+export function restoreInboxRows(rowIds: string[]) {
+  return api<{ restored: number }>("/api/v1/inbox/restore", {
+    method: "POST",
+    body: JSON.stringify({ row_ids: rowIds }),
+  });
 }
 
 export function useInfiniteInboxQuery(props: { searchQuery: string | null }) {
@@ -74,23 +84,23 @@ export function useCategorizeInboxMutation() {
 
   return useMutation({
     mutationFn: (input: { rowIds: string[]; target: InboxCategoryTarget }) =>
-      api<{ categorized: number; bucket?: Bucket }>(
-        "/api/v1/inbox/categorize",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            row_ids: input.rowIds,
-            ...(input.target.type === "bucket"
-              ? { bucket_id: input.target.bucketId }
-              : {
-                  bucket: {
-                    kind: input.target.kind,
-                    name: input.target.name,
-                  },
-                }),
-          }),
-        },
-      ),
+      api<{
+        categorized: number;
+        bucket?: Bucket;
+      }>("/api/v1/inbox/categorize", {
+        method: "POST",
+        body: JSON.stringify({
+          row_ids: input.rowIds,
+          ...(input.target.type === "bucket"
+            ? { bucket_id: input.target.bucketId }
+            : {
+                bucket: {
+                  kind: input.target.kind,
+                  name: input.target.name,
+                },
+              }),
+        }),
+      }),
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.all });
       const previous = queryClient.getQueriesData<InfiniteData<InboxPage>>({
@@ -112,6 +122,8 @@ export function useCategorizeInboxMutation() {
       return { previous };
     },
     onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
       const bucket = result.bucket;
       if (bucket) {
         queryClient.setQueryData<Bucket[]>(bucketKeys.all, (current = []) => [
@@ -120,11 +132,8 @@ export function useCategorizeInboxMutation() {
         ]);
       }
     },
-    onError: (_error, _input, context) => {
-      for (const [queryKey, data] of context?.previous ?? []) {
-        queryClient.setQueryData(queryKey, data);
-      }
-    },
+    onError: (_error, _input, context) =>
+      restoreQueries(queryClient, context?.previous ?? []),
     onSettled: () => queryClient.invalidateQueries({ queryKey: inboxKeys.all }),
   });
 }
@@ -160,10 +169,11 @@ export function useMatchInboxMutation() {
 
       return { previous };
     },
-    onError: (_error, _input, context) => {
-      for (const [queryKey, data] of context?.previous ?? []) {
-        queryClient.setQueryData(queryKey, data);
-      }
+    onError: (_error, _input, context) =>
+      restoreQueries(queryClient, context?.previous ?? []),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: inboxKeys.all }),
   });

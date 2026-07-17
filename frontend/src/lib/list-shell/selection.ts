@@ -60,6 +60,13 @@ export function useSelection() {
     });
   };
 
+  const restoreSelection = (nextSelectMode: boolean, ids: string[]) => {
+    anchor.current = null;
+    rangeBase.current = null;
+    setSelectMode(nextSelectMode);
+    setSelected(new Set(ids));
+  };
+
   return {
     selectMode,
     setSelectMode,
@@ -70,6 +77,7 @@ export function useSelection() {
     clearSelection,
     exitSelect,
     drop,
+    restoreSelection,
   };
 }
 

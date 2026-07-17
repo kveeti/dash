@@ -11,6 +11,7 @@ import {
 import { createContext } from "../../lib/create-context";
 import { setSearchParam, useSearchParam } from "../../lib/search-param";
 import { useI18n } from "../i18n/use-i18n";
+import { useInboxUndo } from "./inbox-undo-context";
 
 import styles from "./match-transactions-dialog.module.css";
 
@@ -67,9 +68,13 @@ function MatchTransactionsContent(props: {
   const paramId = useRef(props.paramId);
 
   const match = useMatchInboxMutation();
+  const undo = useInboxUndo();
 
   function onMatch(item: InboxMatch) {
-    match.mutate({ id: paramId.current, matchId: item.id });
+    const rowIds = [paramId.current, item.id];
+    void undo.run(rowIds, "Matched transactions", () =>
+      match.mutateAsync({ id: paramId.current, matchId: item.id }),
+    );
     props.onClose();
   }
 

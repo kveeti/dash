@@ -4,6 +4,7 @@ import {
   useAddTransactionTagMutation,
   useBulkCategorizeMutation,
   useInfiniteTransactionsQuery,
+  useRemoveTransactionsMutation,
   useTagsQuery,
   type Transaction,
 } from "../../api/transactions";
@@ -19,6 +20,7 @@ import {
   type UseSelectionReturn,
 } from "../../lib/list-shell/selection";
 import { setSearchParam, useSearchParam } from "../../lib/search-param";
+import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
@@ -288,6 +290,7 @@ function FloatingBar(props: { selection: UseSelectionReturn }) {
   const tags = useTagsQuery();
   const categorize = useBulkCategorizeMutation();
   const addTag = useAddTransactionTagMutation();
+  const remove = useRemoveTransactionsMutation();
 
   return (
     <FloatingBarWrap show={props.selection.selectMode}>
@@ -321,6 +324,17 @@ function FloatingBar(props: { selection: UseSelectionReturn }) {
           );
         }}
       />
+      <Button
+        variant="ghost"
+        onClick={() => {
+          if (remove.isPending) return;
+          remove.mutate([...props.selection.selected], {
+            onSuccess: props.selection.exitSelect,
+          });
+        }}
+      >
+        {remove.isPending ? "Removing…" : "Remove"}
+      </Button>
       <CloseButton onClick={props.selection.exitSelect} />
     </FloatingBarWrap>
   );

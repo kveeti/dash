@@ -1,0 +1,17 @@
+.notice {
+  animation: expire 140ms 6s forwards;
+}
+
+@keyframes expire {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@media (min-width: 35rem) {
+  .notice {
+    display: none;
+  }
+}

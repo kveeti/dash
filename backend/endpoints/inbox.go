@@ -108,6 +108,27 @@ func HandleMatchInboxRows(state *state.State, getUserID GetUserID) Handler {
 	}
 }
 
+func HandleRestoreInbox(state *state.State, getUserID GetUserID) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		userID, err := getUserID(r)
+		if err != nil {
+			return err
+		}
+		var body struct {
+			RowIDs []string `json:"row_ids"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			return NewErr("invalid request body", http.StatusBadRequest)
+		}
+		restored, err := state.Data.RestoreInboxRows(r.Context(), userID, body.RowIDs)
+		if err != nil {
+			return mapTransactionErr(err)
+		}
+		Json(w, map[string]int{"restored": restored})
+		return nil
+	}
+}
+
 func HandleCategorizeInbox(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)
@@ -130,7 +151,7 @@ func HandleCategorizeInbox(state *state.State, getUserID GetUserID) Handler {
 		}
 
 		var bucket *data.Bucket
-		var n int
+		var categorized int
 		if body.Bucket != nil {
 			validKind := body.Bucket.Kind == data.KindExpense || body.Bucket.Kind == data.KindIncome || body.Bucket.Kind == data.KindPerson
 			if !validKind {
@@ -148,16 +169,16 @@ func HandleCategorizeInbox(state *state.State, getUserID GetUserID) Handler {
 				CreatedAt:   time.Now(),
 			}
 			var err error
-			n, err = state.Data.CreateBucketAndCategorizeInboxRows(r.Context(), userID, body.RowIDs, created)
+			categorized, err = state.Data.CreateBucketAndCategorizeInboxRows(r.Context(), userID, body.RowIDs, created)
 			if err != nil {
 				return mapTransactionErr(err)
 			}
-			if n > 0 {
+			if categorized > 0 {
 				bucket = &created
 			}
 		} else {
 			var err error
-			n, err = state.Data.CategorizeInboxRows(r.Context(), userID, body.RowIDs, body.BucketID)
+			categorized, err = state.Data.CategorizeInboxRows(r.Context(), userID, body.RowIDs, body.BucketID)
 			if err != nil {
 				return mapTransactionErr(err)
 			}
@@ -166,7 +187,7 @@ func HandleCategorizeInbox(state *state.State, getUserID GetUserID) Handler {
 		out := struct {
 			Categorized int             `json:"categorized"`
 			Bucket      *bucketResponse `json:"bucket,omitempty"`
-		}{Categorized: n}
+		}{Categorized: categorized}
 		if bucket != nil {
 			response := toBucketResponse(*bucket)
 			out.Bucket = &response
