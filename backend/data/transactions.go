@@ -187,7 +187,7 @@ func (d *Data) UpdateTransaction(ctx context.Context, userID, txnID string, date
 	return &updated, postings, nil
 }
 
-// BulkCategorize repoints the single expense/income leg of every given
+// BulkCategorize repoints the single expense/income/person leg of every given
 // transaction to one category bucket in a single set-based update (this covers
 // both uncategorized inbox items and recategorizing already-categorized ones),
 // auditing each repointed posting's before-image the same way. Transactions
@@ -205,7 +205,7 @@ func (d *Data) BulkCategorize(ctx context.Context, userID string, txnIDs []strin
 
 	var valid bool
 	if err := tx.QueryRowContext(ctx,
-		"select exists(select 1 from buckets where id = $1 and owner_user_id = $2 and kind in ('expense', 'income') and hidden = false)",
+		"select exists(select 1 from buckets where id = $1 and owner_user_id = $2 and kind in ('expense', 'income', 'person') and hidden = false)",
 		bucketID, userID).Scan(&valid); err != nil {
 		return 0, err
 	}
@@ -214,10 +214,10 @@ func (d *Data) BulkCategorize(ctx context.Context, userID string, txnIDs []strin
 	}
 
 	const scope = `p.transaction_id = any($2::uuid[])
-		and p.bucket_id in (select id from buckets where owner_user_id = $1 and kind in ('expense', 'income'))
+		and p.bucket_id in (select id from buckets where owner_user_id = $1 and kind in ('expense', 'income', 'person'))
 		and (select count(*) from postings p2
 			where p2.transaction_id = p.transaction_id
-			and p2.bucket_id in (select id from buckets where owner_user_id = $1 and kind in ('expense', 'income'))) = 1`
+			and p2.bucket_id in (select id from buckets where owner_user_id = $1 and kind in ('expense', 'income', 'person'))) = 1`
 
 	if _, err := tx.ExecContext(ctx,
 		`insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at)

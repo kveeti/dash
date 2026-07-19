@@ -72,7 +72,8 @@ func (d *Data) ListTags(ctx context.Context, userID, q string) ([]string, error)
 		from transaction_tags tt
 		join postings p on p.transaction_id = tt.transaction_id
 		where `+visiblePostings+` and ($2 = '' or tt.tag like '%' || $2 || '%')
-		order by tt.tag`, userID, q)
+		order by tt.tag
+		limit 50`, userID, q)
 	if err != nil {
 		return nil, err
 	}

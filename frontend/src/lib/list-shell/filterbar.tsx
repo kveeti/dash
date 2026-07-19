@@ -8,9 +8,7 @@ import { useEffect, useRef } from "react";
 
 import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
-
-import inputStyles from "../../ui/input/input.module.css";
-import styles from "./list-shell.module.css";
+import { Input } from "../../ui/input/input";
 
 export function Filterbar(props: {
   selectLabel: string;
@@ -32,13 +30,13 @@ export function Filterbar(props: {
     : { duration: 0.22, ease: [0.25, 0.8, 0.25, 1] as const };
 
   return (
-    <div className={styles.filterbarPos}>
-      <div className={styles.filterbar}>
-        <div className={styles.selectControls}>
+    <div className="fixed inset-x-0 bottom-(--nav-height) z-2 border-t border-gray-200 bg-canvas/80 backdrop-blur-md sm:sticky sm:top-[var(--nav-height)] sm:flex sm:items-center sm:border-0">
+      <div className="mx-auto flex h-(--filterbar-height) w-full max-w-(--page-width) items-center gap-2 px-3 sm:p-2 sm:px-6">
+        <div className="flex flex-none items-center">
           <Checkbox
             aria-label={props.selectLabel}
             checked={props.selectMode}
-            onChange={(e) => props.onSelectMode(e.currentTarget.checked)}
+            onCheckedChange={props.onSelectMode}
           />
           <AnimatePresence initial={false}>
             {props.selectMode && (
@@ -52,14 +50,14 @@ export function Filterbar(props: {
         </div>
         {props.tag && (
           <button
-            className={styles.activeFilter}
+            className="cursor-pointer whitespace-nowrap rounded-full border-0 bg-gray-200 px-1 py-1 text-gray-900"
             onClick={() => props.onClearTag?.()}
           >
             #{props.tag} ×
           </button>
         )}
-        <input
-          className={inputStyles.control}
+        <Input
+          className="min-w-0 flex-1"
           type="search"
           placeholder="Search..."
           defaultValue={props.search}
@@ -87,7 +85,7 @@ function SelectAllButton(props: {
 
   return (
     <motion.div
-      className={styles.selectAllSlot}
+      className="flex-none overflow-hidden"
       initial={{ width: 0 }}
       animate={{ width: "auto" }}
       exit={{ width: 0 }}
@@ -95,18 +93,18 @@ function SelectAllButton(props: {
       transition={{ ...props.transition, layout: props.transition }}
       inert={!isPresent}
     >
-      <div className={styles.selectAllInner}>
+      <div className="pl-2">
         <Button
           type="button"
           variant="ghost"
-          className={styles.selectAllButton}
+          className="relative px-2"
           aria-label={label}
           onClick={props.onClick}
         >
           <AnimatePresence initial={false} mode="popLayout">
             <motion.span
               key={label}
-              className={styles.selectAllLabel}
+              className="block"
               aria-hidden
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

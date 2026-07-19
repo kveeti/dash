@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -13,7 +15,17 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        browserName: "chromium",
+        launchOptions: chromiumExecutablePath
+          ? { executablePath: chromiumExecutablePath }
+          : undefined,
+      },
+    },
+  ],
   webServer: [
     {
       command: "VITE_PORT=3001 PORT=8200 pnpm run dev --host 127.0.0.1",

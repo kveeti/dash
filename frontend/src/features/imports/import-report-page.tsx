@@ -9,27 +9,31 @@ import {
 import { Button } from "../../ui/button/button";
 import { useI18n } from "../i18n/use-i18n";
 
-import styles from "./imports.module.css";
-
 function ReportSkeleton() {
   return (
-    <div className={styles.reportPage} aria-hidden="true">
-      <header className={styles.reportHeader}>
+    <div
+      className="mx-auto flex w-full max-w-(--page-width) flex-col gap-6 px-3 pt-6 sm:px-6"
+      aria-hidden="true"
+    >
+      <header className="flex min-w-0 flex-col gap-1">
         <span
-          className={`${styles.skeletonBar} ${styles.reportSkeletonTitle}`}
+          className="block h-[1.65rem] animate-pulse rounded-lg bg-gray-150"
           style={{ display: "block", inlineSize: "12rem" }}
         />
         <span
-          className={styles.skeletonBar}
-          style={{ display: "block", inlineSize: "16rem" }}
+          className="block h-[1em] animate-pulse rounded-lg bg-gray-150"
+          style={{ inlineSize: "16rem" }}
         />
       </header>
-      <div className={styles.reportCard}>
-        <ul className={styles.reportList}>
+      <div className="-mx-3 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 sm:-mx-6">
+        <ul className="m-0 flex list-none flex-col p-0">
           {["70%", "55%", "80%"].map((width, i) => (
-            <li key={i} className={styles.reportRow}>
+            <li
+              key={i}
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-gray-200 px-6 py-4 last:border-b-0 min-[30rem]:grid-cols-[minmax(0,1fr)_auto_auto]"
+            >
               <span
-                className={styles.skeletonBar}
+                className="h-[1em] animate-pulse rounded-lg bg-gray-150"
                 style={{ inlineSize: width }}
               />
             </li>
@@ -70,8 +74,8 @@ export default function ImportReportPage() {
   if (batch.isPending || i18nLoading) return <ReportSkeleton />;
   if (batch.isError || i18nError)
     return (
-      <div className={styles.reportPage}>
-        <p className={styles.error}>
+      <div className="mx-auto flex w-full max-w-(--page-width) flex-col gap-6 px-3 pt-6 sm:px-6">
+        <p className="text-base text-danger-fg">
           error: {batch.error?.message ?? "loading currencies failed"}
         </p>
       </div>
@@ -80,10 +84,12 @@ export default function ImportReportPage() {
   const data = batch.data;
 
   return (
-    <div className={styles.reportPage}>
-      <header className={styles.reportHeader}>
-        <h1 className={styles.reportTitle}>{data.filename}</h1>
-        <p className={processing ? styles.processingSummary : undefined}>
+    <div className="mx-auto flex w-full max-w-(--page-width) flex-col gap-6 px-3 pt-6 sm:px-6">
+      <header className="flex min-w-0 flex-col gap-1 [&>p]:text-base [&>p]:text-gray-700">
+        <h1 className="m-0 wrap-anywhere text-xl font-medium">
+          {data.filename}
+        </h1>
+        <p className={processing ? "font-medium text-success-fg!" : undefined}>
           {processing
             ? "Processing…"
             : `${data.imported} imported · ${data.duplicates} duplicates`}
@@ -91,13 +97,16 @@ export default function ImportReportPage() {
       </header>
 
       {data.parse_errors && data.parse_errors.length > 0 && (
-        <section className={styles.reportSection}>
-          <h2 className={styles.sectionTitle}>Skipped rows</h2>
-          <div className={styles.reportCard}>
-            <ul className={styles.reportList}>
+        <section className="flex flex-col gap-2">
+          <h2 className="text-base font-medium text-gray-700">Skipped rows</h2>
+          <div className="-mx-3 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 sm:-mx-6">
+            <ul className="m-0 flex list-none flex-col p-0">
               {data.parse_errors.map((error, i) => (
-                <li key={i} className={styles.reportRow}>
-                  <span className={styles.dupeMain}>
+                <li
+                  key={i}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-gray-200 px-6 py-4 last:border-b-0 min-[30rem]:grid-cols-[minmax(0,1fr)_auto_auto]"
+                >
+                  <span className="flex min-w-0 flex-col">
                     Line {error.line}: {error.error}
                   </span>
                 </li>
@@ -108,18 +117,21 @@ export default function ImportReportPage() {
       )}
 
       {data.duplicates > 0 && (
-        <section className={styles.reportSection}>
-          <h2 className={styles.sectionTitle}>Duplicates</h2>
-          <div className={styles.reportCard}>
-            <ul className={styles.reportList}>
+        <section className="flex flex-col gap-2">
+          <h2 className="text-base font-medium text-gray-700">Duplicates</h2>
+          <div className="-mx-3 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 sm:-mx-6">
+            <ul className="m-0 flex list-none flex-col p-0">
               {dupeRows.map((row) => (
-                <li key={row.id} className={styles.reportRow}>
-                  <span className={styles.dupeMain}>
+                <li
+                  key={row.id}
+                  className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 border-b border-gray-200 px-6 py-4 last:border-b-0 min-[30rem]:grid-cols-[minmax(0,1fr)_auto_auto]"
+                >
+                  <span className="flex min-w-0 flex-col">
                     <span>
                       {row.date} · {row.raw.payee}
                     </span>
                     {row.duplicate_target && (
-                      <span className={styles.target}>
+                      <span className="text-base text-gray-700">
                         Matches {row.duplicate_target.date} ·{" "}
                         {f.amount(
                           row.duplicate_target.amount,
@@ -128,13 +140,13 @@ export default function ImportReportPage() {
                       </span>
                     )}
                   </span>
-                  <span className={styles.amount}>
+                  <span className="whitespace-nowrap tabular-nums">
                     {f.amount(row.amount, row.currency)}
                   </span>
                   <Button
                     type="button"
                     variant="ghost"
-                    className={styles.importAnyway}
+                    className="col-span-full justify-self-end min-[30rem]:col-span-1"
                     onClick={() => {
                       if (forceMutation.isPending) return;
                       forceMutation.mutate(row.id);
@@ -147,13 +159,15 @@ export default function ImportReportPage() {
             </ul>
           </div>
           {forceMutation.isError && (
-            <span className={styles.error}>{forceMutation.error.message}</span>
+            <span className="text-base text-danger-fg">
+              {forceMutation.error.message}
+            </span>
           )}
           {dupes.hasNextPage && (
             <Button
               type="button"
               variant="outline"
-              className={styles.loadDuplicates}
+              className="self-center"
               onClick={() => dupes.fetchNextPage()}
             >
               {dupes.isFetchingNextPage ? "Loading…" : "Load more"}
@@ -162,12 +176,14 @@ export default function ImportReportPage() {
         </section>
       )}
 
-      <div className={styles.reportActions}>
+      <div className="flex flex-col items-end gap-2">
         <Button type="button" variant="destructive" onClick={onUndo}>
           {deleteMutation.isPending ? "Undoing…" : "Undo import"}
         </Button>
         {deleteMutation.isError && (
-          <span className={styles.error}>{deleteMutation.error.message}</span>
+          <span className="text-base text-danger-fg">
+            {deleteMutation.error.message}
+          </span>
         )}
       </div>
     </div>

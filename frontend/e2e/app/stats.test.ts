@@ -9,6 +9,22 @@ function previousMonthStart(today: string) {
     .slice(0, 10);
 }
 
+test("stats shows an empty state when the selected period has no transactions", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  await page.getByRole("link", { name: "stats", exact: true }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "No transactions in this period" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Choose another period, or add transactions to start tracking your spending and income.",
+    ),
+  ).toBeVisible();
+});
+
 test("stats periods, comparisons, and category expansion use persisted transactions", async ({
   page,
 }, testInfo) => {

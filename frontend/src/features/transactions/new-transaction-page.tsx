@@ -14,11 +14,14 @@ import { useCurrenciesQuery } from "../../api/currencies";
 import { useCreateTransactionMutation } from "../../api/transactions";
 import { useMeQuery } from "../../api/user";
 import { Button } from "../../ui/button/button";
-import { Field, Input, InputGroup } from "../../ui/input/input";
+import { FieldInvalidContext } from "../../ui/input/field-context";
+import { Field, Input, InputGroup, Select } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
 
-import inputStyles from "../../ui/input/input.module.css";
-import styles from "./new-transaction-page.module.css";
+const tab =
+  "cursor-pointer rounded-full border-0 bg-transparent px-3 py-1 text-gray-700";
+const activeTab =
+  "cursor-pointer rounded-full border-0 bg-gray-0 px-3 py-1 font-semibold text-gray-900 shadow-[0_1px_3px_rgb(0_0_0_/_0.1)]";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -46,8 +49,8 @@ export default function NewTransactionPage() {
   const me = useMeQuery();
 
   return (
-    <div className={styles.page}>
-      <h1 className={styles.title}>New transaction</h1>
+    <div className="mx-auto w-full max-w-(--page-width) px-3 pt-6 sm:px-6">
+      <h1 className="text-title font-medium">New transaction</h1>
       {buckets.isError || currencies.isError || me.isError ? (
         <p>error: {(buckets.error ?? currencies.error ?? me.error)?.message}</p>
       ) : buckets.data && currencies.data && me.data ? (
@@ -59,7 +62,11 @@ export default function NewTransactionPage() {
   );
 }
 
-export function TransactionForm(props: { homeCurrency: string }) {
+export function TransactionForm(props: {
+  homeCurrency: string;
+  showCategoryKindSelector?: boolean;
+  className?: string;
+}) {
   const [, navigate] = useLocation();
   const buckets = useBucketsQuery();
   const currencies = useCurrenciesQuery();
@@ -119,7 +126,14 @@ export function TransactionForm(props: { homeCurrency: string }) {
       return;
     }
     setErrors(form, { path: ["amount"], errors: null });
-    const accountAmount = mode === "expense" ? -amount : amount;
+    const selectedCategory = bucketById(values.category);
+    const transactionMode =
+      props.showCategoryKindSelector === false
+        ? selectedCategory?.kind === "income"
+          ? "income"
+          : "expense"
+        : mode;
+    const accountAmount = transactionMode === "expense" ? -amount : amount;
     try {
       await mutation.mutateAsync({
         date: new Date(values.date + "T00:00:00").toISOString(),
@@ -145,60 +159,43 @@ export function TransactionForm(props: { homeCurrency: string }) {
   };
 
   return (
-    <div className={styles.card}>
-      <Form of={form} className={styles.form} onSubmit={onSubmit}>
+    <div className="-mx-3 rounded-2xl border border-border-subtle p-6 sm:-mx-6 bg-form">
+      <Form
+        of={form}
+        className="flex w-full flex-col gap-3 min-[30rem]:grid min-[30rem]:grid-cols-[auto_minmax(0,22rem)] min-[30rem]:items-center min-[30rem]:gap-x-8 min-[30rem]:gap-y-3 min-[30rem]:[&>*]:col-span-full"
+        onSubmit={onSubmit}
+      >
         <FormField of={form} path={["date"]}>
           {(field) => (
-            <Input
-              {...field.props}
-              className={inputStyles.horizontal}
-              label="Date"
-              type="date"
-              value={field.input ?? ""}
-              error={field.errors?.[0]}
-            />
+            <Field label="Date" error={field.errors?.[0]}>
+              <Input {...field.props} type="date" value={field.input ?? ""} />
+            </Field>
           )}
         </FormField>
 
         <FormField of={form} path={["counterparty"]}>
           {(field) => (
-            <Input
-              {...field.props}
-              className={inputStyles.horizontal}
-              label="Counterparty"
-              type="text"
-              value={field.input ?? ""}
-              error={field.errors?.[0]}
-            />
+            <Field label="Counterparty" error={field.errors?.[0]}>
+              <Input {...field.props} type="text" value={field.input ?? ""} />
+            </Field>
           )}
         </FormField>
 
         <FormField of={form} path={["description"]}>
           {(field) => (
-            <Input
-              {...field.props}
-              className={inputStyles.horizontal}
-              label="Description"
-              type="text"
-              value={field.input ?? ""}
-              error={field.errors?.[0]}
-            />
+            <Field label="Description" error={field.errors?.[0]}>
+              <Input {...field.props} type="text" value={field.input ?? ""} />
+            </Field>
           )}
         </FormField>
 
         <FormField of={form} path={["amount"]}>
           {(amount) => (
-            <Field
-              className={inputStyles.horizontal}
-              label="Amount"
-              error={amount.errors?.[0]}
-            >
-              <InputGroup>
-                <input
+            <Field label="Amount" error={amount.errors?.[0]}>
+              <InputGroup invalid={false}>
+                <Input
                   {...amount.props}
-                  className={
-                    amount.errors?.[0] ? inputStyles.invalid : undefined
-                  }
+                  grouped
                   type="text"
                   inputMode="decimal"
                   placeholder="0.00"
@@ -206,17 +203,22 @@ export function TransactionForm(props: { homeCurrency: string }) {
                 />
                 <FormField of={form} path={["currency"]}>
                   {(currency) => (
-                    <select
-                      {...currency.props}
-                      aria-label="Currency"
-                      value={currency.input ?? ""}
+                    <FieldInvalidContext.Provider
+                      value={Boolean(currency.errors?.[0])}
                     >
-                      {currencyOptions().map((code) => (
-                        <option key={code} value={code}>
-                          {code}
-                        </option>
-                      ))}
-                    </select>
+                      <Select
+                        {...currency.props}
+                        grouped
+                        aria-label="Currency"
+                        value={currency.input ?? ""}
+                      >
+                        {currencyOptions().map((code) => (
+                          <option key={code} value={code}>
+                            {code}
+                          </option>
+                        ))}
+                      </Select>
+                    </FieldInvalidContext.Provider>
                   )}
                 </FormField>
               </InputGroup>
@@ -226,62 +228,66 @@ export function TransactionForm(props: { homeCurrency: string }) {
 
         <FormField of={form} path={["account"]}>
           {(field) => (
-            <Field
-              className={inputStyles.horizontal}
-              label="Account"
-              error={field.errors?.[0]}
-              as="div"
-            >
-              <BucketPicker
-                kinds={["asset"]}
-                createKinds={["asset"]}
-                value={bucketById(field.input ?? "")}
-                onPick={(bucket) => field.onChange(bucket.id)}
-                placeholder="Select account"
-              />
+            <Field label="Account" error={field.errors?.[0]} as="div">
+              <div className="w-full">
+                <BucketPicker
+                  kinds={["asset"]}
+                  createKinds={["asset"]}
+                  value={bucketById(field.input ?? "")}
+                  onPick={(bucket) => field.onChange(bucket.id)}
+                  placeholder="Select account"
+                />
+              </div>
             </Field>
           )}
         </FormField>
 
         <FormField of={form} path={["category"]}>
           {(field) => (
-            <Field
-              className={inputStyles.horizontal}
-              label="Category"
-              error={field.errors?.[0]}
-              as="div"
-            >
-              <div className={styles.modeTabs}>
-                <button
-                  type="button"
-                  className={mode === "expense" ? styles.active : undefined}
-                  onClick={() => switchMode("expense")}
-                >
-                  Expense
-                </button>
-                <button
-                  type="button"
-                  className={mode === "income" ? styles.active : undefined}
-                  onClick={() => switchMode("income")}
-                >
-                  Income
-                </button>
+            <Field label="Category" error={field.errors?.[0]} as="div">
+              <div className="flex flex-col">
+                {props.showCategoryKindSelector !== false && (
+                  <div className="mb-2 inline-flex items-center self-start rounded-full bg-gray-100 p-1 text-sm">
+                    <button
+                      type="button"
+                      className={mode === "expense" ? activeTab : tab}
+                      onClick={() => switchMode("expense")}
+                    >
+                      Expense
+                    </button>
+                    <button
+                      type="button"
+                      className={mode === "income" ? activeTab : tab}
+                      onClick={() => switchMode("income")}
+                    >
+                      Income
+                    </button>
+                  </div>
+                )}
+                <BucketPicker
+                  kinds={
+                    props.showCategoryKindSelector === false
+                      ? ["expense", "income"]
+                      : [mode]
+                  }
+                  createKinds={
+                    props.showCategoryKindSelector === false
+                      ? ["expense", "income"]
+                      : [mode]
+                  }
+                  value={bucketById(field.input ?? "")}
+                  onPick={(bucket) => field.onChange(bucket.id)}
+                  placeholder="Select category"
+                />
               </div>
-              <BucketPicker
-                kinds={[mode]}
-                createKinds={[mode]}
-                value={bucketById(field.input ?? "")}
-                onPick={(bucket) => field.onChange(bucket.id)}
-                placeholder="Select category"
-              />
             </Field>
           )}
         </FormField>
 
         {mutation.isError && <p>error: {mutation.error?.message}</p>}
 
-        <div className={styles.buttonRow}>
-          <Button type="submit" className={styles.submit}>
+        <div className="flex flex-row-reverse gap-4">
+          <Button type="submit" className="w-full">
             Save
           </Button>
           <Button type="reset" variant="outline">

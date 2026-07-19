@@ -5,6 +5,7 @@ import (
 	"money/backend/data"
 	"money/backend/state"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -36,7 +37,22 @@ func HandleListBuckets(state *state.State, getUserID GetUserID) Handler {
 			return err
 		}
 
-		buckets, err := state.Data.ListBuckets(r.Context(), userID)
+		var buckets []data.Bucket
+		if _, searched := r.URL.Query()["q"]; searched {
+			values := r.URL.Query()["kind"]
+			kinds := make([]data.BucketKind, len(values))
+			for i, value := range values {
+				kinds[i] = data.BucketKind(value)
+			}
+			buckets, err = state.Data.SearchBuckets(
+				r.Context(),
+				userID,
+				strings.TrimSpace(r.URL.Query().Get("q")),
+				kinds,
+			)
+		} else {
+			buckets, err = state.Data.ListBuckets(r.Context(), userID)
+		}
 		if err != nil {
 			return NewUnexpectedErr("error listing buckets: %w", err)
 		}

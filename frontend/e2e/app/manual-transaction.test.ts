@@ -16,6 +16,19 @@ test("manual income validation and creation persist", async ({
   await manual.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("Enter a counterparty")).toBeVisible();
   await expect(page.getByText("Enter an amount")).toBeVisible();
+  await expect(manual.getByLabel("Counterparty")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await expect(manual.getByLabel("Amount")).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  for (const placeholder of ["Select account", "Select category"]) {
+    await expect(
+      manual.getByRole("combobox").filter({ hasText: placeholder }),
+    ).toHaveAttribute("aria-invalid", "true");
+  }
 
   await manual.getByLabel("Counterparty").fill("Employer");
   await manual.getByLabel("Amount").fill("1234.56");
@@ -24,7 +37,9 @@ test("manual income validation and creation persist", async ({
     .filter({ hasText: "Select account" })
     .click();
   await page.getByRole("option", { name: "Checking" }).click();
-  await manual.getByRole("button", { name: "Income" }).click();
+  await expect(
+    manual.getByRole("button", { name: /^(Income|Expense)$/ }),
+  ).toHaveCount(0);
   await manual
     .getByRole("combobox")
     .filter({ hasText: "Select category" })

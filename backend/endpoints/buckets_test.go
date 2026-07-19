@@ -3,6 +3,7 @@ package endpoints
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -75,6 +76,44 @@ func TestCreateAndListBucket(t *testing.T) {
 		names = append(names, b["name"].(string))
 	}
 	require.Contains(t, names, "Groceries")
+}
+
+func TestSearchBuckets(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+
+	for i := 0; i < 55; i++ {
+		resp := authed(t, app, http.MethodPost, "/api/v1/buckets", map[string]any{
+			"kind": "expense",
+			"name": fmt.Sprintf("Search %02d", i),
+		})
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		resp.Body.Close()
+	}
+	resp := authed(t, app, http.MethodPost, "/api/v1/buckets", map[string]any{
+		"kind": "expense",
+		"name": "Search",
+	})
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	resp.Body.Close()
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/buckets?q=SEARCH", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	buckets := decodeBuckets(t, resp)
+	require.Len(t, buckets, 50)
+	require.Equal(t, "Search", buckets[0]["name"])
+	for _, bucket := range buckets {
+		require.NotEqual(t, "clearing", bucket["kind"])
+	}
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/buckets?q=SEARCH&kind=person", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Empty(t, decodeBuckets(t, resp))
+
+	resp = authed(t, app, http.MethodGet, "/api/v1/buckets?q=", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	for _, bucket := range decodeBuckets(t, resp) {
+		require.NotEqual(t, "clearing", bucket["kind"])
+	}
 }
 
 func TestCreatePersonBucket(t *testing.T) {

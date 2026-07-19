@@ -9,7 +9,7 @@ import {
 import { restoreQueries, snapshotQueries } from "../../api/query-snapshot";
 import { tagKeys, transactionKeys } from "../../api/transactions";
 import type { UseSelectionReturn } from "../../lib/list-shell/selection";
-import { UndoNotice, UndoProvider } from "../../lib/undo/undo";
+import { UndoProvider } from "../../lib/undo/undo";
 import { useUndo } from "../../lib/undo/undo-context";
 import { InboxUndoContext } from "./inbox-undo-context";
 
@@ -148,8 +148,4 @@ function selectionConfirmation(
 
 function sameSelection(current: Set<string>, saved: string[]) {
   return current.size === saved.length && saved.every((id) => current.has(id));
-}
-
-export function InboxUndoBar(props: { hide: boolean }) {
-  return <UndoNotice hide={props.hide} />;
 }

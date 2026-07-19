@@ -38,7 +38,7 @@ async function mockCommonApi(page: Page) {
   await page.route("**/api/v1/currencies", (route) =>
     route.fulfill({ json: [{ code: "EUR", exponent: 2 }] }),
   );
-  await page.route("**/api/v1/buckets", (route) =>
+  await page.route("**/api/v1/buckets**", (route) =>
     route.fulfill({
       json: [
         { id: "asset", kind: "asset", name: "Checking", hidden: false },
@@ -55,7 +55,7 @@ test("inbox selects and deselects every visible row", async ({ page }) => {
   );
 
   await page.goto("/e2e/fixture/");
-  await page.getByRole("checkbox", { name: "Select rows" }).check();
+  await page.getByRole("checkbox", { name: "Select rows" }).click();
   await page.getByRole("button", { name: "Select all" }).click();
 
   await expect(page.getByText("5 selected")).toBeVisible();
@@ -74,7 +74,7 @@ test("inbox shift-click resizes the selected range", async ({ page }) => {
   );
 
   await page.goto("/e2e/fixture/");
-  await page.getByRole("checkbox", { name: "Select rows" }).check();
+  await page.getByRole("checkbox", { name: "Select rows" }).click();
   await page
     .getByRole("listitem")
     .filter({ hasText: "Inbox row 2" })
@@ -117,7 +117,7 @@ test("transactions select all follows the rows loaded on the page", async ({
   page,
 }) => {
   await mockCommonApi(page);
-  await page.route("**/api/v1/tags", (route) =>
+  await page.route("**/api/v1/tags**", (route) =>
     route.fulfill({ json: { tags: [] } }),
   );
   await page.route("**/api/v1/transactions**", (route) => {
@@ -137,7 +137,7 @@ test("transactions select all follows the rows loaded on the page", async ({
   });
 
   await page.goto("/e2e/fixture/?transactions");
-  await page.getByRole("checkbox", { name: "Select transactions" }).check();
+  await page.getByRole("checkbox", { name: "Select transactions" }).click();
   await page.getByRole("button", { name: "Select all" }).click();
   await expect(page.getByText("2 selected")).toBeVisible();
 
@@ -157,7 +157,7 @@ test("transactions shift-click resizes the selected range", async ({
   page,
 }) => {
   await mockCommonApi(page);
-  await page.route("**/api/v1/tags", (route) =>
+  await page.route("**/api/v1/tags**", (route) =>
     route.fulfill({ json: { tags: [] } }),
   );
   await page.route("**/api/v1/transactions**", (route) =>
@@ -165,7 +165,7 @@ test("transactions shift-click resizes the selected range", async ({
   );
 
   await page.goto("/e2e/fixture/?transactions");
-  await page.getByRole("checkbox", { name: "Select transactions" }).check();
+  await page.getByRole("checkbox", { name: "Select transactions" }).click();
   await page
     .getByRole("listitem")
     .filter({ hasText: "Transaction 2" })

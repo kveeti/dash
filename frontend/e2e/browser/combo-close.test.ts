@@ -40,7 +40,7 @@ async function mockApi(page: Page, rowCount: number) {
   await page.route("**/api/v1/currencies", (route) =>
     route.fulfill({ json: [{ code: "EUR", exponent: 2 }] }),
   );
-  await page.route("**/api/v1/buckets", (route) =>
+  await page.route("**/api/v1/buckets**", (route) =>
     route.fulfill({ json: buckets }),
   );
   await page.route("**/api/v1/inbox", async (route) => {
@@ -62,6 +62,7 @@ type Sample = {
   mounted: boolean;
   attrs: string;
   popupOpacity: string;
+  popupScale: string;
   posRect: string;
 };
 
@@ -96,6 +97,7 @@ async function categorizeAndSample(page: Page, rowName: string) {
               .join(",")
           : "",
         popupOpacity: el ? getComputedStyle(el).opacity : "",
+        popupScale: el ? getComputedStyle(el).scale : "",
         posRect: rect
           ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(",")
           : "",
@@ -123,6 +125,12 @@ function expectAnimatedOutInPlace(samples: Sample[]) {
       return opacity > 0.1 && opacity < 0.9;
     }).length,
   ).toBeGreaterThanOrEqual(3);
+  expect(
+    ending.filter((s) => {
+      const scale = Number(s.popupScale);
+      return scale > 0.97 && scale < 1;
+    }).length,
+  ).toBeGreaterThanOrEqual(2);
   const positions = new Set(ending.map((s) => s.posRect.split(",")[0]));
   expect(positions.size).toBe(1);
 }
@@ -175,6 +183,7 @@ test("control: escape-close animation profile", async ({ page }) => {
               .join(",")
           : "",
         popupOpacity: el ? getComputedStyle(el).opacity : "",
+        popupScale: el ? getComputedStyle(el).scale : "",
         posRect: rect
           ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(",")
           : "",
@@ -220,6 +229,7 @@ test("opening does not flash an oversized list", async ({ page }) => {
               .join(",")
           : "",
         popupOpacity: el ? getComputedStyle(el).opacity : "",
+        popupScale: el ? getComputedStyle(el).scale : "",
         posRect: rect
           ? [rect.x, rect.y, rect.width, rect.height].map(Math.round).join(",")
           : "",
@@ -240,6 +250,12 @@ test("opening does not flash an oversized list", async ({ page }) => {
     (s) => s.mounted && Number(s.popupOpacity) > 0.05,
   );
   expect(visible.length).toBeGreaterThan(3);
+  expect(
+    visible.filter((s) => {
+      const scale = Number(s.popupScale);
+      return scale > 0.97 && scale < 1;
+    }).length,
+  ).toBeGreaterThanOrEqual(2);
   const heights = visible.map((s) => Number(s.posRect.split(",")[3]));
   const settled = heights[heights.length - 1];
   // No visible frame may be taller than the settled height (oversized flash).

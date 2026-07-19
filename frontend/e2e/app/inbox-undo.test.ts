@@ -109,11 +109,6 @@ test("real app: inbox undo restores the imported row", async ({ page }) => {
   await page.getByRole("button", { name: /Undo shop/ }).click();
   await page.getByRole("option", { name: "Groceries" }).click();
   await expect(
-    page
-      .locator('[data-show="true"]')
-      .filter({ hasText: "Categorized transaction" }),
-  ).toHaveCount(1);
-  await expect(
     page.getByRole("button", { name: "Undo", exact: true }),
   ).not.toBeVisible();
   await expect(
@@ -126,14 +121,18 @@ test("real app: inbox undo restores the imported row", async ({ page }) => {
   await categorize(page);
   await page.goto("/transactions");
   await expect(page.getByText("Undo shop")).toBeVisible();
-  await page.getByRole("checkbox", { name: "Select transactions" }).check();
+  await page.getByRole("checkbox", { name: "Select transactions" }).click();
   await page
     .getByRole("listitem")
     .filter({ hasText: "Undo shop" })
     .locator("div")
     .first()
     .click();
-  await page.getByRole("button", { name: "Remove" }).click();
+  await page.getByRole("combobox").filter({ hasText: "Actions" }).click();
+  await page.getByRole("option", { name: "Remove transactions" }).click();
+  await page
+    .getByRole("button", { name: "Remove transaction", exact: true })
+    .click();
   await expect(page.getByText("Undo shop")).not.toBeVisible();
 
   await page.goto("/inbox");
@@ -151,7 +150,7 @@ test("real app: undo restores selection and confirms before replacing a newer on
   await importRow(page, checking.id, "2026/07/03;-2,00;;;;Undo three;;;;EUR\n");
 
   await page.goto("/inbox");
-  await page.getByRole("checkbox", { name: "Select rows" }).check();
+  await page.getByRole("checkbox", { name: "Select rows" }).click();
   for (const name of ["Undo one", "Undo two"]) {
     await page
       .getByRole("listitem")
@@ -167,7 +166,7 @@ test("real app: undo restores selection and confirms before replacing a newer on
     page.getByRole("button", { name: "Undo", exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("checkbox", { name: "Select rows" }).check();
+  await page.getByRole("checkbox", { name: "Select rows" }).click();
   await page
     .getByRole("listitem")
     .filter({ hasText: "Undo three" })

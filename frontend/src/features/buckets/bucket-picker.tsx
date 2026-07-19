@@ -1,15 +1,20 @@
 import { Combobox } from "@base-ui/react/combobox";
+import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
 import {
-  useBucketsQuery,
+  useBucketSearchQuery,
   useCreateBucketMutation,
   type Bucket,
   type BucketKind,
 } from "../../api/buckets";
+import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
-
-import styles from "./bucket-picker.module.css";
+import { useFieldInvalid } from "../../ui/input/field-context";
+import {
+  inputTriggerClassName,
+  invalidInputClassName,
+} from "../../ui/input/input-styles";
 
 const kindLabels: Record<BucketKind, string> = {
   asset: "Asset",
@@ -33,33 +38,31 @@ type PickerItem =
 type PickerGroup = { id: string; name: string; items: PickerItem[] };
 
 export function BucketPicker(props: {
+  className?: string;
   kinds: BucketKind[];
   createKinds?: BucketKind[];
   value?: Bucket | null;
   onPick: (bucket: Bucket) => void;
   placeholder?: string;
 }) {
-  const { contains } = Combobox.useFilter();
-  const bucketsQuery = useBucketsQuery();
   const createBucket = useCreateBucketMutation();
+  const invalid = useFieldInvalid();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const search = input.trim();
+  const query = useDebouncedValue(search, 50);
+  const bucketsQuery = useBucketSearchQuery(query, props.kinds);
 
   const groups: PickerGroup[] = [];
   if (bucketsQuery.data) {
     const buckets = bucketsQuery.data.filter(
       (bucket) => !bucket.hidden && props.kinds.includes(bucket.kind),
     );
-    const matching = search
-      ? buckets.filter((bucket) => contains(bucket.name, search))
-      : buckets;
-
-    if (matching.length) {
+    if (buckets.length) {
       groups.push({
         id: "buckets",
         name: "Choose…",
-        items: matching.map((bucket) => ({
+        items: buckets.map((bucket) => ({
           type: "bucket",
           id: bucket.id,
           name: bucket.name,
@@ -73,7 +76,15 @@ export function BucketPicker(props: {
       (bucket) =>
         bucket.name.trim().toLocaleLowerCase() === search.toLocaleLowerCase(),
     );
-    if (search && !exactMatch && createKinds.length) {
+    if (
+      search === query &&
+      search &&
+      !exactMatch &&
+      createKinds.length &&
+      !bucketsQuery.isPlaceholderData &&
+      !bucketsQuery.isPending &&
+      !bucketsQuery.isError
+    ) {
       groups.push({
         id: "create",
         name: "Create…",
@@ -120,20 +131,17 @@ export function BucketPicker(props: {
         if (!nextOpen) setInput("");
       }}
     >
-      <Combobox.Trigger className={styles.trigger}>
-        <span className={props.value ? styles.value : styles.placeholder}>
+      <Combobox.Trigger
+        aria-invalid={invalid || undefined}
+        className={`${inputTriggerClassName} ${invalid ? invalidInputClassName : ""} ${props.className ?? ""}`}
+      >
+        <span
+          className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${props.value ? "" : "text-(--input-placeholder)"}`}
+        >
           {props.value ? props.value.name : (props.placeholder ?? "Select…")}
         </span>
-        <Combobox.Icon className={styles.icon}>
-          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path
-              d="m4 6 4 4 4-4"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+        <Combobox.Icon className="flex text-gray-600">
+          <ChevronDownIcon className="size-4" aria-hidden="true" />
         </Combobox.Icon>
       </Combobox.Trigger>
 
@@ -141,42 +149,48 @@ export function BucketPicker(props: {
         <Combobox.Positioner
           align="start"
           sideOffset={6}
-          className={styles.positioner}
+          className="z-10 outline-none"
         >
           <Combobox.Popup
-            className={styles.popup}
-            aria-busy={bucketsQuery.isPending || undefined}
+            className="min-w-48 max-w-(--available-width,100vw) origin-(--transform-origin) overflow-hidden rounded-xl border border-popover-border bg-popover text-base text-gray-900 shadow-float transition-[opacity,scale] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] data-starting-style:scale-[.97] data-starting-style:opacity-0 data-ending-style:scale-[.97] data-ending-style:opacity-0 data-ending-style:duration-120 data-ending-style:ease-[cubic-bezier(0.4,0,1,1)] motion-reduce:duration-[1ms]"
+            aria-busy={bucketsQuery.isFetching || undefined}
           >
             <Combobox.Input
-              className={styles.input}
+              className="h-9 w-full border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
               placeholder={props.placeholder ?? "Search…"}
               aria-label="Filter buckets"
             />
 
             <AnimatedHeight>
-              <div className={styles.scroller}>
+              <div className="max-h-[max(calc(2rem*2.5),calc(2rem*1.5+round(down,var(--cap)-2rem*1.5,2rem)))] scroll-py-1 overflow-y-auto overscroll-contain pb-1 [--cap:min(calc(var(--available-height,100vh)-calc(2rem+var(--spacing))),22rem)] [scrollbar-color:var(--color-gray-300)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:bg-clip-content">
                 <Combobox.Status>
                   {bucketsQuery.isPending ? (
-                    <div className={styles.status}>Loading…</div>
+                    <div className="flex min-h-8 items-center px-3 text-gray-600">
+                      Loading…
+                    </div>
                   ) : bucketsQuery.isError ? (
-                    <div className={styles.status}>Error loading buckets</div>
+                    <div className="flex min-h-8 items-center px-3 text-gray-600">
+                      Error loading buckets
+                    </div>
                   ) : null}
                 </Combobox.Status>
 
                 <Combobox.Empty>
                   {!bucketsQuery.isPending && !bucketsQuery.isError ? (
-                    <div className={styles.empty}>No matches</div>
+                    <div className="p-4 text-center text-gray-600">
+                      No matches
+                    </div>
                   ) : null}
                 </Combobox.Empty>
 
-                <Combobox.List className={styles.list}>
+                <Combobox.List className="outline-none">
                   {(group: PickerGroup) => (
                     <Combobox.Group
                       key={group.id}
                       items={group.items}
-                      className={styles.group}
+                      className="[&+&]:mt-1 [&+&]:border-t [&+&]:border-popover-border"
                     >
-                      <Combobox.GroupLabel className={styles.groupLabel}>
+                      <Combobox.GroupLabel className="flex h-8 items-center px-3 text-base text-gray-600">
                         {group.name}
                       </Combobox.GroupLabel>
                       <Combobox.Collection>
@@ -184,7 +198,7 @@ export function BucketPicker(props: {
                           <Combobox.Item
                             key={item.id}
                             value={item}
-                            className={styles.item}
+                            className="mx-1 flex h-8 cursor-default items-center gap-2 rounded-lg px-3 text-gray-900 outline-none select-none data-highlighted:bg-popover-item-selected data-selected:bg-popover-item-selected"
                           >
                             <span>{item.name}</span>
                           </Combobox.Item>

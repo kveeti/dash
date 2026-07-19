@@ -47,6 +47,10 @@ test("upload, duplicate import, import anyway, and undo use the real backend", a
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page.getByText("Choose a file")).toBeVisible();
   await expect(page.getByText("Select an account")).toBeVisible();
+  await expect(page.getByLabel("File")).toHaveAttribute("aria-invalid", "true");
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "Select account" }).first(),
+  ).toHaveAttribute("aria-invalid", "true");
 
   await upload(page);
   await expect(page.getByText("1 imported · 0 duplicates")).toBeVisible();
@@ -62,6 +66,9 @@ test("upload, duplicate import, import anyway, and undo use the real backend", a
   await page.getByRole("button", { name: "Undo import" }).click();
   await expect(page).toHaveURL(/\/imports$/);
 
-  await page.getByRole("link", { name: "inbox", exact: true }).click();
+  await page
+    .getByRole("link", { name: "inbox", exact: true })
+    .dispatchEvent("mousedown", { button: 0 });
+  await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByText("Duplicate shop")).toHaveCount(1);
 });

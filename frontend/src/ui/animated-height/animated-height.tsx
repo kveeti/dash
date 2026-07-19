@@ -1,20 +1,15 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
-import styles from "./animated-height.module.css";
-
 export function AnimatedHeight(props: { children: ReactNode }) {
   const contentRef = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState<number>();
-
   useLayoutEffect(() => {
     const content = contentRef.current;
     if (!content) return;
-
     function measure(element: HTMLDivElement) {
       const nextHeight = parseFloat(getComputedStyle(element).height);
       setHeight((current) => (current === nextHeight ? current : nextHeight));
     }
-
     measure(content);
     const frame = requestAnimationFrame(() => measure(content));
     const observer = new ResizeObserver(() => measure(content));
@@ -24,9 +19,11 @@ export function AnimatedHeight(props: { children: ReactNode }) {
       observer.disconnect();
     };
   }, []);
-
   return (
-    <div className={styles.root} style={{ height }}>
+    <div
+      className="overflow-hidden motion-safe:transition-[height] motion-safe:duration-250 motion-safe:ease-[cubic-bezier(.05,.95,.15,1)]"
+      style={{ height }}
+    >
       <div ref={contentRef}>{props.children}</div>
     </div>
   );

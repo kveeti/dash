@@ -22,6 +22,7 @@
 
             pkgs.nodejs_24
             pkgs.pnpm_10
+            pkgs.playwright-driver.browsers
           ];
 
           postgresConf = pkgs.writeText "postgresql.conf" ''
@@ -41,6 +42,14 @@
           '';
 
           shellHook = ''
+            export PLAYWRIGHT_BROWSERS_PATH="${pkgs.playwright-driver.browsers}"
+            for chromium in "${pkgs.playwright-driver.browsers}"/chromium-*/chrome-linux64/chrome; do
+              if [ -x "$chromium" ]; then
+                export PLAYWRIGHT_CHROMIUM_EXECUTABLE="$chromium"
+                break
+              fi
+            done
+
             if [ -f .env ]; then
               set -a
               source .env

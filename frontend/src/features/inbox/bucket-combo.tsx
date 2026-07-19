@@ -6,16 +6,15 @@ import {
   type ReactNode,
 } from "react";
 
-import { useBucketsQuery } from "../../api/buckets";
+import { useBucketSearchQuery } from "../../api/buckets";
 import {
   useCategorizeInboxMutation,
   type InboxCategoryTarget,
 } from "../../api/inbox";
 import { createContext } from "../../lib/create-context";
+import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
 import { useInboxUndo } from "./inbox-undo-context";
-
-import styles from "./bucket-combo.module.css";
 
 const [useBucketCombo, BucketComboContext] =
   createContext<(rowId: string, anchor: HTMLButtonElement) => void>();
@@ -25,6 +24,7 @@ const categoryKinds = [
   { kind: "income", name: "Income" },
   { kind: "person", name: "Person" },
 ] as const;
+const categoryKindValues = categoryKinds.map(({ kind }) => kind);
 
 type BucketComboItem =
   | {
@@ -64,14 +64,14 @@ export function BucketComboRoot(props: {
   children: ReactNode;
   onMatchAction?: (rowId: string) => void;
 }) {
-  const { contains } = Combobox.useFilter();
-  const bucketsQuery = useBucketsQuery();
   const { mutateAsync } = useCategorizeInboxMutation();
   const undo = useInboxUndo();
   const [open, setOpen] = useState(false);
   const [session, setSession] = useState<BucketComboSession | null>(null);
   const [input, setInput] = useState("");
   const search = input.trim();
+  const query = useDebouncedValue(search, 50);
+  const bucketsQuery = useBucketSearchQuery(query, categoryKindValues);
 
   const groups: BucketComboGroup[] = [];
   if (bucketsQuery.data) {
@@ -80,15 +80,11 @@ export function BucketComboRoot(props: {
         !bucket.hidden &&
         categoryKinds.some(({ kind }) => kind === bucket.kind),
     );
-    const matchingBuckets = search
-      ? buckets.filter((bucket) => contains(bucket.name, search))
-      : buckets;
-
-    if (matchingBuckets.length) {
+    if (buckets.length) {
       groups.push({
         id: "buckets",
         name: "Categorize as…",
-        items: matchingBuckets.map((bucket) => ({
+        items: buckets.map((bucket) => ({
           type: "bucket",
           id: bucket.id,
           name: bucket.name,
@@ -101,7 +97,14 @@ export function BucketComboRoot(props: {
       (bucket) =>
         bucket.name.trim().toLocaleLowerCase() === search.toLocaleLowerCase(),
     );
-    if (search && !exactMatch) {
+    if (
+      search === query &&
+      search &&
+      !exactMatch &&
+      !bucketsQuery.isPlaceholderData &&
+      !bucketsQuery.isPending &&
+      !bucketsQuery.isError
+    ) {
       groups.push({
         id: "create",
         name: "Create…",
@@ -200,43 +203,49 @@ export function BucketComboRoot(props: {
             anchor={session?.anchor}
             align="start"
             sideOffset={6}
-            className={styles.positioner}
+            className="z-10 outline-none"
           >
             <Combobox.Popup
-              className={styles.popup}
+              className="min-w-48 max-w-(--available-width,100vw) origin-(--transform-origin) overflow-hidden rounded-xl border border-popover-border bg-popover text-base text-gray-900 shadow-float transition-[opacity,scale] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] data-starting-style:scale-[.97] data-starting-style:opacity-0 data-ending-style:scale-[.97] data-ending-style:opacity-0 data-ending-style:duration-120 data-ending-style:ease-[cubic-bezier(0.4,0,1,1)] motion-reduce:duration-[1ms]"
               aria-label="Choose category, person, or action"
-              aria-busy={bucketsQuery.isPending || undefined}
+              aria-busy={bucketsQuery.isFetching || undefined}
             >
               <Combobox.Input
-                className={styles.input}
+                className="h-9 w-full border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
                 placeholder="Filter actions..."
                 aria-label="Filter categories, people, and actions"
               />
 
               <AnimatedHeight>
-                <div className={styles.scroller}>
+                <div className="max-h-[max(calc(2rem*2.5),calc(2rem*1.5+round(down,var(--cap)-2rem*1.5,2rem)))] scroll-py-1 overflow-y-auto overscroll-contain pb-1 [--cap:min(calc(var(--available-height,100vh)-calc(2rem+var(--spacing))),22rem)] [scrollbar-color:var(--color-gray-300)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:bg-clip-content">
                   <Combobox.Status>
                     {bucketsQuery.isPending ? (
-                      <div className={styles.status}>Loading…</div>
+                      <div className="flex min-h-8 items-center px-3 text-gray-600">
+                        Loading…
+                      </div>
                     ) : bucketsQuery.isError ? (
-                      <div className={styles.status}>Error loading buckets</div>
+                      <div className="flex min-h-8 items-center px-3 text-gray-600">
+                        Error loading buckets
+                      </div>
                     ) : null}
                   </Combobox.Status>
 
                   <Combobox.Empty>
                     {!bucketsQuery.isPending && !bucketsQuery.isError ? (
-                      <div className={styles.empty}>No matches</div>
+                      <div className="p-4 text-center text-gray-600">
+                        No matches
+                      </div>
                     ) : null}
                   </Combobox.Empty>
 
-                  <Combobox.List className={styles.list}>
+                  <Combobox.List className="outline-none">
                     {(group: BucketComboGroup) => (
                       <Combobox.Group
                         key={group.id}
                         items={group.items}
-                        className={styles.group}
+                        className="[&+&]:mt-1 [&+&]:border-t [&+&]:border-popover-border"
                       >
-                        <Combobox.GroupLabel className={styles.groupLabel}>
+                        <Combobox.GroupLabel className="flex h-8 items-center px-3 text-base text-gray-600">
                           {group.name}
                         </Combobox.GroupLabel>
                         <Combobox.Collection>
@@ -244,7 +253,7 @@ export function BucketComboRoot(props: {
                             <Combobox.Item
                               key={item.id}
                               value={item}
-                              className={styles.item}
+                              className="mx-1 flex h-8 cursor-default items-center gap-2 rounded-lg px-3 text-gray-900 outline-none select-none data-highlighted:bg-popover-item-selected data-selected:bg-popover-item-selected"
                             >
                               <span>{item.name}</span>
                             </Combobox.Item>

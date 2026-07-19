@@ -1,3 +1,4 @@
+import { ArrowUturnLeftIcon } from "@heroicons/react/24/outline";
 import {
   useCallback,
   useEffect,
@@ -11,17 +12,12 @@ import {
   createAlertDialogHandle,
   type AlertDialogHandle,
 } from "../../ui/alert-dialog/alert-dialog-handle";
-import { Button } from "../../ui/button/button";
-import { FloatingBarWrap } from "../list-shell/floating-bar";
 import {
   UndoContext,
   useUndo,
   type RegisteredUndoAction,
   type UndoAction,
 } from "./undo-context";
-
-import listShell from "../list-shell/list-shell.module.css";
-import styles from "./undo.module.css";
 
 export function UndoProvider(props: { children: ReactNode }) {
   const [action, setAction] = useState<RegisteredUndoAction | null>(null);
@@ -93,22 +89,26 @@ export function UndoProvider(props: { children: ReactNode }) {
   );
 }
 
-export function UndoNotice(props: { hide: boolean }) {
+export function UndoNotice(props: { raised: boolean }) {
   const undo = useUndo();
 
   return (
     <div
       key={undo.action?.key}
-      className={undo.action ? styles.notice : undefined}
+      className={undo.action ? "relative z-4 sm:hidden" : "invisible sm:hidden"}
+      inert={!undo.action}
     >
-      <FloatingBarWrap show={Boolean(undo.action) && !props.hide}>
-        <span className={listShell.count} role="status">
-          {undo.action?.label}
-        </span>
-        <Button variant="ghost" onClick={undo.requestUndo}>
-          Undo
-        </Button>
-      </FloatingBarWrap>
+      <span className="sr-only" role="status">
+        {undo.action?.label}
+      </span>
+      <button
+        className="fixed start-3 bottom-[calc(var(--nav-height)+var(--filterbar-height)+0.75rem)] z-4 inline-flex h-9 animate-[float-in-opacity_80ms_ease-out,float-in-translate_420ms_cubic-bezier(.22,1.55,.36,1),expire_100ms_6s_forwards] items-center justify-center gap-2 rounded-2xl border border-(--popover-border) bg-popover px-3 shadow-float transition-[bottom] duration-420 ease-[cubic-bezier(.22,1.55,.36,1)] data-[raised=true]:bottom-[calc(var(--nav-height)+var(--filterbar-height)+4.5rem)] motion-reduce:animate-[expire_100ms_6s_forwards] motion-reduce:transition-none"
+        data-raised={props.raised}
+        onClick={undo.requestUndo}
+      >
+        <ArrowUturnLeftIcon className="size-3.5" strokeWidth={2} />
+        Undo
+      </button>
     </div>
   );
 }

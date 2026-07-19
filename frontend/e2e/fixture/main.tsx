@@ -6,7 +6,7 @@ import { I18n } from "../../src/features/i18n/use-i18n";
 import InboxPage from "../../src/features/inbox/inbox-page";
 import TransactionsPage from "../../src/features/transactions/transactions-page";
 
-import "../../src/index.css";
+import "../../src/styles.css";
 
 const Page = new URLSearchParams(window.location.search).has("transactions")
   ? TransactionsPage

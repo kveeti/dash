@@ -9,7 +9,30 @@ test("login, navigation, and command palette use the real app", async ({
 
   await page.getByRole("link", { name: "inbox", exact: true }).click();
   await expect(page).toHaveURL(/\/inbox$/);
-  await expect(page.getByText("nothing to categorize")).toBeVisible();
+  await expect(page.getByText("No transactions to categorize")).toBeVisible();
+
+  await page.goBack();
+  await expect(page).toHaveURL(/\/transactions$/);
+
+  const mouseDownWasPrevented = await page
+    .getByRole("link", { name: "inbox", exact: true })
+    .evaluate(
+      (link) =>
+        !link.dispatchEvent(
+          new MouseEvent("mousedown", {
+            bubbles: true,
+            cancelable: true,
+            button: 0,
+          }),
+        ),
+    );
+  expect(mouseDownWasPrevented).toBe(true);
+  await expect(page).toHaveURL(/\/inbox$/);
+
+  await page
+    .getByRole("link", { name: "transactions", exact: true })
+    .dispatchEvent("touchstart");
+  await expect(page).toHaveURL(/\/transactions$/);
 
   await page.keyboard.press("Meta+k");
   const search = page.getByRole("combobox", { name: "Search pages" });

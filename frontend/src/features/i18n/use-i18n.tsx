@@ -52,11 +52,32 @@ function useI18nValue(props: {
     [locale],
   );
 
-  const percentFormatter = new Intl.NumberFormat(undefined, {
-    style: "percent",
-    maximumFractionDigits: 0,
-    signDisplay: "always",
-  });
+  const monthFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        month: "long",
+      }),
+    [locale],
+  );
+
+  const monthYearFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        month: "long",
+        year: "numeric",
+      }),
+    [locale],
+  );
+
+  const percentFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(locale, {
+        style: "percent",
+        maximumFractionDigits: 0,
+        signDisplay: "always",
+      }),
+    [locale],
+  );
 
   const formattersByCurrency = useMemo(() => {
     const formatters: Record<
@@ -109,6 +130,8 @@ function useI18nValue(props: {
       percent: percentFormatter.format,
       shortDate: shortDateFormatter.format,
       longDate: longDateFormatter.format,
+      month: monthFormatter.format,
+      monthYear: monthYearFormatter.format,
     },
     hourCycle,
     timeZone: resolvedOptions.timeZone,

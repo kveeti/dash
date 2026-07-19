@@ -1,0 +1,63 @@
+@import "tailwindcss";
+@import "./colors2.css";
+@import "./theme.css";
+
+@font-face {
+  font-family: geist;
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/geist.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  font-size: 100%;
+  line-height: 1.5;
+}
+
+html {
+  overscroll-behavior-y: none;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  hanging-punctuation: first allow-end last;
+}
+
+html.translated-rtl {
+  direction: rtl;
+}
+
+@variant pwa (@media (display-mode: standalone));
+
+@keyframes float-in-opacity {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes float-in-translate {
+  from {
+    translate: 0 1.5rem;
+  }
+}
+
+@keyframes expire {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

@@ -1,3 +1,10 @@
+import {
+  ArrowDownRightIcon,
+  ArrowUpRightIcon,
+  ChartBarIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from "@heroicons/react/24/outline";
 import { useState } from "react";
 
 import { useBucketsQuery, type Bucket } from "../../api/buckets";
@@ -8,18 +15,10 @@ import {
   type StatsPeriod,
   type Valuation,
 } from "../../api/stats";
+import { ListEmptyState } from "../../lib/list-shell/list-empty-state";
 import { setSearchParams, useSearchParam } from "../../lib/search-param";
+import { Input } from "../../ui/input/input";
 import { useI18n } from "../i18n/use-i18n";
-
-import inputStyles from "../../ui/input/input.module.css";
-import styles from "./stats-page.module.css";
-
-const dateFormat = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 function dateString(date: Date): string {
   const year = date.getFullYear();
@@ -59,12 +58,6 @@ function movePeriod(
   if (period === "month") date.setUTCMonth(date.getUTCMonth() + amount);
   if (period === "year") date.setUTCFullYear(date.getUTCFullYear() + amount);
   return utcDateString(date);
-}
-
-function formatRange(range: { from: string; to: string }) {
-  const from = dateFormat.format(utcDate(range.from));
-  if (range.from === range.to) return from;
-  return `${from}–${dateFormat.format(utcDate(range.to))}`;
 }
 
 type CategoryValue = {
@@ -139,9 +132,19 @@ function categoryGroups(
 }
 
 export default function StatsPage() {
-  const { isLoading: i18nLoading, isError: i18nError } = useI18n();
+  const {
+    f,
+    timeZone: timezone,
+    isLoading: i18nLoading,
+    isError: i18nError,
+  } = useI18n();
   const today = dateString(new Date());
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const formatRange = (range: { from: string; to: string }) => {
+    const from = f.longDate(utcDate(range.from));
+    return range.from === range.to
+      ? from
+      : `${from}–${f.longDate(utcDate(range.to))}`;
+  };
   const monthStart = `${today.slice(0, 7)}-01`;
   const [expanded, setExpanded] = useState(new Set<string>());
 
@@ -211,15 +214,18 @@ export default function StatsPage() {
     periodStart(anchor, navPeriod) < periodStart(today, navPeriod);
 
   return (
-    <div className={styles.page}>
-      <header className={styles.controls}>
-        <div className={styles.tabs} aria-label="Stats period">
+    <div className="mx-auto w-full max-w-(--page-width) p-3 pb-41 pwa:pb-46 sm:p-6">
+      <header className="fixed inset-x-0 bottom-9 pwa:bottom-14 z-2 grid grid-cols-[minmax(0,1fr)_auto] gap-2 border-t border-gray-150 bg-gray-0 px-3 py-2 sm:static sm:flex sm:flex-col sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0 sm:pb-6">
+        <div
+          className="col-span-full flex items-center gap-0.5 rounded-xl bg-gray-100 p-1 text-sm"
+          aria-label="Stats period"
+        >
           {(["week", "month", "year", "custom"] as StatsPeriod[]).map(
             (value) => (
               <button
                 key={value}
                 data-label={value}
-                className={period === value ? styles.active : undefined}
+                className={`inline-grid flex-1 justify-items-center rounded-[0.6rem] border-0 px-2 py-1 capitalize text-gray-700 cursor-pointer sm:px-3 after:block after:h-0 after:overflow-hidden after:font-semibold after:invisible after:content-[attr(data-label)] ${period === value ? "bg-gray-250 font-medium text-gray-900" : "hover:bg-gray-150"}`}
                 onClick={() => setPeriod(value)}
               >
                 {value}
@@ -229,9 +235,9 @@ export default function StatsPage() {
         </div>
 
         {period === "custom" ? (
-          <div className={styles.customDates}>
-            <input
-              className={inputStyles.control}
+          <div className="col-span-full grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-gray-700">
+            <Input
+              className="min-w-0"
               aria-label="From date"
               type="date"
               max={today}
@@ -239,8 +245,8 @@ export default function StatsPage() {
               onInput={(event) => update({ from: event.currentTarget.value })}
             />
             <span>to</span>
-            <input
-              className={inputStyles.control}
+            <Input
+              className="min-w-0"
               aria-label="To date"
               type="date"
               max={today}
@@ -249,39 +255,43 @@ export default function StatsPage() {
             />
           </div>
         ) : (
-          <div className={styles.periodNav}>
+          <div className="flex gap-2">
             <button
-              className={styles.prev}
+              className="grid size-9 place-items-center rounded-full border-0 bg-gray-100 text-gray-900 cursor-pointer hover:bg-gray-150"
               aria-label="Previous period"
               onClick={() =>
                 update({ anchor: movePeriod(anchor, navPeriod, -1) })
               }
-            />
+            >
+              <ChevronLeftIcon className="size-4" aria-hidden="true" />
+            </button>
             <button
-              className={`${styles.next}${canGoNext ? "" : ` ${styles.ghost}`}`}
+              className={`grid size-9 place-items-center rounded-full border-0 bg-gray-100 text-gray-900 cursor-pointer hover:bg-gray-150${canGoNext ? "" : " invisible"}`}
               aria-label="Next period"
               onClick={() =>
                 update({ anchor: movePeriod(anchor, navPeriod, 1) })
               }
-            />
+            >
+              <ChevronRightIcon className="size-4" aria-hidden="true" />
+            </button>
           </div>
         )}
 
         <div
-          className={`${styles.compare}${canCompareYear ? "" : ` ${styles.ghost}`}`}
+          className={`col-start-2 flex items-center justify-self-end gap-2 text-sm${canCompareYear ? "" : " invisible"}`}
         >
-          <span>Compare with</span>
-          <div className={styles.pill}>
+          <span className="hidden text-gray-700 sm:inline">Compare with</span>
+          <div className="flex items-center gap-0.5 rounded-xl bg-gray-100 p-1 text-sm">
             <button
               data-label="previous"
-              className={comparison === "previous" ? styles.active : undefined}
+              className={`inline-grid justify-items-center rounded-[0.6rem] border-0 px-2 py-1 text-gray-700 cursor-pointer sm:px-3 after:block after:h-0 after:overflow-hidden after:font-semibold after:invisible after:content-[attr(data-label)] ${comparison === "previous" ? "bg-gray-250 font-medium text-gray-900" : "hover:bg-gray-150"}`}
               onClick={() => update({ compare: "previous" })}
             >
               previous
             </button>
             <button
               data-label="last year"
-              className={comparison === "year" ? styles.active : undefined}
+              className={`inline-grid justify-items-center rounded-[0.6rem] border-0 px-2 py-1 text-gray-700 cursor-pointer sm:px-3 after:block after:h-0 after:overflow-hidden after:font-semibold after:invisible after:content-[attr(data-label)] ${comparison === "year" ? "bg-gray-250 font-medium text-gray-900" : "hover:bg-gray-150"}`}
               onClick={() => update({ compare: "year" })}
             >
               last year
@@ -293,7 +303,7 @@ export default function StatsPage() {
       {stats.isPending || buckets.isPending || i18nLoading ? (
         <StatsSkeleton />
       ) : stats.isError || buckets.isError || i18nError ? (
-        <p className={styles.error}>
+        <p className="text-danger-fg">
           error:{" "}
           {(stats.error ?? buckets.error)?.message ??
             "loading currencies failed"}
@@ -301,13 +311,26 @@ export default function StatsPage() {
       ) : (
         buckets.data &&
         stats.data && (
-          <div className={stats.isPlaceholderData ? styles.stale : undefined}>
-            <div className={styles.heading}>
-              <h1>{formatRange(stats.data.ranges.current)}</h1>
-              <p>compared with {formatRange(stats.data.ranges.comparison)}</p>
+          <div
+            className={
+              stats.isPlaceholderData
+                ? "opacity-50 transition-opacity delay-150 duration-200"
+                : undefined
+            }
+          >
+            <div className="mb-6">
+              <h1 className="m-0 text-xl font-medium">
+                {formatRange(stats.data.ranges.current)}
+              </h1>
+              <p className="text-sm text-gray-700">
+                compared with {formatRange(stats.data.ranges.comparison)}
+              </p>
             </div>
 
-            <section className={styles.summary} aria-label="Summary">
+            <section
+              className="mb-6 flex w-full flex-col gap-3 min-[30rem]:flex-row"
+              aria-label="Summary"
+            >
               <Summary
                 label="Expenses"
                 value={stats.data.summary.expenses}
@@ -334,7 +357,11 @@ export default function StatsPage() {
             <ValuationNotice valuation={stats.data.valuation} />
 
             {expenses.length === 0 && income.length === 0 && (
-              <p className={styles.empty}>No transactions in this period.</p>
+              <ListEmptyState
+                icon={ChartBarIcon}
+                heading="No transactions in this period"
+                body="Choose another period, or add transactions to start tracking your spending and income."
+              />
             )}
 
             <CategorySection
@@ -365,18 +392,30 @@ export default function StatsPage() {
 function StatsSkeleton() {
   return (
     <div aria-hidden="true">
-      <div className={styles.heading}>
-        <h1 className={styles.skeletonText} style={{ inlineSize: "11rem" }} />
-        <p className={styles.skeletonText} style={{ inlineSize: "15rem" }} />
+      <div className="mb-6">
+        <h1
+          className="m-0 my-1 block h-[1em] max-w-full rounded-lg bg-gray-150 text-xl font-medium motion-safe:animate-pulse"
+          style={{ inlineSize: "11rem" }}
+        />
+        <p
+          className="my-1 block h-[1em] max-w-full rounded-lg bg-gray-150 text-sm text-gray-700 motion-safe:animate-pulse"
+          style={{ inlineSize: "15rem" }}
+        />
       </div>
-      <section className={styles.summary}>
+      <section className="mb-6 flex w-full flex-col gap-2 min-[30rem]:flex-row">
         {[0, 1, 2].map((i) => (
-          <div key={i} className={styles.skeletonCard} />
+          <div
+            key={i}
+            className="h-[5.5rem] w-full rounded-2xl bg-gray-150 motion-safe:animate-pulse"
+          />
         ))}
       </section>
       <div>
         {[0, 1, 2, 3, 4].map((i) => (
-          <div key={i} className={styles.skeletonRow} />
+          <div
+            key={i}
+            className="my-4 h-5 rounded-lg bg-gray-150 motion-safe:animate-pulse"
+          />
         ))}
       </div>
     </div>
@@ -396,22 +435,47 @@ function Summary(props: {
     !props.incomplete && props.value.comparison !== 0 && difference !== 0;
 
   return (
-    <article className={styles.summaryItem}>
-      <h2>{props.label}</h2>
-      <div className={styles.numberLine}>
-        <strong>{f.amount(props.value.current, props.currency)}</strong>
-      </div>
+    <article className="w-full min-w-0 rounded-2xl bg-gray-100 p-3 flex flex-col gap-1">
+      <h2 className="text-sm font-semibold leading-5 text-gray-500">
+        {props.label}
+      </h2>
 
-      <div className={styles.vs}>
-        {showPercent && (
+      <div className="flex flex-col justify-end h-full">
+        {showPercent ? (
           <span
-            className={`${styles.chip} ${difference > 0 === props.goodWhenUp ? styles.chipGood : styles.chipBad}`}
+            className={`inline-flex items-center gap-1 text-xs font-medium ${difference > 0 === props.goodWhenUp ? "text-(--green-fg)" : "text-(--red-fg)"}`}
           >
-            {f.percent(difference / Math.abs(props.value.comparison))}
+            {difference > 0 ? (
+              <ArrowUpRightIcon
+                className="size-2.5"
+                strokeWidth={2.5}
+                aria-hidden="true"
+              />
+            ) : (
+              <ArrowDownRightIcon
+                className="size-2.5"
+                strokeWidth={2.5}
+                aria-hidden="true"
+              />
+            )}
+
+            <span>
+              {f.percent(difference / Math.abs(props.value.comparison))}
+            </span>
+          </span>
+        ) : (
+          <span aria-hidden="true" className="invisible">
+            0
           </span>
         )}
 
-        <p>vs {f.amount(props.value.comparison, props.currency)}</p>
+        <strong className="block text-xl font-semibold leading-6 wrap-anywhere tabular-nums">
+          {f.amount(props.value.current, props.currency)}
+        </strong>
+
+        <p className="text-xs text-gray-700 tabular-nums mt-1">
+          vs {f.amount(props.value.comparison, props.currency)}
+        </p>
       </div>
     </article>
   );
@@ -435,7 +499,7 @@ function ValuationNotice(props: {
   if (fallbackCount === 0 && missing.length === 0) return null;
 
   return (
-    <aside className={styles.notice}>
+    <aside className="mb-6 rounded-2xl border-0 bg-gray-100 p-3 text-sm text-gray-700">
       {fallbackCount > 0 && (
         <p>
           Some values use an earlier exchange rate, up to {oldest} days old.
@@ -464,9 +528,9 @@ function CategorySection(props: {
   const max = Math.max(...props.categories.map((row) => row.current), 0);
 
   return (
-    <section className={styles.categories}>
-      <h2>{props.title}</h2>
-      <ul>
+    <section className="mb-6">
+      <h2 className="mb-2 ms-2.5 text-lg font-medium">{props.title}</h2>
+      <ul className="list-none space-y-1.5 rounded-2xl">
         {props.categories.map((category) => {
           const details = [
             ...(category.direct ? [category.direct] : []),
@@ -481,12 +545,13 @@ function CategorySection(props: {
                 max={max}
                 incomplete={props.incomplete}
                 goodWhenUp={props.goodWhenUp}
+                showBar={props.categories.length > 1}
                 expandable={details.length > 0}
                 expanded={isExpanded}
                 onToggle={() => props.onToggle(category.id)}
               />
               {isExpanded && (
-                <ul className={styles.children}>
+                <ul className="ml-6 list-none space-y-1.5">
                   {details.map((child) => (
                     <li key={child.id}>
                       <CategoryRow
@@ -495,6 +560,7 @@ function CategorySection(props: {
                         max={max}
                         incomplete={props.incomplete}
                         goodWhenUp={props.goodWhenUp}
+                        showBar={details.length > 1}
                       />
                     </li>
                   ))}
@@ -514,6 +580,7 @@ function CategoryRow(props: {
   max: number;
   incomplete: boolean;
   goodWhenUp: boolean;
+  showBar: boolean;
   expandable?: boolean;
   expanded?: boolean;
   onToggle?: () => void;
@@ -524,51 +591,65 @@ function CategoryRow(props: {
     !props.incomplete && props.category.comparison > 0 && difference !== 0;
 
   const content = (
-    <>
-      <span className={styles.categoryName}>
-        {props.category.name}
-        {props.expandable && (
-          <span className={styles.chevron} aria-hidden="true" />
-        )}
-      </span>
-      <span className={styles.categoryAmount}>
-        {f.wholeAmount(props.category.current, props.currency)}
-      </span>
-      <span className={styles.categoryComparison}>
-        vs {f.wholeAmount(props.category.comparison, props.currency)}
-        {showPercent && (
-          <>
-            {", "}
+    <div className="flex justify-between gap-3 w-full leading-5">
+      <div>
+        <span className="relative z-1 inline-flex items-center gap-1 font-medium">
+          {props.category.name}
+          {props.expandable && (
+            <ChevronRightIcon
+              className="size-4 shrink-0 transition-transform duration-150 [button[aria-expanded=true]_&]:rotate-90"
+              aria-hidden="true"
+            />
+          )}
+        </span>
+      </div>
+
+      <div className="flex flex-col">
+        <span className="relative z-1 text-end font-medium">
+          {f.wholeAmount(props.category.current, props.currency)}
+        </span>
+        <span className="relative z-1 text-end text-xs text-gray-900">
+          vs {f.wholeAmount(props.category.comparison, props.currency)}
+          {showPercent && (
+            <>
+              {" "}
+              <span
+                className={
+                  difference > 0 === props.goodWhenUp
+                    ? "text-green-950 py-0.5 px-1 bg-green-220 border border-green-300/80 rounded-md text-[0.65rem]"
+                    : "text-red-950 py-0.5 px-1 bg-red-280 border border-red-300/80 rounded-md text-[0.65rem]"
+                }
+              >
+                {f.percent(difference / props.category.comparison)}
+              </span>
+            </>
+          )}
+        </span>
+        <span className="absolute inset-0 -z-1 bg-gray-100">
+          {props.showBar && (
             <span
-              className={
-                difference > 0 === props.goodWhenUp
-                  ? styles.positive
-                  : styles.negative
-              }
-            >
-              {f.percent(difference / props.category.comparison)}
-            </span>
-          </>
-        )}
-      </span>
-      <span className={styles.barTrack}>
-        <span
-          className={styles.bar}
-          style={{
-            width: `${props.max > 0 ? (Math.max(props.category.current, 0) / props.max) * 100 : 0}%`,
-          }}
-        />
-      </span>
-    </>
+              className="block h-full bg-(--stats-bar-visual)"
+              style={{
+                width: `${props.max > 0 ? (Math.max(props.category.current, 0) / props.max) * 100 : 0}%`,
+              }}
+            />
+          )}
+        </span>
+      </div>
+    </div>
   );
 
   if (!props.expandable) {
-    return <div className={styles.categoryRow}>{content}</div>;
+    return (
+      <div className="p-2.5 relative isolate w-full overflow-hidden rounded-xl border-0 bg-transparent text-start text-gray-900">
+        {content}
+      </div>
+    );
   }
 
   return (
     <button
-      className={styles.categoryRow}
+      className="px-3 py-2 relative isolate w-full cursor-pointer overflow-hidden rounded-xl bg-transparent text-start text-gray-900 hover:bg-gray-100 hover:shadow-[0_1px_3px] hover:shadow-gray-200"
       aria-expanded={props.expanded}
       onClick={() => props.onToggle?.()}
     >

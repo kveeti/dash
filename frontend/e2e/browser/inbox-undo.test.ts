@@ -24,7 +24,7 @@ async function mockInbox(
   await page.route("**/api/v1/currencies", (route) =>
     route.fulfill({ json: [{ code: "EUR", exponent: 2 }] }),
   );
-  await page.route("**/api/v1/buckets", (route) =>
+  await page.route("**/api/v1/buckets**", (route) =>
     route.fulfill({
       json: [
         { id: "groceries", kind: "expense", name: "Groceries", hidden: false },
@@ -134,7 +134,7 @@ test("failed bulk categorization restores selection and removes its undo", async
   });
   await page.goto("/e2e/fixture/");
 
-  await page.getByRole("checkbox", { name: "Select rows" }).check();
+  await page.getByRole("checkbox", { name: "Select rows" }).click();
   for (const name of ["One", "Two"]) {
     await page
       .getByRole("listitem")

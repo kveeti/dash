@@ -11,18 +11,10 @@ import {
 } from "../../api/imports";
 import { useMeQuery } from "../../api/user";
 import { Button } from "../../ui/button/button";
-import { Field, InputGroup } from "../../ui/input/input";
+import { Field, FileInput, Select } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
+import { useI18n } from "../i18n/use-i18n";
 import { TransactionForm } from "../transactions/new-transaction-page";
-
-import inputStyles from "../../ui/input/input.module.css";
-import styles from "./imports.module.css";
-
-const dateFormat = new Intl.DateTimeFormat(undefined, {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
 
 const schema = v.object({
   file: v.instance(File, "Choose a file"),
@@ -31,29 +23,23 @@ const schema = v.object({
   timezone: v.pipe(v.string(), v.nonEmpty("Select a timezone")),
 });
 
-const detectedTimezone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
-const timezones = [
-  detectedTimezone,
-  ...Intl.supportedValuesOf("timeZone").filter((tz) => tz !== detectedTimezone),
-];
-
 export default function ImportsPage() {
   return (
-    <div className={styles.page}>
+    <div className="mx-auto flex w-full max-w-(--page-width) flex-col gap-14 px-3 pt-6 sm:px-6">
       <div>
-        <h1 className={styles.title}>Import transactions</h1>
-        <div className={styles.card}>
+        <h1 className="text-lg font-medium mb-3">Import transactions</h1>
+        <div className="-mx-3 box-border rounded-2xl border border-border-subtle bg-form p-6 sm:-mx-6">
           <ImportForm />
         </div>
       </div>
 
       <section>
-        <h1 className={styles.title}>Past imports</h1>
+        <h1 className="text-lg font-medium mb-3">Past imports</h1>
         <PastImports />
       </section>
 
       <section>
-        <h1 className={styles.title}>Import manually</h1>
+        <h1 className="text-lg font-medium mb-3">Import manually</h1>
         <ManualImport />
       </section>
     </div>
@@ -63,10 +49,15 @@ export default function ImportsPage() {
 function ImportForm() {
   const buckets = useBucketsQuery();
   const mutation = useCreateImportMutation();
+  const { timeZone } = useI18n();
+  const timezones = [
+    timeZone,
+    ...Intl.supportedValuesOf("timeZone").filter((tz) => tz !== timeZone),
+  ];
 
   const form = useForm({
     schema,
-    initialInput: { format: "nordea", timezone: detectedTimezone },
+    initialInput: { format: "nordea", timezone: timeZone },
   });
 
   const onSubmit = async (values: v.InferOutput<typeof schema>) => {
@@ -84,39 +75,31 @@ function ImportForm() {
   };
 
   return (
-    <Form of={form} className={styles.form} onSubmit={onSubmit}>
+    <Form
+      of={form}
+      className="flex w-full flex-col gap-4 min-[30rem]:grid min-[30rem]:grid-cols-[auto_minmax(0,22rem)] min-[30rem]:items-center min-[30rem]:gap-x-8 min-[30rem]:gap-y-3 min-[30rem]:[&>*]:col-span-full"
+      onSubmit={onSubmit}
+    >
       <FormField of={form} path={["file"]}>
         {(field) => (
-          <Field
-            className={inputStyles.horizontal}
-            label="File"
-            error={field.errors?.[0]}
-          >
-            <input
-              {...field.props}
-              className={inputStyles.control}
-              type="file"
-              accept=".csv,text/csv"
-            />
+          <Field label="File" error={field.errors?.[0]}>
+            <FileInput {...field.props} accept=".csv,text/csv" />
           </Field>
         )}
       </FormField>
 
       <FormField of={form} path={["bucket"]}>
         {(field) => (
-          <Field
-            className={inputStyles.horizontal}
-            label="Account"
-            error={field.errors?.[0]}
-            as="div"
-          >
-            <BucketPicker
-              kinds={["asset", "liability"]}
-              createKinds={["asset"]}
-              placeholder="Select account"
-              value={buckets.data?.find((b) => b.id === field.input) ?? null}
-              onPick={(bucket) => field.onChange(bucket.id)}
-            />
+          <Field label="Account" error={field.errors?.[0]} as="div">
+            <div className="w-full">
+              <BucketPicker
+                kinds={["asset", "liability"]}
+                createKinds={["asset"]}
+                placeholder="Select account"
+                value={buckets.data?.find((b) => b.id === field.input) ?? null}
+                onPick={(bucket) => field.onChange(bucket.id)}
+              />
+            </div>
           </Field>
         )}
       </FormField>
@@ -124,33 +107,25 @@ function ImportForm() {
       <FormField of={form} path={["format"]}>
         {(formatField) => (
           <>
-            <Field className={inputStyles.horizontal} label="Format">
-              <InputGroup>
-                <select {...formatField.props} className={styles.select}>
-                  <option value="nordea">Nordea</option>
-                  <option value="op">OP</option>
-                  <option value="revolut">Revolut</option>
-                </select>
-              </InputGroup>
+            <Field label="Format">
+              <Select {...formatField.props}>
+                <option value="nordea">Nordea</option>
+                <option value="op">OP</option>
+                <option value="revolut">Revolut</option>
+              </Select>
             </Field>
 
             {formatField.input !== "revolut" && (
               <FormField of={form} path={["timezone"]}>
                 {(field) => (
-                  <Field
-                    className={inputStyles.horizontal}
-                    label="Dates in timezone"
-                    error={field.errors?.[0]}
-                  >
-                    <InputGroup>
-                      <select {...field.props} className={styles.select}>
-                        {timezones.map((tz) => (
-                          <option key={tz} value={tz}>
-                            {tz}
-                          </option>
-                        ))}
-                      </select>
-                    </InputGroup>
+                  <Field label="Dates in timezone" error={field.errors?.[0]}>
+                    <Select {...field.props}>
+                      {timezones.map((tz) => (
+                        <option key={tz} value={tz}>
+                          {tz}
+                        </option>
+                      ))}
+                    </Select>
                   </Field>
                 )}
               </FormField>
@@ -160,11 +135,11 @@ function ImportForm() {
       </FormField>
 
       {mutation.isError && (
-        <p className={styles.error}>{mutation.error.message}</p>
+        <p className="text-base text-danger-fg">{mutation.error.message}</p>
       )}
 
-      <div className={styles.buttonRow}>
-        <Button type="submit" className={styles.submit}>
+      <div className="mt-4 flex flex-row-reverse gap-4">
+        <Button type="submit" className="w-full">
           {form.isSubmitting ? "Importing…" : "Import"}
         </Button>
         <Button type="reset" variant="ghost">
@@ -183,15 +158,18 @@ const skeletonRows = [
 
 function PastImportsSkeleton() {
   return (
-    <ul className={styles.list} aria-hidden="true">
+    <ul className="m-0 flex list-none flex-col p-0" aria-hidden="true">
       {skeletonRows.map((row, i) => (
-        <li key={i} className={styles.skeletonBatch}>
+        <li
+          key={i}
+          className="flex flex-col gap-2 border-b border-gray-200 py-3 last:border-b-0"
+        >
           <span
-            className={styles.skeletonBar}
+            className="h-[1em] animate-pulse rounded-lg bg-gray-150"
             style={{ inlineSize: row.name }}
           />
           <span
-            className={`${styles.skeletonBar} ${styles.skeletonMeta}`}
+            className="h-[.8em] animate-pulse rounded-lg bg-gray-150"
             style={{ inlineSize: row.meta }}
           />
         </li>
@@ -203,6 +181,7 @@ function PastImportsSkeleton() {
 function PastImports() {
   const imports = useInfiniteImportsQuery();
   const buckets = useBucketsQuery();
+  const { f } = useI18n();
   const batches = imports.data?.pages.flatMap((page) => page.rows) ?? [];
 
   const bucketName = (id: string) =>
@@ -213,25 +192,32 @@ function PastImports() {
   if (!batches.length) return <p>no imports yet</p>;
 
   return (
-    <div className={styles.listScroller}>
-      <ul className={styles.list}>
+    <div className="-mx-6 max-h-[calc(5*4.75rem)] overflow-y-auto rounded-2xl border border-gray-200 bg-form">
+      <ul className="m-0 flex list-none flex-col p-0">
         {batches.map((batch) => {
           const processing =
             batch.status === "uploaded" || batch.status === "processing";
           return (
             <li
               key={batch.id}
-              className={`${styles.batch}${processing ? ` ${styles.processing}` : ""}`}
+              className={`relative grid min-h-[4.75rem] grid-cols-[minmax(0,1fr)_auto] content-center gap-x-3 gap-y-1 border-b border-gray-200 px-6 py-3 last:border-b-0 hover:bg-gray-150 ${processing ? "bg-success-surface" : ""}`}
             >
-              <Link href={`/imports/${batch.id}`} className={styles.batchLink}>
+              <Link
+                href={`/imports/${batch.id}`}
+                className="absolute inset-0 text-transparent no-underline outline-[1.5px] outline-transparent outline-offset-[-1.5px] focus-visible:outline-gray-500"
+              >
                 {batch.filename}
               </Link>
-              <span className={styles.filename}>{batch.filename}</span>
-              <span className={styles.meta}>
-                {bucketName(batch.bucket_id)} ·{" "}
-                {dateFormat.format(new Date(batch.created_at))}
+              <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap underline">
+                {batch.filename}
               </span>
-              <span className={styles.status}>
+              <span className="text-right text-base text-gray-700">
+                {bucketName(batch.bucket_id)} ·{" "}
+                {f.longDate(new Date(batch.created_at))}
+              </span>
+              <span
+                className={`col-span-full text-base ${processing ? "font-medium text-success-fg" : "text-gray-700"}`}
+              >
                 {batch.status === "done"
                   ? `${batch.imported} imported · ${batch.duplicates} duplicates`
                   : batch.status === "failed"
@@ -266,7 +252,7 @@ function LoadMore(props: {
 
   if (!props.imports.hasNextPage) return null;
   return (
-    <div ref={ref} className={styles.loadMore}>
+    <div ref={ref} className="p-3 text-center text-base text-gray-700">
       {props.imports.isFetchingNextPage ? "Loading…" : "Load more"}
     </div>
   );
@@ -281,5 +267,10 @@ function ManualImport() {
   }
   if (!currencies.data || !me.data) return <p>loading…</p>;
 
-  return <TransactionForm homeCurrency={me.data.home_currency} />;
+  return (
+    <TransactionForm
+      homeCurrency={me.data.home_currency}
+      showCategoryKindSelector={false}
+    />
+  );
 }

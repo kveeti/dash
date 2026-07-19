@@ -26,7 +26,7 @@ test("search, select all, and create a category against the real inbox", async (
   await search.fill("");
   await expect(page.getByText("Train")).toBeVisible();
 
-  await page.getByRole("checkbox", { name: "Select rows" }).check();
+  await page.getByRole("checkbox", { name: "Select rows" }).click();
   await page.getByRole("button", { name: "Select all" }).click();
   await expect(page.getByText("3 selected")).toBeVisible();
   await page.getByRole("button", { name: "Deselect all" }).click();
@@ -39,7 +39,7 @@ test("search, select all, and create a category against the real inbox", async (
     .click();
   await page.getByRole("combobox", { name: "Filter buckets" }).fill("Travel");
   await page.getByRole("option", { name: 'Expense "Travel"' }).click();
-  await expect(page.getByText("nothing to categorize")).toBeVisible();
+  await expect(page.getByText("No transactions to categorize")).toBeVisible();
 
   await page.getByRole("link", { name: "transactions", exact: true }).click();
   await expect(page.getByText("Train")).toBeVisible();

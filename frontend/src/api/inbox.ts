@@ -128,6 +128,7 @@ export function useCategorizeInboxMutation() {
           ...current,
           bucket,
         ]);
+        queryClient.invalidateQueries({ queryKey: bucketKeys.searches });
       }
     },
     onError: (_error, _input, context) =>

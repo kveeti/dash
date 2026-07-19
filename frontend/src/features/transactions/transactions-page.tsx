@@ -1,11 +1,14 @@
+import {
+  ArrowsRightLeftIcon,
+  DocumentPlusIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/outline";
+import { isSameDay, isSameYear } from "date-fns";
 import { Fragment } from "react";
+import { Link } from "wouter";
 
 import {
-  useAddTransactionTagMutation,
-  useBulkCategorizeMutation,
   useInfiniteTransactionsQuery,
-  useRemoveTransactionsMutation,
-  useTagsQuery,
   type Transaction,
 } from "../../api/transactions";
 import { Filterbar } from "../../lib/list-shell/filterbar";
@@ -14,21 +17,24 @@ import {
   FloatingBarWrap,
   SelectionCountButton,
 } from "../../lib/list-shell/floating-bar";
+import {
+  ListEmptyState,
+  listEmptyActionClassName,
+} from "../../lib/list-shell/list-empty-state";
 import { ListSkeleton } from "../../lib/list-shell/list-skeleton";
 import {
   useSelection,
   type UseSelectionReturn,
 } from "../../lib/list-shell/selection";
-import { setSearchParam, useSearchParam } from "../../lib/search-param";
-import { Button } from "../../ui/button/button";
+import {
+  setSearchParam,
+  setSearchParams,
+  useSearchParam,
+} from "../../lib/search-param";
 import { Checkbox } from "../../ui/checkbox/checkbox";
-import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
-import { TagCombobox } from "./tag-combobox";
+import { TransactionActionsCombobox } from "./transaction-actions-combobox";
 import { toTransactionRow, type TransactionRow } from "./transaction-row";
-
-import listShell from "../../lib/list-shell/list-shell.module.css";
-import styles from "./transactions-page.module.css";
 
 const asKind =
   <K extends TransactionRow["kind"]>(kind: K) =>
@@ -58,7 +64,7 @@ export default function TransactionsPage() {
     visibleIds.every((id) => selection.selected.has(id));
 
   return (
-    <div className={listShell.wrapper}>
+    <div>
       <Filterbar
         selectLabel="Select transactions"
         selectMode={selection.selectMode}
@@ -77,9 +83,15 @@ export default function TransactionsPage() {
         onClearTag={() => setParam("tag", undefined)}
       />
 
-      <List selection={selection} transactions={transactions} txns={txns} />
+      <List
+        selection={selection}
+        transactions={transactions}
+        txns={txns}
+        searchQuery={searchQuery}
+        tag={tag}
+      />
 
-      <FloatingBar selection={selection} />
+      <FloatingBar selection={selection} transactions={txns} />
     </div>
   );
 }
@@ -88,6 +100,8 @@ function List(props: {
   selection: UseSelectionReturn;
   transactions: ReturnType<typeof useInfiniteTransactionsQuery>;
   txns: Transaction[];
+  searchQuery: string | null;
+  tag: string | null;
 }) {
   const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
 
@@ -95,44 +109,106 @@ function List(props: {
     return <ListSkeleton twoLine />;
   }
   if (props.transactions.isError || i18nError) {
-    return <p className={listShell.col}>error loading transactions</p>;
+    return (
+      <p className="mx-auto w-full max-w-(--page-width) px-3 sm:px-6">
+        error loading transactions
+      </p>
+    );
   }
 
   if (!props.txns.length) {
-    return <p className={listShell.col}>no transactions yet</p>;
+    const hasFilters = Boolean(props.searchQuery || props.tag);
+    return hasFilters ? (
+      <ListEmptyState
+        icon={MagnifyingGlassIcon}
+        heading="No matching transactions"
+        body="Try adjusting your search or filters to find what you’re looking for."
+        secondaryAction={
+          <button
+            type="button"
+            className={`${listEmptyActionClassName} text-gray-900 hover:bg-gray-200`}
+            onClick={() =>
+              setSearchParams(
+                { q: undefined, tag: undefined },
+                { replace: true },
+              )
+            }
+          >
+            Clear filters
+          </button>
+        }
+      />
+    ) : (
+      <ListEmptyState
+        icon={DocumentPlusIcon}
+        heading="No transactions yet"
+        body="Import a bank statement or add a transaction manually to get started."
+        primaryAction={
+          <Link
+            href="/imports"
+            className={`${listEmptyActionClassName} bg-success-solid text-white hover:bg-success-solid-hover`}
+          >
+            Import transactions
+          </Link>
+        }
+      />
+    );
   }
 
   const visibleIds = props.txns.map((txn) => txn.id);
-  let prevDate: string | null = null;
-
-  const filterDate = (date: string) => {
-    const d = new Date(date);
-    return new Date().getFullYear() === d.getFullYear()
-      ? f.shortDate(d)
-      : f.longDate(d);
-  };
+  let prevMonth: number | null = null;
+  const today = new Date();
 
   return (
     <>
       <ul
-        className={`${listShell.list} ${props.selection.selectMode ? listShell.listSelect : ""}`}
+        className={`-mt-1 flex list-none flex-col ${props.selection.selectMode ? "select-none" : ""}`}
       >
         {props.txns.map((txn) => {
-          const dateFormatted = filterDate(txn.date);
-          const showDateHeader = dateFormatted !== prevDate;
-          prevDate = dateFormatted;
+          const date = new Date(txn.date);
+          const month = date.getMonth();
+
+          let dateHeading: string | null = null;
+          if (!isSameDay(today, date)) {
+            dateHeading = isSameYear(date, today)
+              ? f.shortDate(date)
+              : f.longDate(date);
+          }
+
+          let monthHeading: string | null = null;
+          if (prevMonth !== month) {
+            monthHeading = isSameYear(date, today)
+              ? f.month(date)
+              : f.monthYear(date);
+          }
+          prevMonth = month;
 
           return (
             <Fragment key={txn.id}>
-              {showDateHeader && (
-                <li role="presentation" className={listShell.datePos}>
-                  <h2 className={listShell.date}>{dateFormatted}</h2>
+              {monthHeading && (
+                <li
+                  role="presentation"
+                  className="max-w-(--page-width) mx-auto w-full mt-3"
+                >
+                  <h2 className="text-gray-900 font-semibold text-[1.6rem] ms-5.5">
+                    {monthHeading}
+                  </h2>
+                </li>
+              )}
+              {dateHeading && (
+                <li
+                  role="presentation"
+                  className="sticky -top-1 z-1 text-sm text-gray-700 [&+li>*]:border-t-0 sm:top-[calc(var(--nav-height)+var(--filterbar-height)-var(--spacing))]"
+                >
+                  <h3 className="mx-auto my-1 max-w-(--page-width) rounded-lg bg-gray-125 px-3 py-1 text-2xs font-medium sm:px-6">
+                    {dateHeading}
+                  </h3>
                 </li>
               )}
 
-              <li className={listShell.col}>
+              <li className="mx-auto w-full max-w-(--page-width) px-3 sm:px-6">
                 <div
-                  className={`${listShell.rowWrap} ${props.selection.selectMode ? listShell.rowWrapSelect : ""}`}
+                  className={`relative border-t border-gray-200 ${props.selection.selectMode ? "cursor-pointer [&_.transaction-check-slot]:opacity-100 [&_.transaction-slide]:pl-8 [&_.transaction-slide_:where(button,a)]:pointer-events-none" : ""}`}
                   onClick={(event) => {
                     if (!props.selection.selectMode) return;
                     if (event.shiftKey)
@@ -140,7 +216,7 @@ function List(props: {
                     else props.selection.toggle(txn.id);
                   }}
                 >
-                  <div className={listShell.checkSlot}>
+                  <div className="transaction-check-slot pointer-events-none absolute start-0 top-1/2 flex -translate-y-1/2 opacity-0 transition-opacity duration-220 ease-[cubic-bezier(.25,.8,.25,1)] motion-reduce:duration-[1ms]">
                     <Checkbox
                       checked={props.selection.selected.has(txn.id)}
                       tabIndex={-1}
@@ -148,7 +224,7 @@ function List(props: {
                       readOnly
                     />
                   </div>
-                  <div className={`${listShell.slide} ${styles.rowContent}`}>
+                  <div className="transaction-slide grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 py-2 [contain:layout] transition-[padding-inline-start] duration-220 ease-[cubic-bezier(.25,.8,.25,1)] motion-reduce:duration-[1ms]">
                     <Row
                       txn={txn}
                       onFilterTag={(value) =>
@@ -168,7 +244,7 @@ function List(props: {
       {props.transactions.hasNextPage && (
         <button
           type="button"
-          className={listShell.col}
+          className="mx-auto w-full max-w-(--page-width) px-3 sm:px-6"
           onClick={() => {
             if (!props.transactions.isFetchingNextPage)
               props.transactions.fetchNextPage();
@@ -190,19 +266,23 @@ function Row(props: { txn: Transaction; onFilterTag: (tag: string) => void }) {
     const who = props.txn.counterparty || props.txn.description;
     return (
       <>
-        <span className={styles.who}>{who}</span>
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base font-medium text-gray-950">
+          {who}
+        </span>
         <span
-          className={`${styles.amount} ${simple.amount >= 0 ? styles.positive : ""}`}
+          className={`whitespace-nowrap text-base font-medium ${simple.amount >= 0 ? "text-success-fg" : "text-gray-950"}`}
         >
           {f.amount(simple.amount, simple.currency)}
         </span>
-        <div className={styles.metaRow}>
-          <span className={styles.meta}>
+        <div className="col-span-full grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3">
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal text-gray-700">
             {simple.category}
             <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
           </span>
           {simple.account && (
-            <span className={styles.account}>{simple.account}</span>
+            <span className="whitespace-nowrap text-sm font-normal text-gray-700">
+              {simple.account}
+            </span>
           )}
         </div>
       </>
@@ -213,14 +293,17 @@ function Row(props: { txn: Transaction; onFilterTag: (tag: string) => void }) {
   if (transfer) {
     return (
       <>
-        <span className={styles.who}>
-          <span className={styles.swap} />
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base font-normal">
+          <ArrowsRightLeftIcon
+            className="mr-1 inline-block size-[1em] align-[-.12em] text-gray-700"
+            aria-hidden="true"
+          />
           {transfer.from} → {transfer.to}
         </span>
-        <span className={`${styles.amount} ${styles.muted}`}>
+        <span className="whitespace-nowrap text-base font-normal text-gray-700">
           {f.amount(transfer.amount, transfer.currency)}
         </span>
-        <span className={styles.meta}>
+        <span className="col-span-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal text-gray-700">
           Transfer
           <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
         </span>
@@ -232,17 +315,20 @@ function Row(props: { txn: Transaction; onFilterTag: (tag: string) => void }) {
   if (exchange) {
     return (
       <>
-        <span className={styles.who}>
-          <span className={styles.swap} />
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base font-normal">
+          <ArrowsRightLeftIcon
+            className="mr-1 inline-block size-[1em] align-[-.12em] text-gray-700"
+            aria-hidden="true"
+          />
           {exchange.from !== exchange.to
             ? `${exchange.from} → ${exchange.to}`
             : exchange.from}
         </span>
-        <span className={`${styles.amount} ${styles.muted}`}>
+        <span className="whitespace-nowrap text-base font-normal text-gray-700">
           {f.amount(exchange.fromAmount, exchange.fromCurrency)} →{" "}
           {f.amount(exchange.toAmount, exchange.toCurrency)}
         </span>
-        <span className={styles.meta}>
+        <span className="col-span-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal text-gray-700">
           Exchange
           <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
         </span>
@@ -254,9 +340,11 @@ function Row(props: { txn: Transaction; onFilterTag: (tag: string) => void }) {
   const who = props.txn.counterparty || props.txn.description || "Transaction";
   return (
     <>
-      <span className={styles.who}>{who}</span>
+      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base font-medium text-gray-950">
+        {who}
+      </span>
       <span />
-      <span className={styles.meta}>
+      <span className="col-span-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal text-gray-700">
         {generic.legs.map((leg, i) => (
           <Fragment key={i}>
             {i > 0 && ", "}
@@ -276,7 +364,7 @@ function TagList(props: { tags: string[]; onFilter: (tag: string) => void }) {
         <button
           key={tag}
           type="button"
-          className={styles.tag}
+          className="ml-2 cursor-pointer border-0 bg-none p-0 text-inherit text-gray-700"
           onClick={() => props.onFilter(tag)}
         >
           #{tag}
@@ -286,11 +374,14 @@ function TagList(props: { tags: string[]; onFilter: (tag: string) => void }) {
   );
 }
 
-function FloatingBar(props: { selection: UseSelectionReturn }) {
-  const tags = useTagsQuery();
-  const categorize = useBulkCategorizeMutation();
-  const addTag = useAddTransactionTagMutation();
-  const remove = useRemoveTransactionsMutation();
+function FloatingBar(props: {
+  selection: UseSelectionReturn;
+  transactions: Transaction[];
+}) {
+  const ids = [...props.selection.selected];
+  const selectedTransactions = props.transactions.filter((transaction) =>
+    props.selection.selected.has(transaction.id),
+  );
 
   return (
     <FloatingBarWrap show={props.selection.selectMode}>
@@ -298,43 +389,13 @@ function FloatingBar(props: { selection: UseSelectionReturn }) {
         count={props.selection.selected.size}
         onClick={props.selection.clearSelection}
       />
-      <div className={listShell.barPicker}>
-        <BucketPicker
-          kinds={["expense", "income"]}
-          createKinds={["expense"]}
-          value={null}
-          placeholder="Categorize…"
-          onPick={(bucket) => {
-            if (categorize.isPending) return;
-            categorize.mutate(
-              { ids: [...props.selection.selected], bucketId: bucket.id },
-              { onSuccess: props.selection.exitSelect },
-            );
-          }}
+      <div className="min-w-0 flex-1">
+        <TransactionActionsCombobox
+          ids={ids}
+          transactions={selectedTransactions}
+          onFinish={props.selection.exitSelect}
         />
       </div>
-      <TagCombobox
-        className={listShell.barPicker}
-        tags={tags.data?.tags ?? []}
-        onChange={(value) => {
-          if (addTag.isPending) return;
-          addTag.mutate(
-            { ids: [...props.selection.selected], value },
-            { onSuccess: props.selection.exitSelect },
-          );
-        }}
-      />
-      <Button
-        variant="ghost"
-        onClick={() => {
-          if (remove.isPending) return;
-          remove.mutate([...props.selection.selected], {
-            onSuccess: props.selection.exitSelect,
-          });
-        }}
-      >
-        {remove.isPending ? "Removing…" : "Remove"}
-      </Button>
       <CloseButton onClick={props.selection.exitSelect} />
     </FloatingBarWrap>
   );

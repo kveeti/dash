@@ -13,8 +13,6 @@ import { setSearchParam, useSearchParam } from "../../lib/search-param";
 import { useI18n } from "../i18n/use-i18n";
 import { useInboxUndo } from "./inbox-undo-context";
 
-import styles from "./match-transactions-dialog.module.css";
-
 const [useContext, context] =
   createContext<ReturnType<typeof useMatchTransactionsValue>>();
 export const useMatchTransactions = useContext;
@@ -114,25 +112,29 @@ function MatchTransactionsContent(props: {
         // but Combobox's public type narrows the prop to boolean.
         autoHighlight={"always" as unknown as boolean}
       >
-        <div className={styles.inputWrap}>
+        <div className="relative">
           <Combobox.Input
-            className={styles.input}
+            className="h-9 w-full border-b border-popover-border bg-transparent px-3 pe-20 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70"
             placeholder="Search possible matches"
             aria-label="Search possible matches"
           />
           {matches.isFetching && (
-            <span className={styles.loading}>loading…</span>
+            <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-base text-gray-600">
+              loading…
+            </span>
           )}
         </div>
 
         {matches.isError ? (
-          <p className={styles.status}>Couldn’t load matches</p>
+          <p className="p-4 text-center text-gray-600">Couldn’t load matches</p>
         ) : (
           <>
             <Combobox.Empty>
-              <p className={styles.empty}>No possible matches found.</p>
+              <p className="p-4 text-center text-gray-600">
+                No possible matches found.
+              </p>
             </Combobox.Empty>
-            <Combobox.List className={styles.list}>
+            <Combobox.List className="scroll-py-1 overflow-y-auto overscroll-contain py-1 outline-none">
               {(item: InboxMatch) => (
                 <MatchRow key={item.id} item={item} source={source} />
               )}
@@ -157,9 +159,9 @@ function MatchTransactionsDialog(props: {
       }}
     >
       <Dialog.Portal>
-        <Dialog.Backdrop className={styles.backdrop} />
-        <Dialog.Popup className={styles.popup}>
-          <Dialog.Title className={styles.srOnly}>
+        <Dialog.Backdrop className="fixed inset-0 z-20 bg-black/10 transition-opacity duration-180 ease-[cubic-bezier(.16,1,.3,1)] data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-120 data-ending-style:ease-[cubic-bezier(.4,0,1,1)] motion-reduce:duration-[1ms]" />
+        <Dialog.Popup className="fixed start-1/2 top-1/2 z-21 flex max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-1rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-popover-border bg-popover text-base text-gray-900 shadow-float transition-[opacity,scale] duration-240 ease-[cubic-bezier(.16,1,.3,1)] data-starting-style:scale-[.97] data-starting-style:opacity-0 data-ending-style:scale-[.97] data-ending-style:opacity-0 data-ending-style:duration-100 motion-reduce:duration-[1ms]">
+          <Dialog.Title className="absolute m-[-1px] size-px overflow-hidden p-0 [clip-path:inset(50%)] whitespace-nowrap">
             Match transactions
           </Dialog.Title>
 
@@ -173,16 +175,21 @@ function MatchTransactionsDialog(props: {
 function MatchRow(props: { item: InboxMatch; source: InboxItem | undefined }) {
   const { item, source } = props;
   return (
-    <Combobox.Item value={item} className={styles.item}>
-      <span className={styles.who}>
+    <Combobox.Item
+      value={item}
+      className="mx-1 grid cursor-default grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 rounded-lg px-3 py-2 outline-none select-none data-highlighted:bg-popover-item-selected data-selected:bg-popover-item-selected"
+    >
+      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-medium">
         {item.counterparty || item.description || "—"}
       </span>
       <MatchAmount source={source} match={item} />
-      <span className={styles.meta}>
+      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base text-gray-600">
         {item.kind === "exchange" ? "Exchange" : "Transfer"} ·{" "}
         <ListDate date={item.date} />
       </span>
-      <span className={styles.account}>{item.account}</span>
+      <span className="text-end whitespace-nowrap text-base text-gray-600">
+        {item.account}
+      </span>
     </Combobox.Item>
   );
 }
@@ -197,7 +204,7 @@ function MatchAmount(props: {
 
   if (match.kind !== "exchange") {
     return (
-      <span className={styles.amount}>
+      <span className="text-end whitespace-nowrap tabular-nums text-gray-900">
         {f.amount(Math.abs(source.amount), source.currency)}
       </span>
     );
@@ -206,7 +213,7 @@ function MatchAmount(props: {
   const outgoing = source.amount < 0 ? source : match;
   const incoming = source.amount < 0 ? match : source;
   return (
-    <span className={styles.amount}>
+    <span className="text-end whitespace-nowrap tabular-nums text-gray-900">
       {f.amount(outgoing.amount, outgoing.currency)} →{" "}
       {f.amount(incoming.amount, incoming.currency)}
     </span>
@@ -217,17 +224,19 @@ function Source(props: { row: InboxItem }) {
   const { f } = useI18n();
   const { row } = props;
   return (
-    <section className={styles.source}>
-      <span className={styles.who}>
+    <section className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-popover-border p-3">
+      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-medium">
         {row.counterparty || row.description || "—"}
       </span>
-      <span className={styles.amount}>
+      <span className="text-end whitespace-nowrap tabular-nums text-gray-900">
         {f.amount(row.amount, row.currency)}
       </span>
-      <span className={styles.meta}>
+      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base text-gray-600">
         <ListDate date={row.date} />
       </span>
-      <span className={styles.account}>{row.account}</span>
+      <span className="text-end whitespace-nowrap text-base text-gray-600">
+        {row.account}
+      </span>
     </section>
   );
 }

@@ -2,8 +2,7 @@ import { Combobox } from "@base-ui/react/combobox";
 import { useState } from "react";
 
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
-
-import styles from "./tag-combobox.module.css";
+import { inputTriggerClassName } from "../../ui/input/input-styles";
 
 type TagItem =
   | { type: "tag"; id: string; name: string; value: string }
@@ -56,35 +55,40 @@ export function TagCombobox(props: {
           if (!nextOpen) setInput("");
         }}
       >
-        <Combobox.Trigger className={styles.trigger}>
-          <span className={styles.placeholder}>Tag…</span>
+        <Combobox.Trigger className={inputTriggerClassName}>
+          <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-(--input-placeholder)">
+            Tag…
+          </span>
         </Combobox.Trigger>
 
         <Combobox.Portal>
           <Combobox.Positioner
             align="start"
             sideOffset={6}
-            className={styles.positioner}
+            className="z-10 outline-none"
           >
-            <Combobox.Popup className={styles.popup} aria-label="Add tag">
+            <Combobox.Popup
+              className="max-w-[var(--available-width,100vw)] min-w-48 origin-[var(--transform-origin)] overflow-hidden rounded-xl border border-popover-border bg-popover text-base text-gray-900 shadow-float transition-[opacity,scale] duration-150 ease-[cubic-bezier(.16,1,.3,1)] data-starting-style:scale-[.97] data-starting-style:opacity-0 data-ending-style:scale-[.97] data-ending-style:opacity-0 data-ending-style:duration-120 data-ending-style:ease-[cubic-bezier(.4,0,1,1)] motion-reduce:duration-[1ms]"
+              aria-label="Add tag"
+            >
               <Combobox.Input
-                className={styles.input}
+                className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
                 placeholder="Find or create tag"
                 aria-label="Find or create tag"
               />
 
               <AnimatedHeight>
-                <div className={styles.scroller}>
+                <div className="[--cap:min(calc(var(--available-height,100vh)-calc(2rem+var(--spacing))),22rem)] [max-block-size:max(calc(1.5rem),calc(1.5rem+round(down,var(--cap)-1.5rem,1.5rem)))] scroll-py-1 overflow-y-auto overscroll-contain py-1 [scrollbar-color:var(--gray-350)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-gray-350 [&::-webkit-scrollbar-thumb]:bg-clip-content [&::-webkit-scrollbar]:w-2">
                   <Combobox.Empty>
-                    <div className={styles.empty}>No tags</div>
+                    <div className="p-4 text-center text-gray-600">No tags</div>
                   </Combobox.Empty>
 
-                  <Combobox.List className={styles.list}>
+                  <Combobox.List className="outline-none">
                     {(item: TagItem) => (
                       <Combobox.Item
                         key={item.id}
                         value={item}
-                        className={styles.item}
+                        className="mx-1 flex h-6 cursor-default items-center gap-2 rounded-sm px-3 text-gray-900 outline-none select-none data-highlighted:bg-popover-item-selected data-selected:bg-popover-item-selected"
                       >
                         <span>{item.name}</span>
                       </Combobox.Item>

@@ -1,69 +1,45 @@
+import { XCircleIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import type { ReactNode } from "react";
 
 import { Button } from "../../ui/button/button";
-
-import styles from "./list-shell.module.css";
-
 export function SelectionCountButton(props: {
   count: number;
   onClick: () => void;
 }) {
   return (
-    <Button
-      onClick={props.onClick}
-      variant="ghost"
-      style={{ padding: "0.5rem" }}
-    >
-      <svg
-        className={styles.close}
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        strokeWidth="1.5"
-        stroke="currentColor"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="m9.75 9.75 4.5 4.5m0-4.5-4.5 4.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-        />
-      </svg>
-      <span className={styles.count}>{props.count} selected</span>
+    <Button onClick={props.onClick} variant="ghost" className="!px-2">
+      <XCircleIcon className="size-4" />
+      <span className="whitespace-nowrap text-sm text-gray-700 tabular-nums">
+        {props.count} selected
+      </span>
     </Button>
   );
 }
-
 export function CloseButton(props: { onClick: () => void }) {
   return (
     <Button
+      aria-label="Close selection"
       onClick={props.onClick}
       variant="ghost"
-      style={{ inlineSize: "2.25rem", padding: "0.5rem" }}
+      className="w-9 shrink-0 !px-2"
     >
-      <svg
-        className={styles.close}
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="currentColor"
-      >
-        <path
-          fillRule="evenodd"
-          d="M5.47 5.47a.75.75 0 0 1 1.06 0L12 10.94l5.47-5.47a.75.75 0 1 1 1.06 1.06L13.06 12l5.47 5.47a.75.75 0 1 1-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 0 1-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 0 1 0-1.06Z"
-          clipRule="evenodd"
-        />
-      </svg>
+      <XMarkIcon className="size-3.5 shrink-0" strokeWidth={2} />
     </Button>
   );
 }
-
 export function FloatingBarWrap(props: { show: boolean; children: ReactNode }) {
   return (
     <div
-      className={styles.floatingbarPos}
-      data-show={props.show}
+      className="fixed inset-x-0 bottom-[calc(var(--nav-height)+var(--filterbar-height))] z-3 p-1 opacity-100 transition-[opacity,visibility] [transition-duration:80ms,0ms] data-[visible=false]:invisible data-[visible=false]:opacity-0 data-[visible=false]:[transition-delay:0ms,100ms] data-[visible=false]:[transition-duration:100ms,0ms] sm:bottom-0 sm:p-3"
+      data-visible={props.show}
       inert={!props.show}
     >
-      <div className={styles.floatingbar}>{props.children}</div>
+      <div
+        className="mx-auto flex w-full max-w-[calc(var(--page-width)+2rem)] translate-y-0 items-center gap-2 rounded-[1.25rem] border border-popover-border bg-popover p-2 shadow-float transition-[translate] duration-420 ease-[cubic-bezier(.22,1.55,.36,1)] data-[show=false]:translate-y-6 data-[show=false]:delay-100 data-[show=false]:duration-0 data-[show=false]:ease-in-out motion-reduce:translate-y-0 motion-reduce:transition-none"
+        data-show={props.show}
+      >
+        {props.children}
+      </div>
     </div>
   );
 }
