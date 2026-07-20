@@ -115,7 +115,7 @@ export function TransactionActionsCombobox(props: {
               aria-busy={isFetching || undefined}
             >
               <Combobox.Input
-                className="h-9 w-full border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+                className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
                 placeholder="Filter actions…"
                 aria-label="Filter transaction actions"
                 onKeyDown={keyboard.onInputKeyDown}

@@ -9,6 +9,7 @@ import {
   type BucketKind,
 } from "../../api/buckets";
 import { useDebouncedValue } from "../../lib/use-debounced-value";
+import { useLastSettledValue } from "../../lib/use-last-settled-value";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
 import { useFieldInvalid } from "../../ui/input/field-context";
 import {
@@ -52,14 +53,19 @@ export function BucketPicker(props: {
   const search = input.trim();
   const query = useDebouncedValue(search, 50);
   const bucketsQuery = useBucketSearchQuery(query, props.kinds);
+  const settled =
+    search === query &&
+    !bucketsQuery.isPlaceholderData &&
+    !bucketsQuery.isFetching &&
+    !bucketsQuery.isError;
 
-  const groups: PickerGroup[] = [];
+  const currentGroups: PickerGroup[] = [];
   if (bucketsQuery.data) {
     const buckets = bucketsQuery.data.filter(
       (bucket) => !bucket.hidden && props.kinds.includes(bucket.kind),
     );
     if (buckets.length) {
-      groups.push({
+      currentGroups.push({
         id: "buckets",
         name: "Choose…",
         items: buckets.map((bucket) => ({
@@ -76,16 +82,8 @@ export function BucketPicker(props: {
       (bucket) =>
         bucket.name.trim().toLocaleLowerCase() === search.toLocaleLowerCase(),
     );
-    if (
-      search === query &&
-      search &&
-      !exactMatch &&
-      createKinds.length &&
-      !bucketsQuery.isPlaceholderData &&
-      !bucketsQuery.isPending &&
-      !bucketsQuery.isError
-    ) {
-      groups.push({
+    if (settled && search && !exactMatch && createKinds.length) {
+      currentGroups.push({
         id: "create",
         name: "Create…",
         items: createKinds.map((kind) => ({
@@ -98,6 +96,8 @@ export function BucketPicker(props: {
       });
     }
   }
+
+  const groups = useLastSettledValue(currentGroups, settled);
 
   async function select(item: PickerItem) {
     if (item.type === "bucket") {
@@ -156,13 +156,13 @@ export function BucketPicker(props: {
             aria-busy={bucketsQuery.isFetching || undefined}
           >
             <Combobox.Input
-              className="h-9 w-full border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+              className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
               placeholder={props.placeholder ?? "Search…"}
               aria-label="Filter buckets"
             />
 
             <AnimatedHeight>
-              <div className="max-h-[max(calc(2rem*2.5),calc(2rem*1.5+round(down,var(--cap)-2rem*1.5,2rem)))] scroll-py-1 overflow-y-auto overscroll-contain pb-1 [--cap:min(calc(var(--available-height,100vh)-calc(2rem+var(--spacing))),22rem)] [scrollbar-color:var(--color-gray-300)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:bg-clip-content">
+              <div className="max-h-[max(calc(2rem*2.5),calc(2rem*1.5+round(down,var(--cap)-2rem*1.5,2rem)))] scroll-py-1 overflow-y-auto overscroll-contain pb-1 [--cap:min(calc(var(--available-height,100vh)-calc(2rem+var(--spacing))),22rem)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <Combobox.Status>
                   {bucketsQuery.isPending ? (
                     <div className="flex min-h-8 items-center px-3 text-gray-600">

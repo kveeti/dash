@@ -50,7 +50,7 @@ function ImmediateNavLink(props: { href: string; children: ReactNode }) {
     <Link
       href={props.href}
       className={(isActive) =>
-        `inline-flex h-full items-center px-3 text-base text-inherit no-underline outline-none ${isActive ? "underline" : ""} hover:bg-gray-200/80 focus-visible:rounded-none focus-visible:outline-offset-[-1.5px]`
+        `inline-flex h-full items-center px-3 text-base text-inherit no-underline outline-[1.5px] outline-transparent outline-offset-[-1.5px] ${isActive ? "underline" : ""} hover:bg-gray-200/80 focus-visible:rounded-none focus-visible:outline-(--input-ring-active)`
       }
       onClick={(event) => {
         if (
@@ -158,7 +158,7 @@ function CommandPalette(props: {
             <Combobox.Empty>
               <p className="p-4 text-center text-gray-600">No results.</p>
             </Combobox.Empty>
-            <Combobox.List className="scroll-py-1 overflow-y-auto overscroll-contain py-1 outline-none">
+            <Combobox.List className="scroll-py-1 overflow-y-auto overscroll-contain py-1 outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {(page: (typeof pages)[number]) => (
                 <Combobox.Item
                   key={page.href}

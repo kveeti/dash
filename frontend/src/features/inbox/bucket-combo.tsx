@@ -13,11 +13,14 @@ import {
 } from "../../api/inbox";
 import { createContext } from "../../lib/create-context";
 import { useDebouncedValue } from "../../lib/use-debounced-value";
+import { useLastSettledValue } from "../../lib/use-last-settled-value";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
 import { useInboxUndo } from "./inbox-undo-context";
 
-const [useBucketCombo, BucketComboContext] =
-  createContext<(rowId: string, anchor: HTMLButtonElement) => void>();
+const [useBucketCombo, BucketComboContext] = createContext<{
+  open: (rowId: string, anchor: HTMLButtonElement) => void;
+  openRowId: string | null;
+}>();
 
 const categoryKinds = [
   { kind: "expense", name: "Expense" },
@@ -72,8 +75,13 @@ export function BucketComboRoot(props: {
   const search = input.trim();
   const query = useDebouncedValue(search, 50);
   const bucketsQuery = useBucketSearchQuery(query, categoryKindValues);
+  const settled =
+    search === query &&
+    !bucketsQuery.isPlaceholderData &&
+    !bucketsQuery.isFetching &&
+    !bucketsQuery.isError;
 
-  const groups: BucketComboGroup[] = [];
+  const currentBucketGroups: BucketComboGroup[] = [];
   if (bucketsQuery.data) {
     const buckets = bucketsQuery.data.filter(
       (bucket) =>
@@ -81,7 +89,7 @@ export function BucketComboRoot(props: {
         categoryKinds.some(({ kind }) => kind === bucket.kind),
     );
     if (buckets.length) {
-      groups.push({
+      currentBucketGroups.push({
         id: "buckets",
         name: "Categorize as…",
         items: buckets.map((bucket) => ({
@@ -97,15 +105,8 @@ export function BucketComboRoot(props: {
       (bucket) =>
         bucket.name.trim().toLocaleLowerCase() === search.toLocaleLowerCase(),
     );
-    if (
-      search === query &&
-      search &&
-      !exactMatch &&
-      !bucketsQuery.isPlaceholderData &&
-      !bucketsQuery.isPending &&
-      !bucketsQuery.isError
-    ) {
-      groups.push({
+    if (settled && search && !exactMatch) {
+      currentBucketGroups.push({
         id: "create",
         name: "Create…",
         items: categoryKinds.map(({ kind, name }) => ({
@@ -119,6 +120,7 @@ export function BucketComboRoot(props: {
     }
   }
 
+  const groups = [...useLastSettledValue(currentBucketGroups, settled)];
   if (props.onMatchAction) {
     groups.push({
       id: "actions",
@@ -174,7 +176,12 @@ export function BucketComboRoot(props: {
   }
 
   return (
-    <BucketComboContext.Provider value={openFor}>
+    <BucketComboContext.Provider
+      value={{
+        open: openFor,
+        openRowId: open ? (session?.rowId ?? null) : null,
+      }}
+    >
       <Combobox.Root<BucketComboItem>
         items={groups}
         value={null}
@@ -211,13 +218,13 @@ export function BucketComboRoot(props: {
               aria-busy={bucketsQuery.isFetching || undefined}
             >
               <Combobox.Input
-                className="h-9 w-full border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+                className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
                 placeholder="Filter actions..."
                 aria-label="Filter categories, people, and actions"
               />
 
               <AnimatedHeight>
-                <div className="max-h-[max(calc(2rem*2.5),calc(2rem*1.5+round(down,var(--cap)-2rem*1.5,2rem)))] scroll-py-1 overflow-y-auto overscroll-contain pb-1 [--cap:min(calc(var(--available-height,100vh)-calc(2rem+var(--spacing))),22rem)] [scrollbar-color:var(--color-gray-300)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:bg-clip-content">
+                <div className="max-h-[max(calc(2rem*2.5),calc(2rem*1.5+round(down,var(--cap)-2rem*1.5,2rem)))] scroll-py-1 overflow-y-auto overscroll-contain pb-1 [--cap:min(calc(var(--available-height,100vh)-calc(2rem+var(--spacing))),22rem)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <Combobox.Status>
                     {bucketsQuery.isPending ? (
                       <div className="flex min-h-8 items-center px-3 text-gray-600">
@@ -275,7 +282,7 @@ export function BucketComboRoot(props: {
 export function BucketComboTrigger(
   props: { rowId: string } & ButtonHTMLAttributes<HTMLButtonElement>,
 ) {
-  const open = useBucketCombo();
+  const combo = useBucketCombo();
   const { rowId, onClick, type = "button", ...buttonProps } = props;
 
   return (
@@ -283,9 +290,10 @@ export function BucketComboTrigger(
       {...buttonProps}
       type={type}
       aria-haspopup="listbox"
+      data-popup-open={combo.openRowId === rowId ? "" : undefined}
       onClick={(event) => {
         onClick?.(event);
-        if (!event.defaultPrevented) open(rowId, event.currentTarget);
+        if (!event.defaultPrevented) combo.open(rowId, event.currentTarget);
       }}
     />
   );

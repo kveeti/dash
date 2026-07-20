@@ -114,7 +114,7 @@ function MatchTransactionsContent(props: {
       >
         <div className="relative">
           <Combobox.Input
-            className="h-9 w-full border-b border-popover-border bg-transparent px-3 pe-20 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70"
+            className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 pe-20 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
             placeholder="Search possible matches"
             aria-label="Search possible matches"
           />
@@ -134,7 +134,7 @@ function MatchTransactionsContent(props: {
                 No possible matches found.
               </p>
             </Combobox.Empty>
-            <Combobox.List className="scroll-py-1 overflow-y-auto overscroll-contain py-1 outline-none">
+            <Combobox.List className="scroll-py-1 overflow-y-auto overscroll-contain py-1 outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {(item: InboxMatch) => (
                 <MatchRow key={item.id} item={item} source={source} />
               )}

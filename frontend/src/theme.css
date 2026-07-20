@@ -12,28 +12,17 @@
   --popover-item-selected: var(--color-gray-150);
   --border-subtle: var(--color-gray-160);
 
-  --input-border: var(--color-gray-280);
   --input-bg: var(--color-gray-215);
   --input-bg-alt: var(--color-gray-280);
   --input-placeholder: var(--color-gray-600);
   --input-ring-hover: var(--color-gray-350);
   --input-ring-active: var(--color-gray-440);
 
-  --red-bg: var(--color-red-625);
   --red-fg: var(--color-red-625);
-  --green-bg: var(--color-green-150);
   --green-fg: var(--color-green-900);
 
-  --input-invalid-border: var(--danger-border);
-  --input-invalid-bg: var(--danger-surface);
   --input-invalid-text: var(--danger-fg-strong);
-  --input-invalid-placeholder: color-mix(
-    in oklab,
-    var(--danger-fg-strong) 70%,
-    transparent
-  );
   --input-invalid-ring: var(--danger-outline);
-  --input-invalid-ring-active: var(--danger-focus);
 
   --danger-surface: var(--color-red-200);
   --danger-surface-hover: var(--color-red-300);
@@ -65,19 +54,14 @@
     --popover-border: var(--color-gray-225);
     --popover-item-selected: var(--color-gray-225);
 
-    --input-border: transparent;
     --input-bg: var(--color-gray-195);
     --input-bg-alt: var(--color-gray-230);
     --input-placeholder: var(--color-gray-600);
     --input-ring-hover: var(--color-gray-300);
     --input-ring-active: var(--color-gray-450);
 
-    --input-invalid-border: var(--danger-border);
-    --input-invalid-bg: var(--danger-surface);
     --input-invalid-text: oklch(72% 0.2 25deg);
-    --input-invalid-placeholder: oklch(62% 0.2 25deg);
     --input-invalid-ring: oklch(56% 0.18 25deg);
-    --input-invalid-ring-active: var(--danger-focus);
 
     --danger-surface: oklch(24% 0.045 25deg);
     --danger-surface-hover: oklch(29% 0.065 25deg);

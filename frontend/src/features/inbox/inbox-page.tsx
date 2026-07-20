@@ -225,7 +225,7 @@ function Item(props: {
         >
           <BucketComboTrigger
             rowId={itemId}
-            className="-mx-3 grid min-w-0 flex-1 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 rounded-lg bg-transparent px-3 py-2 text-start font-[inherit] text-inherit outline-none hover:bg-gray-150 focus-visible:outline-[1.5px] focus-visible:outline-gray-600 focus-visible:outline-offset-[-1.5px] data-popup-open:bg-gray-150"
+            className="-mx-3 grid min-w-0 flex-1 cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 rounded-lg bg-transparent px-3 py-2 text-start font-[inherit] text-inherit outline-[1.5px] outline-transparent outline-offset-[-1.5px] hover:bg-gray-150 focus-visible:outline-(--input-ring-active) data-popup-open:bg-gray-150"
           >
             <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base font-medium text-gray-1000">
               {props.item.counterparty || "—"}
