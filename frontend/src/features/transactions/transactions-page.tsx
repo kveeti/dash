@@ -156,7 +156,8 @@ function List(props: {
   }
 
   const visibleIds = props.txns.map((txn) => txn.id);
-  let prevMonth: number | null = null;
+  let prevMonth: Date | null = null;
+  let prevDate: Date | null = null;
   const today = new Date();
 
   return (
@@ -166,22 +167,25 @@ function List(props: {
       >
         {props.txns.map((txn) => {
           const date = new Date(txn.date);
-          const month = date.getMonth();
-
           let dateHeading: string | null = null;
-          if (!isSameDay(today, date)) {
+          if (!prevDate || !isSameDay(date, prevDate)) {
             dateHeading = isSameYear(date, today)
               ? f.shortDate(date)
               : f.longDate(date);
           }
+          prevDate = date;
 
           let monthHeading: string | null = null;
-          if (prevMonth !== month) {
+          if (
+            !prevMonth ||
+            date.getMonth() !== prevMonth.getMonth() ||
+            date.getFullYear() !== prevMonth.getFullYear()
+          ) {
             monthHeading = isSameYear(date, today)
               ? f.month(date)
               : f.monthYear(date);
           }
-          prevMonth = month;
+          prevMonth = date;
 
           return (
             <Fragment key={txn.id}>

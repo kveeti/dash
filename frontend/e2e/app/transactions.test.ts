@@ -6,7 +6,13 @@ import {
   type TestInfo,
 } from "@playwright/test";
 
-import { createBucket, importNordea, login, nordeaRow } from "../helpers";
+import {
+  createBucket,
+  createTransaction,
+  importNordea,
+  login,
+  nordeaRow,
+} from "../helpers";
 
 function row(page: Page, name: string) {
   return page.getByRole("listitem").filter({ hasText: name });
@@ -45,6 +51,113 @@ async function setupTransactions(page: Page, testInfo: TestInfo) {
   await page.goto("/transactions");
   return { ids };
 }
+
+test("transaction date and month headings group only matching dates", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  const checking = await createBucket(page, "asset", "Checking");
+  const groceries = await createBucket(page, "expense", "Groceries");
+  const headings = await page.evaluate(() => {
+    const dateParts = (date: Date) =>
+      Object.fromEntries(
+        new Intl.DateTimeFormat("en-CA", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+          .formatToParts(date)
+          .filter(({ type }) => type !== "literal")
+          .map(({ type, value }) => [type, value]),
+      );
+    const today = new Date();
+    const format = (date: Date) => ({
+      date: new Intl.DateTimeFormat("fi-FI", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(date),
+      month: new Intl.DateTimeFormat("fi-FI", {
+        month: "long",
+        year: "numeric",
+      }).format(date),
+    });
+    const todayParts = dateParts(today);
+
+    return {
+      today: `${todayParts.year}-${todayParts.month}-${todayParts.day}`,
+      todayDate: new Intl.DateTimeFormat("fi-FI", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }).format(today),
+      todayMonth: new Intl.DateTimeFormat("fi-FI", { month: "long" }).format(
+        today,
+      ),
+      july2001: format(new Date("2001-07-01T12:00:00Z")),
+      july2000: format(new Date("2000-07-02T12:00:00Z")),
+    };
+  });
+
+  for (const [date, counterparty] of [
+    [headings.today, "Today one"],
+    [headings.today, "Today two"],
+    ["2001-07-01", "July 2001"],
+    ["2000-07-02", "July 2000"],
+  ]) {
+    await createTransaction(page, {
+      date,
+      counterparty,
+      accountId: checking.id,
+      categoryId: groceries.id,
+      amount: 12,
+    });
+  }
+
+  await page.goto("/transactions");
+  await expect(
+    page.getByRole("heading", {
+      level: 3,
+      name: headings.todayDate,
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", {
+      level: 3,
+      name: headings.july2001.date,
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", {
+      level: 3,
+      name: headings.july2000.date,
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", {
+      level: 2,
+      name: headings.todayMonth,
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", {
+      level: 2,
+      name: headings.july2001.month,
+      exact: true,
+    }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", {
+      level: 2,
+      name: headings.july2000.month,
+      exact: true,
+    }),
+  ).toHaveCount(1);
+});
 
 async function selectFailureTransactions(page: Page) {
   await page.getByRole("checkbox", { name: "Select transactions" }).click();
