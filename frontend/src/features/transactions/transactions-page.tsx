@@ -206,7 +206,7 @@ function List(props: {
                 </li>
               )}
 
-              <li className="mx-auto w-full max-w-(--page-width) px-3 sm:px-6">
+              <li className="mx-auto w-full max-w-(--page-width) px-3 [content-visibility:auto] [contain-intrinsic-size:auto_60px] sm:px-6">
                 <div
                   className={`relative border-t border-gray-200 ${props.selection.selectMode ? "cursor-pointer [&_.transaction-check-slot]:opacity-100 [&_.transaction-slide]:pl-8 [&_.transaction-slide_:where(button,a)]:pointer-events-none" : ""}`}
                   onClick={(event) => {

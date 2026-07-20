@@ -200,7 +200,7 @@ function Item(props: {
   const { f } = useI18n();
 
   return (
-    <li className="mx-auto w-full max-w-(--page-width) px-3 sm:px-6">
+    <li className="mx-auto w-full max-w-(--page-width) px-3 [content-visibility:auto] [contain-intrinsic-size:auto_60px] sm:px-6">
       <div
         className={`relative border-t border-gray-200 ${props.selection.selectMode ? "cursor-pointer" : ""}`}
         onClick={(event) => {
