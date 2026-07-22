@@ -9,7 +9,13 @@ import (
 	"time"
 )
 
-const visiblePostings = "p.bucket_id in (select id from buckets where owner_user_id = $1 and hidden = false)"
+const visiblePostings = `
+	p.bucket_id in (
+		select id
+		from buckets
+		where owner_user_id = $1
+		  and hidden = false
+	)`
 
 var (
 	ErrUnbalanced         = errors.New("transaction does not balance: each currency must net to zero")
@@ -68,9 +74,12 @@ func insertTransactionTx(ctx context.Context, tx *sql.Tx, txn *Transaction, post
 		return err
 	}
 	txn.CreatedAt = time.Now().UTC()
-	_, err := tx.ExecContext(ctx, `insert into transactions
-		(id, owner_user_id, occurred_at, counterparty, description, memo, created_at)
-		values ($1,$2,$3,$4,$5,$6,$7)`, txn.ID, txn.OwnerUserID, txn.OccurredAt,
+	_, err := tx.ExecContext(ctx, `
+		insert into transactions (
+			id, owner_user_id, occurred_at, counterparty, description, memo, created_at
+		)
+		values ($1, $2, $3, $4, $5, $6, $7)
+	`, txn.ID, txn.OwnerUserID, txn.OccurredAt,
 		txn.Counterparty, txn.Description, txn.Memo, txn.CreatedAt)
 	if err != nil {
 		return err
@@ -83,9 +92,13 @@ func insertTransactionTx(ctx context.Context, tx *sql.Tx, txn *Transaction, post
 			postings[i].ID = NewPrivateID()
 		}
 		p := postings[i]
-		_, err = tx.ExecContext(ctx, `insert into postings
-			(id,transaction_id,bucket_id,amount,currency,stats_date,memo,import_row_id,mirror_id,created_at)
-			values ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())`, p.ID, txn.ID, p.BucketID,
+		_, err = tx.ExecContext(ctx, `
+			insert into postings (
+				id, transaction_id, bucket_id, amount, currency, stats_date, memo,
+				import_row_id, mirror_id, created_at
+			)
+			values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+		`, p.ID, txn.ID, p.BucketID,
 			p.Amount, p.Currency, p.StatsDate, p.Memo, p.ImportRowID, p.MirrorID)
 		if err != nil {
 			return err
@@ -127,24 +140,54 @@ func (d *Data) BulkCategorize(ctx context.Context, userID string, txnIDs []strin
 	}
 	defer tx.Rollback()
 	var valid bool
-	err = tx.QueryRowContext(ctx, `select exists(select 1 from buckets where id=$1 and owner_user_id=$2
-		and kind in ('expense','income','person') and hidden=false)`, bucketID, userID).Scan(&valid)
+	err = tx.QueryRowContext(ctx, `
+		select exists (
+			select 1
+			from buckets
+			where id = $1
+			  and owner_user_id = $2
+			  and kind in ('expense', 'income', 'person')
+			  and hidden = false
+		)
+	`, bucketID, userID).Scan(&valid)
 	if err != nil {
 		return 0, err
 	}
 	if !valid {
 		return 0, ErrInvalidCategory
 	}
-	const scope = `p.transaction_id=any($2::uuid[]) and p.import_row_id is null
-		and p.bucket_id in (select id from buckets where owner_user_id=$1 and kind in ('expense','income','person') and hidden=false)
-		and (select count(*) from postings p2 join buckets b2 on b2.id=p2.bucket_id
-			where p2.transaction_id=p.transaction_id and b2.kind in ('expense','income','person') and b2.hidden=false)=1`
-	_, err = tx.ExecContext(ctx, `insert into audit_logs(id,actor_user_id,table_name,row_id,operation,before,created_at)
-		select uuidv7(),$1,'postings',p.id,'update',to_jsonb(p),now() from postings p where `+scope, userID, txnIDs)
+	const scope = `
+		p.transaction_id = any($2::uuid[])
+		and p.import_row_id is null
+		and p.bucket_id in (
+			select id
+			from buckets
+			where owner_user_id = $1
+			  and kind in ('expense', 'income', 'person')
+			  and hidden = false
+		)
+		and (
+			select count(*)
+			from postings p2
+			join buckets b2 on b2.id = p2.bucket_id
+			where p2.transaction_id = p.transaction_id
+			  and b2.kind in ('expense', 'income', 'person')
+			  and b2.hidden = false
+		) = 1`
+	_, err = tx.ExecContext(ctx, `
+		insert into audit_logs (
+			id, actor_user_id, table_name, row_id, operation, before, created_at
+		)
+		select uuidv7(), $1, 'postings', p.id, 'update', to_jsonb(p), now()
+		from postings p
+		where `+scope, userID, txnIDs)
 	if err != nil {
 		return 0, err
 	}
-	res, err := tx.ExecContext(ctx, `update postings p set bucket_id=$3 where `+scope, userID, txnIDs, bucketID)
+	res, err := tx.ExecContext(ctx, `
+		update postings p
+		set bucket_id = $3
+		where `+scope, userID, txnIDs, bucketID)
 	if err != nil {
 		return 0, err
 	}
@@ -171,7 +214,11 @@ func (d *Data) PatchTransactionMemo(ctx context.Context, userID, id, memo string
 	if err = auditWrite(ctx, tx, userID, "transactions", id, "update", old); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "update transactions set memo=$1 where id=$2", memo, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `
+		update transactions
+		set memo = $1
+		where id = $2
+	`, memo, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -186,12 +233,27 @@ func (d *Data) CategorizePosting(ctx context.Context, userID, id, bucketID strin
 
 	var old Posting
 	var editable bool
-	err = tx.QueryRowContext(ctx, `select p.id,p.bucket_id,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,
-		p.import_row_id is null and not b.hidden and b.kind in ('expense','income')
-		and not exists(select 1 from postings p3 join buckets b3 on b3.id=p3.bucket_id
-			where p3.transaction_id=p.transaction_id and b3.kind='transit')
-		from postings p join transactions t on t.id=p.transaction_id join buckets b on b.id=p.bucket_id
-		where p.id=$1 and t.owner_user_id=$2 for update of p`, id, userID).Scan(
+	err = tx.QueryRowContext(ctx, `
+		select
+			p.id, p.bucket_id, p.amount, p.currency, p.stats_date, p.memo,
+			p.import_row_id, p.mirror_id,
+			p.import_row_id is null
+				and not b.hidden
+				and b.kind in ('expense', 'income')
+				and not exists (
+					select 1
+					from postings p3
+					join buckets b3 on b3.id = p3.bucket_id
+					where p3.transaction_id = p.transaction_id
+					  and b3.kind = 'transit'
+				)
+		from postings p
+		join transactions t on t.id = p.transaction_id
+		join buckets b on b.id = p.bucket_id
+		where p.id = $1
+		  and t.owner_user_id = $2
+		for update of p
+	`, id, userID).Scan(
 		&old.ID, &old.BucketID, &old.Amount, &old.Currency, &old.StatsDate, &old.Memo,
 		&old.ImportRowID, &old.MirrorID, &editable,
 	)
@@ -206,8 +268,16 @@ func (d *Data) CategorizePosting(ctx context.Context, userID, id, bucketID strin
 	}
 
 	var valid bool
-	if err = tx.QueryRowContext(ctx, `select exists(select 1 from buckets
-		where id=$1 and owner_user_id=$2 and kind in ('expense','income') and hidden=false)`, bucketID, userID).Scan(&valid); err != nil {
+	if err = tx.QueryRowContext(ctx, `
+		select exists (
+			select 1
+			from buckets
+			where id = $1
+			  and owner_user_id = $2
+			  and kind in ('expense', 'income')
+			  and hidden = false
+		)
+	`, bucketID, userID).Scan(&valid); err != nil {
 		return err
 	}
 	if !valid {
@@ -216,7 +286,11 @@ func (d *Data) CategorizePosting(ctx context.Context, userID, id, bucketID strin
 	if err = auditWrite(ctx, tx, userID, "postings", id, "update", old); err != nil {
 		return err
 	}
-	if _, err = tx.ExecContext(ctx, "update postings set bucket_id=$1 where id=$2", bucketID, id); err != nil {
+	if _, err = tx.ExecContext(ctx, `
+		update postings
+		set bucket_id = $1
+		where id = $2
+	`, bucketID, id); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -224,8 +298,13 @@ func (d *Data) CategorizePosting(ctx context.Context, userID, id, bucketID strin
 
 func loadOwnedTransaction(ctx context.Context, tx *sql.Tx, userID, id string) (*Transaction, error) {
 	var t Transaction
-	err := tx.QueryRowContext(ctx, `select id,owner_user_id,occurred_at,counterparty,description,memo,created_at
-		from transactions where id=$1 and owner_user_id=$2 for update`, id, userID).Scan(&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt)
+	err := tx.QueryRowContext(ctx, `
+		select id, owner_user_id, occurred_at, counterparty, description, memo, created_at
+		from transactions
+		where id = $1
+		  and owner_user_id = $2
+		for update
+	`, id, userID).Scan(&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -241,7 +320,13 @@ func (d *Data) RemoveTransactions(ctx context.Context, userID string, ids []stri
 		return 0, 0, err
 	}
 	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, "select id from transactions where owner_user_id=$1 and id=any($2::uuid[]) for update", userID, ids)
+	rows, err := tx.QueryContext(ctx, `
+		select id
+		from transactions
+		where owner_user_id = $1
+		  and id = any($2::uuid[])
+		for update
+	`, userID, ids)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -273,20 +358,45 @@ func (d *Data) RemoveTransactions(ctx context.Context, userID string, ids []stri
 
 func removeTransactionsTx(ctx context.Context, tx *sql.Tx, userID string, ids []string) (int, error) {
 	// Removing one side drops the match first, leaving its counterpart as an unmatched side.
-	_, err := tx.ExecContext(ctx, `with doomed as materialized(select * from account_movement_matches where owner_user_id=$1 and
-		(outgoing_transaction_id=any($2::uuid[]) or incoming_transaction_id=any($2::uuid[]))),
-		a as (insert into audit_logs select uuidv7(),$1,'account_movement_matches',id,'delete',to_jsonb(doomed),now() from doomed)
-		delete from account_movement_matches where id in(select id from doomed)`, userID, ids)
+	_, err := tx.ExecContext(ctx, `
+		with doomed as materialized (
+			select *
+			from account_movement_matches
+			where owner_user_id = $1
+			  and (
+				outgoing_transaction_id = any($2::uuid[])
+				or incoming_transaction_id = any($2::uuid[])
+			  )
+		), audited as (
+			insert into audit_logs
+			select uuidv7(), $1, 'account_movement_matches', id, 'delete', to_jsonb(doomed), now()
+			from doomed
+		)
+		delete from account_movement_matches
+		where id in (select id from doomed)
+	`, userID, ids)
 	if err != nil {
 		return 0, err
 	}
-	_, err = tx.ExecContext(ctx, `insert into audit_logs(id,actor_user_id,table_name,row_id,operation,before,created_at)
-		select uuidv7(),$1,'import_rows',r.id,'update',to_jsonb(r),now() from import_rows r join postings p on p.import_row_id=r.id where p.transaction_id=any($2::uuid[])`, userID, ids)
+	_, err = tx.ExecContext(ctx, `
+		insert into audit_logs (
+			id, actor_user_id, table_name, row_id, operation, before, created_at
+		)
+		select uuidv7(), $1, 'import_rows', r.id, 'update', to_jsonb(r), now()
+		from import_rows r
+		join postings p on p.import_row_id = r.id
+		where p.transaction_id = any($2::uuid[])
+	`, userID, ids)
 	if err != nil {
 		return 0, err
 	}
-	res, err := tx.ExecContext(ctx, `update import_rows r set status='pending' from postings p
-		where p.import_row_id=r.id and p.transaction_id=any($1::uuid[])`, ids)
+	res, err := tx.ExecContext(ctx, `
+		update import_rows r
+		set status = 'pending'
+		from postings p
+		where p.import_row_id = r.id
+		  and p.transaction_id = any($1::uuid[])
+	`, ids)
 	if err != nil {
 		return 0, err
 	}
@@ -294,9 +404,20 @@ func removeTransactionsTx(ctx context.Context, tx *sql.Tx, userID string, ids []
 	if err != nil {
 		return 0, err
 	}
-	_, err = tx.ExecContext(ctx, `with doomed as (select pt.* from posting_tags pt join postings p on p.id=pt.posting_id where p.transaction_id=any($2::uuid[])),
-		a as (insert into audit_logs select uuidv7(),$1,'posting_tags',id,'delete',to_jsonb(doomed),now() from doomed)
-		delete from posting_tags where id in(select id from doomed)`, userID, ids)
+	_, err = tx.ExecContext(ctx, `
+		with doomed as (
+			select pt.*
+			from posting_tags pt
+			join postings p on p.id = pt.posting_id
+			where p.transaction_id = any($2::uuid[])
+		), audited as (
+			insert into audit_logs
+			select uuidv7(), $1, 'posting_tags', id, 'delete', to_jsonb(doomed), now()
+			from doomed
+		)
+		delete from posting_tags
+		where id in (select id from doomed)
+	`, userID, ids)
 	if err != nil {
 		return 0, err
 	}
@@ -305,9 +426,19 @@ func removeTransactionsTx(ctx context.Context, tx *sql.Tx, userID string, ids []
 		if table == "transactions" {
 			where = "id=any($2::uuid[])"
 		}
-		_, err = tx.ExecContext(ctx, `with doomed as (select * from `+table+` where `+where+`),
-			a as (insert into audit_logs select uuidv7(),$1,'`+table+`',id,'delete',to_jsonb(doomed),now() from doomed)
-			delete from `+table+` where id in(select id from doomed)`, userID, ids)
+		_, err = tx.ExecContext(ctx, `
+			with doomed as (
+				select *
+				from `+table+`
+				where `+where+`
+			), audited as (
+				insert into audit_logs
+				select uuidv7(), $1, '`+table+`', id, 'delete', to_jsonb(doomed), now()
+				from doomed
+			)
+			delete from `+table+`
+			where id in (select id from doomed)
+		`, userID, ids)
 		if err != nil {
 			return 0, err
 		}
@@ -323,7 +454,13 @@ func (d *Data) UnmatchTransfer(ctx context.Context, userID, matchID string) (int
 	defer tx.Rollback()
 	var ids []string
 	var a, b string
-	err = tx.QueryRowContext(ctx, "select outgoing_transaction_id,incoming_transaction_id from account_movement_matches where id=$1 and owner_user_id=$2 for update", matchID, userID).Scan(&a, &b)
+	err = tx.QueryRowContext(ctx, `
+		select outgoing_transaction_id, incoming_transaction_id
+		from account_movement_matches
+		where id = $1
+		  and owner_user_id = $2
+		for update
+	`, matchID, userID).Scan(&a, &b)
 	if err == sql.ErrNoRows {
 		return 0, ErrNotFound
 	}
@@ -358,7 +495,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 	args := []any{userID, timezone}
 	cursorClause := ""
 	if cursorID != "" {
-		cursorClause = "and (t.occurred_at,t.id)<($3::timestamptz,$4::uuid)"
+		cursorClause = "and (t.occurred_at, t.id) < ($3::timestamptz, $4::uuid)"
 		args = append(args, cursor, cursorID)
 	}
 	searchClause := ""
@@ -370,7 +507,13 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 	tagClause := ""
 	if tag = normalizeTag(tag); tag != "" {
 		n := strconv.Itoa(len(args) + 1)
-		tagClause = "and exists(select 1 from posting_tags pt join postings tp on tp.id=pt.posting_id where tp.transaction_id=t.id and pt.tag=$" + n + ")"
+		tagClause = `and exists (
+			select 1
+			from posting_tags pt
+			join postings tp on tp.id = pt.posting_id
+			where tp.transaction_id = t.id
+			  and pt.tag = $` + n + `
+		)`
 		args = append(args, tag)
 	}
 	query := `with page as materialized (
@@ -469,14 +612,28 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 
 func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transaction, []Posting, error) {
 	var t Transaction
-	err := d.db.QueryRowContext(ctx, `select id,owner_user_id,occurred_at,counterparty,description,memo,created_at from transactions where id=$1 and owner_user_id=$2`, id, userID).Scan(&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt)
+	err := d.db.QueryRowContext(ctx, `
+		select id, owner_user_id, occurred_at, counterparty, description, memo, created_at
+		from transactions
+		where id = $1
+		  and owner_user_id = $2
+	`, id, userID).Scan(&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil, ErrNotFound
 	}
 	if err != nil {
 		return nil, nil, err
 	}
-	rows, err := d.db.QueryContext(ctx, `select p.id,p.bucket_id,b.name,b.kind,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id from postings p join buckets b on b.id=p.bucket_id where p.transaction_id=$1 and b.hidden=false order by p.created_at,p.id`, id)
+	rows, err := d.db.QueryContext(ctx, `
+		select
+			p.id, p.bucket_id, b.name, b.kind, p.amount, p.currency,
+			p.stats_date, p.memo, p.import_row_id, p.mirror_id
+		from postings p
+		join buckets b on b.id = p.bucket_id
+		where p.transaction_id = $1
+		  and b.hidden = false
+		order by p.created_at, p.id
+	`, id)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -525,7 +682,12 @@ func (d *Data) loadPostingTags(ctx context.Context, grouped map[string][]Posting
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := d.db.QueryContext(ctx, "select posting_id,tag from posting_tags where posting_id=any($1::uuid[]) order by tag", ids)
+	rows, err := d.db.QueryContext(ctx, `
+		select posting_id, tag
+		from posting_tags
+		where posting_id = any($1::uuid[])
+		order by tag
+	`, ids)
 	if err != nil {
 		return err
 	}
@@ -551,18 +713,35 @@ func (d *Data) loadTransfers(ctx context.Context, txns []Transaction) error {
 		ids[i] = t.ID
 		at[t.ID] = i
 	}
-	rows, err := d.db.QueryContext(ctx, `with sides as (
-		select m.id as match_id,m.outgoing_transaction_id as transaction_id,m.incoming_transaction_id as counterpart_id,'outgoing' as side
-		from account_movement_matches m where m.outgoing_transaction_id=any($1::uuid[])
-		union all
-		select m.id,m.incoming_transaction_id,m.outgoing_transaction_id,'incoming'
-		from account_movement_matches m where m.incoming_transaction_id=any($1::uuid[])
-	)
-	select sides.match_id,sides.transaction_id,sides.counterpart_id,sides.side,counterpart.occurred_at,
-		b.id,b.name,b.kind,p.amount,p.currency
-	from sides join transactions counterpart on counterpart.id=sides.counterpart_id
-	join postings p on p.transaction_id=counterpart.id and p.import_row_id is not null
-	join buckets b on b.id=p.bucket_id`, ids)
+	rows, err := d.db.QueryContext(ctx, `
+		with sides as (
+			select
+				m.id as match_id,
+				m.outgoing_transaction_id as transaction_id,
+				m.incoming_transaction_id as counterpart_id,
+				'outgoing' as side
+			from account_movement_matches m
+			where m.outgoing_transaction_id = any($1::uuid[])
+
+			union all
+
+			select
+				m.id,
+				m.incoming_transaction_id,
+				m.outgoing_transaction_id,
+				'incoming'
+			from account_movement_matches m
+			where m.incoming_transaction_id = any($1::uuid[])
+		)
+		select
+			sides.match_id, sides.transaction_id, sides.counterpart_id, sides.side,
+			counterpart.occurred_at, b.id, b.name, b.kind, p.amount, p.currency
+		from sides
+		join transactions counterpart on counterpart.id = sides.counterpart_id
+		join postings p on p.transaction_id = counterpart.id
+		  and p.import_row_id is not null
+		join buckets b on b.id = p.bucket_id
+	`, ids)
 	if err != nil {
 		return err
 	}
@@ -589,12 +768,27 @@ func (d *Data) loadTransfers(ctx context.Context, txns []Transaction) error {
 	if err = rows.Err(); err != nil {
 		return err
 	}
-	unmatched, err := d.db.QueryContext(ctx, `select distinct p.transaction_id,case when imported.amount<0 then 'outgoing' else 'incoming' end
-		from postings p join buckets b on b.id=p.bucket_id and b.kind='transit'
-		join postings imported on imported.transaction_id=p.transaction_id and imported.import_row_id is not null
-		where p.transaction_id=any($1::uuid[])
-		and not exists(select 1 from account_movement_matches m where m.outgoing_transaction_id=p.transaction_id)
-		and not exists(select 1 from account_movement_matches m where m.incoming_transaction_id=p.transaction_id)`, ids)
+	unmatched, err := d.db.QueryContext(ctx, `
+		select distinct
+			p.transaction_id,
+			case when imported.amount < 0 then 'outgoing' else 'incoming' end
+		from postings p
+		join buckets b on b.id = p.bucket_id
+		  and b.kind = 'transit'
+		join postings imported on imported.transaction_id = p.transaction_id
+		  and imported.import_row_id is not null
+		where p.transaction_id = any($1::uuid[])
+		  and not exists (
+			select 1
+			from account_movement_matches m
+			where m.outgoing_transaction_id = p.transaction_id
+		  )
+		  and not exists (
+			select 1
+			from account_movement_matches m
+			where m.incoming_transaction_id = p.transaction_id
+		  )
+	`, ids)
 	if err != nil {
 		return err
 	}
@@ -612,7 +806,12 @@ func (d *Data) loadTransfers(ctx context.Context, txns []Transaction) error {
 }
 
 func ownedBuckets(ctx context.Context, tx *sql.Tx, owner string) (map[string]PostingBucket, error) {
-	rows, err := tx.QueryContext(ctx, "select id,name,kind from buckets where owner_user_id=$1 and hidden=false", owner)
+	rows, err := tx.QueryContext(ctx, `
+		select id, name, kind
+		from buckets
+		where owner_user_id = $1
+		  and hidden = false
+	`, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -648,7 +847,15 @@ func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID strin
 	if _, err = loadOwnedTransaction(ctx, tx, userID, transactionID); err != nil {
 		return err
 	}
-	rows, err := tx.QueryContext(ctx, `select p.id,p.bucket_id,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,b.hidden,b.kind from postings p join buckets b on b.id=p.bucket_id where p.transaction_id=$1 for update of p`, transactionID)
+	rows, err := tx.QueryContext(ctx, `
+		select
+			p.id, p.bucket_id, p.amount, p.currency, p.stats_date, p.memo,
+			p.import_row_id, p.mirror_id, b.hidden, b.kind
+		from postings p
+		join buckets b on b.id = p.bucket_id
+		where p.transaction_id = $1
+		for update of p
+	`, transactionID)
 	if err != nil {
 		return err
 	}
@@ -714,17 +921,77 @@ func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID strin
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `with desired as materialized(select * from jsonb_to_recordset($3::jsonb) as x(id uuid,bucket_id uuid,amount bigint,currency text,stats_date date,memo text)),
-	old as materialized(select p.* from postings p join buckets b on b.id=p.bucket_id where p.transaction_id=$2 and p.import_row_id is null and b.hidden=false),
-	changed as materialized(select o.* from old o join desired d on d.id=o.id where (o.bucket_id,o.amount,o.currency,o.stats_date,o.memo) is distinct from (d.bucket_id,d.amount,d.currency,d.stats_date,d.memo)),
-	deleted_tags as materialized(delete from posting_tags where posting_id in(select id from old where id not in(select id from desired)) returning *),
-	a_tags as (insert into audit_logs select uuidv7(),$1,'posting_tags',id,'delete',to_jsonb(deleted_tags),now() from deleted_tags),
-	a_changed as (insert into audit_logs select uuidv7(),$1,'postings',id,'update',to_jsonb(changed),now() from changed),
-	a_deleted as (insert into audit_logs select uuidv7(),$1,'postings',id,'delete',to_jsonb(old),now() from old where id not in(select id from desired)),
-	upd as (update postings p set bucket_id=d.bucket_id,amount=d.amount,currency=d.currency,stats_date=d.stats_date,memo=d.memo from desired d where p.id=d.id),
-	del as (delete from postings where id in(select id from old where id not in(select id from desired))),
-	ins as (insert into postings(id,transaction_id,bucket_id,amount,currency,stats_date,memo,created_at) select d.id,$2,d.bucket_id,d.amount,d.currency,d.stats_date,d.memo,now() from desired d where d.id not in(select id from old) returning id)
-	insert into audit_logs select uuidv7(),$1,'postings',id,'insert',null,now() from ins`, userID, transactionID, payload)
+	_, err = tx.ExecContext(ctx, `
+		with desired as materialized (
+			select *
+			from jsonb_to_recordset($3::jsonb) as x (
+				id uuid, bucket_id uuid, amount bigint, currency text,
+				stats_date date, memo text
+			)
+		), old as materialized (
+			select p.*
+			from postings p
+			join buckets b on b.id = p.bucket_id
+			where p.transaction_id = $2
+			  and p.import_row_id is null
+			  and b.hidden = false
+		), changed as materialized (
+			select o.*
+			from old o
+			join desired d on d.id = o.id
+			where (o.bucket_id, o.amount, o.currency, o.stats_date, o.memo)
+				is distinct from
+				(d.bucket_id, d.amount, d.currency, d.stats_date, d.memo)
+		), deleted_tags as materialized (
+			delete from posting_tags
+			where posting_id in (
+				select id
+				from old
+				where id not in (select id from desired)
+			)
+			returning *
+		), audited_tags as (
+			insert into audit_logs
+			select uuidv7(), $1, 'posting_tags', id, 'delete', to_jsonb(deleted_tags), now()
+			from deleted_tags
+		), audited_changes as (
+			insert into audit_logs
+			select uuidv7(), $1, 'postings', id, 'update', to_jsonb(changed), now()
+			from changed
+		), audited_deletes as (
+			insert into audit_logs
+			select uuidv7(), $1, 'postings', id, 'delete', to_jsonb(old), now()
+			from old
+			where id not in (select id from desired)
+		), updated as (
+			update postings p
+			set bucket_id = d.bucket_id,
+			    amount = d.amount,
+			    currency = d.currency,
+			    stats_date = d.stats_date,
+			    memo = d.memo
+			from desired d
+			where p.id = d.id
+		), deleted as (
+			delete from postings
+			where id in (
+				select id
+				from old
+				where id not in (select id from desired)
+			)
+		), inserted as (
+			insert into postings (
+				id, transaction_id, bucket_id, amount, currency, stats_date, memo, created_at
+			)
+			select d.id, $2, d.bucket_id, d.amount, d.currency, d.stats_date, d.memo, now()
+			from desired d
+			where d.id not in (select id from old)
+			returning id
+		)
+		insert into audit_logs
+		select uuidv7(), $1, 'postings', id, 'insert', null, now()
+		from inserted
+	`, userID, transactionID, payload)
 	if err != nil {
 		return err
 	}

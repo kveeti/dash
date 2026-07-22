@@ -20,8 +20,11 @@ func auditWrite(ctx context.Context, tx *sql.Tx, actorID, table, rowID, operatio
 		}
 	}
 
-	_, err := tx.ExecContext(ctx,
-		"insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at) values ($1, $2, $3, $4, $5, $6, $7)",
-		NewPrivateID(), actorID, table, rowID, operation, beforeJSON, time.Now().UTC())
+	_, err := tx.ExecContext(ctx, `
+		insert into audit_logs (
+			id, actor_user_id, table_name, row_id, operation, before, created_at
+		)
+		values ($1, $2, $3, $4, $5, $6, $7)
+	`, NewPrivateID(), actorID, table, rowID, operation, beforeJSON, time.Now().UTC())
 	return err
 }

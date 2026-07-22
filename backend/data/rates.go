@@ -100,17 +100,27 @@ func (d *Data) upsertRates(ctx context.Context, rates []Rate) error {
 		}
 		defer tx.Rollback(ctx)
 
-		if _, err := tx.Exec(ctx, "create temp table rate_stage (date date, currency text, rate numeric) on commit drop"); err != nil {
+		if _, err := tx.Exec(ctx, `
+			create temp table rate_stage (
+				date date,
+				currency text,
+				rate numeric
+			) on commit drop
+		`); err != nil {
 			return err
 		}
 		if _, err := tx.CopyFrom(ctx, pgx.Identifier{"rate_stage"}, []string{"date", "currency", "rate"}, &rateCopySource{rates: rates}); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `insert into rates (date, currency, rate)
-			select s.date, s.currency, s.rate from rate_stage s
+		if _, err := tx.Exec(ctx, `
+			insert into rates (date, currency, rate)
+			select s.date, s.currency, s.rate
+			from rate_stage s
 			join currencies c on c.code = s.currency
-			on conflict (date, currency) do update set rate = excluded.rate
-			where rates.rate is distinct from excluded.rate`); err != nil {
+			on conflict (date, currency) do update
+			set rate = excluded.rate
+			where rates.rate is distinct from excluded.rate
+		`); err != nil {
 			return err
 		}
 		return tx.Commit(ctx)
@@ -119,7 +129,12 @@ func (d *Data) upsertRates(ctx context.Context, rates []Rate) error {
 
 func (d *Data) syncRates(ctx context.Context) error {
 	var empty bool
-	if err := d.db.QueryRowContext(ctx, "select not exists(select 1 from rates)").Scan(&empty); err != nil {
+	if err := d.db.QueryRowContext(ctx, `
+		select not exists (
+			select 1
+			from rates
+		)
+	`).Scan(&empty); err != nil {
 		return err
 	}
 	url := ecbRecentURL

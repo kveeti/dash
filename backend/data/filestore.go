@@ -36,9 +36,10 @@ func (s *PostgresFileStore) Put(ctx context.Context, key string, r io.Reader) er
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx,
-		"insert into import_files (batch_id, content, created_at) values ($1, $2, $3)",
-		key, content, time.Now().UTC())
+	_, err = s.db.ExecContext(ctx, `
+		insert into import_files (batch_id, content, created_at)
+		values ($1, $2, $3)
+	`, key, content, time.Now().UTC())
 	return err
 }
 
@@ -47,15 +48,20 @@ func (s *PostgresFileStore) PutTx(ctx context.Context, tx *sql.Tx, key string, r
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx,
-		"insert into import_files (batch_id, content, created_at) values ($1, $2, $3)",
-		key, content, time.Now().UTC())
+	_, err = tx.ExecContext(ctx, `
+		insert into import_files (batch_id, content, created_at)
+		values ($1, $2, $3)
+	`, key, content, time.Now().UTC())
 	return err
 }
 
 func (s *PostgresFileStore) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	var content []byte
-	err := s.db.QueryRowContext(ctx, "select content from import_files where batch_id = $1", key).Scan(&content)
+	err := s.db.QueryRowContext(ctx, `
+		select content
+		from import_files
+		where batch_id = $1
+	`, key).Scan(&content)
 	if err == sql.ErrNoRows {
 		return nil, ErrFileNotFound
 	}
@@ -66,7 +72,10 @@ func (s *PostgresFileStore) Open(ctx context.Context, key string) (io.ReadCloser
 }
 
 func (s *PostgresFileStore) Delete(ctx context.Context, key string) error {
-	_, err := s.db.ExecContext(ctx, "delete from import_files where batch_id = $1", key)
+	_, err := s.db.ExecContext(ctx, `
+		delete from import_files
+		where batch_id = $1
+	`, key)
 	return err
 }
 

@@ -30,9 +30,12 @@ type Bucket struct {
 }
 
 func insertBucketTx(ctx context.Context, tx *sql.Tx, b Bucket) error {
-	if _, err := tx.ExecContext(ctx,
-		`insert into buckets (id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at)
-		 values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+	if _, err := tx.ExecContext(ctx, `
+		insert into buckets (
+			id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
+		)
+		values ($1, $2, $3, $4, $5, $6, $7, $8)
+	`,
 		b.ID, b.OwnerUserID, b.Kind, b.Name, b.ParentID, b.CounterpartUserID, b.Hidden, b.CreatedAt.UTC()); err != nil {
 		return err
 	}
@@ -53,9 +56,13 @@ func (d *Data) CreateBucket(ctx context.Context, b Bucket) error {
 }
 
 func (d *Data) ListBuckets(ctx context.Context, ownerID string) ([]Bucket, error) {
-	rows, err := d.db.QueryContext(ctx,
-		`select id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
-		 from buckets where owner_user_id = $1 and hidden = false order by created_at`, ownerID)
+	rows, err := d.db.QueryContext(ctx, `
+		select id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
+		from buckets
+		where owner_user_id = $1
+		  and hidden = false
+		order by created_at
+	`, ownerID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,16 +91,20 @@ func (d *Data) SearchBuckets(ctx context.Context, ownerID, query string, kinds [
 		args = append(args, kindValues)
 	}
 
-	rows, err := d.db.QueryContext(ctx,
-		`select id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
-		 from buckets
-		 where owner_user_id = $1 and hidden = false
-		   and lower(name) like '%' || lower($2) || '%'
-		   `+kindClause+`
-		 order by (lower(name) = lower($2)) desc,
-		          (lower(name) like lower($2) || '%') desc,
-		          lower(name), id
-		 limit 50`, args...)
+	rows, err := d.db.QueryContext(ctx, `
+		select id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
+		from buckets
+		where owner_user_id = $1
+		  and hidden = false
+		  and lower(name) like '%' || lower($2) || '%'
+		  `+kindClause+`
+		order by
+			(lower(name) = lower($2)) desc,
+			(lower(name) like lower($2) || '%') desc,
+			lower(name),
+			id
+		limit 50
+	`, args...)
 	if err != nil {
 		return nil, err
 	}

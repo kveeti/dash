@@ -248,11 +248,21 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 		return ErrInvalidPostings
 	}
 	var transit, fx string
-	if err = tx.QueryRowContext(ctx, "select id from buckets where owner_user_id=$1 and kind='transit'", userID).Scan(&transit); err != nil {
+	if err = tx.QueryRowContext(ctx, `
+		select id
+		from buckets
+		where owner_user_id = $1
+		  and kind = 'transit'
+	`, userID).Scan(&transit); err != nil {
 		return err
 	}
 	if exchange {
-		if err = tx.QueryRowContext(ctx, "select id from buckets where owner_user_id=$1 and kind='fx_conversion'", userID).Scan(&fx); err != nil {
+		if err = tx.QueryRowContext(ctx, `
+			select id
+			from buckets
+			where owner_user_id = $1
+			  and kind = 'fx_conversion'
+		`, userID).Scan(&fx); err != nil {
 			return err
 		}
 	}
@@ -288,7 +298,16 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 		}
 	}
 	var transitClear bool
-	if err = tx.QueryRowContext(ctx, `select not exists(select 1 from postings where transaction_id=any($1::uuid[]) and bucket_id=$2 group by currency having sum(amount)<>0)`, []string{ids[a.id], ids[b.id]}, transit).Scan(&transitClear); err != nil {
+	if err = tx.QueryRowContext(ctx, `
+		select not exists (
+			select 1
+			from postings
+			where transaction_id = any($1::uuid[])
+			  and bucket_id = $2
+			group by currency
+			having sum(amount) <> 0
+		)
+	`, []string{ids[a.id], ids[b.id]}, transit).Scan(&transitClear); err != nil {
 		return err
 	}
 	if !transitClear {
@@ -298,16 +317,38 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 	if in.amount < 0 {
 		out, in = in, out
 	}
-	_, err = tx.ExecContext(ctx, `with added as (insert into account_movement_matches(id,owner_user_id,outgoing_transaction_id,incoming_transaction_id,created_at) values(uuidv7(),$1,$2,$3,now()) returning id) insert into audit_logs select uuidv7(),$1,'account_movement_matches',id,'insert',null,now() from added`, userID, ids[out.id], ids[in.id])
+	_, err = tx.ExecContext(ctx, `
+		with added as (
+			insert into account_movement_matches (
+				id, owner_user_id, outgoing_transaction_id, incoming_transaction_id, created_at
+			)
+			values (uuidv7(), $1, $2, $3, now())
+			returning id
+		)
+		insert into audit_logs
+		select uuidv7(), $1, 'account_movement_matches', id, 'insert', null, now()
+		from added
+	`, userID, ids[out.id], ids[in.id])
 	if err != nil {
 		return err
 	}
 	rowIDs := []string{a.id, b.id}
-	_, err = tx.ExecContext(ctx, `insert into audit_logs(id,actor_user_id,table_name,row_id,operation,before,created_at) select uuidv7(),$1,'import_rows',id,'update',to_jsonb(import_rows),now() from import_rows where id=any($2::uuid[])`, userID, rowIDs)
+	_, err = tx.ExecContext(ctx, `
+		insert into audit_logs (
+			id, actor_user_id, table_name, row_id, operation, before, created_at
+		)
+		select uuidv7(), $1, 'import_rows', id, 'update', to_jsonb(import_rows), now()
+		from import_rows
+		where id = any($2::uuid[])
+	`, userID, rowIDs)
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, "update import_rows set status='categorized' where id=any($1::uuid[])", rowIDs)
+	_, err = tx.ExecContext(ctx, `
+		update import_rows
+		set status = 'categorized'
+		where id = any($1::uuid[])
+	`, rowIDs)
 	if err != nil {
 		return err
 	}
@@ -380,9 +421,16 @@ func (d *Data) categorizeInboxRows(ctx context.Context, userID string, rowIDs []
 
 	if bucket == nil {
 		var valid bool
-		if err := tx.QueryRowContext(ctx,
-			"select exists(select 1 from buckets where id = $1 and owner_user_id = $2 and kind in ('expense', 'income', 'person') and hidden = false)",
-			bucketID, userID).Scan(&valid); err != nil {
+		if err := tx.QueryRowContext(ctx, `
+			select exists (
+				select 1
+				from buckets
+				where id = $1
+				  and owner_user_id = $2
+				  and kind in ('expense', 'income', 'person')
+				  and hidden = false
+			)
+		`, bucketID, userID).Scan(&valid); err != nil {
 			return 0, err
 		}
 		if !valid {

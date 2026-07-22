@@ -158,16 +158,28 @@ func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filen
 	}()
 
 	var inserted int
-	err = tx.QueryRowContext(ctx, `with added as (
-		insert into import_batches(id,user_id,bucket_id,source,filename,timezone,created_at,status)
-		select $1,$2,$3,$4,$5,$6,$7,'uploaded' from buckets
-		where id=$3 and owner_user_id=$2 and kind in ('asset','liability') and hidden=false
-		returning id
-	), audited as (
-		insert into audit_logs(id,actor_user_id,table_name,row_id,operation,before,created_at)
-		select uuidv7(),$2,'import_batches',id,'insert',null,now() from added
-	)
-	select count(*) from added`, batch.ID, batch.UserID, batch.BucketID, batch.Source, batch.Filename, batch.Timezone, batch.CreatedAt).Scan(&inserted)
+	err = tx.QueryRowContext(ctx, `
+		with added as (
+			insert into import_batches (
+				id, user_id, bucket_id, source, filename, timezone, created_at, status
+			)
+			select $1, $2, $3, $4, $5, $6, $7, 'uploaded'
+			from buckets
+			where id = $3
+			  and owner_user_id = $2
+			  and kind in ('asset', 'liability')
+			  and hidden = false
+			returning id
+		), audited as (
+			insert into audit_logs (
+				id, actor_user_id, table_name, row_id, operation, before, created_at
+			)
+			select uuidv7(), $2, 'import_batches', id, 'insert', null, now()
+			from added
+		)
+		select count(*)
+		from added
+	`, batch.ID, batch.UserID, batch.BucketID, batch.Source, batch.Filename, batch.Timezone, batch.CreatedAt).Scan(&inserted)
 	if err != nil {
 		return nil, err
 	}
@@ -290,10 +302,18 @@ func (d *Data) stageFile(ctx context.Context, batch ImportBatch, src RowSource) 
 		}
 		defer tx.Rollback(ctx)
 
-		if _, err := tx.Exec(ctx, `create temp table import_stage (
-			id uuid, date timestamptz, amount bigint, currency text,
-			raw_description text, raw jsonb, dedup_hash text, occurrence int not null default 0
-		) on commit drop`); err != nil {
+		if _, err := tx.Exec(ctx, `
+			create temp table import_stage (
+				id uuid,
+				date timestamptz,
+				amount bigint,
+				currency text,
+				raw_description text,
+				raw jsonb,
+				dedup_hash text,
+				occurrence int not null default 0
+			) on commit drop
+		`); err != nil {
 			return err
 		}
 
@@ -421,12 +441,22 @@ func (d *Data) finishBatch(ctx context.Context, batchID string, parseErrs []RowE
 		}
 		pe = b
 	}
-	_, err := d.db.ExecContext(ctx, "update import_batches set status = 'done', parse_errors = $2 where id = $1", batchID, pe)
+	_, err := d.db.ExecContext(ctx, `
+		update import_batches
+		set status = 'done',
+		    parse_errors = $2
+		where id = $1
+	`, batchID, pe)
 	return err
 }
 
 func (d *Data) failBatch(ctx context.Context, batchID string, cause error) {
-	if _, err := d.db.ExecContext(ctx, "update import_batches set status = 'failed', error = $2 where id = $1", batchID, cause.Error()); err != nil {
+	if _, err := d.db.ExecContext(ctx, `
+		update import_batches
+		set status = 'failed',
+		    error = $2
+		where id = $1
+	`, batchID, cause.Error()); err != nil {
 		slog.Error("marking import failed", "batch", batchID, "err", err)
 	}
 }
@@ -443,10 +473,21 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 
 	var status, hash string
 	var linked bool
-	err = tx.QueryRowContext(ctx,
-		`select r.status,r.dedup_hash,exists(select 1 from postings where import_row_id=r.id)
-		 from import_rows r join import_batches b on b.id=r.batch_id
-		 where r.id=$1 and b.user_id=$2 for update of r`, rowID, userID).
+	err = tx.QueryRowContext(ctx, `
+		select
+			r.status,
+			r.dedup_hash,
+			exists (
+				select 1
+				from postings
+				where import_row_id = r.id
+			)
+		from import_rows r
+		join import_batches b on b.id = r.batch_id
+		where r.id = $1
+		  and b.user_id = $2
+		for update of r
+	`, rowID, userID).
 		Scan(&status, &hash, &linked)
 	if err == sql.ErrNoRows {
 		return ErrImportNotFound
@@ -462,9 +503,12 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 	}
 
 	var occurrence int
-	if err := tx.QueryRowContext(ctx,
-		"select coalesce(max(occurrence)+1, 0) from import_rows where dedup_hash = $1 and status <> 'duplicate'",
-		hash).Scan(&occurrence); err != nil {
+	if err := tx.QueryRowContext(ctx, `
+		select coalesce(max(occurrence) + 1, 0)
+		from import_rows
+		where dedup_hash = $1
+		  and status <> 'duplicate'
+	`, hash).Scan(&occurrence); err != nil {
 		return err
 	}
 
@@ -475,9 +519,13 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 	if err := auditWrite(ctx, tx, userID, "import_rows", rowID, "update", before); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx,
-		"update import_rows set status = 'pending', duplicate_of = null, occurrence = $1 where id = $2",
-		occurrence, rowID); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		update import_rows
+		set status = 'pending',
+		    duplicate_of = null,
+		    occurrence = $1
+		where id = $2
+	`, occurrence, rowID); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -494,7 +542,11 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 	}
 	defer tx.Rollback()
 	var owner string
-	err = tx.QueryRowContext(ctx, "select user_id from import_batches where id=$1", batchID).Scan(&owner)
+	err = tx.QueryRowContext(ctx, `
+		select user_id
+		from import_batches
+		where id = $1
+	`, batchID).Scan(&owner)
 	if err == sql.ErrNoRows || (err == nil && owner != userID) {
 		return ErrImportNotFound
 	}
@@ -502,7 +554,12 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 		return err
 	}
 	var txnIDs []string
-	rows, err := tx.QueryContext(ctx, `select p.transaction_id from postings p join import_rows r on r.id=p.import_row_id where r.batch_id=$1`, batchID)
+	rows, err := tx.QueryContext(ctx, `
+		select p.transaction_id
+		from postings p
+		join import_rows r on r.id = p.import_row_id
+		where r.batch_id = $1
+	`, batchID)
 	if err != nil {
 		return err
 	}
@@ -528,7 +585,19 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 		if table == "import_batches" {
 			where = "id=$2"
 		}
-		_, err = tx.ExecContext(ctx, `with doomed as(select * from `+table+` where `+where+`),a as(insert into audit_logs select uuidv7(),$1,'`+table+`',id,'delete',to_jsonb(doomed),now() from doomed) delete from `+table+` where id in(select id from doomed)`, userID, batchID)
+		_, err = tx.ExecContext(ctx, `
+			with doomed as (
+				select *
+				from `+table+`
+				where `+where+`
+			), audited as (
+				insert into audit_logs
+				select uuidv7(), $1, '`+table+`', id, 'delete', to_jsonb(doomed), now()
+				from doomed
+			)
+			delete from `+table+`
+			where id in (select id from doomed)
+		`, userID, batchID)
 		if err != nil {
 			return err
 		}
@@ -601,9 +670,12 @@ func (d *Data) GetImportStatus(ctx context.Context, userID, batchID string) (*Im
 
 func (d *Data) GetImport(ctx context.Context, userID, batchID string) (*ImportBatch, []ImportRow, error) {
 	var b ImportBatch
-	err := d.db.QueryRowContext(ctx,
-		"select id, user_id, bucket_id, source, filename, created_at, status from import_batches where id = $1 and user_id = $2",
-		batchID, userID).Scan(&b.ID, &b.UserID, &b.BucketID, &b.Source, &b.Filename, &b.CreatedAt, &b.Status)
+	err := d.db.QueryRowContext(ctx, `
+		select id, user_id, bucket_id, source, filename, created_at, status
+		from import_batches
+		where id = $1
+		  and user_id = $2
+	`, batchID, userID).Scan(&b.ID, &b.UserID, &b.BucketID, &b.Source, &b.Filename, &b.CreatedAt, &b.Status)
 	if err == sql.ErrNoRows {
 		return nil, nil, ErrImportNotFound
 	}
@@ -699,9 +771,15 @@ func (d *Data) ListDuplicates(ctx context.Context, userID, batchID, cursor strin
 
 func loadImportRow(ctx context.Context, tx *sql.Tx, rowID string) (*ImportRow, error) {
 	var r ImportRow
-	err := tx.QueryRowContext(ctx,
-		`select r.id, r.batch_id, r.date, r.amount, r.currency, r.raw_description, r.raw, r.dedup_hash, r.occurrence, r.status, p.transaction_id, r.duplicate_of
-		 from import_rows r left join postings p on p.import_row_id=r.id where r.id = $1`, rowID).
+	err := tx.QueryRowContext(ctx, `
+		select
+			r.id, r.batch_id, r.date, r.amount, r.currency, r.raw_description,
+			r.raw, r.dedup_hash, r.occurrence, r.status, p.transaction_id,
+			r.duplicate_of
+		from import_rows r
+		left join postings p on p.import_row_id = r.id
+		where r.id = $1
+	`, rowID).
 		Scan(&r.ID, &r.BatchID, &r.Date, &r.Amount, &r.Currency, &r.RawDescription, &r.Raw, &r.DedupHash, &r.Occurrence, &r.Status, &r.TransactionID, &r.DuplicateOf)
 	if err != nil {
 		return nil, err

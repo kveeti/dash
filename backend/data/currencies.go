@@ -11,7 +11,11 @@ type Currency struct {
 }
 
 func (d *Data) ListCurrencies(ctx context.Context) ([]Currency, error) {
-	rows, err := d.db.QueryContext(ctx, "select code, exponent from currencies order by code")
+	rows, err := d.db.QueryContext(ctx, `
+		select code, exponent
+		from currencies
+		order by code
+	`)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +54,11 @@ func validatePostingCurrencies(ctx context.Context, tx *sql.Tx, postings []Posti
 		}
 	}
 	var count int
-	if err := tx.QueryRowContext(ctx, "select count(*) from currencies where code = any($1)", codes).Scan(&count); err != nil {
+	if err := tx.QueryRowContext(ctx, `
+		select count(*)
+		from currencies
+		where code = any($1)
+	`, codes).Scan(&count); err != nil {
 		return err
 	}
 	if count != len(codes) {

@@ -19,8 +19,11 @@ const (
 // then wake on a kick (sent after each upload) or a periodic poll, and claim
 // whole batches via FOR UPDATE SKIP LOCKED with per-user round-robin fairness.
 func (d *Data) StartImportWorkers(ctx context.Context) {
-	if _, err := d.db.ExecContext(ctx,
-		"update import_batches set status = 'uploaded' where status = 'processing'"); err != nil {
+	if _, err := d.db.ExecContext(ctx, `
+		update import_batches
+		set status = 'uploaded'
+		where status = 'processing'
+	`); err != nil {
 		slog.Error("import boot recovery failed", "err", err)
 	}
 	for i := 0; i < importWorkers; i++ {
