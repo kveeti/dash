@@ -668,59 +668,6 @@ func (d *Data) GetImportStatus(ctx context.Context, userID, batchID string) (*Im
 	return &b, nil
 }
 
-func (d *Data) GetImport(ctx context.Context, userID, batchID string) (*ImportBatch, []ImportRow, error) {
-	var b ImportBatch
-	err := d.db.QueryRowContext(ctx, `
-		select id, user_id, bucket_id, source, filename, created_at, status
-		from import_batches
-		where id = $1
-		  and user_id = $2
-	`, batchID, userID).Scan(&b.ID, &b.UserID, &b.BucketID, &b.Source, &b.Filename, &b.CreatedAt, &b.Status)
-	if err == sql.ErrNoRows {
-		return nil, nil, ErrImportNotFound
-	}
-	if err != nil {
-		return nil, nil, err
-	}
-
-	rows, err := d.db.QueryContext(ctx,
-		`select r.id, r.batch_id, r.date, r.amount, r.currency, r.raw_description, r.raw, r.status, rp.transaction_id, r.duplicate_of,
-		        t.date, t.amount, t.currency, t.raw_description, tp.transaction_id, tb.id, tb.created_at
-		 from import_rows r
-		 left join postings rp on rp.import_row_id = r.id
-		 left join import_rows t on t.id = r.duplicate_of
-		 left join postings tp on tp.import_row_id = t.id
-		 left join import_batches tb on tb.id = t.batch_id
-		 where r.batch_id = $1 order by r.date, r.id`, batchID)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
-
-	var out []ImportRow
-	for rows.Next() {
-		var r ImportRow
-		var (
-			tDate, tCreated               sql.NullTime
-			tAmount                       sql.NullInt64
-			tCurrency, tRawDesc, tBatchID sql.NullString
-			tTxnID                        sql.NullString
-		)
-		if err := rows.Scan(&r.ID, &r.BatchID, &r.Date, &r.Amount, &r.Currency, &r.RawDescription, &r.Raw, &r.Status, &r.TransactionID, &r.DuplicateOf,
-			&tDate, &tAmount, &tCurrency, &tRawDesc, &tTxnID, &tBatchID, &tCreated); err != nil {
-			return nil, nil, err
-		}
-		if tDate.Valid {
-			r.Target = &DupTarget{Date: tDate.Time, Amount: tAmount.Int64, Currency: tCurrency.String, RawDescription: tRawDesc.String, BatchID: tBatchID.String, CreatedAt: tCreated.Time}
-			if tTxnID.Valid {
-				r.Target.TransactionID = &tTxnID.String
-			}
-		}
-		out = append(out, r)
-	}
-	return &b, out, rows.Err()
-}
-
 // ListDuplicates returns one keyset page of a batch's duplicate rows (id order,
 // so cursor is the last id seen; empty cursor starts at the beginning), each with
 // its collision target inline via the same self-join GetImport uses. Server-side

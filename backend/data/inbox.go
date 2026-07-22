@@ -115,75 +115,105 @@ select count(*) from rows`
 // opposite signs in different currencies. ECB rates only rank exchange
 // candidates by value; missing rates never hide a candidate.
 func (d *Data) GetInboxMatches(ctx context.Context, userID, rowID, q string) (InboxRow, []InboxMatch, error) {
-	var source InboxRow
-	var sourceExponent int
-	var sourceTimezone string
-	err := d.db.QueryRowContext(ctx, `select r.id, r.date, r.amount, r.currency,
-		coalesce(r.raw->>'payee', ''), coalesce(r.raw->>'message', ''), b.bucket_id, bucket.name, c.exponent, b.timezone
-		from import_rows r
-		join import_batches b on b.id = r.batch_id
-		join buckets bucket on bucket.id = b.bucket_id
-		join currencies c on c.code = r.currency
-		where r.id = $1 and b.user_id = $2 and r.status = 'pending'`, rowID, userID).
-		Scan(&source.ID, &source.Date, &source.Amount, &source.Currency, &source.Counterparty, &source.Description, &source.BucketID, &source.Account, &sourceExponent, &sourceTimezone)
-	if err == sql.ErrNoRows {
-		return source, nil, ErrNotFound
-	}
-	if err != nil {
-		return source, nil, err
-	}
-
-	rows, err := d.db.QueryContext(ctx, `select r.id, r.date, r.amount, r.currency,
-		coalesce(r.raw->>'payee', ''), coalesce(r.raw->>'message', ''), b.bucket_id, bucket.name,
-		case when r.currency = $4 then 'transfer' else 'exchange' end as kind
-		from import_rows r
-		join import_batches b on b.id = r.batch_id
-		join buckets bucket on bucket.id = b.bucket_id
-		join currencies c on c.code = r.currency
-		left join lateral (
-			select source.rate as source_rate, candidate.rate as candidate_rate
-			from rates source
-			join rates candidate on candidate.date = source.date and candidate.currency = r.currency
-			where source.currency = $4 and source.date <= ($6::timestamptz at time zone $9)::date
-			order by source.date desc limit 1
-		) fx on r.currency <> $4
-		where b.user_id = $1 and r.status = 'pending' and r.id <> $2 and $5::bigint <> 0
-		and (r.date at time zone b.timezone)::date between
-			(($6::timestamptz at time zone $9)::date - 7) and (($6::timestamptz at time zone $9)::date + 7)
-		and (
-			(r.currency = $4 and r.amount = -$5::bigint and b.bucket_id <> $3)
-			or (r.currency <> $4 and ((r.amount < 0 and $5::bigint > 0) or (r.amount > 0 and $5::bigint < 0)))
+	rows, err := d.db.QueryContext(ctx, `
+		with source as materialized (
+			select r.id, r.date, r.amount, r.currency,
+				coalesce(r.raw->>'payee', '') as counterparty,
+				coalesce(r.raw->>'message', '') as description,
+				b.bucket_id, bucket.name as account, c.exponent, b.timezone
+			from import_rows r
+			join import_batches b on b.id = r.batch_id
+			join buckets bucket on bucket.id = b.bucket_id
+			join currencies c on c.code = r.currency
+			where r.id = $2 and b.user_id = $1 and r.status = 'pending'
 		)
-		and ($7 = '' or coalesce(r.raw->>'payee', '') ilike '%' || $7 || '%'
-			or coalesce(r.raw->>'message', '') ilike '%' || $7 || '%' or bucket.name ilike '%' || $7 || '%')
-		order by
-			case when r.currency = $4 then 0::numeric else
-				abs(
-					abs($5::bigint)::numeric / power(10::numeric, $8) / fx.source_rate
-					- abs(r.amount)::numeric / power(10::numeric, c.exponent) / fx.candidate_rate
-				) / greatest(
-					abs($5::bigint)::numeric / power(10::numeric, $8) / fx.source_rate,
-					abs(r.amount)::numeric / power(10::numeric, c.exponent) / fx.candidate_rate
-				)
-			end nulls last,
-			abs(extract(epoch from (r.date - $6::timestamptz))),
-			(b.bucket_id = $3) desc,
-			r.date desc
-		limit 30`, userID, rowID, source.BucketID, source.Currency, source.Amount, source.Date, q, sourceExponent, sourceTimezone)
+		select s.id, s.date, s.amount, s.currency, s.counterparty, s.description, s.bucket_id, s.account,
+			m.id, m.date, m.amount, m.currency, m.counterparty, m.description, m.bucket_id, m.account, m.kind
+		from source s
+		left join lateral (
+			select r.id, r.date, r.amount, r.currency,
+				coalesce(r.raw->>'payee', '') as counterparty,
+				coalesce(r.raw->>'message', '') as description,
+				b.bucket_id, bucket.name as account,
+				case when r.currency = s.currency then 'transfer' else 'exchange' end as kind,
+				case when r.currency = s.currency then 0::numeric else
+					abs(
+						abs(s.amount)::numeric / power(10::numeric, s.exponent) / fx.source_rate
+						- abs(r.amount)::numeric / power(10::numeric, c.exponent) / fx.candidate_rate
+					) / greatest(
+						abs(s.amount)::numeric / power(10::numeric, s.exponent) / fx.source_rate,
+						abs(r.amount)::numeric / power(10::numeric, c.exponent) / fx.candidate_rate
+					)
+				end as value_distance,
+				abs(extract(epoch from (r.date - s.date))) as time_distance,
+				(b.bucket_id = s.bucket_id) as same_account
+			from import_rows r
+			join import_batches b on b.id = r.batch_id
+			join buckets bucket on bucket.id = b.bucket_id
+			join currencies c on c.code = r.currency
+			left join lateral (
+				select source_rate.rate as source_rate, candidate_rate.rate as candidate_rate
+				from rates source_rate
+				join rates candidate_rate on candidate_rate.date = source_rate.date and candidate_rate.currency = r.currency
+				where source_rate.currency = s.currency
+				  and source_rate.date <= (s.date at time zone s.timezone)::date
+				order by source_rate.date desc
+				limit 1
+			) fx on r.currency <> s.currency
+			where b.user_id = $1 and r.status = 'pending' and r.id <> s.id and s.amount <> 0
+			  and (r.date at time zone b.timezone)::date between
+				((s.date at time zone s.timezone)::date - 7) and ((s.date at time zone s.timezone)::date + 7)
+			  and (
+				(r.currency = s.currency and r.amount = -s.amount and b.bucket_id <> s.bucket_id)
+				or (r.currency <> s.currency and ((r.amount < 0 and s.amount > 0) or (r.amount > 0 and s.amount < 0)))
+			  )
+			  and ($3 = '' or coalesce(r.raw->>'payee', '') ilike '%' || $3 || '%'
+				or coalesce(r.raw->>'message', '') ilike '%' || $3 || '%' or bucket.name ilike '%' || $3 || '%')
+			order by value_distance nulls last, time_distance, same_account desc, r.date desc
+			limit 30
+		) m on true
+		order by m.value_distance nulls last, m.time_distance, m.same_account desc, m.date desc
+	`, userID, rowID, q)
 	if err != nil {
-		return source, nil, err
+		return InboxRow{}, nil, err
 	}
 	defer rows.Close()
 
+	var source InboxRow
 	var matches []InboxMatch
+	found := false
 	for rows.Next() {
-		var match InboxMatch
-		if err := rows.Scan(&match.ID, &match.Date, &match.Amount, &match.Currency, &match.Counterparty, &match.Description, &match.BucketID, &match.Account, &match.Kind); err != nil {
+		found = true
+		var (
+			matchID, matchCurrency, matchCounterparty, matchDescription sql.NullString
+			matchBucketID, matchAccount, matchKind                      sql.NullString
+			matchDate                                                   sql.NullTime
+			matchAmount                                                 sql.NullInt64
+		)
+		if err := rows.Scan(
+			&source.ID, &source.Date, &source.Amount, &source.Currency, &source.Counterparty, &source.Description, &source.BucketID, &source.Account,
+			&matchID, &matchDate, &matchAmount, &matchCurrency, &matchCounterparty, &matchDescription, &matchBucketID, &matchAccount, &matchKind,
+		); err != nil {
 			return source, nil, err
 		}
-		matches = append(matches, match)
+		if matchID.Valid {
+			matches = append(matches, InboxMatch{
+				InboxRow: InboxRow{
+					ID: matchID.String, Date: matchDate.Time, Amount: matchAmount.Int64,
+					Currency: matchCurrency.String, Counterparty: matchCounterparty.String,
+					Description: matchDescription.String, BucketID: matchBucketID.String, Account: matchAccount.String,
+				},
+				Kind: matchKind.String,
+			})
+		}
 	}
-	return source, matches, rows.Err()
+	if err := rows.Err(); err != nil {
+		return source, nil, err
+	}
+	if !found {
+		return source, nil, ErrNotFound
+	}
+	return source, matches, nil
 }
 
 func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string) error {

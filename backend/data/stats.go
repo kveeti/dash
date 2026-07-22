@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -76,32 +75,41 @@ left join lateral (
 order by n.label, n.bucket_id, n.date, n.currency`
 
 const statsFallbacksSQL = `
-with requested_ranges(label, from_date, to_date) as (
+with user_config as (
+    select upper(home_currency) as home_currency from users where id = $1
+), requested_ranges(label, from_date, to_date) as (
     values ('current', $2::date, $3::date),
            ('comparison', $4::date, $5::date),
            ('full_comparison', $6::date, $7::date)
 ), ranges as (
     select * from requested_ranges where from_date is not null
 ), category_postings as (
-    select r.label, t.id as transaction_id, coalesce(p.stats_date,(t.occurred_at at time zone $9)::date) as date,
+    select r.label, t.id as transaction_id, coalesce(p.stats_date,(t.occurred_at at time zone $8)::date) as date,
            upper(p.currency) as currency
     from postings p
     join transactions t on t.id = p.transaction_id
     join buckets b on b.id = p.bucket_id
-    join ranges r on coalesce(p.stats_date,(t.occurred_at at time zone $9)::date) between r.from_date and r.to_date
-    where ` + visiblePostings + ` and b.kind in ('expense', 'income') and upper(p.currency) <> $8
+    join ranges r on coalesce(p.stats_date,(t.occurred_at at time zone $8)::date) between r.from_date and r.to_date
+    where ` + visiblePostings + ` and b.kind in ('expense', 'income')
+      and upper(p.currency) <> (select home_currency from user_config)
+), fallbacks as (
+    select c.label, count(distinct c.transaction_id) as transaction_count, max(c.date - x.date) as maximum_days
+    from category_postings c
+    join lateral (
+        select source.date
+        from rates source
+        join rates home on home.date = source.date
+                       and home.currency = (select home_currency from user_config)
+        where source.currency = c.currency and source.date <= c.date
+        order by source.date desc
+        limit 1
+    ) x on x.date < c.date
+    group by c.label
 )
-select c.label, count(distinct c.transaction_id), max(c.date - x.date)
-from category_postings c
-join lateral (
-    select source.date
-    from rates source
-    join rates home on home.date = source.date and home.currency = $8
-    where source.currency = c.currency and source.date <= c.date
-    order by source.date desc
-    limit 1
-) x on x.date < c.date
-group by c.label`
+select u.home_currency, f.label, f.transaction_count, f.maximum_days
+from user_config u
+left join fallbacks f on true
+order by f.label`
 
 type statKey struct {
 	label    string
@@ -109,13 +117,21 @@ type statKey struct {
 	kind     string
 }
 
-func rateArgs(userID string, current, comparison DateRange, full *DateRange, home, timezone string) []any {
-	args := []any{userID, current.From, current.To, comparison.From, comparison.To, nil, nil, home, timezone}
+func rangeArgs(userID string, current, comparison DateRange, full *DateRange) []any {
+	args := []any{userID, current.From, current.To, comparison.From, comparison.To, nil, nil}
 	if full != nil {
 		args[5] = full.From
 		args[6] = full.To
 	}
 	return args
+}
+
+func rateArgs(userID string, current, comparison DateRange, full *DateRange, home, timezone string) []any {
+	return append(rangeArgs(userID, current, comparison, full), home, timezone)
+}
+
+func fallbackArgs(userID string, current, comparison DateRange, full *DateRange, timezone string) []any {
+	return append(rangeArgs(userID, current, comparison, full), timezone)
 }
 
 func pow10(n int) *big.Int {
@@ -154,15 +170,41 @@ func roundRat(value *big.Rat) (int64, error) {
 }
 
 func (d *Data) GetStats(ctx context.Context, userID string, current, comparison DateRange, full *DateRange, timezone string) (*Stats, error) {
-	user, err := d.GetUserByID(ctx, userID)
+	valuation := map[string]Valuation{
+		"current":         {},
+		"comparison":      {},
+		"full_comparison": {},
+	}
+	fallbackRows, err := d.db.QueryContext(ctx, statsFallbacksSQL, fallbackArgs(userID, current, comparison, full, timezone)...)
 	if err != nil {
 		return nil, err
 	}
-	if user == nil {
+	var home string
+	foundUser := false
+	for fallbackRows.Next() {
+		foundUser = true
+		var label sql.NullString
+		var count, days sql.NullInt64
+		if err := fallbackRows.Scan(&home, &label, &count, &days); err != nil {
+			fallbackRows.Close()
+			return nil, err
+		}
+		if label.Valid {
+			v := valuation[label.String]
+			v.FallbackTransactions = int(count.Int64)
+			v.MaximumFallbackDays = int(days.Int64)
+			valuation[label.String] = v
+		}
+	}
+	if err := fallbackRows.Close(); err != nil {
+		return nil, err
+	}
+	if err := fallbackRows.Err(); err != nil {
+		return nil, err
+	}
+	if !foundUser {
 		return nil, ErrNotFound
 	}
-	home := strings.ToUpper(user.HomeCurrency)
-
 	amounts := map[statKey]*big.Rat{}
 	missing := map[string]map[string]bool{}
 	for _, label := range []string{"current", "comparison", "full_comparison"} {
@@ -208,33 +250,6 @@ func (d *Data) GetStats(ctx context.Context, userID string, current, comparison 
 		return nil, err
 	}
 
-	valuation := map[string]Valuation{
-		"current":         {},
-		"comparison":      {},
-		"full_comparison": {},
-	}
-	fallbackRows, err := d.db.QueryContext(ctx, statsFallbacksSQL, rateArgs(userID, current, comparison, full, home, timezone)...)
-	if err != nil {
-		return nil, err
-	}
-	for fallbackRows.Next() {
-		var label string
-		var count, days int
-		if err := fallbackRows.Scan(&label, &count, &days); err != nil {
-			fallbackRows.Close()
-			return nil, err
-		}
-		v := valuation[label]
-		v.FallbackTransactions = count
-		v.MaximumFallbackDays = days
-		valuation[label] = v
-	}
-	if err := fallbackRows.Close(); err != nil {
-		return nil, err
-	}
-	if err := fallbackRows.Err(); err != nil {
-		return nil, err
-	}
 	for label, currencies := range missing {
 		v := valuation[label]
 		for code := range currencies {

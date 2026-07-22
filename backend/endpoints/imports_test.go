@@ -2,15 +2,12 @@ package endpoints
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
-
-	"money/backend/data"
 
 	"github.com/stretchr/testify/require"
 )
@@ -188,8 +185,8 @@ func TestImportDedupsReimport(t *testing.T) {
 	require.Len(t, dups, 2)
 	for _, row := range dups {
 		require.NotNil(t, row.DuplicateOf)
-		require.NotNil(t, row.Target, "duplicate row exposes its target inline")
-		require.Nil(t, row.Target.TransactionID, "target is a pending row, not yet a transaction")
+		require.NotNil(t, row.DuplicateTarget, "duplicate row exposes its target inline")
+		require.Nil(t, row.DuplicateTarget.TransactionID, "target is a pending row, not yet a transaction")
 	}
 }
 
@@ -413,26 +410,17 @@ func getBatch(t *testing.T, app *testApp, id string) batchReport {
 	return out
 }
 
-func meID(t *testing.T, app *testApp) string {
-	t.Helper()
-	resp := authed(t, app, http.MethodGet, "/api/v1/users/@me", nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var out struct {
-		ID string `json:"id"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
-	return out.ID
+type dupRow struct {
+	ID              string  `json:"id"`
+	DuplicateOf     *string `json:"duplicate_of"`
+	DuplicateTarget *struct {
+		TransactionID *string `json:"transaction_id"`
+	} `json:"duplicate_target"`
 }
 
 type dupPage struct {
-	Rows []struct {
-		ID              string  `json:"id"`
-		DuplicateOf     *string `json:"duplicate_of"`
-		DuplicateTarget *struct {
-			TransactionID *string `json:"transaction_id"`
-		} `json:"duplicate_target"`
-	} `json:"rows"`
-	NextCursor *string `json:"next_cursor"`
+	Rows       []dupRow `json:"rows"`
+	NextCursor *string  `json:"next_cursor"`
 }
 
 func getDuplicates(t *testing.T, app *testApp, id, query string) dupPage {
@@ -472,15 +460,7 @@ func TestListDuplicatesPaginates(t *testing.T) {
 	require.NotEqual(t, p1.Rows[0].ID, p2.Rows[0].ID)
 }
 
-func dupRows(t *testing.T, app *testApp, batchID string) []data.ImportRow {
+func dupRows(t *testing.T, app *testApp, batchID string) []dupRow {
 	t.Helper()
-	_, rows, err := app.d.GetImport(context.Background(), meID(t, app), batchID)
-	require.NoError(t, err)
-	var dups []data.ImportRow
-	for _, r := range rows {
-		if r.Status == "duplicate" {
-			dups = append(dups, r)
-		}
-	}
-	return dups
+	return getDuplicates(t, app, batchID, "?limit=200").Rows
 }

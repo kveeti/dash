@@ -611,198 +611,143 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 }
 
 func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transaction, []Posting, error) {
-	var t Transaction
-	err := d.db.QueryRowContext(ctx, `
-		select id, owner_user_id, occurred_at, counterparty, description, memo, created_at
-		from transactions
-		where id = $1
-		  and owner_user_id = $2
-	`, id, userID).Scan(&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt)
-	if err == sql.ErrNoRows {
-		return nil, nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, nil, err
-	}
 	rows, err := d.db.QueryContext(ctx, `
-		select
-			p.id, p.bucket_id, b.name, b.kind, p.amount, p.currency,
-			p.stats_date, p.memo, p.import_row_id, p.mirror_id
-		from postings p
-		join buckets b on b.id = p.bucket_id
-		where p.transaction_id = $1
-		  and b.hidden = false
-		order by p.created_at, p.id
-	`, id)
-	if err != nil {
-		return nil, nil, err
-	}
-	defer rows.Close()
-	var ps []Posting
-	for rows.Next() {
-		var p Posting
-		if err = rows.Scan(&p.ID, &p.Bucket.ID, &p.Bucket.Name, &p.Bucket.Kind, &p.Amount, &p.Currency, &p.StatsDate, &p.Memo, &p.ImportRowID, &p.MirrorID); err != nil {
-			return nil, nil, err
-		}
-		p.BucketID = p.Bucket.ID
-		p.Tags = []string{}
-		ps = append(ps, p)
-	}
-	if err = rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	m := map[string][]Posting{id: ps}
-	if err = d.loadPostingTags(ctx, m); err != nil {
-		return nil, nil, err
-	}
-	ps = m[id]
-	ts := []Transaction{t}
-	if err = d.loadTransfers(ctx, ts); err != nil {
-		return nil, nil, err
-	}
-	t = ts[0]
-	return &t, ps, nil
-}
-
-func (d *Data) loadPostingTags(ctx context.Context, grouped map[string][]Posting) error {
-	var ids []string
-	locations := map[string]struct {
-		tx string
-		i  int
-	}{}
-	for tx, ps := range grouped {
-		for i, p := range ps {
-			ids = append(ids, p.ID)
-			locations[p.ID] = struct {
-				tx string
-				i  int
-			}{tx, i}
-		}
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-	rows, err := d.db.QueryContext(ctx, `
-		select posting_id, tag
-		from posting_tags
-		where posting_id = any($1::uuid[])
-		order by tag
-	`, ids)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id, tag string
-		if err = rows.Scan(&id, &tag); err != nil {
-			return err
-		}
-		l := locations[id]
-		grouped[l.tx][l.i].Tags = append(grouped[l.tx][l.i].Tags, tag)
-	}
-	return rows.Err()
-}
-
-func (d *Data) loadTransfers(ctx context.Context, txns []Transaction) error {
-	if len(txns) == 0 {
-		return nil
-	}
-	ids := make([]string, len(txns))
-	at := map[string]int{}
-	for i, t := range txns {
-		ids[i] = t.ID
-		at[t.ID] = i
-	}
-	rows, err := d.db.QueryContext(ctx, `
-		with sides as (
-			select
-				m.id as match_id,
-				m.outgoing_transaction_id as transaction_id,
-				m.incoming_transaction_id as counterpart_id,
-				'outgoing' as side
-			from account_movement_matches m
-			where m.outgoing_transaction_id = any($1::uuid[])
+		with target as materialized (
+			select id, owner_user_id, occurred_at, counterparty, description, memo, created_at
+			from transactions
+			where id = $1 and owner_user_id = $2
+		), target_postings as (
+			select p.id, p.transaction_id, p.bucket_id, b.name as bucket_name, b.kind as bucket_kind,
+				p.amount, p.currency, p.stats_date, p.memo, p.import_row_id, p.mirror_id, p.created_at,
+				coalesce(jsonb_agg(pt.tag order by pt.tag) filter (where pt.tag is not null), '[]'::jsonb) as tags
+			from target
+			join postings p on p.transaction_id = target.id
+			join buckets b on b.id = p.bucket_id and b.hidden = false
+			left join posting_tags pt on pt.posting_id = p.id
+			group by p.id, b.id
+		), matched_sides as (
+			select m.id as match_id, m.outgoing_transaction_id as transaction_id,
+				m.incoming_transaction_id as counterpart_id, 'outgoing' as side
+			from target
+			join account_movement_matches m on m.outgoing_transaction_id = target.id
 
 			union all
 
-			select
-				m.id,
-				m.incoming_transaction_id,
-				m.outgoing_transaction_id,
-				'incoming'
-			from account_movement_matches m
-			where m.incoming_transaction_id = any($1::uuid[])
+			select m.id, m.incoming_transaction_id, m.outgoing_transaction_id, 'incoming'
+			from target
+			join account_movement_matches m on m.incoming_transaction_id = target.id
+		), matched_transfer as (
+			select s.match_id, s.transaction_id, s.counterpart_id, s.side,
+				counterpart.occurred_at, b.id as bucket_id, b.name as bucket_name, b.kind as bucket_kind,
+				p.amount, p.currency
+			from matched_sides s
+			join transactions counterpart on counterpart.id = s.counterpart_id
+			join postings p on p.transaction_id = counterpart.id and p.import_row_id is not null
+			join buckets b on b.id = p.bucket_id
+		), unmatched_transfer as (
+			select distinct p.transaction_id,
+				case when imported.amount < 0 then 'outgoing' else 'incoming' end as side
+			from target
+			join postings p on p.transaction_id = target.id
+			join buckets b on b.id = p.bucket_id and b.kind = 'transit'
+			join postings imported on imported.transaction_id = p.transaction_id and imported.import_row_id is not null
+			where not exists (
+				select 1 from account_movement_matches m where m.outgoing_transaction_id = p.transaction_id
+			) and not exists (
+				select 1 from account_movement_matches m where m.incoming_transaction_id = p.transaction_id
+			)
 		)
-		select
-			sides.match_id, sides.transaction_id, sides.counterpart_id, sides.side,
-			counterpart.occurred_at, b.id, b.name, b.kind, p.amount, p.currency
-		from sides
-		join transactions counterpart on counterpart.id = sides.counterpart_id
-		join postings p on p.transaction_id = counterpart.id
-		  and p.import_row_id is not null
-		join buckets b on b.id = p.bucket_id
-	`, ids)
+		select target.id, target.owner_user_id, target.occurred_at, target.counterparty,
+			target.description, target.memo, target.created_at,
+			p.id, p.bucket_id, p.bucket_name, p.bucket_kind, p.amount, p.currency,
+			p.stats_date, p.memo, p.import_row_id, p.mirror_id, p.tags,
+			m.match_id, m.side, m.counterpart_id, m.occurred_at, m.bucket_id,
+			m.bucket_name, m.bucket_kind, m.amount, m.currency, u.side
+		from target
+		left join target_postings p on p.transaction_id = target.id
+		left join matched_transfer m on m.transaction_id = target.id
+		left join unmatched_transfer u on u.transaction_id = target.id
+		order by p.created_at, p.id
+	`, id, userID)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	defer rows.Close()
+
+	var t Transaction
+	var ps []Posting
+	found := false
 	for rows.Next() {
-		var mid, transactionID, counterpartID, side, bucketID, bucketName, bucketKind, currency string
-		var occurredAt time.Time
-		var amount int64
-		if err = rows.Scan(&mid, &transactionID, &counterpartID, &side, &occurredAt, &bucketID, &bucketName, &bucketKind, &amount, &currency); err != nil {
-			return err
+		found = true
+		var (
+			postingID, bucketID, bucketName, bucketKind, currency sql.NullString
+			postingAmount                                         sql.NullInt64
+			statsDate                                             sql.NullTime
+			postingMemo, importRowID, mirrorID                    sql.NullString
+			tags                                                  []byte
+			matchID, matchSide, counterpartID                     sql.NullString
+			counterpartOccurredAt                                 sql.NullTime
+			counterpartBucketID, counterpartBucketName            sql.NullString
+			counterpartBucketKind, counterpartCurrency            sql.NullString
+			counterpartAmount                                     sql.NullInt64
+			unmatchedSide                                         sql.NullString
+		)
+		if err = rows.Scan(
+			&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt,
+			&postingID, &bucketID, &bucketName, &bucketKind, &postingAmount, &currency,
+			&statsDate, &postingMemo, &importRowID, &mirrorID, &tags,
+			&matchID, &matchSide, &counterpartID, &counterpartOccurredAt, &counterpartBucketID,
+			&counterpartBucketName, &counterpartBucketKind, &counterpartAmount, &counterpartCurrency, &unmatchedSide,
+		); err != nil {
+			return nil, nil, err
 		}
-		if x, ok := at[transactionID]; ok {
-			txns[x].Transfer = &TransferInfo{
-				MatchID:               mid,
-				Side:                  side,
-				CounterpartID:         counterpartID,
-				CounterpartOccurredAt: occurredAt,
-				CounterpartBucket:     &PostingBucket{ID: bucketID, Name: bucketName, Kind: BucketKind(bucketKind)},
-				CounterpartAmount:     amount,
-				CounterpartCurrency:   currency,
+		if postingID.Valid {
+			p := Posting{
+				ID:       postingID.String,
+				BucketID: bucketID.String,
+				Bucket: PostingBucket{
+					ID: bucketID.String, Name: bucketName.String, Kind: BucketKind(bucketKind.String),
+				},
+				Amount: postingAmount.Int64, Currency: currency.String, Memo: postingMemo.String,
+				Tags: []string{},
 			}
+			if statsDate.Valid {
+				p.StatsDate = &statsDate.Time
+			}
+			if importRowID.Valid {
+				p.ImportRowID = &importRowID.String
+			}
+			if mirrorID.Valid {
+				p.MirrorID = &mirrorID.String
+			}
+			if err = json.Unmarshal(tags, &p.Tags); err != nil {
+				return nil, nil, err
+			}
+			ps = append(ps, p)
+		}
+		if matchID.Valid {
+			t.Transfer = &TransferInfo{
+				MatchID:               matchID.String,
+				Side:                  matchSide.String,
+				CounterpartID:         counterpartID.String,
+				CounterpartOccurredAt: counterpartOccurredAt.Time,
+				CounterpartBucket: &PostingBucket{
+					ID: counterpartBucketID.String, Name: counterpartBucketName.String, Kind: BucketKind(counterpartBucketKind.String),
+				},
+				CounterpartAmount:   counterpartAmount.Int64,
+				CounterpartCurrency: counterpartCurrency.String,
+			}
+		} else if unmatchedSide.Valid {
+			t.Transfer = &TransferInfo{Side: unmatchedSide.String, Unmatched: true}
 		}
 	}
 	if err = rows.Err(); err != nil {
-		return err
+		return nil, nil, err
 	}
-	unmatched, err := d.db.QueryContext(ctx, `
-		select distinct
-			p.transaction_id,
-			case when imported.amount < 0 then 'outgoing' else 'incoming' end
-		from postings p
-		join buckets b on b.id = p.bucket_id
-		  and b.kind = 'transit'
-		join postings imported on imported.transaction_id = p.transaction_id
-		  and imported.import_row_id is not null
-		where p.transaction_id = any($1::uuid[])
-		  and not exists (
-			select 1
-			from account_movement_matches m
-			where m.outgoing_transaction_id = p.transaction_id
-		  )
-		  and not exists (
-			select 1
-			from account_movement_matches m
-			where m.incoming_transaction_id = p.transaction_id
-		  )
-	`, ids)
-	if err != nil {
-		return err
+	if !found {
+		return nil, nil, ErrNotFound
 	}
-	defer unmatched.Close()
-	for unmatched.Next() {
-		var id, side string
-		if err = unmatched.Scan(&id, &side); err != nil {
-			return err
-		}
-		if x, ok := at[id]; ok {
-			txns[x].Transfer = &TransferInfo{Side: side, Unmatched: true}
-		}
-	}
-	return unmatched.Err()
+	return &t, ps, nil
 }
 
 func ownedBuckets(ctx context.Context, tx *sql.Tx, owner string) (map[string]PostingBucket, error) {

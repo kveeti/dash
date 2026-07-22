@@ -375,6 +375,23 @@ func TestInboxCategorizeRejectsNonCategory(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+func TestInboxMatchesReturnsSourceWithoutCandidates(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	checking := createBucket(t, app, "asset", "Checking")
+	doImport(t, app, checking, nordeaHeader+nordeaRow("2026/07/01", "-5,00", "Only row", ""))
+	source := getInbox(t, app, "")[0]
+
+	resp := authed(t, app, http.MethodGet, "/api/v1/inbox/"+source.ID+"/matches", nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var suggestions struct {
+		Source  inboxRow   `json:"source"`
+		Matches []inboxRow `json:"matches"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&suggestions))
+	require.Equal(t, source.ID, suggestions.Source.ID)
+	require.Empty(t, suggestions.Matches)
+}
+
 func TestMatchInboxTransfer(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	checking := createBucket(t, app, "asset", "Checking")
@@ -427,6 +444,9 @@ func TestMatchInboxTransfer(t *testing.T) {
 		require.Equal(t, -txn.Postings[0].Amount, txn.Transfer.CounterpartAmount)
 		require.Equal(t, txn.Postings[0].Currency, txn.Transfer.CounterpartCurrency)
 	}
+	detail := getTransaction(t, app, page.Transactions[0].ID)
+	require.Equal(t, page.Transactions[0].Transfer, detail.Transfer)
+	require.Equal(t, page.Transactions[0].Postings, detail.Postings)
 	transit := systemBucketID(t, app, "transit")
 	midpoint := postingTotalsAt(t, app, time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC))
 	require.Equal(t, int64(-50000), midpoint[checking]["EUR"])
