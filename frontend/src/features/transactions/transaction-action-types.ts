@@ -16,6 +16,7 @@ export type TransactionActionItem =
       name: string;
       value: string;
       state: TagState;
+      creatable?: boolean;
     }
   | { type: "remove"; id: "remove"; name: string };
 

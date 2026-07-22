@@ -7,8 +7,8 @@ import (
 )
 
 type tagBody struct {
-	TransactionIDs []string `json:"transaction_ids"`
-	Tag            string   `json:"tag"`
+	PostingIDs []string `json:"posting_ids"`
+	Tag        string   `json:"tag"`
 }
 
 func HandleAddTransactionTag(state *state.State, getUserID GetUserID) Handler {
@@ -21,7 +21,7 @@ func HandleAddTransactionTag(state *state.State, getUserID GetUserID) Handler {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
-		count, err := state.Data.AddTransactionTag(r.Context(), userID, body.TransactionIDs, body.Tag)
+		count, err := state.Data.AddPostingTag(r.Context(), userID, body.PostingIDs, body.Tag)
 		if err != nil {
 			return mapTransactionErr(err)
 		}
@@ -40,7 +40,7 @@ func HandleRemoveTransactionTag(state *state.State, getUserID GetUserID) Handler
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
-		count, err := state.Data.RemoveTransactionTag(r.Context(), userID, body.TransactionIDs, body.Tag)
+		count, err := state.Data.RemovePostingTag(r.Context(), userID, body.PostingIDs, body.Tag)
 		if err != nil {
 			return mapTransactionErr(err)
 		}

@@ -250,7 +250,7 @@ func TestDeleteImportRemovesTaggedTransaction(t *testing.T) {
 	require.Len(t, txns, 1)
 	txnID := txns[0]["id"].(string)
 	resp = authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
-		"transaction_ids": []string{txnID}, "tag": "imported",
+		"posting_ids": []string{postingIDForTransaction(t, app, txnID)}, "tag": "imported",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -266,7 +266,7 @@ func TestDeleteImportRemovesTaggedTransaction(t *testing.T) {
 	require.Empty(t, tags.Tags)
 }
 
-func TestDeleteImportReturnsMatchedRowFromOtherBatchToInbox(t *testing.T) {
+func TestDeleteImportLeavesOtherTransferSideUnmatched(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	checking := createBucket(t, app, "asset", "Checking")
 	savings := createBucket(t, app, "asset", "Savings")
@@ -290,11 +290,11 @@ func TestDeleteImportReturnsMatchedRowFromOtherBatchToInbox(t *testing.T) {
 	resp = authed(t, app, http.MethodDelete, "/api/v1/imports/"+checkingImport.ID, nil)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
-	rows = getInbox(t, app, "")
-	require.Len(t, rows, 1)
-	require.Equal(t, int64(50000), rows[0].Amount)
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	require.Empty(t, decodeTxns(t, resp))
+	require.Empty(t, getInbox(t, app, ""))
+	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
+	require.Len(t, page.Transactions, 1)
+	require.NotNil(t, page.Transactions[0].Transfer)
+	require.True(t, page.Transactions[0].Transfer.Unmatched)
 }
 
 func TestImportCollectsRowErrors(t *testing.T) {
@@ -363,6 +363,12 @@ func TestImportRejectsBadBucket(t *testing.T) {
 
 	resp = importCSV(t, app, "00000000-0000-0000-0000-000000000000", csv)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	var batches, files int
+	require.NoError(t, app.d.Users.QueryRow("select count(*) from import_batches").Scan(&batches))
+	require.NoError(t, app.d.Users.QueryRow("select count(*) from import_files").Scan(&files))
+	require.Zero(t, batches)
+	require.Zero(t, files)
 }
 
 func TestListImports(t *testing.T) {

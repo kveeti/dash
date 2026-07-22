@@ -11,9 +11,9 @@ import type {
   TransactionActionGroup,
   TransactionActionItem,
 } from "./transaction-action-types";
+import { useTagComboboxState } from "./transaction-details/tag-field";
 import { useCategoryActions } from "./use-category-actions";
 import { useRemoveTransactionAction } from "./use-remove-transaction-action";
-import { useTagActions } from "./use-tag-actions";
 import { useTagOptionKeyboard } from "./use-tag-option-keyboard";
 import { useTransactionActionsSession } from "./use-transaction-actions-session";
 
@@ -32,29 +32,32 @@ export function TransactionActionsCombobox(props: {
     selectedCount: props.ids.length,
     onFinish: props.onFinish,
   });
-  const tags = useTagActions({
-    search,
+  const newTags = useTagComboboxState({
     query,
-    ids: props.ids,
-    transactions: props.transactions,
-    retainedTags: session.retainedTags,
-    onRetainTag: session.retainTag,
+    search,
+    selectedItems: props.transactions.flatMap((t) => t.postings),
   });
   const remove = useRemoveTransactionAction({
     ids: props.ids,
     onFinish: props.onFinish,
   });
-  const groups = [categories.group, tags.group, remove.group].filter(
-    (group): group is TransactionActionGroup => group !== null,
-  );
+  const groups = [
+    categories.group,
+    {
+      id: "tags",
+      name: "Change or add tags...",
+      items: newTags.items,
+    },
+    remove.group,
+  ].filter((group): group is TransactionActionGroup => group !== null);
   const keyboard = useTagOptionKeyboard({
     groups,
-    onToggleTag: tags.toggle,
+    onToggleTag: newTags.toggle,
   });
 
   function select(item: TransactionActionItem) {
     if (item.type === "tag") {
-      tags.toggle(item);
+      newTags.toggle(item);
     } else if (item.type === "remove") {
       remove.request();
     } else {
@@ -62,15 +65,14 @@ export function TransactionActionsCombobox(props: {
     }
   }
 
-  const isFetching = categories.isFetching || tags.isFetching;
-  const isPending = categories.isPending || tags.isPending;
-  const isError = categories.isError || tags.isError;
+  const isFetching = categories.isFetching || newTags.isFetching;
+  const isPending = categories.isPending || newTags.isPending;
+  const isError = categories.isError || Boolean(newTags.error);
 
   return (
     <>
       <Combobox.Root<TransactionActionItem>
         items={groups}
-        value={null}
         open={session.open}
         inputValue={session.input}
         filter={null}
@@ -163,7 +165,7 @@ export function TransactionActionsCombobox(props: {
                                   event.target.closest("[data-tag-checkbox]")
                                 ) {
                                   event.preventBaseUIHandler();
-                                  tags.toggle(item);
+                                  newTags.toggle(item);
                                 }
                               }}
                             >

@@ -42,6 +42,17 @@ func (s *PostgresFileStore) Put(ctx context.Context, key string, r io.Reader) er
 	return err
 }
 
+func (s *PostgresFileStore) PutTx(ctx context.Context, tx *sql.Tx, key string, r io.Reader) error {
+	content, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx,
+		"insert into import_files (batch_id, content, created_at) values ($1, $2, $3)",
+		key, content, time.Now().UTC())
+	return err
+}
+
 func (s *PostgresFileStore) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	var content []byte
 	err := s.db.QueryRowContext(ctx, "select content from import_files where batch_id = $1", key).Scan(&content)

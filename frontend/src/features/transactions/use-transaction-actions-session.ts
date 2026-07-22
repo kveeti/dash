@@ -3,7 +3,6 @@ import { useState } from "react";
 type Session = {
   open: boolean;
   input: string;
-  retainedTags: string[];
 };
 
 export function useTransactionActionsSession() {
@@ -24,17 +23,6 @@ export function useTransactionActionsSession() {
     });
   }
 
-  function retainTag(tag: string) {
-    setSession((current) =>
-      current && !current.retainedTags.includes(tag)
-        ? {
-            ...current,
-            retainedTags: [...current.retainedTags, tag].sort(),
-          }
-        : current,
-    );
-  }
-
   function completeOpenChange(open: boolean) {
     if (!open) setSession(null);
   }
@@ -42,10 +30,8 @@ export function useTransactionActionsSession() {
   return {
     open: session?.open ?? false,
     input: session?.input ?? "",
-    retainedTags: session?.retainedTags ?? [],
     setInput,
     setOpen,
-    retainTag,
     completeOpenChange,
   };
 }

@@ -4,17 +4,14 @@ import * as v from "valibot";
 import { Link } from "wouter";
 
 import { useBucketsQuery } from "../../api/buckets";
-import { useCurrenciesQuery } from "../../api/currencies";
 import {
   useCreateImportMutation,
   useInfiniteImportsQuery,
 } from "../../api/imports";
-import { useMeQuery } from "../../api/user";
 import { Button } from "../../ui/button/button";
 import { Field, FileInput, Select } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
-import { TransactionForm } from "../transactions/new-transaction-page";
 
 const schema = v.object({
   file: v.instance(File, "Choose a file"),
@@ -36,11 +33,6 @@ export default function ImportsPage() {
       <section>
         <h1 className="text-lg font-medium mb-3">Past imports</h1>
         <PastImports />
-      </section>
-
-      <section>
-        <h1 className="text-lg font-medium mb-3">Import manually</h1>
-        <ManualImport />
       </section>
     </div>
   );
@@ -255,22 +247,5 @@ function LoadMore(props: {
     <div ref={ref} className="p-3 text-center text-base text-gray-700">
       {props.imports.isFetchingNextPage ? "Loading…" : "Load more"}
     </div>
-  );
-}
-
-function ManualImport() {
-  const currencies = useCurrenciesQuery();
-  const me = useMeQuery();
-
-  if (currencies.isError || me.isError) {
-    return <p>error: {(currencies.error ?? me.error)?.message}</p>;
-  }
-  if (!currencies.data || !me.data) return <p>loading…</p>;
-
-  return (
-    <TransactionForm
-      homeCurrency={me.data.home_currency}
-      showCategoryKindSelector={false}
-    />
   );
 }

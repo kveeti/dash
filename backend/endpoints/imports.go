@@ -33,9 +33,8 @@ func mapImportErr(err error) error {
 }
 
 // HandleCreateImport lands the upload durably and returns immediately; parsing
-// and promotion happen in the background worker. It caps the body, validates the
-// bucket, checks the selected format's header, then buffers to a temp file (so
-// the slow upload holds no DB connection) before storing it.
+// and promotion happen in the background worker. It caps the body, checks the
+// selected format's header, then buffers to a temp file before storing it.
 func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)
@@ -65,10 +64,6 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 		if _, err := time.LoadLocation(timezone); err != nil || timezone == "" {
 			return NewErr("valid timezone is required", http.StatusBadRequest)
 		}
-		if err := state.Data.ValidateImportBucket(r.Context(), userID, bucketID); err != nil {
-			return mapImportErr(err)
-		}
-
 		file, header, err := r.FormFile("file")
 		if err != nil {
 			return NewErr("file is required", http.StatusBadRequest)

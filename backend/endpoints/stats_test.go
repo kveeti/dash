@@ -5,17 +5,19 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 func postDatedTransaction(t *testing.T, app *testApp, date string, postings []map[string]any) {
 	t.Helper()
-	resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-		"date":     date + "T00:00:00Z",
-		"postings": postings,
-	})
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	require.Len(t, postings, 2)
+	occurredAt, err := time.Parse("2006-01-02", date)
+	require.NoError(t, err)
+	amount, ok := postings[0]["amount"].(int)
+	require.True(t, ok)
+	seedCategorizedTransaction(t, app, occurredAt, postings[0]["bucket_id"].(string), postings[1]["bucket_id"].(string), int64(amount), postings[0]["currency"].(string), "Stats")
 }
 
 func getStats(t *testing.T, app *testApp, query url.Values) statsResponse {
@@ -141,14 +143,9 @@ func TestStatsUsesUserTimezoneForTransactionDates(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
 	food := createBucket(t, app, "expense", "Food")
-	resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-		"date": "2026-07-01T00:00:00+03:00",
-		"postings": []map[string]any{
-			{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-			{"bucket_id": food, "amount": 1000, "currency": "EUR"},
-		},
-	})
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	occurredAt, err := time.Parse(time.RFC3339, "2026-07-01T00:00:00+03:00")
+	require.NoError(t, err)
+	seedCategorizedTransaction(t, app, occurredAt, bank, food, -1000, "EUR", "Stats")
 
 	stats := getStats(t, app, url.Values{
 		"period":   {"custom"},
@@ -159,6 +156,34 @@ func TestStatsUsesUserTimezoneForTransactionDates(t *testing.T) {
 		"timezone": {"Europe/Helsinki"},
 	})
 	require.Equal(t, int64(1000), stats.Summary.Expenses.Current)
+}
+
+func TestStatsDateControlsPeriodAndRateDateOnly(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	travel := createBucket(t, app, "expense", "Travel")
+	_, err := app.d.Users.Exec(`insert into rates(date,currency,rate) values
+		('2026-06-30','EUR',1),('2026-06-30','USD',2),
+		('2026-07-01','EUR',1),('2026-07-01','USD',1)`)
+	require.NoError(t, err)
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, travel, -10000, "USD", "Train")
+
+	july := getStats(t, app, url.Values{"period": {"custom"}, "from": {"2026-07-01"}, "to": {"2026-07-01"}, "today": {"2026-07-02"}, "compare": {"previous"}})
+	require.Equal(t, int64(10000), july.Summary.Expenses.Current)
+
+	resp := authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"postings": []map[string]any{
+		{"id": seed.UserPostingID, "bucket_id": travel, "amount": 6000, "currency": "USD", "stats_date": "2026-06-30"},
+		{"bucket_id": travel, "amount": 4000, "currency": "USD", "stats_date": "2026-06-30"},
+	}})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	july = getStats(t, app, url.Values{"period": {"custom"}, "from": {"2026-07-01"}, "to": {"2026-07-01"}, "today": {"2026-07-02"}, "compare": {"previous"}})
+	require.Zero(t, july.Summary.Expenses.Current)
+	june := getStats(t, app, url.Values{"period": {"custom"}, "from": {"2026-06-30"}, "to": {"2026-06-30"}, "today": {"2026-07-02"}, "compare": {"previous"}})
+	require.Equal(t, int64(5000), june.Summary.Expenses.Current)
+
+	totals := postingTotals(t, app)
+	require.Equal(t, int64(-10000), totals[bank]["USD"])
+	require.Equal(t, int64(10000), totals[travel]["USD"])
 }
 
 func TestStatsWeekLastYearUses52Weeks(t *testing.T) {

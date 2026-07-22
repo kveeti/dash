@@ -32,16 +32,18 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/v1/buckets", NewHandler(HandleCreateBucket(state, getUserID)))
 
 	mux.HandleFunc("GET /api/v1/transactions", NewHandler(HandleListTransactions(state, getUserID)))
-	mux.HandleFunc("POST /api/v1/transactions", NewHandler(HandleCreateTransaction(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/transactions/{id}", NewHandler(HandleGetTransaction(state, getUserID)))
 	mux.HandleFunc("DELETE /api/v1/transactions", NewHandler(HandleRemoveTransactions(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/transactions/categorize", NewHandler(HandleBulkCategorize(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/transactions/tags", NewHandler(HandleAddTransactionTag(state, getUserID)))
 	mux.HandleFunc("DELETE /api/v1/transactions/tags", NewHandler(HandleRemoveTransactionTag(state, getUserID)))
 	mux.HandleFunc("GET /api/v1/tags", NewHandler(HandleListTags(state, getUserID)))
-	mux.HandleFunc("PATCH /api/v1/transactions/{id}", NewHandler(HandleUpdateTransaction(state, getUserID)))
+	mux.HandleFunc("PATCH /api/v1/transactions/{id}", NewHandler(HandlePatchTransaction(state, getUserID)))
+	mux.HandleFunc("PUT /api/v1/transactions/{id}/postings", NewHandler(HandleSplitTransaction(state, getUserID)))
 	mux.HandleFunc("DELETE /api/v1/transactions/{id}", NewHandler(HandleDeleteTransaction(state, getUserID)))
+	mux.HandleFunc("PATCH /api/v1/postings/{id}", NewHandler(HandlePatchPosting(state, getUserID)))
+	mux.HandleFunc("DELETE /api/v1/transfer-matches/{id}", NewHandler(HandleUnmatchTransfer(state, getUserID)))
 
-	mux.HandleFunc("GET /api/v1/balances", NewHandler(HandleGetBalances(state, getUserID)))
 	mux.HandleFunc("GET /api/v1/stats", NewHandler(HandleGetStats(state, getUserID)))
 
 	mux.HandleFunc("GET /api/v1/inbox", NewHandler(HandleListInbox(state, getUserID)))

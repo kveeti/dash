@@ -204,7 +204,18 @@ test("real app: undo restores both matched rows", async ({ page }) => {
   await page.goto("/inbox");
   await page.getByRole("button", { name: /Transfer out/ }).click();
   await page.getByRole("option", { name: "Match transactions" }).click();
+  const matchResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/match") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("option", { name: /Transfer in/ }).click();
+  expect((await matchResponse).ok()).toBe(true);
+  const transactions = await page.request.get("/api/v1/transactions");
+  await expect(transactions).toBeOK();
+  expect(
+    ((await transactions.json()) as { transactions: unknown[] }).transactions,
+  ).toHaveLength(2);
   await expect(
     page.getByRole("button", { name: /Transfer out/ }),
   ).not.toBeVisible();

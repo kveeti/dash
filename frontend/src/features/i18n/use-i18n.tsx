@@ -24,13 +24,11 @@ function useI18nValue(props: {
   isError: boolean;
 }) {
   const locale = "fi-FI";
-  const timeZone = undefined;
-  const hourCycle: 12 | 24 = 24;
-
-  const resolvedOptions = useMemo(
-    () => new Intl.DateTimeFormat(locale, { timeZone }).resolvedOptions(),
-    [locale, timeZone],
+  const timeZone = useMemo(
+    () => new Intl.DateTimeFormat(locale).resolvedOptions().timeZone,
+    [locale],
   );
+  const hourCycle: 12 | 24 = 24;
 
   const shortDateFormatter = useMemo(
     () =>
@@ -38,8 +36,9 @@ function useI18nValue(props: {
         weekday: "short",
         month: "short",
         day: "numeric",
+        timeZone,
       }),
-    [locale],
+    [locale, timeZone],
   );
 
   const longDateFormatter = useMemo(
@@ -48,16 +47,28 @@ function useI18nValue(props: {
         month: "short",
         day: "numeric",
         year: "numeric",
+        timeZone,
       }),
-    [locale],
+    [locale, timeZone],
+  );
+
+  const longDateTimeFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        dateStyle: "long",
+        timeStyle: "short",
+        timeZone,
+      }),
+    [locale, timeZone],
   );
 
   const monthFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
         month: "long",
+        timeZone,
       }),
-    [locale],
+    [locale, timeZone],
   );
 
   const monthYearFormatter = useMemo(
@@ -65,8 +76,9 @@ function useI18nValue(props: {
       new Intl.DateTimeFormat(locale, {
         month: "long",
         year: "numeric",
+        timeZone,
       }),
-    [locale],
+    [locale, timeZone],
   );
 
   const percentFormatter = useMemo(
@@ -130,10 +142,11 @@ function useI18nValue(props: {
       percent: percentFormatter.format,
       shortDate: shortDateFormatter.format,
       longDate: longDateFormatter.format,
+      longDateTime: longDateTimeFormatter.format,
       month: monthFormatter.format,
       monthYear: monthYearFormatter.format,
     },
     hourCycle,
-    timeZone: resolvedOptions.timeZone,
+    timeZone,
   };
 }

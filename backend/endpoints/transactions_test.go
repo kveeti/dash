@@ -2,22 +2,36 @@ package endpoints
 
 import (
 	"encoding/json"
-	"money/backend/data"
+	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
+	"time"
 
-	"github.com/oauth2-proxy/mockoidc"
+	"money/backend/data"
+
 	"github.com/stretchr/testify/require"
 )
+
+type seededTransaction struct {
+	RowID         string
+	TransactionID string
+	ImportedID    string
+	UserPostingID string
+}
+
+func decodeTransactionPage(t *testing.T, resp *http.Response) transactionsResponse {
+	t.Helper()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var out transactionsResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	return out
+}
 
 func decodeTxns(t *testing.T, resp *http.Response) []map[string]any {
 	t.Helper()
 	var body struct {
 		Transactions []map[string]any `json:"transactions"`
-		NextCursor   *struct {
-			Date string `json:"date"`
-			ID   string `json:"id"`
-		} `json:"next_cursor"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	return body.Transactions
@@ -32,559 +46,306 @@ func createBucket(t *testing.T, app *testApp, kind, name string) string {
 	return b["id"].(string)
 }
 
-func clearingBucketID(t *testing.T, app *testApp) string {
+func seedCategorizedTransaction(t *testing.T, app *testApp, occurredAt time.Time, accountID, categoryID string, amount int64, currency, counterparty string) seededTransaction {
 	t.Helper()
-	resp := authed(t, app, http.MethodGet, "/api/v1/buckets", nil)
-	for _, b := range decodeBuckets(t, resp) {
-		if b["kind"] == "clearing" {
-			return b["id"].(string)
-		}
-	}
-	t.Fatal("no clearing bucket")
-	return ""
+	var userID string
+	require.NoError(t, app.d.Users.QueryRow("select owner_user_id from buckets where id=$1", accountID).Scan(&userID))
+
+	batchID := data.NewPrivateID()
+	rowID := data.NewPrivateID()
+	_, err := app.d.Users.Exec(`insert into import_batches(id,user_id,bucket_id,source,filename,timezone,created_at,status)
+		values($1,$2,$3,'nordea','test.csv','UTC',now(),'done')`, batchID, userID, accountID)
+	require.NoError(t, err)
+	_, err = app.d.Users.Exec(`insert into import_rows(id,batch_id,date,amount,currency,raw_description,raw,dedup_hash,status)
+		values($1,$2,$3,$4,$5,$6,jsonb_build_object('payee',$6::text),$1::uuid::text,'pending')`,
+		rowID, batchID, occurredAt, amount, currency, counterparty)
+	require.NoError(t, err)
+
+	n, err := app.d.CategorizeInboxRows(t.Context(), userID, []string{rowID}, categoryID)
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	var out seededTransaction
+	out.RowID = rowID
+	require.NoError(t, app.d.Users.QueryRow(`select p.transaction_id,p.id,u.id
+		from postings p join postings u on u.transaction_id=p.transaction_id and u.import_row_id is null
+		where p.import_row_id=$1`, rowID).Scan(&out.TransactionID, &out.ImportedID, &out.UserPostingID))
+	return out
 }
 
-func postTransaction(t *testing.T, app *testApp, postings []map[string]any) *http.Response {
+func getTransaction(t *testing.T, app *testApp, id string) transactionResponse {
 	t.Helper()
-	return authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-		"date":        "2026-07-01T00:00:00Z",
-		"description": "test",
-		"postings":    postings,
-	})
+	resp := authed(t, app, http.MethodGet, "/api/v1/transactions/"+id, nil)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var out transactionResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
+	return out
 }
 
-func requirePostingBucket(t *testing.T, postings []postingResponse, id, name string, kind data.BucketKind) {
+func postingByID(t *testing.T, postings []postingResponse, id string) postingResponse {
 	t.Helper()
 	for _, posting := range postings {
-		if posting.Bucket.ID == id {
-			require.Equal(t, postingBucketResponse{ID: id, Name: name, Kind: kind}, posting.Bucket)
-			return
+		if posting.ID == id {
+			return posting
 		}
 	}
-	t.Fatalf("no posting for bucket %s", id)
+	t.Fatalf("posting %s not found", id)
+	return postingResponse{}
 }
 
-func createTransaction(t *testing.T, app *testApp, postings []map[string]any) string {
-	t.Helper()
-	resp := postTransaction(t, app, postings)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-	var txn map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&txn))
-	return txn["id"].(string)
+func TestManualTransactionCreationIsRemoved(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{})
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
-func TestCreateBalancedTransaction(t *testing.T) {
+func TestTransactionListAndDetailUseImportedSource(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
+	food := createBucket(t, app, "expense", "Food")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 12, 30, 0, 0, time.UTC), bank, food, -1234, "EUR", "Market")
 
-	resp := postTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-	})
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-	var created transactionResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-	requirePostingBucket(t, created.Postings, bank, "Bank", data.KindAsset)
-	requirePostingBucket(t, created.Postings, groceries, "Groceries", data.KindExpense)
+	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
+	require.Len(t, page.Transactions, 1)
+	require.Equal(t, seed.TransactionID, page.Transactions[0].ID)
+	require.Equal(t, "2026-07-01T12:30:00Z", page.Transactions[0].OccurredAt)
+	require.Len(t, page.Transactions[0].Postings, 2)
+	require.True(t, postingByID(t, page.Transactions[0].Postings, seed.ImportedID).Imported)
+	require.False(t, postingByID(t, page.Transactions[0].Postings, seed.UserPostingID).Imported)
 
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var listed transactionsResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&listed))
-	require.Len(t, listed.Transactions, 1)
-	require.Equal(t, "2026-07-01T00:00:00Z", listed.Transactions[0].Date)
-	requirePostingBucket(t, listed.Transactions[0].Postings, bank, "Bank", data.KindAsset)
-	requirePostingBucket(t, listed.Transactions[0].Postings, groceries, "Groceries", data.KindExpense)
+	detail := getTransaction(t, app, seed.TransactionID)
+	require.Equal(t, "Market", detail.Counterparty)
+	require.Equal(t, seed.TransactionID, detail.ID)
 }
 
-func TestCounterpartyRoundTrips(t *testing.T) {
+func TestPatchTransactionOnlyChangesMemo(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
+	food := createBucket(t, app, "expense", "Food")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, food, -1000, "EUR", "Market")
 
-	resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-		"date":         "2026-07-01T00:00:00Z",
-		"counterparty": "K-Market",
-		"description":  "weekly shop",
-		"postings": []map[string]any{
-			{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-			{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-		},
-	})
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-	var created map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-	require.Equal(t, "K-Market", created["counterparty"])
-
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 1)
-	require.Equal(t, "K-Market", txns[0]["counterparty"])
-
-	resp = authed(t, app, http.MethodPatch, "/api/v1/transactions/"+created["id"].(string), map[string]any{
-		"date":         "2026-07-01T00:00:00Z",
-		"counterparty": "Lidl",
-		"description":  "weekly shop",
-		"postings": []map[string]any{
-			{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-			{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-		},
-	})
+	resp := authed(t, app, http.MethodPatch, "/api/v1/transactions/"+seed.TransactionID, map[string]any{"memo": "Work"})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var updated transactionResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updated))
-	requirePostingBucket(t, updated.Postings, bank, "Bank", data.KindAsset)
-	requirePostingBucket(t, updated.Postings, groceries, "Groceries", data.KindExpense)
+	require.Equal(t, "Market", updated.Counterparty)
+	require.Empty(t, updated.Description)
+	require.Equal(t, "Work", updated.Memo)
+	require.Equal(t, "2026-07-01T00:00:00Z", updated.OccurredAt)
 
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns = decodeTxns(t, resp)
-	require.Equal(t, "Lidl", txns[0]["counterparty"])
+	resp = authed(t, app, http.MethodPatch, "/api/v1/transactions/"+seed.TransactionID, map[string]any{
+		"counterparty": "Shop", "description": "Lunch", "occurred_at": "2030-01-01T00:00:00Z",
+	})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	unchanged := getTransaction(t, app, seed.TransactionID)
+	require.Equal(t, "Market", unchanged.Counterparty)
+	require.Empty(t, unchanged.Description)
+	require.Equal(t, "2026-07-01T00:00:00Z", unchanged.OccurredAt)
 }
 
-func TestCounterpartyDefaultsEmpty(t *testing.T) {
+func TestPatchPostingOnlyChangesSingleTransactionCategory(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
+	food := createBucket(t, app, "expense", "Food")
+	travel := createBucket(t, app, "expense", "Travel")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, food, -1000, "EUR", "Market")
 
-	resp := postTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-	})
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-	var created map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&created))
-	require.Equal(t, "", created["counterparty"])
-}
-
-func TestListOrdersByDateDesc(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-
-	post := func(date string) {
-		resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-			"date":        date,
-			"description": date,
-			"postings": []map[string]any{
-				{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-				{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-			},
-		})
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
-	}
-	post("2026-07-01T00:00:00Z")
-	post("2026-07-03T00:00:00Z")
-	post("2026-07-02T00:00:00Z")
-
-	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 3)
-	require.Equal(t, "2026-07-03T00:00:00Z", txns[0]["date"])
-	require.Equal(t, "2026-07-02T00:00:00Z", txns[1]["date"])
-	require.Equal(t, "2026-07-01T00:00:00Z", txns[2]["date"])
-}
-
-func TestSearchByCounterparty(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-
-	post := func(counterparty string) {
-		resp := authed(t, app, http.MethodPost, "/api/v1/transactions", map[string]any{
-			"date":         "2026-07-01T00:00:00Z",
-			"counterparty": counterparty,
-			"postings": []map[string]any{
-				{"bucket_id": bank, "amount": -100, "currency": "EUR"},
-				{"bucket_id": groceries, "amount": 100, "currency": "EUR"},
-			},
-		})
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
-	}
-	post("K-Market Kamppi")
-	post("K-Market Helsinki")
-	post("Shell")
-
-	resp := authed(t, app, http.MethodGet, "/api/v1/transactions?q=market", nil)
+	resp := authed(t, app, http.MethodPatch, "/api/v1/postings/"+seed.UserPostingID, map[string]any{"bucket_id": travel})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	require.Len(t, decodeTxns(t, resp), 2)
-}
+	posting := postingByID(t, getTransaction(t, app, seed.TransactionID).Postings, seed.UserPostingID)
+	require.Equal(t, travel, posting.Bucket.ID)
+	require.Empty(t, posting.Memo)
+	require.Nil(t, posting.StatsDate)
 
-// BulkCategorize recategorizes existing transactions (transactions page), repointing
-// each one's single expense/income leg to a new category.
-func TestTransactionTags(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	first := createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -500, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
+	resp = authed(t, app, http.MethodPatch, "/api/v1/postings/"+seed.UserPostingID, map[string]any{
+		"bucket_id": food, "memo": "Train", "stats_date": "2026-06-30",
 	})
-	createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -700, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 700, "currency": "EUR"},
-	})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	posting = postingByID(t, getTransaction(t, app, seed.TransactionID).Postings, seed.UserPostingID)
+	require.Equal(t, travel, posting.Bucket.ID)
+	require.Empty(t, posting.Memo)
+	require.Nil(t, posting.StatsDate)
 
-	body := map[string]any{"transaction_ids": []string{first}, "tag": "  Summer Holiday  "}
-	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", body)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	resp = authed(t, app, http.MethodPost, "/api/v1/transactions/tags", body)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions?tag=SUMMER%20HOLIDAY", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 1)
-	require.Equal(t, first, txns[0]["id"])
-	require.Equal(t, []any{"summer holiday"}, txns[0]["tags"])
-
-	resp = authed(t, app, http.MethodGet, "/api/v1/tags?q=holiday", nil)
-	var tags struct {
-		Tags []string `json:"tags"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&tags))
-	require.Equal(t, []string{"summer holiday"}, tags.Tags)
-
-	resp = authed(t, app, http.MethodDelete, "/api/v1/transactions/tags", map[string]any{
-		"transaction_ids": []string{first}, "tag": "SUMMER HOLIDAY",
-	})
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions?tag=summer%20holiday", nil)
-	require.Empty(t, decodeTxns(t, resp))
-}
-
-func TestTransactionTagRejectsEmpty(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
-		"transaction_ids": []string{}, "tag": "  ",
-	})
+	resp = authed(t, app, http.MethodPatch, "/api/v1/postings/"+seed.ImportedID, map[string]any{"bucket_id": travel})
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestCannotTagAnotherUsersTransaction(t *testing.T) {
+func TestPostingTagsListFilterAndRemove(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	txn := createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -500, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
-	})
+	food := createBucket(t, app, "expense", "Food")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, food, -1000, "EUR", "Market")
 
-	app.mock.QueueUser(&mockoidc.MockUser{
-		Subject: "another-user", Email: "other@example.com", EmailVerified: true,
-	})
 	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
-		"transaction_ids": []string{txn}, "tag": "private",
+		"posting_ids": []string{seed.ImportedID}, "tag": "bank-fact",
+	})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	resp = authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
+		"posting_ids": []string{seed.UserPostingID}, "tag": "  Holiday  ",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var result map[string]int
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&result))
-	require.Zero(t, result["tagged"])
+	posting := postingByID(t, getTransaction(t, app, seed.TransactionID).Postings, seed.UserPostingID)
+	require.Equal(t, []string{"holiday"}, posting.Tags)
 
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions?tag=private", nil)
-	require.Empty(t, decodeTxns(t, resp))
+	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions?tag=holiday", nil))
+	require.Len(t, page.Transactions, 1)
+	page = decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions?tag=other", nil))
+	require.Empty(t, page.Transactions)
+
+	resp = authed(t, app, http.MethodDelete, "/api/v1/transactions/tags", map[string]any{
+		"posting_ids": []string{seed.UserPostingID}, "tag": "HOLIDAY",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Empty(t, postingByID(t, getTransaction(t, app, seed.TransactionID).Postings, seed.UserPostingID).Tags)
 }
 
-func TestTransactionTagsSurviveEdit(t *testing.T) {
+func TestBulkCategorizeMovesSingleCategoryPosting(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	txn := createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -500, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
-	})
-	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
-		"transaction_ids": []string{txn}, "tag": "holiday",
-	})
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	resp = authed(t, app, http.MethodPatch, "/api/v1/transactions/"+txn, map[string]any{
-		"date": "2026-07-02T00:00:00Z", "description": "edited",
-		"postings": []map[string]any{
-			{"bucket_id": bank, "amount": -700, "currency": "EUR"},
-			{"bucket_id": groceries, "amount": 700, "currency": "EUR"},
-		},
-	})
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var updated map[string]any
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&updated))
-	require.Equal(t, []any{"holiday"}, updated["tags"])
-
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions?tag=holiday", nil)
-	require.Len(t, decodeTxns(t, resp), 1)
-}
-
-func TestBulkCategorize(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	dining := createBucket(t, app, "expense", "Dining")
-	groceries := createBucket(t, app, "expense", "Groceries")
-
-	entry := func() string {
-		return createTransaction(t, app, []map[string]any{
-			{"bucket_id": bank, "amount": -500, "currency": "EUR"},
-			{"bucket_id": dining, "amount": 500, "currency": "EUR"},
-		})
-	}
-	a, b, c := entry(), entry(), entry()
+	food := createBucket(t, app, "expense", "Food")
+	travel := createBucket(t, app, "expense", "Travel")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, food, -1000, "EUR", "Market")
 
 	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/categorize", map[string]any{
-		"transaction_ids": []string{a, b, c},
-		"bucket_id":       groceries,
+		"transaction_ids": []string{seed.TransactionID}, "bucket_id": travel,
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var out map[string]int
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
-	require.Equal(t, 3, out["categorized"])
-
-	balances := getBalances(t, app)
-	require.Equal(t, int64(1500), balances[groceries]["EUR"])
-	require.NotContains(t, balances, dining)
+	require.Equal(t, 1, out["categorized"])
+	require.Equal(t, travel, postingByID(t, getTransaction(t, app, seed.TransactionID).Postings, seed.UserPostingID).Bucket.ID)
 }
 
-func TestBulkCategorizeRejectsNonCategory(t *testing.T) {
+func TestSplitKeepsSurvivingPostingIDMetadataAndTags(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	txn := createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -500, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
-	})
+	food := createBucket(t, app, "expense", "Food")
+	travel := createBucket(t, app, "expense", "Travel")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, food, -1000, "EUR", "Market")
 
-	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/categorize", map[string]any{
-		"transaction_ids": []string{txn},
-		"bucket_id":       bank,
-	})
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
-func TestRejectsUnsupportedCurrency(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	resp := postTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "XYZ"},
-		{"bucket_id": groceries, "amount": 1000, "currency": "XYZ"},
-	})
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
-func TestRejectsUnbalancedTransaction(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-
-	resp := postTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 500, "currency": "EUR"},
-	})
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
-// A cross-currency conversion routes through clearing and balances in every
-// currency: USD nets to zero, EUR nets to zero.
-func TestConversionThroughClearing(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	clearing := clearingBucketID(t, app)
-
-	resp := postTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -100, "currency": "USD"},
-		{"bucket_id": clearing, "amount": 100, "currency": "USD"},
-		{"bucket_id": clearing, "amount": -91, "currency": "EUR"},
-		{"bucket_id": bank, "amount": 91, "currency": "EUR"},
-	})
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-}
-
-// The same conversion but with a mismatched USD leg must be rejected.
-func TestRejectsUnbalancedConversion(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	clearing := clearingBucketID(t, app)
-
-	resp := postTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -100, "currency": "USD"},
-		{"bucket_id": clearing, "amount": 99, "currency": "USD"},
-		{"bucket_id": clearing, "amount": -91, "currency": "EUR"},
-		{"bucket_id": bank, "amount": 91, "currency": "EUR"},
-	})
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
-func TestRejectsPostingToUnownedBucket(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-
-	resp := postTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-		{"bucket_id": "00000000-0000-0000-0000-000000000000", "amount": 1000, "currency": "EUR"},
-	})
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
-func TestUpdateTransaction(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	id := createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-	})
-
-	resp := authed(t, app, http.MethodPatch, "/api/v1/transactions/"+id, map[string]any{
-		"date":        "2026-07-05T00:00:00Z",
-		"description": "updated",
-		"postings": []map[string]any{
-			{"bucket_id": bank, "amount": -1500, "currency": "EUR"},
-			{"bucket_id": groceries, "amount": 1500, "currency": "EUR"},
-		},
-	})
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	balances := getBalances(t, app)
-	require.Equal(t, int64(-1500), balances[bank]["EUR"])
-	require.Equal(t, int64(1500), balances[groceries]["EUR"])
-
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Len(t, txns, 1)
-	require.Equal(t, "updated", txns[0]["description"])
-	require.Equal(t, "2026-07-05T00:00:00Z", txns[0]["date"])
-}
-
-func TestUpdateRejectsUnbalanced(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	id := createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-	})
-
-	resp := authed(t, app, http.MethodPatch, "/api/v1/transactions/"+id, map[string]any{
-		"date": "2026-07-05T00:00:00Z", "description": "x",
-		"postings": []map[string]any{
-			{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-			{"bucket_id": groceries, "amount": 999, "currency": "EUR"},
-		},
-	})
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-}
-
-func TestUpdateNotFound(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-
-	resp := authed(t, app, http.MethodPatch, "/api/v1/transactions/00000000-0000-0000-0000-000000000000", map[string]any{
-		"date": "2026-07-05T00:00:00Z", "description": "x",
-		"postings": []map[string]any{
-			{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-			{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-		},
-	})
-	require.Equal(t, http.StatusNotFound, resp.StatusCode)
-}
-
-func TestDeleteTransaction(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	id := createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-	})
 	resp := authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
-		"transaction_ids": []string{id}, "tag": "temporary",
+		"posting_ids": []string{seed.UserPostingID}, "tag": "shared",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	resp = authed(t, app, http.MethodDelete, "/api/v1/transactions/"+id, nil)
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"postings": []map[string]any{
+		{"id": seed.UserPostingID, "bucket_id": food, "amount": 600, "currency": "EUR", "memo": "kept", "stats_date": "2026-06-30"},
+		{"bucket_id": travel, "amount": 400, "currency": "EUR"},
+	}})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var split transactionResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&split))
+	require.Len(t, split.Postings, 3)
+	survivor := postingByID(t, split.Postings, seed.UserPostingID)
+	require.Equal(t, int64(600), survivor.Amount)
+	require.Equal(t, "kept", survivor.Memo)
+	require.Equal(t, []string{"shared"}, survivor.Tags)
+	require.Equal(t, "2026-06-30", *survivor.StatsDate)
 
-	resp = authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	txns := decodeTxns(t, resp)
-	require.Empty(t, txns)
+	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"postings": []map[string]any{
+		{"id": seed.UserPostingID, "bucket_id": food, "amount": 500, "currency": "EUR"},
+	}})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.Len(t, getTransaction(t, app, seed.TransactionID).Postings, 3)
 
-	resp = authed(t, app, http.MethodGet, "/api/v1/tags", nil)
-	var tags struct {
-		Tags []string `json:"tags"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&tags))
-	require.Empty(t, tags.Tags)
-	require.Empty(t, getBalances(t, app))
+	var updates, inserts int
+	require.NoError(t, app.d.Users.QueryRow("select count(*) from audit_logs where table_name='postings' and operation='update' and row_id=$1", seed.UserPostingID).Scan(&updates))
+	require.NoError(t, app.d.Users.QueryRow("select count(*) from audit_logs where table_name='postings' and operation='insert' and before is null").Scan(&inserts))
+	require.Positive(t, updates)
+	require.Positive(t, inserts)
 }
 
-func TestBulkRemovePermanentlyDeletesManualTransaction(t *testing.T) {
+func TestDeleteImportedTransactionReturnsRowToInbox(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-	id := createTransaction(t, app, []map[string]any{
-		{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-		{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-	})
+	food := createBucket(t, app, "expense", "Food")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, food, -1000, "EUR", "Market")
 
-	resp := authed(t, app, http.MethodDelete, "/api/v1/transactions", map[string]any{
-		"transaction_ids": []string{id},
-	})
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var out struct {
-		Removed  int `json:"removed"`
-		Restored int `json:"restored"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
-	require.Equal(t, 1, out.Removed)
-	require.Zero(t, out.Restored)
-	require.Empty(t, decodeTxns(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil)))
-	require.Empty(t, getInbox(t, app, ""))
+	resp := authed(t, app, http.MethodDelete, "/api/v1/transactions/"+seed.TransactionID, nil)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	var status string
+	require.NoError(t, app.d.Users.QueryRow("select status from import_rows where id=$1", seed.RowID).Scan(&status))
+	require.Equal(t, "pending", status)
+	require.Len(t, getInbox(t, app, ""), 1)
 }
 
-func TestDeleteNotFound(t *testing.T) {
+func TestImportedFactsCannotChangeThroughWrites(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	resp := authed(t, app, http.MethodDelete, "/api/v1/transactions/00000000-0000-0000-0000-000000000000", nil)
+	bank := createBucket(t, app, "asset", "Bank")
+	food := createBucket(t, app, "expense", "Food")
+	other := createBucket(t, app, "asset", "Other")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, food, -1000, "EUR", "Market")
+
+	resp := authed(t, app, http.MethodPatch, "/api/v1/transactions/"+seed.TransactionID, map[string]any{"occurred_at": "2026-07-02T00:00:00Z"})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp = authed(t, app, http.MethodPatch, "/api/v1/postings/"+seed.ImportedID, map[string]any{"bucket_id": other})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"postings": []map[string]any{
+		{"id": seed.ImportedID, "bucket_id": bank, "amount": -1000, "currency": "EUR"},
+		{"id": seed.UserPostingID, "bucket_id": food, "amount": 1000, "currency": "EUR"},
+	}})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+	var amount, rowAmount int64
+	var currency, bucketID, status string
+	var occurredAt time.Time
+	var links int
+	require.NoError(t, app.d.Users.QueryRow(`select p.amount,p.currency,p.bucket_id,t.occurred_at,r.amount,r.status,
+		(select count(*) from postings where import_row_id=r.id)
+		from postings p join transactions t on t.id=p.transaction_id join import_rows r on r.id=p.import_row_id
+		where p.id=$1`, seed.ImportedID).Scan(&amount, &currency, &bucketID, &occurredAt, &rowAmount, &status, &links))
+	require.Equal(t, int64(-1000), amount)
+	require.Equal(t, amount, rowAmount)
+	require.Equal(t, "EUR", currency)
+	require.Equal(t, bank, bucketID)
+	require.True(t, occurredAt.Equal(time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)))
+	require.Equal(t, "categorized", status)
+	require.Equal(t, 1, links)
+}
+
+func TestTransactionOwnership(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	otherUserID := data.NewPrivateID()
+	require.NoError(t, app.d.CreateUser(t.Context(), data.User{ID: otherUserID, Subject: "other-transactions", Issuer: "test", Email: "other@example.com", CreatedAt: time.Now()}))
+	accountID, categoryID := data.NewPrivateID(), data.NewPrivateID()
+	require.NoError(t, app.d.CreateBucket(t.Context(), data.Bucket{ID: accountID, OwnerUserID: otherUserID, Kind: data.KindAsset, Name: "Other bank", CreatedAt: time.Now()}))
+	require.NoError(t, app.d.CreateBucket(t.Context(), data.Bucket{ID: categoryID, OwnerUserID: otherUserID, Kind: data.KindExpense, Name: "Other food", CreatedAt: time.Now()}))
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), accountID, categoryID, -1000, "EUR", "Private")
+
+	resp := authed(t, app, http.MethodGet, "/api/v1/transactions/"+seed.TransactionID, nil)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
-}
-
-func TestTransactionRequiresAuth(t *testing.T) {
-	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
-	resp, err := app.client.Get(app.url + "/api/v1/transactions")
-	require.NoError(t, err)
-	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-}
-
-func decodeTxnPage(t *testing.T, resp *http.Response) ([]map[string]any, map[string]any) {
-	t.Helper()
-	var body struct {
-		Transactions []map[string]any `json:"transactions"`
-		NextCursor   map[string]any   `json:"next_cursor"`
-	}
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
-	return body.Transactions, body.NextCursor
+	resp = authed(t, app, http.MethodPatch, "/api/v1/postings/"+seed.UserPostingID, map[string]any{"bucket_id": categoryID})
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	resp = authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{"posting_ids": []string{seed.UserPostingID}, "tag": "private"})
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	var count int
+	require.NoError(t, app.d.Users.QueryRow("select count(*) from posting_tags where posting_id=$1", seed.UserPostingID).Scan(&count))
+	require.Zero(t, count)
 }
 
 func TestTransactionPagination(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
-	groceries := createBucket(t, app, "expense", "Groceries")
-
-	const total = data.TransactionPageSize + 1
-	for i := 0; i < total; i++ {
-		createTransaction(t, app, []map[string]any{
-			{"bucket_id": bank, "amount": -1000, "currency": "EUR"},
-			{"bucket_id": groceries, "amount": 1000, "currency": "EUR"},
-		})
+	food := createBucket(t, app, "expense", "Food")
+	for i := 0; i < data.TransactionPageSize+1; i++ {
+		seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, i, 0, 0, time.UTC), bank, food, -int64(i+1), "EUR", fmt.Sprintf("Row %d", i))
 	}
 
-	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	page1, cursor := decodeTxnPage(t, resp)
-	require.Len(t, page1, data.TransactionPageSize)
-	require.NotNil(t, cursor)
+	first := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
+	require.Len(t, first.Transactions, data.TransactionPageSize)
+	require.NotNil(t, first.NextCursor)
+	query := url.Values{"before_date": {first.NextCursor.Date}, "before_id": {first.NextCursor.ID}}
+	second := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions?"+query.Encode(), nil))
+	require.Len(t, second.Transactions, 1)
+	require.NotEqual(t, first.Transactions[len(first.Transactions)-1].ID, second.Transactions[0].ID)
+}
 
-	url := "/api/v1/transactions?before_date=" + cursor["date"].(string) + "&before_id=" + cursor["id"].(string)
-	resp = authed(t, app, http.MethodGet, url, nil)
-	page2, cursor := decodeTxnPage(t, resp)
-	require.Len(t, page2, total-data.TransactionPageSize)
-	require.Nil(t, cursor)
-
-	require.NotEqual(t, page1[len(page1)-1]["id"], page2[0]["id"])
+func TestTransactionEndpointsRequireAuth(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	for _, path := range []string{"/api/v1/transactions", "/api/v1/transactions/" + data.NewPrivateID()} {
+		resp, err := app.client.Get(app.url + path)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	}
 }

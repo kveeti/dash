@@ -28,7 +28,7 @@ export function useRemoveTransactionAction(props: {
     dialogRef.current?.openWithPayload({
       title: multiple ? "Remove transactions?" : "Remove transaction?",
       description:
-        "Are you sure? Imported transactions will return to the inbox. Manually added transactions will be deleted.",
+        "Are you sure? Imported transactions will return to the inbox.",
       confirmLabel: multiple ? "Remove transactions" : "Remove transaction",
       confirmVariant: "destructive",
       onConfirm: () => mutation.mutate(ids, { onSuccess: props.onFinish }),

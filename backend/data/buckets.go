@@ -9,12 +9,13 @@ import (
 type BucketKind string
 
 const (
-	KindAsset     BucketKind = "asset"
-	KindLiability BucketKind = "liability"
-	KindExpense   BucketKind = "expense"
-	KindIncome    BucketKind = "income"
-	KindPerson    BucketKind = "person"
-	KindClearing  BucketKind = "clearing"
+	KindAsset        BucketKind = "asset"
+	KindLiability    BucketKind = "liability"
+	KindExpense      BucketKind = "expense"
+	KindIncome       BucketKind = "income"
+	KindPerson       BucketKind = "person"
+	KindTransit      BucketKind = "transit"
+	KindFXConversion BucketKind = "fx_conversion"
 )
 
 type Bucket struct {
@@ -54,7 +55,7 @@ func (d *Data) CreateBucket(ctx context.Context, b Bucket) error {
 func (d *Data) ListBuckets(ctx context.Context, ownerID string) ([]Bucket, error) {
 	rows, err := d.db.QueryContext(ctx,
 		`select id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
-		 from buckets where owner_user_id = $1 order by created_at`, ownerID)
+		 from buckets where owner_user_id = $1 and hidden = false order by created_at`, ownerID)
 	if err != nil {
 		return nil, err
 	}

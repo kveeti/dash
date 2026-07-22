@@ -109,6 +109,61 @@ func newTestData(t *testing.T) *data.Data {
 	return d
 }
 
+func postingIDForTransaction(t *testing.T, app *testApp, transactionID string) string {
+	t.Helper()
+	var id string
+	if err := app.d.Users.QueryRow("select id from postings where transaction_id=$1 and import_row_id is null order by created_at limit 1", transactionID).Scan(&id); err != nil {
+		t.Fatalf("finding user posting: %v", err)
+	}
+	return id
+}
+
+func systemBucketID(t *testing.T, app *testApp, kind string) string {
+	t.Helper()
+	var id string
+	if err := app.d.Users.QueryRow("select id from buckets where kind=$1 and hidden=true", kind).Scan(&id); err != nil {
+		t.Fatalf("finding %s bucket: %v", kind, err)
+	}
+	return id
+}
+
+func postingTotals(t *testing.T, app *testApp) map[string]map[string]int64 {
+	t.Helper()
+	return queryPostingTotals(t, app, `select bucket_id,currency,sum(amount) from postings group by bucket_id,currency`)
+}
+
+func postingTotalsAt(t *testing.T, app *testApp, at time.Time) map[string]map[string]int64 {
+	t.Helper()
+	return queryPostingTotals(t, app, `select p.bucket_id,p.currency,sum(p.amount) from postings p
+		join transactions t on t.id=p.transaction_id where t.occurred_at<=$1 group by p.bucket_id,p.currency`, at)
+}
+
+func queryPostingTotals(t *testing.T, app *testApp, query string, args ...any) map[string]map[string]int64 {
+	t.Helper()
+	rows, err := app.d.Users.Query(query, args...)
+	if err != nil {
+		t.Fatalf("querying posting totals: %v", err)
+	}
+	defer rows.Close()
+
+	out := map[string]map[string]int64{}
+	for rows.Next() {
+		var bucketID, currency string
+		var amount int64
+		if err := rows.Scan(&bucketID, &currency, &amount); err != nil {
+			t.Fatalf("scanning posting total: %v", err)
+		}
+		if out[bucketID] == nil {
+			out[bucketID] = map[string]int64{}
+		}
+		out[bucketID][currency] = amount
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("reading posting totals: %v", err)
+	}
+	return out
+}
+
 func dsnForDB(base, dbName string) (string, error) {
 	u, err := url.Parse(base)
 	if err != nil {

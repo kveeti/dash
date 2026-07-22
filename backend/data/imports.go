@@ -114,58 +114,73 @@ func parserFor(source string, r io.Reader, loc *time.Location, currencies map[st
 	}
 }
 
-// CreateImport durably stores the uploaded file as the batch's work item, then
-// records the batch pointer. Blob-before-pointer: the blob lands first, so a batch
-// row always has its file; the only failure mode is an orphan blob if the pointer
-// insert fails (swept later). All parsing and staging happen in the background
-// worker (see stageBatch). Returns the batch.
+// CreateImport stores the uploaded file, then atomically validates the target,
+// inserts the batch, and audits it. Postgres-backed files join the same database
+// transaction. External stores are cleaned up if the database write fails.
 func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filename, timezone string, r io.Reader) (*ImportBatch, error) {
 	batch := ImportBatch{ID: NewPrivateID(), UserID: userID, BucketID: bucketID, Source: source, Filename: filename, Timezone: timezone, CreatedAt: time.Now().UTC(), Status: "uploaded"}
 
-	if err := d.files.Put(ctx, batch.ID, r); err != nil {
-		return nil, err
+	var tx *sql.Tx
+	var err error
+	externalFile := false
+	if files, ok := d.files.(interface {
+		PutTx(context.Context, *sql.Tx, string, io.Reader) error
+	}); ok {
+		tx, err = d.db.BeginTx(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		if err = files.PutTx(ctx, tx, batch.ID, r); err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	} else {
+		if err = d.files.Put(ctx, batch.ID, r); err != nil {
+			return nil, err
+		}
+		externalFile = true
+		tx, err = d.db.BeginTx(ctx, nil)
+		if err != nil {
+			if cleanupErr := d.files.Delete(ctx, batch.ID); cleanupErr != nil {
+				slog.Error("cleaning up import file", "batch", batch.ID, "err", cleanupErr)
+			}
+			return nil, err
+		}
 	}
+	committed := false
+	defer func() {
+		tx.Rollback()
+		if externalFile && !committed {
+			if cleanupErr := d.files.Delete(ctx, batch.ID); cleanupErr != nil {
+				slog.Error("cleaning up import file", "batch", batch.ID, "err", cleanupErr)
+			}
+		}
+	}()
 
-	tx, err := d.db.BeginTx(ctx, nil)
+	var inserted int
+	err = tx.QueryRowContext(ctx, `with added as (
+		insert into import_batches(id,user_id,bucket_id,source,filename,timezone,created_at,status)
+		select $1,$2,$3,$4,$5,$6,$7,'uploaded' from buckets
+		where id=$3 and owner_user_id=$2 and kind in ('asset','liability') and hidden=false
+		returning id
+	), audited as (
+		insert into audit_logs(id,actor_user_id,table_name,row_id,operation,before,created_at)
+		select uuidv7(),$2,'import_batches',id,'insert',null,now() from added
+	)
+	select count(*) from added`, batch.ID, batch.UserID, batch.BucketID, batch.Source, batch.Filename, batch.Timezone, batch.CreatedAt).Scan(&inserted)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(ctx,
-		"insert into import_batches (id, user_id, bucket_id, source, filename, timezone, created_at, status) values ($1, $2, $3, $4, $5, $6, $7, 'uploaded')",
-		batch.ID, batch.UserID, batch.BucketID, batch.Source, batch.Filename, batch.Timezone, batch.CreatedAt); err != nil {
+	if inserted == 0 {
+		return nil, ErrImportBucket
+	}
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
-	if _, err := tx.ExecContext(ctx,
-		"insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at) values (uuidv7(), $1, 'import_batches', $2, 'insert', null, now())",
-		userID, batch.ID); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
+	committed = true
 
 	d.kickImport()
 	return &batch, nil
-}
-
-// ValidateImportBucket reports whether the target bucket is one the user owns and
-// can import into (asset or liability), so the ingest handler can reject before
-// buffering the upload.
-func (d *Data) ValidateImportBucket(ctx context.Context, userID, bucketID string) error {
-	var kind BucketKind
-	err := d.db.QueryRowContext(ctx, "select kind from buckets where id = $1 and owner_user_id = $2", bucketID, userID).Scan(&kind)
-	if err == sql.ErrNoRows {
-		return ErrImportBucket
-	}
-	if err != nil {
-		return err
-	}
-	if kind != KindAsset && kind != KindLiability {
-		return ErrImportBucket
-	}
-	return nil
 }
 
 // stageCopySource adapts a RowSource into a CopyFromSource for the import_stage
@@ -427,11 +442,12 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 	defer tx.Rollback()
 
 	var status, hash string
+	var linked bool
 	err = tx.QueryRowContext(ctx,
-		`select r.status, r.dedup_hash
-		 from import_rows r join import_batches b on b.id = r.batch_id
-		 where r.id = $1 and b.user_id = $2`, rowID, userID).
-		Scan(&status, &hash)
+		`select r.status,r.dedup_hash,exists(select 1 from postings where import_row_id=r.id)
+		 from import_rows r join import_batches b on b.id=r.batch_id
+		 where r.id=$1 and b.user_id=$2 for update of r`, rowID, userID).
+		Scan(&status, &hash, &linked)
 	if err == sql.ErrNoRows {
 		return ErrImportNotFound
 	}
@@ -440,6 +456,9 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 	}
 	if status != "duplicate" {
 		return ErrNotDuplicate
+	}
+	if linked {
+		return ErrInvalidPostings
 	}
 
 	var occurrence int
@@ -461,7 +480,6 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 		occurrence, rowID); err != nil {
 		return err
 	}
-
 	return tx.Commit()
 }
 
@@ -475,57 +493,50 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 		return err
 	}
 	defer tx.Rollback()
-
 	var owner string
-	err = tx.QueryRowContext(ctx, "select user_id from import_batches where id = $1", batchID).Scan(&owner)
+	err = tx.QueryRowContext(ctx, "select user_id from import_batches where id=$1", batchID).Scan(&owner)
 	if err == sql.ErrNoRows || (err == nil && owner != userID) {
 		return ErrImportNotFound
 	}
 	if err != nil {
 		return err
 	}
-
-	txnScope := "select transaction_id from import_rows where batch_id = $2 and transaction_id is not null"
-	audits := []string{
-		"select uuidv7(), $1, 'import_batches', b.id, 'delete', to_jsonb(b), now() from import_batches b where b.id = $2",
-		"select uuidv7(), $1, 'import_rows', r.id, 'delete', to_jsonb(r), now() from import_rows r where r.batch_id = $2",
-		"select uuidv7(), $1, 'import_rows', r.id, 'update', to_jsonb(r), now() from import_rows r where r.batch_id <> $2 and r.transaction_id in (" + txnScope + ")",
-		"select uuidv7(), $1, 'transaction_tags', tt.id, 'delete', to_jsonb(tt), now() from transaction_tags tt where tt.transaction_id in (" + txnScope + ")",
-		"select uuidv7(), $1, 'transactions', t.id, 'delete', to_jsonb(t), now() from transactions t where t.id in (" + txnScope + ")",
-		"select uuidv7(), $1, 'postings', p.id, 'delete', to_jsonb(p), now() from postings p where p.transaction_id in (" + txnScope + ")",
+	var txnIDs []string
+	rows, err := tx.QueryContext(ctx, `select p.transaction_id from postings p join import_rows r on r.id=p.import_row_id where r.batch_id=$1`, batchID)
+	if err != nil {
+		return err
 	}
-	for _, sel := range audits {
-		if _, err := tx.ExecContext(ctx,
-			"insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at) "+sel,
-			userID, batchID); err != nil {
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		txnIDs = append(txnIDs, id)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	if len(txnIDs) > 0 {
+		if _, err = removeTransactionsTx(ctx, tx, userID, txnIDs); err != nil {
 			return err
 		}
 	}
-
-	// A matched transfer can span batches. Return its other row to the inbox.
-	if _, err := tx.ExecContext(ctx,
-		"update import_rows set status = 'pending', transaction_id = null where batch_id <> $1 and transaction_id in (select transaction_id from import_rows where batch_id = $1 and transaction_id is not null)",
-		batchID); err != nil {
+	for _, table := range []string{"import_rows", "import_batches"} {
+		where := "batch_id=$2"
+		if table == "import_batches" {
+			where = "id=$2"
+		}
+		_, err = tx.ExecContext(ctx, `with doomed as(select * from `+table+` where `+where+`),a as(insert into audit_logs select uuidv7(),$1,'`+table+`',id,'delete',to_jsonb(doomed),now() from doomed) delete from `+table+` where id in(select id from doomed)`, userID, batchID)
+		if err != nil {
+			return err
+		}
+	}
+	if err = tx.Commit(); err != nil {
 		return err
 	}
-
-	// transactions first (postings cascade), then rows, then the batch.
-	if _, err := tx.ExecContext(ctx,
-		"delete from transactions where id in (select transaction_id from import_rows where batch_id = $1 and transaction_id is not null)",
-		batchID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, "delete from import_rows where batch_id = $1", batchID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, "delete from import_batches where id = $1", batchID); err != nil {
-		return err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	if err := d.files.Delete(ctx, batchID); err != nil {
+	if err = d.files.Delete(ctx, batchID); err != nil {
 		slog.Error("import blob delete failed", "batch", batchID, "err", err)
 	}
 	return nil
@@ -601,10 +612,12 @@ func (d *Data) GetImport(ctx context.Context, userID, batchID string) (*ImportBa
 	}
 
 	rows, err := d.db.QueryContext(ctx,
-		`select r.id, r.batch_id, r.date, r.amount, r.currency, r.raw_description, r.raw, r.status, r.transaction_id, r.duplicate_of,
-		        t.date, t.amount, t.currency, t.raw_description, t.transaction_id, tb.id, tb.created_at
+		`select r.id, r.batch_id, r.date, r.amount, r.currency, r.raw_description, r.raw, r.status, rp.transaction_id, r.duplicate_of,
+		        t.date, t.amount, t.currency, t.raw_description, tp.transaction_id, tb.id, tb.created_at
 		 from import_rows r
+		 left join postings rp on rp.import_row_id = r.id
 		 left join import_rows t on t.id = r.duplicate_of
+		 left join postings tp on tp.import_row_id = t.id
 		 left join import_batches tb on tb.id = t.batch_id
 		 where r.batch_id = $1 order by r.date, r.id`, batchID)
 	if err != nil {
@@ -643,11 +656,13 @@ func (d *Data) GetImport(ctx context.Context, userID, batchID string) (*ImportBa
 // even on million-row batches where duplicates are sparse.
 func (d *Data) ListDuplicates(ctx context.Context, userID, batchID, cursor string, limit int) ([]ImportRow, error) {
 	rows, err := d.db.QueryContext(ctx,
-		`select r.id, r.batch_id, r.date, r.amount, r.currency, r.raw_description, r.raw, r.status, r.transaction_id, r.duplicate_of,
-		        t.date, t.amount, t.currency, t.raw_description, t.transaction_id, tb.id, tb.created_at
+		`select r.id, r.batch_id, r.date, r.amount, r.currency, r.raw_description, r.raw, r.status, rp.transaction_id, r.duplicate_of,
+		        t.date, t.amount, t.currency, t.raw_description, tp.transaction_id, tb.id, tb.created_at
 		 from import_rows r
 		 join import_batches b on b.id = r.batch_id
+		 left join postings rp on rp.import_row_id = r.id
 		 left join import_rows t on t.id = r.duplicate_of
+		 left join postings tp on tp.import_row_id = t.id
 		 left join import_batches tb on tb.id = t.batch_id
 		 where r.batch_id = $1 and b.user_id = $2 and r.status = 'duplicate'
 		   and ($3 = '' or r.id > $3::uuid)
@@ -685,8 +700,8 @@ func (d *Data) ListDuplicates(ctx context.Context, userID, batchID, cursor strin
 func loadImportRow(ctx context.Context, tx *sql.Tx, rowID string) (*ImportRow, error) {
 	var r ImportRow
 	err := tx.QueryRowContext(ctx,
-		`select id, batch_id, date, amount, currency, raw_description, raw, dedup_hash, occurrence, status, transaction_id, duplicate_of
-		 from import_rows where id = $1`, rowID).
+		`select r.id, r.batch_id, r.date, r.amount, r.currency, r.raw_description, r.raw, r.dedup_hash, r.occurrence, r.status, p.transaction_id, r.duplicate_of
+		 from import_rows r left join postings p on p.import_row_id=r.id where r.id = $1`, rowID).
 		Scan(&r.ID, &r.BatchID, &r.Date, &r.Amount, &r.Currency, &r.RawDescription, &r.Raw, &r.DedupHash, &r.Occurrence, &r.Status, &r.TransactionID, &r.DuplicateOf)
 	if err != nil {
 		return nil, err

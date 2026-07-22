@@ -1,10 +1,4 @@
-import {
-  expect,
-  test,
-  type Page,
-  type Route,
-  type TestInfo,
-} from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 
 import {
   createBucket,
@@ -43,13 +37,7 @@ async function setupTransactions(page: Page, testInfo: TestInfo) {
   });
   expect(categorized).toBeOK();
 
-  const transactionsResponse = await page.request.get("/api/v1/transactions");
-  const transactions = (await transactionsResponse.json()) as {
-    transactions: { id: string; counterparty: string }[];
-  };
-  const ids = transactions.transactions.map((transaction) => transaction.id);
   await page.goto("/transactions");
-  return { ids };
 }
 
 test("transaction date and month headings group only matching dates", async ({
@@ -204,7 +192,7 @@ async function holdFailedRequest(
   };
 }
 
-test("search, recategorize, tag, and remove persisted transactions", async ({
+test("search, recategorize, and remove persisted transactions", async ({
   page,
 }, testInfo) => {
   await login(page, testInfo);
@@ -247,88 +235,6 @@ test("search, recategorize, tag, and remove persisted transactions", async ({
   await page.getByRole("option", { name: "Dining" }).click();
   await expect(row(page, "Market one")).toContainText("Dining");
 
-  const transactionsResponse = await page.request.get("/api/v1/transactions");
-  const transactions = (await transactionsResponse.json()) as {
-    transactions: { id: string; counterparty: string }[];
-  };
-  const marketOne = transactions.transactions.find(
-    (transaction) => transaction.counterparty === "Market one",
-  )!;
-  const partialTagResponse = await page.request.post(
-    "/api/v1/transactions/tags",
-    {
-      data: { transaction_ids: [marketOne.id], tag: "partial" },
-    },
-  );
-  expect(partialTagResponse).toBeOK();
-  await page.reload();
-
-  await page.getByRole("checkbox", { name: "Select transactions" }).click();
-  await selectRow(page, "Market one");
-  await selectRow(page, "Market two");
-  await page.getByRole("combobox").filter({ hasText: "Actions" }).click();
-  await expect(page.getByText("Categorize all as…")).toBeVisible();
-  await expect(page.getByText("Change or add tags…")).toBeVisible();
-
-  const partialOption = page
-    .getByRole("option")
-    .filter({ hasText: "#partial" });
-  const partialCheckbox = partialOption.getByRole("checkbox");
-  const partialCheckboxHitbox = partialOption.locator("[data-tag-checkbox]");
-  await expect(partialCheckbox).toHaveAttribute("aria-checked", "mixed");
-  await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/v1/transactions/tags") &&
-        response.request().method() === "POST",
-    ),
-    partialCheckboxHitbox.click(),
-  ]);
-  await expect(partialCheckbox).toBeChecked();
-  await expect(
-    page.getByRole("combobox", { name: "Filter transaction actions" }),
-  ).toBeVisible();
-
-  await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/v1/transactions/tags") &&
-        response.request().method() === "DELETE",
-    ),
-    partialCheckboxHitbox.click(),
-  ]);
-  await expect(partialCheckbox).not.toBeChecked();
-  await expect(
-    page.getByRole("combobox", { name: "Filter transaction actions" }),
-  ).toBeVisible();
-
-  await page
-    .getByRole("combobox", { name: "Filter transaction actions" })
-    .fill("weekly");
-  const createWeekly = page
-    .getByRole("option")
-    .filter({ hasText: "Create #weekly" });
-  await expect(createWeekly.getByRole("checkbox")).not.toBeChecked();
-  await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/v1/transactions/tags") &&
-        response.request().method() === "POST",
-    ),
-    createWeekly.getByText("Create #weekly", { exact: true }).click(),
-  ]);
-  await expect(
-    page.getByRole("combobox", { name: "Filter transaction actions" }),
-  ).not.toBeVisible();
-  await page.getByRole("button", { name: "Close selection" }).click();
-
-  const tag = page.getByRole("button", { name: "#weekly" }).first();
-  await expect(tag).toBeVisible();
-  await tag.click();
-  await expect(page).toHaveURL(/tag=weekly/);
-  await expect(page.getByText("Market two")).toBeVisible();
-  await page.getByRole("button", { name: "#weekly ×" }).click();
-
   await page.getByRole("checkbox", { name: "Select transactions" }).click();
   await selectRow(page, "Market two");
   await page.getByRole("combobox").filter({ hasText: "Actions" }).click();
@@ -346,7 +252,232 @@ test("search, recategorize, tag, and remove persisted transactions", async ({
   await expect(page.getByText("Market two")).toBeVisible();
 });
 
-test("transaction action search keeps previous actions while results load", async ({
+test("transaction detail edits memo, category, and tags", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  const checking = await createBucket(page, "asset", "Checking");
+  const groceries = await createBucket(page, "expense", "Groceries");
+  await createBucket(page, "expense", "Dining");
+  await importNordea(
+    page,
+    checking.id,
+    nordeaRow("2026/07/01", "-12,00", "Detail Market"),
+  );
+  const inboxResponse = await page.request.get("/api/v1/inbox");
+  const inbox = (await inboxResponse.json()) as { rows: { id: string }[] };
+  const categorized = await page.request.post("/api/v1/inbox/categorize", {
+    data: { row_ids: [inbox.rows[0].id], bucket_id: groceries.id },
+  });
+  expect(categorized).toBeOK();
+
+  await page.goto("/transactions");
+  await page.getByRole("link", { name: "View Detail Market" }).click();
+  await expect(page).toHaveURL(/\/transactions\/[0-9a-f-]+$/);
+
+  await expect(
+    page.getByRole("heading", { name: "Detail Market" }),
+  ).toBeVisible();
+  const fields = page.getByRole("region", { name: "Transaction fields" });
+  await expect(fields.getByLabel("Counterparty")).toHaveCount(0);
+  await expect(fields.getByLabel("Description")).toHaveCount(0);
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/v1/transactions/") &&
+        response.request().method() === "PATCH",
+    ),
+    fields.getByLabel("Memo").fill("Work meal"),
+  ]);
+
+  await page.getByRole("combobox").filter({ hasText: "Groceries" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/v1/postings/") &&
+        response.request().method() === "PATCH",
+    ),
+    page.getByRole("option", { name: "Dining" }).click(),
+  ]);
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "Dining" }),
+  ).toBeVisible();
+
+  const tagTrigger = page.getByRole("combobox", {
+    name: "Tags",
+    exact: true,
+  });
+  await tagTrigger.click();
+  await page
+    .getByRole("combobox", { name: "Change or add tags..." })
+    .fill("Travel");
+  const travelOption = page.getByRole("option").filter({ hasText: "#travel" });
+  await expect(travelOption).toBeVisible();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/transactions/tags") &&
+        response.request().method() === "POST",
+    ),
+    travelOption.click(),
+  ]);
+  await expect(tagTrigger).toContainText("#travel");
+
+  await tagTrigger.click();
+  await expect(
+    travelOption.getByRole("checkbox", {
+      name: "Remove tag #travel from selected transactions",
+    }),
+  ).toBeChecked();
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/transactions/tags") &&
+        response.request().method() === "DELETE",
+    ),
+    travelOption.click(),
+  ]);
+  await expect(tagTrigger).not.toContainText("#travel");
+
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Detail Market" }),
+  ).toBeVisible();
+  await expect(fields.getByLabel("Memo")).toHaveValue("Work meal");
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "Dining" }),
+  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Postings" })).toHaveCount(0);
+});
+
+test("income transaction detail shows category and tags", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  const checking = await createBucket(page, "asset", "Checking");
+  const salary = await createBucket(page, "income", "Salary");
+  await importNordea(
+    page,
+    checking.id,
+    nordeaRow("2026/07/01", "1200,00", "Employer"),
+  );
+  const inboxResponse = await page.request.get("/api/v1/inbox");
+  const inbox = (await inboxResponse.json()) as { rows: { id: string }[] };
+  const categorized = await page.request.post("/api/v1/inbox/categorize", {
+    data: { row_ids: [inbox.rows[0].id], bucket_id: salary.id },
+  });
+  expect(categorized).toBeOK();
+
+  await page.goto("/transactions");
+  await page.getByRole("link", { name: "View Employer" }).click();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "Salary" }),
+  ).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Tags" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Postings" })).toHaveCount(0);
+});
+
+async function setupMatchedTransfer(page: Page) {
+  const checking = await createBucket(page, "asset", "Checking");
+  const savings = await createBucket(page, "asset", "Savings");
+  await importNordea(
+    page,
+    checking.id,
+    nordeaRow("2026/07/01", "-50,00", "Transfer out"),
+  );
+  await importNordea(
+    page,
+    savings.id,
+    nordeaRow("2026/07/01", "50,00", "Transfer in"),
+  );
+  const inboxResponse = await page.request.get("/api/v1/inbox");
+  const inbox = (await inboxResponse.json()) as {
+    rows: { id: string; counterparty: string }[];
+  };
+  const outgoing = inbox.rows.find(
+    (row) => row.counterparty === "Transfer out",
+  )!;
+  const incoming = inbox.rows.find(
+    (row) => row.counterparty === "Transfer in",
+  )!;
+  const matched = await page.request.post(
+    `/api/v1/inbox/${outgoing.id}/match`,
+    {
+      data: { match_id: incoming.id },
+    },
+  );
+  expect(matched).toBeOK();
+
+  const response = await page.request.get("/api/v1/transactions");
+  const transactions = (await response.json()) as {
+    transactions: { id: string; counterparty: string }[];
+  };
+  return transactions.transactions.find(
+    (transaction) => transaction.counterparty === "Transfer out",
+  )!;
+}
+
+test("removing one transfer side leaves the counterpart unmatched", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  const transaction = await setupMatchedTransfer(page);
+  await page.goto("/transactions");
+  await expect(page.getByText("Checking → Savings")).toHaveCount(1);
+  const outgoingRow = page
+    .getByRole("link", { name: "View Transfer out" })
+    .locator("..");
+  await expect(outgoingRow).toContainText(/[−-]50/);
+  await expect(
+    page.getByRole("link", { name: "View Transfer in" }),
+  ).toHaveCount(0);
+  await page.goto(`/transactions/${transaction.id}`);
+  const fields = page.getByRole("region", { name: "Transaction fields" });
+  await expect(fields.getByLabel("Memo")).toBeVisible();
+  await expect(page.getByLabel("Category")).toHaveCount(0);
+  await expect(page.getByLabel("Tags", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Postings" })).toHaveCount(0);
+  const counterpart = page.getByRole("link", { name: "View counterpart" });
+  await expect(counterpart).toBeVisible();
+  await counterpart.click();
+  await expect(
+    page.getByRole("heading", { name: "Transfer in" }),
+  ).toBeVisible();
+  await page.goto(`/transactions/${transaction.id}`);
+  await page.getByRole("button", { name: "Remove this side" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Remove this side" })
+    .click();
+  await expect(page).toHaveURL(/\/transactions$/);
+
+  const response = await page.request.get("/api/v1/transactions");
+  const body = (await response.json()) as {
+    transactions: { transfer?: { unmatched?: boolean } }[];
+  };
+  expect(body.transactions).toHaveLength(1);
+  expect(body.transactions[0].transfer?.unmatched).toBe(true);
+});
+
+test("unmatching a transfer returns both sides to the inbox", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  const transaction = await setupMatchedTransfer(page);
+  await page.goto(`/transactions/${transaction.id}`);
+  await page.getByRole("button", { name: "Unmatch both" }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "Unmatch both" })
+    .click();
+  await expect(page).toHaveURL(/\/transactions$/);
+
+  const response = await page.request.get("/api/v1/inbox");
+  const body = (await response.json()) as { rows: unknown[] };
+  expect(body.rows).toHaveLength(2);
+});
+
+test("transaction action search keeps previous categories while results load", async ({
   page,
 }, testInfo) => {
   await setupTransactions(page, testInfo);
@@ -356,101 +487,26 @@ test("transaction action search keeps previous actions while results load", asyn
     name: "Filter transaction actions",
   });
   await expect(page.getByRole("option", { name: "Groceries" })).toBeVisible();
-  await page.evaluate(() => {
-    const recordingWindow = window as typeof window & {
-      actionOptionsFlashed: boolean;
-      actionOptionsObserver?: MutationObserver;
-    };
-    const record = () => {
-      const options = [...document.querySelectorAll('[role="option"]')];
-      if (
-        options.length === 1 &&
-        options[0]?.textContent?.includes("Remove transactions")
-      ) {
-        recordingWindow.actionOptionsFlashed = true;
-      }
-    };
-    recordingWindow.actionOptionsFlashed = false;
-    recordingWindow.actionOptionsObserver = new MutationObserver(record);
-    recordingWindow.actionOptionsObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-  });
 
-  let heldQuery = "";
-  let pendingSearches = 0;
-  let gate = Promise.resolve();
-  let release = () => {};
-  function holdSearchesFor(query: string) {
-    heldQuery = query;
-    pendingSearches = 0;
-    gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-  }
-  const holdSearch = async (route: Route) => {
-    if (new URL(route.request().url()).searchParams.get("q") !== heldQuery) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/v1/buckets?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("q") !== "nothing") {
       await route.continue();
       return;
     }
-    pendingSearches += 1;
-    const requestGate = gate;
-    await requestGate;
+    await gate;
     await route.continue();
-  };
-  await page.route("**/api/v1/buckets?*", holdSearch);
-  await page.route("**/api/v1/tags?*", holdSearch);
-
-  holdSearchesFor("nothin");
-  await input.fill("nothin");
-  await expect.poll(() => pendingSearches).toBe(2);
-  await expect(page.getByRole("option", { name: "Groceries" })).toBeVisible();
-  release();
-  await expect(
-    page.getByRole("option", { name: "Create expense “nothin”" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("option", { name: "Create #nothin" }),
-  ).toBeVisible();
-
-  holdSearchesFor("nothing");
-  await input.fill("nothing");
-  await expect.poll(() => pendingSearches).toBe(2);
-  await expect(
-    page.getByRole("option", { name: "Create expense “nothin”" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("option", { name: "Create #nothin" }),
-  ).toBeVisible();
-  release();
-  await expect(
-    page.getByRole("option", { name: "Create expense “nothing”" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("option", { name: "Create #nothing" }),
-  ).toBeVisible();
-
-  holdSearchesFor("");
-  await input.fill("");
-  await expect.poll(() => pendingSearches).toBe(2);
-  await expect(
-    page.getByRole("option", { name: "Create expense “nothing”" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("option", { name: "Create #nothing" }),
-  ).toBeVisible();
-  release();
-  await expect(page.getByRole("option", { name: "Groceries" })).toBeVisible();
-  const flashed = await page.evaluate(() => {
-    const recordingWindow = window as typeof window & {
-      actionOptionsFlashed: boolean;
-      actionOptionsObserver?: MutationObserver;
-    };
-    recordingWindow.actionOptionsObserver?.disconnect();
-    return recordingWindow.actionOptionsFlashed;
   });
-  expect(flashed).toBe(false);
+
+  await input.fill("nothing");
+  await expect(page.getByRole("option", { name: "Groceries" })).toBeVisible();
+  release();
+  await expect(
+    page.getByRole("option", { name: "Create expense “nothing”" }),
+  ).toBeVisible();
 });
 
 test("transaction action keyboard looping preserves scroll padding", async ({
@@ -503,120 +559,12 @@ test("transaction action keyboard looping preserves scroll padding", async ({
   expect(topGap).toBeGreaterThanOrEqual(3);
 });
 
-test("transaction action keyboard semantics keep checkbox toggles open", async ({
-  page,
-}, testInfo) => {
-  const { ids } = await setupTransactions(page, testInfo);
-  const tagged = await page.request.post("/api/v1/transactions/tags", {
-    data: { transaction_ids: [ids[0]], tag: "partial" },
-  });
-  expect(tagged).toBeOK();
-  await page.reload();
-
-  await selectFailureTransactions(page);
-  await page.getByRole("combobox").filter({ hasText: "Actions" }).click();
-  const input = page.getByRole("combobox", {
-    name: "Filter transaction actions",
-  });
-  await input.fill("partial");
-  await input.press("Space");
-  await expect(input).toHaveValue("partial ");
-
-  await input.fill("partial");
-  const option = page.getByRole("option").filter({ hasText: "#partial" });
-  await expect(option).toBeVisible();
-  await expect(
-    page.getByRole("option", { name: "Create expense “partial”" }),
-  ).toBeVisible();
-  await input.press("ArrowDown");
-  const checkbox = option.getByRole("checkbox");
-  await expect(checkbox).toHaveAttribute("aria-checked", "mixed");
-
-  await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/v1/transactions/tags") &&
-        response.request().method() === "POST",
-    ),
-    input.press("Space"),
-  ]);
-  await expect(input).toHaveValue("partial");
-  await expect(checkbox).toBeChecked();
-  await expect(input).toBeVisible();
-  await expect(input).toBeFocused();
-
-  await input.dispatchEvent("keydown", {
-    key: " ",
-    code: "Space",
-    repeat: true,
-    bubbles: true,
-  });
-  await expect(checkbox).toBeChecked();
-
-  await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().endsWith("/api/v1/transactions/tags") &&
-        response.request().method() === "DELETE",
-    ),
-    input.press("Enter"),
-  ]);
-  await expect(input).not.toBeVisible();
-  await expect(row(page, "Failure one")).not.toContainText("#partial");
-  await expect(row(page, "Failure two")).not.toContainText("#partial");
-});
-
 test("failed transaction actions roll back and preserve selection", async ({
   page,
 }, testInfo) => {
-  const { ids } = await setupTransactions(page, testInfo);
-  for (const tag of ["partial", "stable"]) {
-    const tagged = await page.request.post("/api/v1/transactions/tags", {
-      data: {
-        transaction_ids: tag === "partial" ? [ids[0]] : ids,
-        tag,
-      },
-    });
-    expect(tagged).toBeOK();
-  }
-  await page.reload();
+  await setupTransactions(page, testInfo);
   await selectFailureTransactions(page);
   await page.getByRole("combobox").filter({ hasText: "Actions" }).click();
-
-  const input = page.getByRole("combobox", {
-    name: "Filter transaction actions",
-  });
-  await input.fill("partial");
-  const partialOption = page
-    .getByRole("option")
-    .filter({ hasText: "#partial" });
-  const partialCheckbox = partialOption.getByRole("checkbox");
-  await expect(partialCheckbox).toHaveAttribute("aria-checked", "mixed");
-  const finishFailedAdd = await holdFailedRequest(
-    page,
-    "**/api/v1/transactions/tags",
-    "POST",
-    () => partialOption.locator("[data-tag-checkbox]").click(),
-  );
-  await expect(partialCheckbox).toBeChecked();
-  await finishFailedAdd();
-  await expect(partialCheckbox).toHaveAttribute("aria-checked", "mixed");
-
-  await input.fill("stable");
-  const stableOption = page.getByRole("option").filter({ hasText: "#stable" });
-  const stableCheckbox = stableOption.getByRole("checkbox");
-  await expect(stableCheckbox).toBeChecked();
-  const finishFailedRemove = await holdFailedRequest(
-    page,
-    "**/api/v1/transactions/tags",
-    "DELETE",
-    () => stableOption.locator("[data-tag-checkbox]").click(),
-  );
-  await expect(stableCheckbox).not.toBeChecked();
-  await finishFailedRemove();
-  await expect(stableCheckbox).toBeChecked();
-
-  await input.fill("");
   const finishFailedCategorize = await holdFailedRequest(
     page,
     "**/api/v1/transactions/categorize",

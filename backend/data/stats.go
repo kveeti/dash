@@ -50,14 +50,14 @@ with requested_ranges(label, from_date, to_date) as (
 ), ranges as (
     select * from requested_ranges where from_date is not null
 ), native as (
-    select r.label, p.bucket_id, b.kind, (t.date at time zone $9)::date as date,
+    select r.label, p.bucket_id, b.kind, coalesce(p.stats_date,(t.occurred_at at time zone $9)::date) as date,
            upper(p.currency) as currency, sum(p.amount) as amount
     from postings p
     join transactions t on t.id = p.transaction_id
     join buckets b on b.id = p.bucket_id
-    join ranges r on (t.date at time zone $9)::date between r.from_date and r.to_date
+    join ranges r on coalesce(p.stats_date,(t.occurred_at at time zone $9)::date) between r.from_date and r.to_date
     where ` + visiblePostings + ` and b.kind in ('expense', 'income')
-    group by r.label, p.bucket_id, b.kind, (t.date at time zone $9)::date, upper(p.currency)
+    group by r.label, p.bucket_id, b.kind, coalesce(p.stats_date,(t.occurred_at at time zone $9)::date), upper(p.currency)
 )
 select n.label, n.bucket_id, n.kind, n.date, n.currency, n.amount,
        source_currency.exponent, home_currency.exponent,
@@ -83,12 +83,12 @@ with requested_ranges(label, from_date, to_date) as (
 ), ranges as (
     select * from requested_ranges where from_date is not null
 ), category_postings as (
-    select r.label, t.id as transaction_id, (t.date at time zone $9)::date as date,
+    select r.label, t.id as transaction_id, coalesce(p.stats_date,(t.occurred_at at time zone $9)::date) as date,
            upper(p.currency) as currency
     from postings p
     join transactions t on t.id = p.transaction_id
     join buckets b on b.id = p.bucket_id
-    join ranges r on (t.date at time zone $9)::date between r.from_date and r.to_date
+    join ranges r on coalesce(p.stats_date,(t.occurred_at at time zone $9)::date) between r.from_date and r.to_date
     where ` + visiblePostings + ` and b.kind in ('expense', 'income') and upper(p.currency) <> $8
 )
 select c.label, count(distinct c.transaction_id), max(c.date - x.date)

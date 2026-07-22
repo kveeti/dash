@@ -23,8 +23,7 @@ type User struct {
 	CreatedAt    time.Time
 }
 
-// CreateUser inserts a new user together with their hidden clearing bucket (the
-// FX residual sink) in one transaction, so a user never exists without it.
+// CreateUser inserts a new user and both required system buckets atomically.
 func (d *Data) CreateUser(ctx context.Context, user User) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -41,9 +40,14 @@ func (d *Data) CreateUser(ctx context.Context, user User) error {
 		return err
 	}
 
-	clearing := Bucket{ID: NewPrivateID(), OwnerUserID: user.ID, Kind: KindClearing, Name: "Clearing", Hidden: true, CreatedAt: time.Now().UTC()}
-	if err := insertBucketTx(ctx, tx, clearing); err != nil {
-		return err
+	now := time.Now().UTC()
+	for _, bucket := range []Bucket{
+		{ID: NewPrivateID(), OwnerUserID: user.ID, Kind: KindTransit, Name: "Transit", Hidden: true, CreatedAt: now},
+		{ID: NewPrivateID(), OwnerUserID: user.ID, Kind: KindFXConversion, Name: "FX conversion", Hidden: true, CreatedAt: now},
+	} {
+		if err := insertBucketTx(ctx, tx, bucket); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()

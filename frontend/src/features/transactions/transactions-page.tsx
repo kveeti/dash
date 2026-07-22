@@ -142,7 +142,7 @@ function List(props: {
       <ListEmptyState
         icon={DocumentPlusIcon}
         heading="No transactions yet"
-        body="Import a bank statement or add a transaction manually to get started."
+        body="Import a bank statement to get started."
         primaryAction={
           <Link
             href="/imports"
@@ -166,7 +166,7 @@ function List(props: {
         className={`-mt-1 flex list-none flex-col ${props.selection.selectMode ? "select-none" : ""}`}
       >
         {props.txns.map((txn) => {
-          const date = new Date(txn.date);
+          const date = new Date(txn.occurred_at);
           let dateHeading: string | null = null;
           if (!prevDate || !isSameDay(date, prevDate)) {
             dateHeading = isSameYear(date, today)
@@ -228,7 +228,12 @@ function List(props: {
                       readOnly
                     />
                   </div>
-                  <div className="transaction-slide grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 py-2 [contain:layout] transition-[padding-inline-start] duration-220 ease-[cubic-bezier(.25,.8,.25,1)] motion-reduce:duration-[1ms]">
+                  <div className="transaction-slide relative grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 py-2 [contain:layout] transition-[padding-inline-start] duration-220 ease-[cubic-bezier(.25,.8,.25,1)] motion-reduce:duration-[1ms]">
+                    <Link
+                      href={`/transactions/${txn.id}`}
+                      className="absolute inset-0 rounded-lg"
+                      aria-label={`View ${txn.counterparty || txn.description || "transaction"}`}
+                    />
                     <Row
                       txn={txn}
                       onFilterTag={(value) =>
@@ -368,7 +373,7 @@ function TagList(props: { tags: string[]; onFilter: (tag: string) => void }) {
         <button
           key={tag}
           type="button"
-          className="ml-2 cursor-pointer border-0 bg-none p-0 text-inherit text-gray-700"
+          className="relative z-1 ml-2 cursor-pointer border-0 bg-none p-0 text-inherit text-gray-700"
           onClick={() => props.onFilter(tag)}
         >
           #{tag}
@@ -383,8 +388,8 @@ function FloatingBar(props: {
   transactions: Transaction[];
 }) {
   const ids = [...props.selection.selected];
-  const selectedTransactions = props.transactions.filter((transaction) =>
-    props.selection.selected.has(transaction.id),
+  const selectedTransactions = props.transactions.filter((t) =>
+    props.selection.selected.has(t.id),
   );
 
   return (
@@ -396,8 +401,8 @@ function FloatingBar(props: {
       <div className="min-w-0 flex-1">
         <TransactionActionsCombobox
           ids={ids}
-          transactions={selectedTransactions}
           onFinish={props.selection.exitSelect}
+          transactions={selectedTransactions}
         />
       </div>
       <CloseButton onClick={props.selection.exitSelect} />

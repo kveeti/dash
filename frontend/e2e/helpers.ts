@@ -45,36 +45,47 @@ export async function createTransaction(
     kind?: "expense" | "income";
   },
 ) {
-  const accountAmount = input.kind === "income" ? input.amount : -input.amount;
-  const response = await page.request.post("/api/v1/transactions", {
-    data: {
-      date: `${input.date}T12:00:00Z`,
-      counterparty: input.counterparty,
-      description: "",
-      postings: [
-        {
-          bucket_id: input.accountId,
-          amount: accountAmount,
-          currency: "EUR",
-        },
-        {
-          bucket_id: input.categoryId,
-          amount: -accountAmount,
-          currency: "EUR",
-        },
-      ],
-    },
+  const beforeResponse = await page.request.get("/api/v1/inbox");
+  const before = (await beforeResponse.json()) as { rows: { id: string }[] };
+  const beforeIds = new Set(before.rows.map((row) => row.id));
+  const sign = input.kind === "income" ? 1 : -1;
+  const amount = ((sign * input.amount) / 100).toFixed(2).replace(".", ",");
+  await importNordea(
+    page,
+    input.accountId,
+    nordeaRow(input.date.replaceAll("-", "/"), amount, input.counterparty),
+    "UTC",
+  );
+
+  const inboxResponse = await page.request.get("/api/v1/inbox");
+  const inbox = (await inboxResponse.json()) as { rows: { id: string }[] };
+  const row = inbox.rows.find((item) => !beforeIds.has(item.id));
+  expect(row).toBeTruthy();
+  const categorized = await page.request.post("/api/v1/inbox/categorize", {
+    data: { row_ids: [row!.id], bucket_id: input.categoryId },
   });
-  expect(response).toBeOK();
-  return (await response.json()) as { id: string };
+  expect(categorized).toBeOK();
+
+  const transactionsResponse = await page.request.get("/api/v1/transactions");
+  const transactions = (await transactionsResponse.json()) as {
+    transactions: { id: string; counterparty: string }[];
+  };
+  return transactions.transactions.find(
+    (transaction) => transaction.counterparty === input.counterparty,
+  )!;
 }
 
-export async function importNordea(page: Page, bucketId: string, rows: string) {
+export async function importNordea(
+  page: Page,
+  bucketId: string,
+  rows: string,
+  timezone = "Europe/Helsinki",
+) {
   const response = await page.request.post("/api/v1/imports", {
     multipart: {
       bucket_id: bucketId,
       format: "nordea",
-      timezone: "Europe/Helsinki",
+      timezone,
       file: {
         name: "transactions.csv",
         mimeType: "text/csv",

@@ -68,11 +68,7 @@ func (d *Data) ListInbox(ctx context.Context, userID string, cursorDate time.Tim
 	return out, rows.Err()
 }
 
-// categorizeInboxSQL creates one balanced transaction per pending row in a single
-// set-based statement: an asset leg on the row's import bucket + a category leg on
-// the chosen bucket, and flips each row to 'categorized' pointing at its new
-// transaction. Inserts are audited (null before) and each row's before-image is
-// captured for the status flip. Params: $1 user, $2 row ids, $3 category bucket.
+// categorizeInboxSQL locks each source row and creates one exact import link.
 const categorizeInboxSQL = `
 with rows as materialized (
     select r.id as row_id, r.date, r.amount, r.currency,
@@ -81,14 +77,15 @@ with rows as materialized (
     from import_rows r
     join import_batches b on b.id = r.batch_id
     where r.id = any($2::uuid[]) and b.user_id = $1 and r.status = 'pending'
+    for update of r
 ),
 ins_txn as (
-    insert into transactions (id, owner_user_id, date, counterparty, description, created_at)
-    select txn_id, $1, date, payee, message, now() from rows
+    insert into transactions (id, owner_user_id, occurred_at, counterparty, description, memo, created_at)
+    select txn_id, $1, date, payee, message, '', now() from rows
 ),
 ins_post as (
-    insert into postings (id, transaction_id, bucket_id, amount, currency, mirror_id, created_at)
-    select p1, txn_id, bucket_id, amount, currency, null::uuid, now() from rows
+    insert into postings (id, transaction_id, bucket_id, amount, currency, import_row_id, created_at)
+    select p1, txn_id, bucket_id, amount, currency, row_id, now() from rows
     union all
     select p2, txn_id, $3, -amount, currency, null::uuid, now() from rows
 ),
@@ -108,7 +105,7 @@ aud_rows as (
     from import_rows orig where orig.id in (select row_id from rows)
 ),
 upd as (
-    update import_rows set status = 'categorized', transaction_id = r.txn_id
+    update import_rows set status = 'categorized'
     from rows r where import_rows.id = r.row_id
 )
 select count(*) from rows`
@@ -195,102 +192,126 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 		return err
 	}
 	defer tx.Rollback()
-
-	type matchedRow struct {
+	type row struct {
 		id                                                    string
 		date                                                  time.Time
 		amount                                                int64
 		currency, counterparty, description, bucket, timezone string
 	}
-	rows, err := tx.QueryContext(ctx, `select r.id, r.date, r.amount, r.currency,
-		coalesce(r.raw->>'payee', ''), coalesce(r.raw->>'message', ''), b.bucket_id, b.timezone
-		from import_rows r join import_batches b on b.id = r.batch_id
-		where r.id = any($2::uuid[]) and b.user_id = $1 and r.status = 'pending' for update of r`, userID, []string{rowID, matchID})
+	rows, err := tx.QueryContext(ctx, `select r.id,r.date,r.amount,r.currency,coalesce(r.raw->>'payee',''),coalesce(r.raw->>'message',''),b.bucket_id,b.timezone
+		from import_rows r join import_batches b on b.id=r.batch_id where r.id=any($2::uuid[]) and b.user_id=$1 and r.status='pending' for update of r`, userID, []string{rowID, matchID})
 	if err != nil {
 		return err
 	}
-	var pair []matchedRow
+	var pair []row
 	for rows.Next() {
-		var row matchedRow
-		if err := rows.Scan(&row.id, &row.date, &row.amount, &row.currency, &row.counterparty, &row.description, &row.bucket, &row.timezone); err != nil {
+		var r row
+		if err = rows.Scan(&r.id, &r.date, &r.amount, &r.currency, &r.counterparty, &r.description, &r.bucket, &r.timezone); err != nil {
 			rows.Close()
 			return err
 		}
-		pair = append(pair, row)
+		pair = append(pair, r)
 	}
-	if err := rows.Close(); err != nil {
+	if err = rows.Close(); err != nil {
 		return err
 	}
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		return err
 	}
 	if len(pair) != 2 {
 		return ErrInvalidPostings
 	}
-
-	first, second := pair[0], pair[1]
-	firstLocation, err := time.LoadLocation(first.timezone)
+	a, b := pair[0], pair[1]
+	localDay := func(r row) (time.Time, error) {
+		loc, e := time.LoadLocation(r.timezone)
+		if e != nil {
+			return time.Time{}, e
+		}
+		x := r.date.In(loc)
+		return time.Date(x.Year(), x.Month(), x.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
+	ad, err := localDay(a)
 	if err != nil {
 		return err
 	}
-	secondLocation, err := time.LoadLocation(second.timezone)
+	bd, err := localDay(b)
 	if err != nil {
 		return err
 	}
-	firstLocal := first.date.In(firstLocation)
-	secondLocal := second.date.In(secondLocation)
-	firstDay := time.Date(firstLocal.Year(), firstLocal.Month(), firstLocal.Day(), 0, 0, 0, 0, time.UTC)
-	secondDay := time.Date(secondLocal.Year(), secondLocal.Month(), secondLocal.Day(), 0, 0, 0, 0, time.UTC)
-	distance := firstDay.Sub(secondDay)
+	distance := ad.Sub(bd)
 	if distance < -7*24*time.Hour || distance > 7*24*time.Hour {
 		return ErrInvalidPostings
 	}
-	transfer := first.currency == second.currency && first.bucket != second.bucket && first.amount == -second.amount && first.amount != 0
-	exchange := first.currency != second.currency && ((first.amount < 0 && second.amount > 0) || (first.amount > 0 && second.amount < 0))
+	transfer := a.currency == b.currency && a.bucket != b.bucket && a.amount == -b.amount && a.amount != 0
+	exchange := a.currency != b.currency && ((a.amount < 0 && b.amount > 0) || (a.amount > 0 && b.amount < 0))
 	if !transfer && !exchange {
 		return ErrInvalidPostings
 	}
-
-	postings := []Posting{
-		{BucketID: first.bucket, Amount: first.amount, Currency: first.currency},
-		{BucketID: second.bucket, Amount: second.amount, Currency: second.currency},
+	var transit, fx string
+	if err = tx.QueryRowContext(ctx, "select id from buckets where owner_user_id=$1 and kind='transit'", userID).Scan(&transit); err != nil {
+		return err
 	}
 	if exchange {
-		var clearing string
-		if err := tx.QueryRowContext(ctx, "select id from buckets where owner_user_id = $1 and kind = 'clearing' and hidden = true", userID).Scan(&clearing); err != nil {
+		if err = tx.QueryRowContext(ctx, "select id from buckets where owner_user_id=$1 and kind='fx_conversion'", userID).Scan(&fx); err != nil {
 			return err
 		}
-		postings = append(postings,
-			Posting{BucketID: clearing, Amount: -first.amount, Currency: first.currency},
-			Posting{BucketID: clearing, Amount: -second.amount, Currency: second.currency},
-		)
 	}
-
-	outgoing := first
-	if second.amount < 0 {
-		outgoing = second
+	// Exchange settlement follows source time, with the outgoing row first on a tie.
+	first, second := a, b
+	if second.date.Before(first.date) || (second.date.Equal(first.date) && second.amount < 0) {
+		first, second = second, first
 	}
-	date := first.date
-	if second.date.After(date) {
-		date = second.date
+	ids := map[string]string{}
+	create := func(r row, postings []Posting) error {
+		rid := r.id
+		txn := Transaction{ID: NewPrivateID(), OwnerUserID: userID, OccurredAt: r.date, Counterparty: r.counterparty, Description: r.description}
+		postings[0].ImportRowID = &rid
+		if err := insertTransactionTx(ctx, tx, &txn, postings); err != nil {
+			return err
+		}
+		ids[r.id] = txn.ID
+		return nil
 	}
-	txn := Transaction{ID: NewPrivateID(), OwnerUserID: userID, Date: date, Counterparty: outgoing.counterparty, Description: outgoing.description}
-	if err := insertTransactionTx(ctx, tx, &txn, postings); err != nil {
+	if transfer {
+		if err = create(a, []Posting{{BucketID: a.bucket, Amount: a.amount, Currency: a.currency}, {BucketID: transit, Amount: -a.amount, Currency: a.currency}}); err != nil {
+			return err
+		}
+		if err = create(b, []Posting{{BucketID: b.bucket, Amount: b.amount, Currency: b.currency}, {BucketID: transit, Amount: -b.amount, Currency: b.currency}}); err != nil {
+			return err
+		}
+	} else {
+		if err = create(first, []Posting{{BucketID: first.bucket, Amount: first.amount, Currency: first.currency}, {BucketID: transit, Amount: -first.amount, Currency: first.currency}}); err != nil {
+			return err
+		}
+		if err = create(second, []Posting{{BucketID: second.bucket, Amount: second.amount, Currency: second.currency}, {BucketID: fx, Amount: -second.amount, Currency: second.currency}, {BucketID: transit, Amount: first.amount, Currency: first.currency}, {BucketID: fx, Amount: -first.amount, Currency: first.currency}}); err != nil {
+			return err
+		}
+	}
+	var transitClear bool
+	if err = tx.QueryRowContext(ctx, `select not exists(select 1 from postings where transaction_id=any($1::uuid[]) and bucket_id=$2 group by currency having sum(amount)<>0)`, []string{ids[a.id], ids[b.id]}, transit).Scan(&transitClear); err != nil {
 		return err
 	}
-	ids := []string{rowID, matchID}
-	if _, err := tx.ExecContext(ctx, `insert into audit_logs (id, actor_user_id, table_name, row_id, operation, before, created_at)
-		select uuidv7(), $1, 'import_rows', id, 'update', to_jsonb(import_rows), now()
-		from import_rows where id = any($2::uuid[])`, userID, ids); err != nil {
+	if !transitClear {
+		return ErrUnbalanced
+	}
+	out, in := a, b
+	if in.amount < 0 {
+		out, in = in, out
+	}
+	_, err = tx.ExecContext(ctx, `with added as (insert into account_movement_matches(id,owner_user_id,outgoing_transaction_id,incoming_transaction_id,created_at) values(uuidv7(),$1,$2,$3,now()) returning id) insert into audit_logs select uuidv7(),$1,'account_movement_matches',id,'insert',null,now() from added`, userID, ids[out.id], ids[in.id])
+	if err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `update import_rows set status = 'categorized', transaction_id = $1 where id = any($2::uuid[])`, txn.ID, ids); err != nil {
+	rowIDs := []string{a.id, b.id}
+	_, err = tx.ExecContext(ctx, `insert into audit_logs(id,actor_user_id,table_name,row_id,operation,before,created_at) select uuidv7(),$1,'import_rows',id,'update',to_jsonb(import_rows),now() from import_rows where id=any($2::uuid[])`, userID, rowIDs)
+	if err != nil {
 		return err
 	}
-	if err := tx.Commit(); err != nil {
+	_, err = tx.ExecContext(ctx, "update import_rows set status='categorized' where id=any($1::uuid[])", rowIDs)
+	if err != nil {
 		return err
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (d *Data) RestoreInboxRows(ctx context.Context, userID string, rowIDs []string) (int, error) {
@@ -304,12 +325,9 @@ func (d *Data) RestoreInboxRows(ctx context.Context, userID string, rowIDs []str
 	defer tx.Rollback()
 
 	rows, err := tx.QueryContext(ctx, `select t.id
-		from transactions t
-		where t.owner_user_id = $1 and exists (
-			select 1 from import_rows r
-			join import_batches b on b.id = r.batch_id
-			where r.id = any($2::uuid[]) and b.user_id = $1 and r.transaction_id = t.id
-		) for update`, userID, rowIDs)
+		from transactions t join postings p on p.transaction_id=t.id
+		join import_rows r on r.id=p.import_row_id join import_batches b on b.id=r.batch_id
+		where t.owner_user_id=$1 and r.id=any($2::uuid[]) and b.user_id=$1 for update of t`, userID, rowIDs)
 	if err != nil {
 		return 0, err
 	}

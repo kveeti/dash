@@ -10,6 +10,7 @@ import ImportsPage from "./features/imports/imports-page";
 import InboxPage from "./features/inbox/inbox-page";
 import { Layout } from "./features/layout";
 import StatsPage from "./features/stats/stats-page";
+import TransactionDetailPage from "./features/transactions/transaction-detail-page";
 import TransactionsPage from "./features/transactions/transactions-page";
 
 import "./styles.css";
@@ -24,6 +25,10 @@ createRoot(document.getElementById("root")!).render(
           <Layout>
             <Switch>
               <Route path="/inbox" component={InboxPage} />
+              <Route
+                path="/transactions/:id"
+                component={TransactionDetailPage}
+              />
               <Route path="/transactions" component={TransactionsPage} />
               <Route path="/imports" component={ImportsPage} />
               <Route path="/imports/:id" component={ImportReportPage} />

@@ -33,6 +33,72 @@ export function toTransactionRow(txn: Transaction): TransactionRow {
   const name = (p: Posting) => p.bucket.name;
   const kind = (p: Posting) => p.bucket.kind;
 
+  if (txn.transfer && txn.postings.length === 1) {
+    const posting = txn.postings[0];
+    const counterpartBucket = txn.transfer.counterpart_bucket;
+    const counterpartAmount = txn.transfer.counterpart_amount;
+    const counterpartCurrency = txn.transfer.counterpart_currency;
+
+    if (
+      counterpartBucket &&
+      counterpartAmount !== undefined &&
+      counterpartCurrency
+    ) {
+      const outgoing =
+        txn.transfer.side === "outgoing"
+          ? {
+              name: name(posting),
+              amount: posting.amount,
+              currency: posting.currency,
+            }
+          : {
+              name: counterpartBucket.name,
+              amount: counterpartAmount,
+              currency: counterpartCurrency,
+            };
+      const incoming =
+        txn.transfer.side === "incoming"
+          ? {
+              name: name(posting),
+              amount: posting.amount,
+              currency: posting.currency,
+            }
+          : {
+              name: counterpartBucket.name,
+              amount: counterpartAmount,
+              currency: counterpartCurrency,
+            };
+
+      if (outgoing.currency !== incoming.currency) {
+        return {
+          kind: "exchange",
+          from: outgoing.name,
+          to: incoming.name,
+          fromAmount: outgoing.amount,
+          fromCurrency: outgoing.currency,
+          toAmount: incoming.amount,
+          toCurrency: incoming.currency,
+        };
+      }
+      return {
+        kind: "transfer",
+        from: outgoing.name,
+        to: incoming.name,
+        amount: posting.amount,
+        currency: posting.currency,
+      };
+    }
+
+    const other = txn.transfer.unmatched ? "Unmatched side" : "Other account";
+    return {
+      kind: "transfer",
+      from: txn.transfer.side === "incoming" ? other : name(posting),
+      to: txn.transfer.side === "incoming" ? name(posting) : other,
+      amount: posting.amount,
+      currency: posting.currency,
+    };
+  }
+
   const categoryLegs = txn.postings.filter(
     (p) =>
       kind(p) === "expense" || kind(p) === "income" || kind(p) === "person",
