@@ -27,6 +27,7 @@ import {
 } from "../../lib/list-shell/selection";
 import { setSearchParam, useSearchParam } from "../../lib/search-param";
 import { UndoNotice } from "../../lib/undo/undo";
+import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
@@ -186,6 +187,21 @@ function List(props: {
             </Link>
           }
         />
+      )}
+      {props.inboxQuery.hasNextPage && (
+        <div className="mx-auto mb-[calc(var(--nav-height)+var(--filterbar-height)+var(--spacing))] w-full max-w-(--page-width) px-3 sm:mb-0 sm:px-6">
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={() => {
+              if (!props.inboxQuery.isFetchingNextPage)
+                props.inboxQuery.fetchNextPage();
+            }}
+          >
+            {props.inboxQuery.isFetchingNextPage ? "loading…" : "Load older"}
+          </Button>
+        </div>
       )}
     </BucketComboRoot>
   );

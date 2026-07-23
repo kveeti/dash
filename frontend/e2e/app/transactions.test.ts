@@ -270,6 +270,13 @@ test("transaction detail edits memo, category, and tags", async ({
     data: { row_ids: [inbox.rows[0].id], bucket_id: groceries.id },
   });
   expect(categorized).toBeOK();
+  await createTransaction(page, {
+    date: "2026-07-02",
+    accountId: checking.id,
+    categoryId: groceries.id,
+    amount: 800,
+    counterparty: "Other market",
+  });
 
   await page.goto("/transactions");
   await page.getByRole("link", { name: "View Detail Market" }).click();
@@ -348,6 +355,29 @@ test("transaction detail edits memo, category, and tags", async ({
     page.getByRole("combobox").filter({ hasText: "Dining" }),
   ).toBeVisible();
   await expect(page.getByRole("heading", { name: "Postings" })).toHaveCount(0);
+
+  await tagTrigger.click();
+  await page
+    .getByRole("combobox", { name: "Change or add tags..." })
+    .fill("Filter");
+  const filterOption = page.getByRole("option").filter({ hasText: "#filter" });
+  await Promise.all([
+    page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/transactions/tags") &&
+        response.request().method() === "POST",
+    ),
+    filterOption.click(),
+  ]);
+
+  await page.getByRole("link", { name: "transactions", exact: true }).click();
+  await page.getByRole("button", { name: "#filter" }).click();
+  await expect(page).toHaveURL(/tag=filter/);
+  await expect(page.getByText("Detail Market")).toBeVisible();
+  await expect(page.getByText("Other market")).not.toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Detail Market")).toBeVisible();
+  await expect(page.getByText("Other market")).not.toBeVisible();
 });
 
 test("income transaction detail shows category and tags", async ({

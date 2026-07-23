@@ -47,3 +47,54 @@ test("search, select all, and create a category against the real inbox", async (
   await expect(page.getByText("Museum")).toBeVisible();
   await expect(page.getByText("Travel")).toHaveCount(3);
 });
+
+test("inbox and transactions load older rows from the real backend", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  const checking = await createBucket(page, "asset", "Checking");
+  const groceries = await createBucket(page, "expense", "Groceries");
+  const rows = [
+    ...Array.from({ length: 100 }, (_, index) =>
+      nordeaRow("2026/07/02", "-1,00", `Current page ${index + 1}`),
+    ),
+    nordeaRow("2026/07/01", "-1,00", "Older page row"),
+  ].join("");
+  await importNordea(page, checking.id, rows);
+
+  await page.goto("/inbox");
+  await expect(page.locator("main").getByRole("listitem")).toHaveCount(100);
+  await expect(page.getByText("Older page row")).not.toBeVisible();
+  await page.getByRole("button", { name: "Load older" }).click();
+  await expect(page.getByText("Older page row")).toBeVisible();
+  await expect(page.locator("main").getByRole("listitem")).toHaveCount(101);
+
+  const firstPage = await page.request.get("/api/v1/inbox");
+  expect(firstPage).toBeOK();
+  const first = (await firstPage.json()) as {
+    rows: { id: string }[];
+    next_cursor: { date: string; id: string } | null;
+  };
+  expect(first.next_cursor).toBeTruthy();
+  const secondPage = await page.request.get(
+    `/api/v1/inbox?before_date=${encodeURIComponent(first.next_cursor!.date)}&before_id=${first.next_cursor!.id}`,
+  );
+  expect(secondPage).toBeOK();
+  const second = (await secondPage.json()) as { rows: { id: string }[] };
+  const categorized = await page.request.post("/api/v1/inbox/categorize", {
+    data: {
+      row_ids: [...first.rows, ...second.rows].map((row) => row.id),
+      bucket_id: groceries.id,
+    },
+  });
+  expect(categorized).toBeOK();
+
+  await page.goto("/transactions");
+  await expect(page.locator("main").getByRole("listitem")).toHaveCount(100);
+  await expect(page.getByText("Older page row")).not.toBeVisible();
+  await page.getByRole("button", { name: "Load older" }).click();
+  await expect(page.getByText("Older page row")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Select transactions" }).click();
+  await page.getByRole("button", { name: "Select all" }).click();
+  await expect(page.getByText("101 selected")).toBeVisible();
+});

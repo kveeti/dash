@@ -2,14 +2,34 @@ import { expect, test, type Page } from "@playwright/test";
 
 import { login, nordeaHeader, nordeaRow } from "../helpers";
 
-const csv = nordeaHeader + nordeaRow("2026/07/01", "-12,34", "Duplicate shop");
+const nordeaCSV =
+  nordeaHeader + nordeaRow("2026/07/01", "-12,34", "Duplicate shop");
+const opCSV =
+  '"Kirjauspäivä";"Arvopäivä";"Määrä EUROA";"Laji";"Selitys";"Saaja/Maksaja";"Saajan tilinumero";"Saajan pankin BIC";"Viite";"Viesti";"Arkistointitunnus"\n' +
+  "2026-07-01;2026-07-01;-12,34;Korttimaksu;Ruoka;K-Market;FI123;;;Viesti: Groceries;A1\n";
+const revolutCSV =
+  "Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n" +
+  "CARD_PAYMENT,Current,2026-07-01 12:30:00,2026-07-01 12:31:00,Cafe,-10.00,0.50,EUR,COMPLETED,90.00\n";
+const duplicatePageCSV =
+  nordeaHeader +
+  [
+    ...Array.from({ length: 50 }, (_, index) =>
+      nordeaRow("2026/07/02", "-1,00", `Duplicate page ${index + 1}`),
+    ),
+    nordeaRow("2026/07/01", "-1,00", "Older duplicate page"),
+  ].join("");
 
-async function upload(page: Page) {
+async function upload(
+  page: Page,
+  input: { csv?: string; format?: "nordea" | "op" | "revolut" } = {},
+) {
+  const format = input.format ?? "nordea";
   await page.getByLabel("File").setInputFiles({
-    name: "transactions.csv",
+    name: `${format}.csv`,
     mimeType: "text/csv",
-    buffer: Buffer.from(csv),
+    buffer: Buffer.from(input.csv ?? nordeaCSV),
   });
+  await page.getByLabel("Format").selectOption(format);
   await page
     .getByRole("combobox")
     .filter({ hasText: "Select account" })
@@ -71,4 +91,49 @@ test("upload, duplicate import, import anyway, and undo use the real backend", a
     .dispatchEvent("mousedown", { button: 0 });
   await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByText("Duplicate shop")).toHaveCount(1);
+});
+
+test("OP and Revolut files import through the real app", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  await page.getByRole("link", { name: "import", exact: true }).click();
+  await upload(page, { csv: opCSV, format: "op" });
+  await expect(page.getByText("1 imported · 0 duplicates")).toBeVisible();
+
+  await page.getByRole("link", { name: "import", exact: true }).click();
+  await upload(page, { csv: revolutCSV, format: "revolut" });
+  await expect(page.getByText("1 imported · 0 duplicates")).toBeVisible();
+});
+
+test("an import report loads older duplicate rows", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  await page.getByRole("link", { name: "import", exact: true }).click();
+  await upload(page, { csv: duplicatePageCSV });
+
+  await page.getByRole("link", { name: "import", exact: true }).click();
+  await upload(page, { csv: duplicatePageCSV });
+  await expect(page.getByText("0 imported · 51 duplicates")).toBeVisible();
+  await expect(page.getByText("Older duplicate page")).not.toBeVisible();
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(page.getByText("Older duplicate page")).toBeVisible();
+});
+
+test("an import report shows skipped CSV rows", async ({ page }, testInfo) => {
+  await login(page, testInfo);
+  await page.getByRole("link", { name: "import", exact: true }).click();
+  await upload(page, {
+    csv:
+      nordeaHeader +
+      nordeaRow("2026/07/01", "-12,34", "Valid shop") +
+      nordeaRow("bad-date", "-1,00", "Broken shop") +
+      nordeaRow("2026/07/03", "50,00", "Refund"),
+  });
+  await expect(page.getByText("2 imported · 0 duplicates")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Skipped rows" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Line 3:/)).toBeVisible();
 });

@@ -115,4 +115,13 @@ test("stats periods, comparisons, and category expansion use persisted transacti
 
   await page.reload();
   await expect(page.getByLabel("From date")).toHaveValue(currentStart);
+
+  await page.getByRole("button", { name: "week" }).click();
+  await expect(page).toHaveURL(/period=week/);
+  await page.getByRole("button", { name: "Previous period" }).click();
+  await expect(page).toHaveURL(/anchor=/);
+
+  await page.getByRole("button", { name: "year", exact: true }).click();
+  await expect(page).toHaveURL(/period=year/);
+  await expect(page).toHaveURL(/compare=previous/);
 });

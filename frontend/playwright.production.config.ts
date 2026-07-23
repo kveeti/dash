@@ -3,9 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
 
 export default defineConfig({
-  testDir: "./e2e",
-  testIgnore: "production/**",
-  fullyParallel: true,
+  testDir: "./e2e/production",
   timeout: 20_000,
   use: {
     ...devices["iPhone 13"],
@@ -26,19 +24,11 @@ export default defineConfig({
       },
     },
   ],
-  webServer: [
-    {
-      command: "VITE_PORT=3001 PORT=8200 pnpm run dev --host 127.0.0.1",
-      url: "http://127.0.0.1:3001",
-      reuseExistingServer: false,
-      gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-    },
-    {
-      command: "pnpm run e2e:server",
-      url: "http://127.0.0.1:8200/api/health",
-      reuseExistingServer: false,
-      timeout: 30_000,
-      gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
-    },
-  ],
+  webServer: {
+    command: "pnpm run build && DEV_VITE_URL= pnpm run e2e:server",
+    url: "http://127.0.0.1:8200/api/health",
+    reuseExistingServer: false,
+    timeout: 60_000,
+    gracefulShutdown: { signal: "SIGTERM", timeout: 10_000 },
+  },
 });

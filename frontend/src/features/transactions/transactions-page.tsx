@@ -31,6 +31,7 @@ import {
   setSearchParams,
   useSearchParam,
 } from "../../lib/search-param";
+import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { useI18n } from "../i18n/use-i18n";
 import { TransactionActionsCombobox } from "./transaction-actions-combobox";
@@ -251,16 +252,19 @@ function List(props: {
       </ul>
 
       {props.transactions.hasNextPage && (
-        <button
-          type="button"
-          className="mx-auto w-full max-w-(--page-width) px-3 sm:px-6"
-          onClick={() => {
-            if (!props.transactions.isFetchingNextPage)
-              props.transactions.fetchNextPage();
-          }}
-        >
-          {props.transactions.isFetchingNextPage ? "loading…" : "Load older"}
-        </button>
+        <div className="mx-auto mb-[calc(var(--nav-height)+var(--filterbar-height)+var(--spacing))] w-full max-w-(--page-width) px-3 sm:mb-0 sm:px-6">
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={() => {
+              if (!props.transactions.isFetchingNextPage)
+                props.transactions.fetchNextPage();
+            }}
+          >
+            {props.transactions.isFetchingNextPage ? "loading…" : "Load older"}
+          </Button>
+        </div>
       )}
     </>
   );
