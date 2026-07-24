@@ -31,7 +31,7 @@ async function mockInbox(
       ],
     }),
   );
-  await page.route("**/api/v1/inbox", (route) =>
+  await page.route(/\/api\/v1\/inbox(?:\?.*)?$/, (route) =>
     route.fulfill({
       json: {
         rows: rows.filter((row) => !categorized.has(row.id)),

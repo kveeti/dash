@@ -6,7 +6,7 @@ export function Layout(props: { children: ReactNode }) {
   return (
     <>
       <Nav />
-      <main className="text-base pl-(--scrollbar-pl)">{props.children}</main>
+      <main className="text-base sm:pl-(--scrollbar-pl)">{props.children}</main>
     </>
   );
 }

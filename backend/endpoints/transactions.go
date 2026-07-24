@@ -3,10 +3,14 @@ package endpoints
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"money/backend/data"
 	"money/backend/state"
 	"net/http"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const dateLayout = time.RFC3339
@@ -257,7 +261,12 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 				return NewErr("invalid timezone", http.StatusBadRequest)
 			}
 		}
-		txns, postings, err := state.Data.ListTransactions(r.Context(), userID, timezone, date, id, r.URL.Query().Get("q"), r.URL.Query().Get("tag"))
+		filter, err := parseTransactionFilter(r, state)
+		if err != nil {
+			return err
+		}
+		filter.Search = r.URL.Query().Get("q")
+		txns, postings, err := state.Data.ListTransactions(r.Context(), userID, timezone, date, id, filter)
 		if err != nil {
 			return NewUnexpectedErr("error listing transactions: %w", err)
 		}
@@ -272,6 +281,132 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 		Json(w, out)
 		return nil
 	}
+}
+
+func parseTransactionFilter(r *http.Request, state *state.State) (data.TransactionFilter, error) {
+	query := r.URL.Query()
+	filter := data.TransactionFilter{
+		Categories: query["category"],
+		Tags:       query["tag"],
+		Accounts:   query["account"],
+	}
+	for _, id := range append(append([]string{}, filter.Categories...), filter.Accounts...) {
+		if _, err := uuid.Parse(id); err != nil {
+			return data.TransactionFilter{}, NewErr("invalid bucket id", http.StatusBadRequest)
+		}
+	}
+	for _, tag := range filter.Tags {
+		if strings.TrimSpace(tag) == "" {
+			return data.TransactionFilter{}, NewErr("invalid tag", http.StatusBadRequest)
+		}
+	}
+
+	if direction := query.Get("direction"); direction != "" {
+		if direction != "in" && direction != "out" {
+			return data.TransactionFilter{}, NewErr("direction must be in or out", http.StatusBadRequest)
+		}
+		filter.Direction = direction
+	}
+	for _, field := range []struct {
+		name string
+		to   **time.Time
+	}{{"occurred_from", &filter.OccurredFrom}, {"occurred_before", &filter.OccurredBefore}} {
+		if value := query.Get(field.name); value != "" {
+			parsed, err := time.Parse(time.RFC3339, value)
+			if err != nil {
+				return data.TransactionFilter{}, NewErr(field.name+" must be an RFC3339 timestamp", http.StatusBadRequest)
+			}
+			*field.to = &parsed
+		}
+	}
+	if filter.OccurredFrom != nil && filter.OccurredBefore != nil && !filter.OccurredFrom.Before(*filter.OccurredBefore) {
+		return data.TransactionFilter{}, NewErr("occurred_from must be before occurred_before", http.StatusBadRequest)
+	}
+
+	amount, minimum, maximum := query.Get("amount"), query.Get("amount_min"), query.Get("amount_max")
+	if amount != "" && (minimum != "" || maximum != "") {
+		return data.TransactionFilter{}, NewErr("amount cannot be combined with amount_min or amount_max", http.StatusBadRequest)
+	}
+	if amount != "" || minimum != "" || maximum != "" {
+		currency := query.Get("currency")
+		exponents, err := state.Data.ListCurrencies(r.Context())
+		if err != nil {
+			return data.TransactionFilter{}, NewUnexpectedErr("error listing currencies: %w", err)
+		}
+		exponent := -1
+		for _, item := range exponents {
+			if item.Code == currency {
+				exponent = item.Exponent
+				break
+			}
+		}
+		if exponent < 0 {
+			return data.TransactionFilter{}, NewErr("invalid amount currency", http.StatusBadRequest)
+		}
+		filter.Currency = currency
+		for _, field := range []struct {
+			value string
+			to    **int64
+		}{{amount, &filter.Amount}, {minimum, &filter.AmountMin}, {maximum, &filter.AmountMax}} {
+			if field.value == "" {
+				continue
+			}
+			parsed, ok := parseAmountMinor(field.value, exponent)
+			if !ok {
+				return data.TransactionFilter{}, NewErr("invalid amount", http.StatusBadRequest)
+			}
+			*field.to = &parsed
+		}
+		if filter.AmountMin != nil && filter.AmountMax != nil && *filter.AmountMin > *filter.AmountMax {
+			return data.TransactionFilter{}, NewErr("amount_min must not exceed amount_max", http.StatusBadRequest)
+		}
+	}
+	return filter, nil
+}
+
+func parseAmountMinor(value string, exponent int) (int64, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.HasPrefix(value, "-") || strings.HasPrefix(value, "+") {
+		return 0, false
+	}
+	whole, fraction, hasFraction := strings.Cut(value, ".")
+	if whole == "" {
+		whole = "0"
+	}
+	if !hasFraction {
+		fraction = ""
+	}
+	if len(fraction) > exponent || strings.Contains(fraction, ".") {
+		return 0, false
+	}
+	for _, part := range []string{whole, fraction} {
+		for _, char := range part {
+			if char < '0' || char > '9' {
+				return 0, false
+			}
+		}
+	}
+	var scale int64 = 1
+	for range exponent {
+		scale *= 10
+	}
+	var integer, decimal int64
+	for _, char := range whole {
+		if integer > (math.MaxInt64-int64(char-'0'))/10 {
+			return 0, false
+		}
+		integer = integer*10 + int64(char-'0')
+	}
+	for _, char := range fraction {
+		decimal = decimal*10 + int64(char-'0')
+	}
+	for range exponent - len(fraction) {
+		decimal *= 10
+	}
+	if integer > (math.MaxInt64-decimal)/scale {
+		return 0, false
+	}
+	return integer*scale + decimal, true
 }
 
 func HandleSplitTransaction(state *state.State, getUserID GetUserID) Handler {

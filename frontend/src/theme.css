@@ -7,6 +7,7 @@
 
   --surface-canvas: oklch(98.8% 0.003 70deg);
   --surface-popover: var(--color-gray-25);
+  --surface-popover-alt: var(--color-gray-50);
   --surface-form: var(--color-gray-100);
   --popover-border: color-mix(in oklab, var(--color-gray-500) 15%, transparent);
   --popover-item-selected: var(--color-gray-150);
@@ -14,6 +15,8 @@
 
   --input-bg: var(--color-gray-215);
   --input-bg-alt: var(--color-gray-280);
+  --input-bg-popover: var(--color-gray-170);
+  --input-bg-alt-popover: var(--color-gray-240);
   --input-placeholder: var(--color-gray-600);
   --input-ring-hover: var(--color-gray-350);
   --input-ring-active: var(--color-gray-440);
@@ -51,11 +54,14 @@
     --border-subtle: var(--color-gray-150);
 
     --surface-popover: var(--color-gray-175);
+    --surface-popover-alt: var(--color-gray-90);
     --popover-border: var(--color-gray-225);
     --popover-item-selected: var(--color-gray-225);
 
     --input-bg: var(--color-gray-195);
     --input-bg-alt: var(--color-gray-230);
+    --input-bg-popover: var(--color-gray-245);
+    --input-bg-alt-popover: var(--color-gray-275);
     --input-placeholder: var(--color-gray-600);
     --input-ring-hover: var(--color-gray-300);
     --input-ring-active: var(--color-gray-450);

@@ -102,7 +102,7 @@ test("transaction date and month headings group only matching dates", async ({
     });
   }
 
-  await page.goto("/transactions");
+  await page.goto("/transactions?range=all-time");
   await expect(
     page.getByRole("heading", {
       level: 3,
@@ -626,4 +626,45 @@ test("failed transaction actions roll back and preserve selection", async ({
   await expect(row(page, "Failure one")).toBeVisible();
   await expect(row(page, "Failure two")).toBeVisible();
   await expect(page.getByText("2 selected")).toBeVisible();
+});
+
+test("transaction direction filters work without an amount", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  const checking = await createBucket(page, "asset", "Checking");
+  const groceries = await createBucket(page, "expense", "Groceries");
+  const salary = await createBucket(page, "income", "Salary");
+  const today = await page.evaluate(() => {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
+  await createTransaction(page, {
+    date: today,
+    accountId: checking.id,
+    categoryId: groceries.id,
+    amount: 1200,
+    counterparty: "Direction purchase",
+  });
+  await createTransaction(page, {
+    date: today,
+    accountId: checking.id,
+    categoryId: salary.id,
+    amount: 5000,
+    counterparty: "Direction salary",
+    kind: "income",
+  });
+
+  await page.goto("/transactions");
+  await page.getByRole("button", { name: "Filters" }).click();
+  await page.getByRole("radio", { name: "Out" }).click();
+  await expect(page.getByText("Direction purchase")).toBeVisible();
+  await expect(page.getByText("Direction salary")).toHaveCount(0);
+
+  await page.getByRole("radio", { name: "In" }).click();
+  await expect(page.getByText("Direction salary")).toBeVisible();
+  await expect(page.getByText("Direction purchase")).toHaveCount(0);
 });

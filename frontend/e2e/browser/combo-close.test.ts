@@ -43,7 +43,7 @@ async function mockApi(page: Page, rowCount: number) {
   await page.route("**/api/v1/buckets**", (route) =>
     route.fulfill({ json: buckets }),
   );
-  await page.route("**/api/v1/inbox", async (route) => {
+  await page.route(/\/api\/v1\/inbox(?:\?.*)?$/, async (route) => {
     const rows = makeRows(rowCount).filter((row) => row.id !== categorizedId);
     await route.fulfill({ json: { rows, next_cursor: null } });
   });

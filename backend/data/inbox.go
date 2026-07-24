@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -28,20 +29,46 @@ type InboxMatch struct {
 const InboxPageSize = 100
 
 // ListInbox returns one keyset page of the user's pending import rows across all
-// their batches, ordered (date desc, id desc). cursorID == "" starts at the top;
-// q filters on counterparty or description.
-func (d *Data) ListInbox(ctx context.Context, userID string, cursorDate time.Time, cursorID, q string) ([]InboxRow, error) {
+// their batches, ordered (date desc, id desc). cursorID == "" starts at the top.
+func (d *Data) ListInbox(ctx context.Context, userID string, cursorDate time.Time, cursorID string, filter TransactionFilter) ([]InboxRow, error) {
 	args := []any{userID}
-	cursorClause := ""
-	if cursorID != "" {
-		cursorClause = "and (r.date, r.id) < ($2::timestamptz, $3::uuid)"
-		args = append(args, cursorDate, cursorID)
+	addArg := func(value any) string {
+		args = append(args, value)
+		return "$" + strconv.Itoa(len(args))
 	}
-	searchClause := ""
-	if q != "" {
-		n := strconv.Itoa(len(args) + 1)
-		searchClause = "and (r.raw->>'payee' ilike $" + n + " or r.raw->>'message' ilike $" + n + ")"
-		args = append(args, "%"+q+"%")
+	clauses := []string{}
+	if cursorID != "" {
+		clauses = append(clauses, "and (r.date, r.id) < ("+addArg(cursorDate)+"::timestamptz, "+addArg(cursorID)+"::uuid)")
+	}
+	if filter.Search != "" {
+		arg := addArg("%" + filter.Search + "%")
+		clauses = append(clauses, "and (r.raw->>'payee' ilike "+arg+" or r.raw->>'message' ilike "+arg+")")
+	}
+	if len(filter.Accounts) > 0 {
+		clauses = append(clauses, "and b.bucket_id=any("+addArg(filter.Accounts)+"::uuid[])")
+	}
+	if filter.Direction == "in" {
+		clauses = append(clauses, "and r.amount > 0")
+	} else if filter.Direction == "out" {
+		clauses = append(clauses, "and r.amount < 0")
+	}
+	if filter.Currency != "" {
+		clauses = append(clauses, "and r.currency="+addArg(filter.Currency))
+	}
+	if filter.Amount != nil {
+		clauses = append(clauses, "and abs(r.amount)="+addArg(*filter.Amount))
+	}
+	if filter.AmountMin != nil {
+		clauses = append(clauses, "and abs(r.amount)>="+addArg(*filter.AmountMin))
+	}
+	if filter.AmountMax != nil {
+		clauses = append(clauses, "and abs(r.amount)<="+addArg(*filter.AmountMax))
+	}
+	if filter.OccurredFrom != nil {
+		clauses = append(clauses, "and r.date >= "+addArg(*filter.OccurredFrom)+"::timestamptz")
+	}
+	if filter.OccurredBefore != nil {
+		clauses = append(clauses, "and r.date < "+addArg(*filter.OccurredBefore)+"::timestamptz")
 	}
 
 	rows, err := d.db.QueryContext(ctx,
@@ -49,7 +76,7 @@ func (d *Data) ListInbox(ctx context.Context, userID string, cursorDate time.Tim
 		 from import_rows r
 		 join import_batches b on b.id = r.batch_id
 		 join buckets bucket on bucket.id = b.bucket_id
-		 where b.user_id = $1 and r.status = 'pending' `+cursorClause+` `+searchClause+`
+		 where b.user_id = $1 and r.status = 'pending' `+strings.Join(clauses, " ")+`
 		 order by r.date desc, r.id desc
 		 limit `+strconv.Itoa(InboxPageSize), args...)
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -491,34 +492,95 @@ func (d *Data) DeleteTransaction(ctx context.Context, userID, id string) error {
 
 const TransactionPageSize = 100
 
-func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cursor time.Time, cursorID, q, tag string) ([]Transaction, map[string][]Posting, error) {
+type TransactionFilter struct {
+	Search                       string
+	Categories, Tags, Accounts   []string
+	Direction, Currency          string
+	Amount, AmountMin, AmountMax *int64
+	OccurredFrom, OccurredBefore *time.Time
+}
+
+func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cursor time.Time, cursorID string, filter TransactionFilter) ([]Transaction, map[string][]Posting, error) {
 	args := []any{userID, timezone}
-	cursorClause := ""
+	addArg := func(value any) string {
+		args = append(args, value)
+		return "$" + strconv.Itoa(len(args))
+	}
+	clauses := []string{}
 	if cursorID != "" {
-		cursorClause = "and (t.occurred_at, t.id) < ($3::timestamptz, $4::uuid)"
-		args = append(args, cursor, cursorID)
+		clauses = append(clauses, "and (t.occurred_at, t.id) < ("+addArg(cursor)+"::timestamptz, "+addArg(cursorID)+"::uuid)")
 	}
-	searchClause := ""
-	if q != "" {
-		n := strconv.Itoa(len(args) + 1)
-		searchClause = "and (t.counterparty ilike $" + n + " or t.description ilike $" + n + ")"
-		args = append(args, "%"+q+"%")
+	if filter.Search != "" {
+		arg := addArg("%" + filter.Search + "%")
+		clauses = append(clauses, "and (t.counterparty ilike "+arg+" or t.description ilike "+arg+")")
 	}
-	tagClause := ""
-	if tag = normalizeTag(tag); tag != "" {
-		n := strconv.Itoa(len(args) + 1)
-		tagClause = `and exists (
+	if len(filter.Categories) > 0 {
+		arg := addArg(filter.Categories)
+		clauses = append(clauses, `and exists (
+			select 1 from postings p
+			join buckets b on b.id=p.bucket_id
+			where p.transaction_id=t.id
+			  and b.kind in ('expense','income','person')
+			  and p.bucket_id=any(`+arg+`::uuid[])
+		)`)
+	}
+	if len(filter.Tags) > 0 {
+		for i, tag := range filter.Tags {
+			filter.Tags[i] = normalizeTag(tag)
+		}
+		arg := addArg(filter.Tags)
+		clauses = append(clauses, `and exists (
+			select 1 from posting_tags pt
+			join postings p on p.id=pt.posting_id
+			where p.transaction_id=t.id and pt.tag=any(`+arg+`::text[])
+		)`)
+	}
+	if filter.OccurredFrom != nil {
+		clauses = append(clauses, "and t.occurred_at >= "+addArg(*filter.OccurredFrom)+"::timestamptz")
+	}
+	if filter.OccurredBefore != nil {
+		clauses = append(clauses, "and t.occurred_at < "+addArg(*filter.OccurredBefore)+"::timestamptz")
+	}
+	if len(filter.Accounts) > 0 || filter.Direction != "" || filter.Amount != nil || filter.AmountMin != nil || filter.AmountMax != nil {
+		legClauses := []string{"b.kind in ('asset','liability')"}
+		if len(filter.Accounts) > 0 {
+			legClauses = append(legClauses, "p.bucket_id=any("+addArg(filter.Accounts)+"::uuid[])")
+		}
+		if filter.Direction == "in" {
+			legClauses = append(legClauses, "p.amount > 0")
+		} else if filter.Direction == "out" {
+			legClauses = append(legClauses, "p.amount < 0")
+		}
+		if filter.Currency != "" {
+			legClauses = append(legClauses, "p.currency="+addArg(filter.Currency))
+		}
+		if filter.Amount != nil {
+			legClauses = append(legClauses, "abs(p.amount)="+addArg(*filter.Amount))
+		}
+		if filter.AmountMin != nil {
+			legClauses = append(legClauses, "abs(p.amount)>= "+addArg(*filter.AmountMin))
+		}
+		if filter.AmountMax != nil {
+			legClauses = append(legClauses, "abs(p.amount)<= "+addArg(*filter.AmountMax))
+		}
+		clauses = append(clauses, `and exists (
 			select 1
-			from posting_tags pt
-			join postings tp on tp.id = pt.posting_id
-			where tp.transaction_id = t.id
-			  and pt.tag = $` + n + `
-		)`
-		args = append(args, tag)
+			from postings p join buckets b on b.id=p.bucket_id
+			where p.transaction_id in (
+				t.id,
+				coalesce((
+					select case when m.outgoing_transaction_id=t.id then m.incoming_transaction_id else m.outgoing_transaction_id end
+					from account_movement_matches m
+					where m.outgoing_transaction_id=t.id or m.incoming_transaction_id=t.id
+					limit 1
+				), t.id)
+			)
+			and `+strings.Join(legClauses, " and ")+`
+		)`)
 	}
 	query := `with page as materialized (
 		select t.id,t.owner_user_id,t.occurred_at,t.counterparty,t.description,t.memo,t.created_at from transactions t
-		where t.owner_user_id=$1 ` + cursorClause + ` ` + searchClause + ` ` + tagClause + `
+		where t.owner_user_id=$1 ` + strings.Join(clauses, " ") + `
 		and not exists (
 			select 1 from account_movement_matches movement
 			join transactions outgoing on outgoing.id=movement.outgoing_transaction_id

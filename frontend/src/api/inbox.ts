@@ -11,11 +11,22 @@ import { api } from "./api";
 import { bucketKeys, type Bucket } from "./buckets";
 import { restoreQueries, type QuerySnapshot } from "./query-snapshot";
 
+export interface InboxFilters {
+  direction?: "in" | "out";
+  amount?: string;
+  amountMin?: string;
+  amountMax?: string;
+  currency?: string;
+  accounts?: string[];
+  occurredFrom?: string;
+  occurredBefore?: string;
+}
+
 export const inboxKeys = {
   all: ["inbox"] as const,
-  list: ({ searchQuery }: { searchQuery: string | null }) => [
+  list: (props: { searchQuery: string | null; filters: InboxFilters }) => [
     "inbox",
-    searchQuery,
+    props,
   ],
 };
 
@@ -47,9 +58,12 @@ export function restoreInboxRows(rowIds: string[]) {
   });
 }
 
-export function useInfiniteInboxQuery(props: { searchQuery: string | null }) {
+export function useInfiniteInboxQuery(props: {
+  searchQuery: string | null;
+  filters: InboxFilters;
+}) {
   return useInfiniteQuery({
-    queryKey: inboxKeys.list({ searchQuery: props.searchQuery }),
+    queryKey: inboxKeys.list(props),
     queryFn: async ({ pageParam }: { pageParam: InboxPage["next_cursor"] }) => {
       const params = new URLSearchParams();
       if (pageParam) {
@@ -58,6 +72,21 @@ export function useInfiniteInboxQuery(props: { searchQuery: string | null }) {
       }
 
       if (props.searchQuery) params.set("q", props.searchQuery);
+      if (props.filters.direction)
+        params.set("direction", props.filters.direction);
+      if (props.filters.amount) params.set("amount", props.filters.amount);
+      if (props.filters.amountMin)
+        params.set("amount_min", props.filters.amountMin);
+      if (props.filters.amountMax)
+        params.set("amount_max", props.filters.amountMax);
+      if (props.filters.currency)
+        params.set("currency", props.filters.currency);
+      for (const account of props.filters.accounts ?? [])
+        params.append("account", account);
+      if (props.filters.occurredFrom)
+        params.set("occurred_from", props.filters.occurredFrom);
+      if (props.filters.occurredBefore)
+        params.set("occurred_before", props.filters.occurredBefore);
 
       return api<InboxPage>(
         `/api/v1/inbox${params.size ? `?${params.toString()}` : ""}`,

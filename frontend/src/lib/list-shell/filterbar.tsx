@@ -1,10 +1,11 @@
+import { XMarkIcon } from "@heroicons/react/24/outline";
 import {
   AnimatePresence,
   motion,
   useIsPresent,
   useReducedMotion,
 } from "motion/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
@@ -18,10 +19,10 @@ export function Filterbar(props: {
   onToggleAll: () => void;
   search?: string;
   onSearch: (value: string | undefined) => void;
-  tag?: string;
-  onClearTag?: () => void;
+  end?: ReactNode;
 }) {
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const searchInput = useRef<HTMLInputElement>(null);
   const reduceMotion = useReducedMotion();
   useEffect(() => () => clearTimeout(debounce.current), []);
 
@@ -48,25 +49,33 @@ export function Filterbar(props: {
             )}
           </AnimatePresence>
         </div>
-        {props.tag && (
+        <div className="relative min-w-0 flex-1 [&:has(input:placeholder-shown)>button]:invisible [&_input]:pe-9 [&_input::-webkit-search-cancel-button]:hidden">
+          <Input
+            ref={searchInput}
+            type="search"
+            placeholder="Search..."
+            defaultValue={props.search}
+            onChange={(e) => {
+              const value = e.currentTarget.value || undefined;
+              clearTimeout(debounce.current);
+              debounce.current = setTimeout(() => props.onSearch(value), 150);
+            }}
+          />
           <button
-            className="cursor-pointer whitespace-nowrap rounded-full border-0 bg-gray-200 px-1 py-1 text-gray-900"
-            onClick={() => props.onClearTag?.()}
+            type="button"
+            aria-label="Clear search"
+            className="absolute end-1 top-1/2 z-1 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-gray-600 outline-[1.5px] outline-transparent outline-offset-[-1px] hover:bg-gray-200 hover:text-gray-900 focus-visible:outline-gray-500"
+            onClick={() => {
+              clearTimeout(debounce.current);
+              if (searchInput.current) searchInput.current.value = "";
+              props.onSearch(undefined);
+              searchInput.current?.focus();
+            }}
           >
-            #{props.tag} ×
+            <XMarkIcon className="size-4" aria-hidden="true" />
           </button>
-        )}
-        <Input
-          className="min-w-0 flex-1"
-          type="search"
-          placeholder="Search..."
-          defaultValue={props.search}
-          onChange={(e) => {
-            const value = e.currentTarget.value || undefined;
-            clearTimeout(debounce.current);
-            debounce.current = setTimeout(() => props.onSearch(value), 150);
-          }}
-        />
+        </div>
+        {props.end}
       </div>
     </div>
   );

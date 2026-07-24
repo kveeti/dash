@@ -25,7 +25,7 @@ export function Nav() {
   }, []);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-10 h-(--nav-height) bg-gray-125/80 backdrop-blur-md sm:sticky sm:top-0 pl-(--scrollbar-pl)">
+    <nav className="fixed inset-x-0 bottom-0 z-10 h-(--nav-height) bg-gray-125/80 backdrop-blur-md sm:sticky sm:top-0 sm:pl-(--scrollbar-pl)">
       <div className="mx-auto flex h-full max-w-(--page-width) px-3">
         <ul className="flex list-none">
           {pages.map((page) => (

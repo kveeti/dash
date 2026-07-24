@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -33,6 +34,56 @@ func getInbox(t *testing.T, app *testApp, query string) []inboxRow {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&out))
 	return out.Rows
+}
+
+func TestInboxFilters(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	cash := createBucket(t, app, "asset", "Cash")
+	doImport(t, app, bank, nordeaHeader+
+		nordeaRow("2026/01/01", "-30,00", "Old", "")+
+		nordeaRow("2026/02/01", "-12,00", "Food", ""))
+	doImport(t, app, cash, nordeaHeader+
+		nordeaRow("2026/02/02", "50,00", "Salary", ""))
+
+	list := func(values url.Values) []inboxRow {
+		return getInbox(t, app, "?"+values.Encode())
+	}
+	parties := func(rows []inboxRow) []string {
+		out := make([]string, len(rows))
+		for i, row := range rows {
+			out[i] = row.Counterparty
+		}
+		return out
+	}
+
+	require.ElementsMatch(t, []string{"Old", "Food"}, parties(list(url.Values{"account": {bank}})))
+	require.Equal(t, []string{"Salary"}, parties(list(url.Values{"direction": {"in"}})))
+	require.Equal(t, []string{"Salary"}, parties(list(url.Values{"currency": {"EUR"}, "amount": {"50"}})))
+	require.Equal(t, []string{"Food"}, parties(list(url.Values{"currency": {"EUR"}, "amount_min": {"10"}, "amount_max": {"20"}})))
+
+	food := inboxByParty(getInbox(t, app, ""))["Food"]
+	foodDate, err := time.Parse(time.RFC3339, food.Date)
+	require.NoError(t, err)
+	require.Equal(t, []string{"Food"}, parties(list(url.Values{
+		"occurred_from":   {foodDate.Add(-time.Second).Format(time.RFC3339)},
+		"occurred_before": {foodDate.Add(time.Second).Format(time.RFC3339)},
+	})))
+}
+
+func TestInboxFiltersRejectInvalidValues(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	for _, query := range []string{
+		"direction=sideways",
+		"account=nope",
+		"occurred_from=not-a-time",
+		"amount=1&amount_min=1&currency=EUR",
+		"category=nope",
+		"tag=nope",
+	} {
+		response := authed(t, app, http.MethodGet, "/api/v1/inbox?"+query, nil)
+		require.Equal(t, http.StatusBadRequest, response.StatusCode, query)
+	}
 }
 
 func categorizeInboxTransactions(t *testing.T, app *testApp, rowIDs []string, bucketID string) []string {

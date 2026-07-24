@@ -34,8 +34,12 @@ func HandleListInbox(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
+		filter, err := parseInboxFilter(r, state)
+		if err != nil {
+			return err
+		}
 
-		rows, err := state.Data.ListInbox(r.Context(), userID, cursorDate, cursorID, r.URL.Query().Get("q"))
+		rows, err := state.Data.ListInbox(r.Context(), userID, cursorDate, cursorID, filter)
 		if err != nil {
 			return NewUnexpectedErr("error listing inbox: %w", err)
 		}
@@ -59,6 +63,18 @@ func HandleListInbox(state *state.State, getUserID GetUserID) Handler {
 		Json(w, out)
 		return nil
 	}
+}
+
+func parseInboxFilter(r *http.Request, state *state.State) (data.TransactionFilter, error) {
+	if r.URL.Query().Has("category") || r.URL.Query().Has("tag") {
+		return data.TransactionFilter{}, NewErr("unsupported inbox filter", http.StatusBadRequest)
+	}
+	filter, err := parseTransactionFilter(r, state)
+	if err != nil {
+		return data.TransactionFilter{}, err
+	}
+	filter.Search = r.URL.Query().Get("q")
+	return filter, nil
 }
 
 func inboxRowToResponse(row data.InboxRow) inboxRowResponse {

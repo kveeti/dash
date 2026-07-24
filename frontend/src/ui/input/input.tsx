@@ -5,6 +5,7 @@ import {
 import type {
   InputHTMLAttributes,
   ReactNode,
+  Ref,
   SelectHTMLAttributes,
 } from "react";
 
@@ -79,27 +80,50 @@ export function InputGroup(props: {
   );
 }
 
-interface Props extends InputHTMLAttributes<HTMLInputElement> {
+type Props = InputHTMLAttributes<HTMLInputElement> & {
   error?: string;
-  grouped?: boolean;
-}
+  ref?: Ref<HTMLInputElement>;
+} & (
+    | {
+        grouped: true;
+        iconLeft?: never;
+        iconRight?: never;
+      }
+    | {
+        grouped?: false;
+        iconLeft?: ReactNode;
+        iconRight?: ReactNode;
+      }
+  );
+
+type FileInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
+  error?: string;
+};
 
 // TODO: Make custom. On IOS "Choose File" would require half a pixel more
 // height to be vertically centered. Going custom is more sane
-export function FileInput({
-  className,
-  ...props
-}: Omit<Props, "type" | "grouped">) {
+export function FileInput({ error, className, ...props }: FileInputProps) {
+  const fieldInvalid = useFieldInvalid();
+  const invalid = Boolean(error) || fieldInvalid;
+
   return (
-    <Input
+    <input
       {...props}
       type="file"
-      className={`${fileInputClassName} ${className ?? ""}`}
+      aria-invalid={invalid || undefined}
+      className={`${inputControlClassName} ${fileInputClassName} ${hasBackgroundClass(className) ? "" : "bg-(--input-bg)/80"} ${invalid ? invalidInputClassName : ""} ${className ?? ""}`}
     />
   );
 }
 
-export function Input({ error, grouped, className, ...rest }: Props) {
+export function Input({
+  error,
+  grouped,
+  iconLeft,
+  iconRight,
+  className,
+  ...rest
+}: Props) {
   const fieldInvalid = useFieldInvalid();
   const invalid = Boolean(error) || fieldInvalid;
 
@@ -114,11 +138,31 @@ export function Input({ error, grouped, className, ...rest }: Props) {
   }
 
   return (
-    <input
-      {...rest}
-      aria-invalid={invalid || undefined}
-      className={`${inputControlClassName} ${hasBackgroundClass(className) ? "" : "bg-(--input-bg)/80"} ${invalid ? invalidInputClassName : ""} ${className ?? ""}`}
-    />
+    <span
+      className={`relative block h-9 w-full rounded-xl ${hasBackgroundClass(className) ? "" : "bg-(--input-bg)/80"} ${className ?? ""}`}
+    >
+      {iconLeft && (
+        <span
+          className="pointer-events-none absolute inset-y-0 start-3 z-1 flex items-center text-gray-600 [&>svg]:size-4"
+          aria-hidden="true"
+        >
+          {iconLeft}
+        </span>
+      )}
+      <input
+        {...rest}
+        aria-invalid={invalid || undefined}
+        className={`${inputControlClassName} bg-transparent ${iconLeft ? "ps-9" : ""} ${iconRight ? "pe-9" : ""} ${invalid ? invalidInputClassName : ""}`}
+      />
+      {iconRight && (
+        <span
+          className="pointer-events-none absolute inset-y-0 end-3 z-1 flex items-center text-gray-600 [&>svg]:size-4"
+          aria-hidden="true"
+        >
+          {iconRight}
+        </span>
+      )}
+    </span>
   );
 }
 

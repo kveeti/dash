@@ -12,18 +12,31 @@ import { api } from "./api";
 import type { Bucket, BucketKind } from "./buckets";
 import { restoreQueries, type QuerySnapshot } from "./query-snapshot";
 
+export interface TransactionFilters {
+  direction?: "in" | "out";
+  amount?: string;
+  amountMin?: string;
+  amountMax?: string;
+  currency?: string;
+  categories?: string[];
+  tags?: string[];
+  accounts?: string[];
+  occurredFrom?: string;
+  occurredBefore?: string;
+}
+
 export const transactionKeys = {
   all: ["transactions"] as const,
   lists: ["transactions", "list"] as const,
   list: ({
     searchQuery,
-    tag,
+    filters,
     timezone,
   }: {
     searchQuery?: string;
-    tag?: string;
+    filters: TransactionFilters;
     timezone: string;
-  }) => [...transactionKeys.lists, searchQuery, tag, timezone] as const,
+  }) => [...transactionKeys.lists, searchQuery, filters, timezone] as const,
   details: ["transactions", "detail"] as const,
   detail: (id: string) => [...transactionKeys.details, id] as const,
 };
@@ -138,13 +151,13 @@ function invalidateRelated(queryClient: ReturnType<typeof useQueryClient>) {
 
 export function useInfiniteTransactionsQuery(props: {
   searchQuery?: string;
-  tag?: string;
+  filters: TransactionFilters;
 }) {
   const { timeZone } = useI18n();
   return useInfiniteQuery({
     queryKey: transactionKeys.list({
       searchQuery: props.searchQuery,
-      tag: props.tag,
+      filters: props.filters,
       timezone: timeZone,
     }),
     queryFn: ({ pageParam }: { pageParam: Cursor | null }) => {
@@ -154,7 +167,24 @@ export function useInfiniteTransactionsQuery(props: {
         params.set("before_id", pageParam.id);
       }
       if (props.searchQuery) params.set("q", props.searchQuery);
-      if (props.tag) params.set("tag", props.tag);
+      if (props.filters.direction)
+        params.set("direction", props.filters.direction);
+      if (props.filters.amount) params.set("amount", props.filters.amount);
+      if (props.filters.amountMin)
+        params.set("amount_min", props.filters.amountMin);
+      if (props.filters.amountMax)
+        params.set("amount_max", props.filters.amountMax);
+      if (props.filters.currency)
+        params.set("currency", props.filters.currency);
+      for (const category of props.filters.categories ?? [])
+        params.append("category", category);
+      for (const tag of props.filters.tags ?? []) params.append("tag", tag);
+      for (const account of props.filters.accounts ?? [])
+        params.append("account", account);
+      if (props.filters.occurredFrom)
+        params.set("occurred_from", props.filters.occurredFrom);
+      if (props.filters.occurredBefore)
+        params.set("occurred_before", props.filters.occurredBefore);
       params.set("timezone", timeZone);
 
       return api<

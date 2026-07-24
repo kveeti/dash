@@ -58,7 +58,7 @@ async function mockCommonApi(page: Page) {
 
 test("inbox selects and deselects every visible row", async ({ page }) => {
   await mockCommonApi(page);
-  await page.route("**/api/v1/inbox", (route) =>
+  await page.route(/\/api\/v1\/inbox(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { rows: inboxRows, next_cursor: null } }),
   );
 
@@ -77,7 +77,7 @@ test("inbox selects and deselects every visible row", async ({ page }) => {
 
 test("inbox shift-click resizes the selected range", async ({ page }) => {
   await mockCommonApi(page);
-  await page.route("**/api/v1/inbox", (route) =>
+  await page.route(/\/api\/v1\/inbox(?:\?.*)?$/, (route) =>
     route.fulfill({ json: { rows: inboxRows, next_cursor: null } }),
   );
 

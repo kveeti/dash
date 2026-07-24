@@ -25,13 +25,20 @@ import {
   useSelection,
   type UseSelectionReturn,
 } from "../../lib/list-shell/selection";
-import { setSearchParam, useSearchParam } from "../../lib/search-param";
+import {
+  setSearchParam,
+  setSearchParams,
+  useSearchParam,
+} from "../../lib/search-param";
 import { UndoNotice } from "../../lib/undo/undo";
+import { useDebouncedAmountFilters } from "../../lib/use-debounced-amount-filters";
 import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
 import { BucketComboRoot, BucketComboTrigger } from "./bucket-combo";
+import { useInboxFilters } from "./inbox-filter-state";
+import { InboxFiltersButton } from "./inbox-filters";
 import { InboxUndoProvider } from "./inbox-undo";
 import { useInboxUndo } from "./inbox-undo-context";
 import {
@@ -51,8 +58,14 @@ export default function InboxPage() {
 
 function InboxPageContent(props: { selection: UseSelectionReturn }) {
   const searchQuery = useSearchParam("q");
+  const dateRange = useSearchParam("range");
+  const filters = useInboxFilters();
+  const queryFilters = useDebouncedAmountFilters(filters);
   const selection = props.selection;
-  const inboxQuery = useInfiniteInboxQuery({ searchQuery });
+  const inboxQuery = useInfiniteInboxQuery({
+    searchQuery,
+    filters: queryFilters,
+  });
   const inboxItems = inboxQuery.data?.pages.flatMap((p) => p.rows) ?? [];
   const visibleIds = inboxItems.map((item) => item.id);
   const allVisibleSelected =
@@ -75,12 +88,15 @@ function InboxPageContent(props: { selection: UseSelectionReturn }) {
         }
         search={searchQuery || undefined}
         onSearch={(value) => setSearchParam("q", value, { replace: true })}
+        end={<InboxFiltersButton />}
       />
 
       <MatchTransactions>
         <List
           selection={selection}
           searchQuery={searchQuery}
+          dateRange={dateRange}
+          filters={filters}
           inboxQuery={inboxQuery}
           inboxItems={inboxItems}
           visibleIds={visibleIds}
@@ -97,6 +113,8 @@ function InboxPageContent(props: { selection: UseSelectionReturn }) {
 function List(props: {
   selection: UseSelectionReturn;
   searchQuery: string | null;
+  dateRange: string | null;
+  filters: ReturnType<typeof useInboxFilters>;
   inboxQuery: ReturnType<typeof useInfiniteInboxQuery>;
   inboxItems: InboxItem[];
   visibleIds: string[];
@@ -116,6 +134,15 @@ function List(props: {
   }
 
   let prevDate: string | null = null;
+  const hasFilters = Boolean(
+    props.searchQuery ||
+    props.filters.direction ||
+    props.filters.amount ||
+    props.filters.amountMin ||
+    props.filters.amountMax ||
+    props.filters.accounts?.length ||
+    (props.dateRange !== null && props.dateRange !== "all-time"),
+  );
 
   const currentYear = new Date().getFullYear();
   const formatDate = (value: string) => {
@@ -158,18 +185,34 @@ function List(props: {
             );
           })}
         </ul>
-      ) : props.searchQuery ? (
+      ) : hasFilters ? (
         <ListEmptyState
           icon={MagnifyingGlassIcon}
           heading="No matching inbox items"
-          body="Try adjusting your search to find what you’re looking for."
+          body="Try adjusting your search or filters to find what you’re looking for."
           secondaryAction={
             <button
               type="button"
               className={`${listEmptyActionClassName} text-gray-900 hover:bg-gray-200`}
-              onClick={() => setSearchParam("q", undefined, { replace: true })}
+              onClick={() =>
+                setSearchParams(
+                  {
+                    q: undefined,
+                    direction: undefined,
+                    amount: undefined,
+                    amount_min: undefined,
+                    amount_max: undefined,
+                    currency: undefined,
+                    account: undefined,
+                    range: undefined,
+                    start: undefined,
+                    end: undefined,
+                  },
+                  { replace: true },
+                )
+              }
             >
-              Clear search
+              Clear filters
             </button>
           }
         />

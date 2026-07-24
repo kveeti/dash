@@ -31,10 +31,15 @@ import {
   setSearchParams,
   useSearchParam,
 } from "../../lib/search-param";
+import { useDebouncedAmountFilters } from "../../lib/use-debounced-amount-filters";
 import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import { useI18n } from "../i18n/use-i18n";
 import { TransactionActionsCombobox } from "./transaction-actions-combobox";
+import {
+  TransactionFiltersButton,
+  useTransactionFilters,
+} from "./transaction-filters";
 import { toTransactionRow, type TransactionRow } from "./transaction-row";
 
 const asKind =
@@ -46,7 +51,9 @@ const asKind =
 
 export default function TransactionsPage() {
   const searchQuery = useSearchParam("q");
-  const tag = useSearchParam("tag");
+  const dateRange = useSearchParam("range");
+  const filters = useTransactionFilters();
+  const queryFilters = useDebouncedAmountFilters(filters);
 
   const setParam = (key: string, value: string | undefined) => {
     setSearchParam(key, value || undefined, { replace: true });
@@ -55,7 +62,7 @@ export default function TransactionsPage() {
   const selection = useSelection();
   const transactions = useInfiniteTransactionsQuery({
     searchQuery: searchQuery || undefined,
-    tag: tag || undefined,
+    filters: queryFilters,
   });
   const txns =
     transactions.data?.pages.flatMap((page) => page.transactions) ?? [];
@@ -80,8 +87,7 @@ export default function TransactionsPage() {
         }
         search={searchQuery || undefined}
         onSearch={(value) => setParam("q", value)}
-        tag={tag || undefined}
-        onClearTag={() => setParam("tag", undefined)}
+        end={<TransactionFiltersButton />}
       />
 
       <List
@@ -89,7 +95,8 @@ export default function TransactionsPage() {
         transactions={transactions}
         txns={txns}
         searchQuery={searchQuery}
-        tag={tag}
+        dateRange={dateRange}
+        filters={filters}
       />
 
       <FloatingBar selection={selection} transactions={txns} />
@@ -102,7 +109,8 @@ function List(props: {
   transactions: ReturnType<typeof useInfiniteTransactionsQuery>;
   txns: Transaction[];
   searchQuery: string | null;
-  tag: string | null;
+  dateRange: string | null;
+  filters: ReturnType<typeof useTransactionFilters>;
 }) {
   const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
 
@@ -118,7 +126,17 @@ function List(props: {
   }
 
   if (!props.txns.length) {
-    const hasFilters = Boolean(props.searchQuery || props.tag);
+    const hasFilters = Boolean(
+      props.searchQuery ||
+      props.filters.direction ||
+      props.filters.amount ||
+      props.filters.amountMin ||
+      props.filters.amountMax ||
+      props.filters.categories?.length ||
+      props.filters.tags?.length ||
+      props.filters.accounts?.length ||
+      (props.dateRange !== null && props.dateRange !== "all-time"),
+    );
     return hasFilters ? (
       <ListEmptyState
         icon={MagnifyingGlassIcon}
@@ -130,7 +148,20 @@ function List(props: {
             className={`${listEmptyActionClassName} text-gray-900 hover:bg-gray-200`}
             onClick={() =>
               setSearchParams(
-                { q: undefined, tag: undefined },
+                {
+                  q: undefined,
+                  direction: undefined,
+                  amount: undefined,
+                  amount_min: undefined,
+                  amount_max: undefined,
+                  currency: undefined,
+                  category: undefined,
+                  tag: undefined,
+                  account: undefined,
+                  range: undefined,
+                  start: undefined,
+                  end: undefined,
+                },
                 { replace: true },
               )
             }
@@ -238,9 +269,10 @@ function List(props: {
                     <Row
                       txn={txn}
                       onFilterTag={(value) =>
-                        setSearchParam("tag", value || undefined, {
-                          replace: true,
-                        })
+                        setSearchParams(
+                          { tag: value ? [value] : undefined },
+                          { replace: true },
+                        )
                       }
                     />
                   </div>
