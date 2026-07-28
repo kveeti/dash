@@ -21,7 +21,7 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
     <button
       {...rest}
       ref={ref}
-      className={`inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-transparent px-4 font-[inherit] font-medium outline-[1.5px] outline-transparent outline-offset-[-1px] select-none focus-visible:outline-gray-500 disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className ?? ""}`}
+      className={`inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-transparent px-4 font-[inherit] font-medium outline-2 outline-transparent outline-offset-[-1px] select-none focus-visible:outline-gray-500 disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${className ?? ""}`}
     />
   );
 });

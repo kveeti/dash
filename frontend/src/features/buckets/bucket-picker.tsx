@@ -11,11 +11,7 @@ import {
 import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { useLastSettledValue } from "../../lib/use-last-settled-value";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
-import { useFieldInvalid } from "../../ui/input/field-context";
-import {
-  inputTriggerClassName,
-  invalidInputClassName,
-} from "../../ui/input/input-styles";
+import { InputTrigger, PopupSearchInput } from "../../ui/input/input";
 
 const kindLabels: Record<BucketKind, string> = {
   asset: "Asset",
@@ -47,7 +43,6 @@ export function BucketPicker(props: {
   placeholder?: string;
 }) {
   const createBucket = useCreateBucketMutation();
-  const invalid = useFieldInvalid();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const search = input.trim();
@@ -131,10 +126,7 @@ export function BucketPicker(props: {
         if (!nextOpen) setInput("");
       }}
     >
-      <Combobox.Trigger
-        aria-invalid={invalid || undefined}
-        className={`${inputTriggerClassName} ${invalid ? invalidInputClassName : ""} ${props.className ?? ""}`}
-      >
+      <Combobox.Trigger render={<InputTrigger />} className={props.className}>
         <span
           className={`min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${props.value ? "" : "text-(--input-placeholder)"}`}
         >
@@ -156,7 +148,7 @@ export function BucketPicker(props: {
             aria-busy={bucketsQuery.isFetching || undefined}
           >
             <Combobox.Input
-              className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+              render={<PopupSearchInput className="h-10" />}
               placeholder={props.placeholder ?? "Search…"}
               aria-label="Filter buckets"
             />

@@ -1,4 +1,3 @@
-import { XMarkIcon } from "@heroicons/react/24/outline";
 import {
   AnimatePresence,
   motion,
@@ -9,7 +8,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
-import { Input } from "../../ui/input/input";
+import { SearchInput } from "../../ui/input/input";
 
 export function Filterbar(props: {
   selectLabel: string;
@@ -22,7 +21,6 @@ export function Filterbar(props: {
   end?: ReactNode;
 }) {
   const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const searchInput = useRef<HTMLInputElement>(null);
   const reduceMotion = useReducedMotion();
   useEffect(() => () => clearTimeout(debounce.current), []);
 
@@ -49,10 +47,8 @@ export function Filterbar(props: {
             )}
           </AnimatePresence>
         </div>
-        <div className="relative min-w-0 flex-1 [&:has(input:placeholder-shown)>button]:invisible [&_input]:pe-9 [&_input::-webkit-search-cancel-button]:hidden">
-          <Input
-            ref={searchInput}
-            type="search"
+        <div className="min-w-0 flex-1">
+          <SearchInput
             placeholder="Search..."
             defaultValue={props.search}
             onChange={(e) => {
@@ -60,20 +56,11 @@ export function Filterbar(props: {
               clearTimeout(debounce.current);
               debounce.current = setTimeout(() => props.onSearch(value), 150);
             }}
-          />
-          <button
-            type="button"
-            aria-label="Clear search"
-            className="absolute end-1 top-1/2 z-1 grid size-7 -translate-y-1/2 place-items-center rounded-lg text-gray-600 outline-[1.5px] outline-transparent outline-offset-[-1px] hover:bg-gray-200 hover:text-gray-900 focus-visible:outline-gray-500"
-            onClick={() => {
+            onClear={() => {
               clearTimeout(debounce.current);
-              if (searchInput.current) searchInput.current.value = "";
               props.onSearch(undefined);
-              searchInput.current?.focus();
             }}
-          >
-            <XMarkIcon className="size-4" aria-hidden="true" />
-          </button>
+          />
         </div>
         {props.end}
       </div>

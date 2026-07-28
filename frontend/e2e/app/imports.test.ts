@@ -24,12 +24,12 @@ async function upload(
   input: { csv?: string; format?: "nordea" | "op" | "revolut" } = {},
 ) {
   const format = input.format ?? "nordea";
-  await page.getByLabel("File").setInputFiles({
+  await page.getByLabel("File", { exact: true }).setInputFiles({
     name: `${format}.csv`,
     mimeType: "text/csv",
     buffer: Buffer.from(input.csv ?? nordeaCSV),
   });
-  await page.getByLabel("Format").selectOption(format);
+  await expect(page.getByLabel("Format")).toHaveValue(format);
   await page
     .getByRole("combobox")
     .filter({ hasText: "Select account" })
@@ -58,6 +58,47 @@ async function upload(
   await page.locator(`a[href="/imports/${batchId}"]`).click();
 }
 
+test("dropping a CSV anywhere opens a recognized import", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+
+  await page.evaluate((csv) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([csv], "op.csv", { type: "text/csv" }));
+    window.dispatchEvent(
+      new DragEvent("dragenter", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: transfer,
+      }),
+    );
+  }, opCSV);
+  await expect(page.getByText("Drop CSV to import")).toBeVisible();
+  await expect(page.getByText("You’ll choose the account next")).toBeVisible();
+
+  await page.evaluate((csv) => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([csv], "op.csv", { type: "text/csv" }));
+    window.dispatchEvent(
+      new DragEvent("drop", {
+        bubbles: true,
+        cancelable: true,
+        dataTransfer: transfer,
+      }),
+    );
+  }, opCSV);
+
+  await expect(page).toHaveURL(/\/imports$/);
+  await expect(page.getByText("Drop CSV to import")).not.toBeVisible();
+  await expect(page.getByText("op.csv", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Format")).toHaveValue("op");
+
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page.getByText("Choose a file")).toHaveCount(0);
+  await expect(page.getByText("Select an account")).toBeVisible();
+});
+
 test("upload, duplicate import, import anyway, and undo use the real backend", async ({
   page,
 }, testInfo) => {
@@ -67,7 +108,10 @@ test("upload, duplicate import, import anyway, and undo use the real backend", a
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page.getByText("Choose a file")).toBeVisible();
   await expect(page.getByText("Select an account")).toBeVisible();
-  await expect(page.getByLabel("File")).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByLabel("File", { exact: true })).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
   await expect(
     page.getByRole("combobox").filter({ hasText: "Select account" }).first(),
   ).toHaveAttribute("aria-invalid", "true");

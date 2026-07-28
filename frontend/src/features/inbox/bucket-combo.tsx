@@ -15,6 +15,7 @@ import { createContext } from "../../lib/create-context";
 import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { useLastSettledValue } from "../../lib/use-last-settled-value";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
+import { PopupSearchInput } from "../../ui/input/input";
 import { useInboxUndo } from "./inbox-undo-context";
 
 const [useBucketCombo, BucketComboContext] = createContext<{
@@ -218,7 +219,7 @@ export function BucketComboRoot(props: {
               aria-busy={bucketsQuery.isFetching || undefined}
             >
               <Combobox.Input
-                className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+                render={<PopupSearchInput />}
                 placeholder="Filter actions..."
                 aria-label="Filter categories, people, and actions"
               />

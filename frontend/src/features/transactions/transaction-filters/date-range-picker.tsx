@@ -3,7 +3,7 @@ import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
 import { AnimatedHeight } from "../../../ui/animated-height/animated-height";
-import { inputTriggerClassName } from "../../../ui/input/input-styles";
+import { InputTrigger, PopupSearchInput } from "../../../ui/input/input";
 import { dateRanges, type DateRange } from "./date-range";
 
 export function DateRangePicker(props: {
@@ -36,8 +36,9 @@ export function DateRangePicker(props: {
       }}
     >
       <Combobox.Trigger
+        render={<InputTrigger />}
         aria-label="Quick select"
-        className={`${inputTriggerClassName} mt-1`}
+        className="mt-1"
       >
         <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap">
           {selected.label}
@@ -54,7 +55,7 @@ export function DateRangePicker(props: {
         >
           <Combobox.Popup className="min-w-56 max-w-(--available-width,100vw) origin-(--transform-origin) overflow-hidden rounded-xl border border-popover-border bg-popover text-base text-gray-900 shadow-float transition-[opacity,scale] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] data-starting-style:scale-[.97] data-starting-style:opacity-0 data-ending-style:scale-[.97] data-ending-style:opacity-0 data-ending-style:duration-120 data-ending-style:ease-[cubic-bezier(0.4,0,1,1)] motion-reduce:duration-[1ms]">
             <Combobox.Input
-              className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+              render={<PopupSearchInput />}
               placeholder="Filter date ranges…"
               aria-label="Filter date ranges"
             />

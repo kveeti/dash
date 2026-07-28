@@ -3,6 +3,8 @@ import { Dialog } from "@base-ui/react/dialog";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 
+import { PopupSearchInput } from "../../ui/input/input";
+
 const pages = [
   { label: "inbox", href: "/inbox" },
   { label: "transactions", href: "/transactions" },
@@ -50,7 +52,7 @@ function ImmediateNavLink(props: { href: string; children: ReactNode }) {
     <Link
       href={props.href}
       className={(isActive) =>
-        `inline-flex h-full items-center px-3 text-base text-inherit no-underline outline-[1.5px] outline-transparent outline-offset-[-1.5px] ${isActive ? "underline" : ""} hover:bg-gray-200/80 focus-visible:rounded-none focus-visible:outline-(--input-ring-active)`
+        `inline-flex h-full items-center px-3 text-base text-inherit no-underline outline-2 outline-transparent outline-offset-[-2px] ${isActive ? "underline" : ""} hover:bg-gray-200/80 focus-visible:rounded-none focus-visible:outline-(--input-ring-active)`
       }
       onClick={(event) => {
         if (
@@ -151,7 +153,7 @@ function CommandPalette(props: {
             }}
           >
             <Combobox.Input
-              className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+              render={<PopupSearchInput />}
               placeholder="Search…"
               aria-label="Search pages"
             />

@@ -1,7 +1,7 @@
 import { Combobox } from "@base-ui/react/combobox";
 
 import { Checkbox } from "../../../ui/checkbox/checkbox";
-import { inputControlClassName } from "../../../ui/input/input-styles";
+import { Input } from "../../../ui/input/input";
 import { useComboboxOptionKeyboard } from "../use-combobox-option-keyboard";
 
 export type FilterItem = { id: string; name: string };
@@ -52,7 +52,7 @@ export function InlineMultiPicker(props: {
     >
       <div className="text-sm" aria-busy={props.isFetching || undefined}>
         <Combobox.Input
-          className={`${inputControlClassName} bg-(--input-bg)/80 text-sm`}
+          render={<Input className="text-sm" />}
           placeholder={props.inputLabel}
           aria-label={props.inputLabel}
           onKeyDown={keyboard.onInputKeyDown}

@@ -10,6 +10,7 @@ import {
 } from "../../api/inbox";
 import { createContext } from "../../lib/create-context";
 import { setSearchParam, useSearchParam } from "../../lib/search-param";
+import { PopupSearchInput } from "../../ui/input/input";
 import { useI18n } from "../i18n/use-i18n";
 import { useInboxUndo } from "./inbox-undo-context";
 
@@ -112,18 +113,11 @@ function MatchTransactionsContent(props: {
         // but Combobox's public type narrows the prop to boolean.
         autoHighlight={"always" as unknown as boolean}
       >
-        <div className="relative">
-          <Combobox.Input
-            className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 pe-20 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
-            placeholder="Search possible matches"
-            aria-label="Search possible matches"
-          />
-          {matches.isFetching && (
-            <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-base text-gray-600">
-              loading…
-            </span>
-          )}
-        </div>
+        <Combobox.Input
+          render={<PopupSearchInput loading={matches.isFetching} />}
+          placeholder="Search possible matches"
+          aria-label="Search possible matches"
+        />
 
         {matches.isError ? (
           <p className="p-4 text-center text-gray-600">Couldn’t load matches</p>

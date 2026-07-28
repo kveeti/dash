@@ -5,6 +5,7 @@ import { Redirect, Route, Router, Switch } from "wouter";
 
 import DesignPage from "./features/design/design-page";
 import { I18n } from "./features/i18n/use-i18n";
+import { ImportDropProvider } from "./features/imports/import-drop";
 import ImportReportPage from "./features/imports/import-report-page";
 import ImportsPage from "./features/imports/imports-page";
 import InboxPage from "./features/inbox/inbox-page";
@@ -22,23 +23,25 @@ createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <I18n>
         <Router>
-          <Layout>
-            <Switch>
-              <Route path="/inbox" component={InboxPage} />
-              <Route
-                path="/transactions/:id"
-                component={TransactionDetailPage}
-              />
-              <Route path="/transactions" component={TransactionsPage} />
-              <Route path="/imports" component={ImportsPage} />
-              <Route path="/imports/:id" component={ImportReportPage} />
-              <Route path="/stats" component={StatsPage} />
-              <Route path="/design" component={DesignPage} />
-              <Route>
-                <Redirect to="/transactions" />
-              </Route>
-            </Switch>
-          </Layout>
+          <ImportDropProvider>
+            <Layout>
+              <Switch>
+                <Route path="/inbox" component={InboxPage} />
+                <Route
+                  path="/transactions/:id"
+                  component={TransactionDetailPage}
+                />
+                <Route path="/transactions" component={TransactionsPage} />
+                <Route path="/imports" component={ImportsPage} />
+                <Route path="/imports/:id" component={ImportReportPage} />
+                <Route path="/stats" component={StatsPage} />
+                <Route path="/design" component={DesignPage} />
+                <Route>
+                  <Redirect to="/transactions" />
+                </Route>
+              </Switch>
+            </Layout>
+          </ImportDropProvider>
         </Router>
       </I18n>
     </QueryClientProvider>

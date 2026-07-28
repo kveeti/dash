@@ -1,5 +1,5 @@
-import { Field as FormField, Form, useForm } from "@formisch/react";
-import { useEffect, useRef } from "react";
+import { Field as FormField, Form, setInput, useForm } from "@formisch/react";
+import { useCallback, useEffect, useRef } from "react";
 import * as v from "valibot";
 import { Link } from "wouter";
 
@@ -12,6 +12,8 @@ import { Button } from "../../ui/button/button";
 import { Field, FileInput, Select } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
+import { detectImportFormat } from "./detect-import-format";
+import { useImportDrop } from "./import-drop-context";
 
 const schema = v.object({
   file: v.instance(File, "Choose a file"),
@@ -41,6 +43,7 @@ export default function ImportsPage() {
 function ImportForm() {
   const buckets = useBucketsQuery();
   const mutation = useCreateImportMutation();
+  const { file: droppedFile, clearFile: clearDroppedFile } = useImportDrop();
   const { timeZone } = useI18n();
   const timezones = [
     timeZone,
@@ -51,6 +54,31 @@ function ImportForm() {
     schema,
     initialInput: { format: "nordea", timezone: timeZone },
   });
+  const selectedFile = useRef<File | null>(null);
+
+  const detectSelectedFile = useCallback(
+    async (file: File | null) => {
+      selectedFile.current = file;
+      if (!file) return;
+
+      try {
+        const format = await detectImportFormat(file);
+        if (format && selectedFile.current === file) {
+          setInput(form, { path: ["format"], input: format });
+        }
+      } catch {
+        // Keep the format editable when the file cannot be read.
+      }
+    },
+    [form],
+  );
+
+  useEffect(() => {
+    if (!droppedFile) return;
+    setInput(form, { path: ["file"], input: droppedFile });
+    void detectSelectedFile(droppedFile);
+    clearDroppedFile();
+  }, [clearDroppedFile, detectSelectedFile, droppedFile, form]);
 
   const onSubmit = async (values: v.InferOutput<typeof schema>) => {
     if (mutation.isPending) return;
@@ -71,11 +99,20 @@ function ImportForm() {
       of={form}
       className="flex w-full flex-col gap-4 min-[30rem]:grid min-[30rem]:grid-cols-[auto_minmax(0,22rem)] min-[30rem]:items-center min-[30rem]:gap-x-8 min-[30rem]:gap-y-3 min-[30rem]:[&>*]:col-span-full"
       onSubmit={onSubmit}
+      onReset={() => {
+        selectedFile.current = null;
+      }}
     >
       <FormField of={form} path={["file"]}>
         {(field) => (
           <Field label="File" error={field.errors?.[0]}>
-            <FileInput {...field.props} accept=".csv,text/csv" />
+            <FileInput
+              {...field.props}
+              aria-label="File"
+              acceptedFileTypes={[".csv", "text/csv"]}
+              files={field.input instanceof File ? [field.input] : []}
+              onSelect={(files) => void detectSelectedFile(files?.[0] ?? null)}
+            />
           </Field>
         )}
       </FormField>
@@ -100,7 +137,14 @@ function ImportForm() {
         {(formatField) => (
           <>
             <Field label="Format">
-              <Select {...formatField.props}>
+              <Select
+                {...formatField.props}
+                value={formatField.input ?? ""}
+                onChange={(event) => {
+                  selectedFile.current = null;
+                  formatField.onChange(event.currentTarget.value);
+                }}
+              >
                 <option value="nordea">Nordea</option>
                 <option value="op">OP</option>
                 <option value="revolut">Revolut</option>
@@ -196,7 +240,7 @@ function PastImports() {
             >
               <Link
                 href={`/imports/${batch.id}`}
-                className="absolute inset-0 text-transparent no-underline outline-[1.5px] outline-transparent outline-offset-[-1.5px] focus-visible:outline-gray-500"
+                className="absolute inset-0 text-transparent no-underline outline-2 outline-transparent outline-offset-[-2px] focus-visible:outline-gray-500"
               >
                 {batch.filename}
               </Link>

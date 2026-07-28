@@ -6,7 +6,7 @@ import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { AlertDialog } from "../../ui/alert-dialog/alert-dialog";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
 import { Checkbox } from "../../ui/checkbox/checkbox";
-import { inputTriggerClassName } from "../../ui/input/input-styles";
+import { InputTrigger, PopupSearchInput } from "../../ui/input/input";
 import type {
   TransactionActionGroup,
   TransactionActionItem,
@@ -96,7 +96,7 @@ export function TransactionActionsCombobox(props: {
           session.completeOpenChange(open);
         }}
       >
-        <Combobox.Trigger className={inputTriggerClassName}>
+        <Combobox.Trigger render={<InputTrigger />}>
           <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-(--input-placeholder)">
             Actions
           </span>
@@ -117,7 +117,7 @@ export function TransactionActionsCombobox(props: {
               aria-busy={isFetching || undefined}
             >
               <Combobox.Input
-                className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+                render={<PopupSearchInput />}
                 placeholder="Filter actions…"
                 aria-label="Filter transaction actions"
                 onKeyDown={keyboard.onInputKeyDown}

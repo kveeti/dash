@@ -16,7 +16,7 @@ export function FilterButton(props: {
       modal="trap-focus"
     >
       <Popover.Trigger
-        className={`relative grid size-9 shrink-0 place-items-center rounded-xl border border-transparent outline-[1.5px] outline-transparent outline-offset-[-1px] focus-visible:outline-gray-500 data-popup-open:bg-popover-item-selected data-popup-open:text-gray-950 ${props.appliedCount ? "bg-popover-item-selected text-gray-950" : "text-gray-700 hover:bg-popover-item-selected"}`}
+        className={`relative grid size-9 shrink-0 place-items-center rounded-xl border border-transparent outline-2 outline-transparent outline-offset-[-1px] focus-visible:outline-gray-500 data-popup-open:bg-popover-item-selected data-popup-open:text-gray-950 ${props.appliedCount ? "bg-popover-item-selected text-gray-950" : "text-gray-700 hover:bg-popover-item-selected"}`}
         aria-label={
           props.appliedCount
             ? `Filters, ${props.appliedCount} sections applied`
@@ -73,7 +73,7 @@ export function TabContent(props: { showClear: boolean; children: ReactNode }) {
           type="button"
           aria-label="Clear filters"
           title="Clear filters"
-          className="absolute end-3 top-3 z-1 grid size-8 place-items-center rounded-lg text-gray-700 outline-[1.5px] outline-transparent outline-offset-[-1px] hover:bg-popover-item-selected focus-visible:outline-gray-500"
+          className="absolute end-3 top-3 z-1 grid size-8 place-items-center rounded-lg text-gray-700 outline-2 outline-transparent outline-offset-[-1px] hover:bg-popover-item-selected focus-visible:outline-gray-500"
           onClick={() =>
             setSearchParams(
               {
@@ -121,7 +121,7 @@ export function TabTrigger(props: {
   return (
     <Tabs.Tab
       value={props.value}
-      className="flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-left text-sm text-gray-700 outline-[1.5px] outline-transparent outline-offset-[-1px] hover:bg-popover-item-selected focus-visible:bg-popover-item-selected focus-visible:text-gray-950 focus-visible:outline-gray-500 data-active:bg-popover-item-selected data-active:text-gray-950 sm:w-full"
+      className="flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-left text-sm text-gray-700 outline-2 outline-transparent outline-offset-[-1px] hover:bg-popover-item-selected focus-visible:bg-popover-item-selected focus-visible:text-gray-950 focus-visible:outline-gray-500 data-active:bg-popover-item-selected data-active:text-gray-950 sm:w-full"
     >
       <props.Icon className="size-4" aria-hidden="true" />
       <span>{props.label}</span>

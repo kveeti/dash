@@ -11,7 +11,7 @@ import { useDebouncedValue } from "../../../lib/use-debounced-value";
 import { useLastSettledValue } from "../../../lib/use-last-settled-value";
 import { AnimatedHeight } from "../../../ui/animated-height/animated-height";
 import { Checkbox } from "../../../ui/checkbox/checkbox";
-import { Field } from "../../../ui/input/input";
+import { Field, PopupSearchInput } from "../../../ui/input/input";
 import type { TagActionItem, TagState } from "../transaction-action-types";
 
 export function TagsField(props: { posting: Posting }) {
@@ -55,7 +55,7 @@ export function TagsField(props: { posting: Posting }) {
           onOpenChange={setIsOpen}
         >
           <Combobox.Trigger
-            className="flex min-h-9 w-full flex-wrap items-center gap-2 rounded-xl text-left outline-[1.5px] outline-transparent outline-offset-2 focus-visible:outline-gray-500"
+            className="flex min-h-9 w-full flex-wrap items-center gap-2 rounded-xl text-left outline-2 outline-transparent outline-offset-2 focus-visible:outline-gray-500"
             aria-label="Tags"
           >
             <Combobox.Chips className="flex flex-wrap items-center gap-2">
@@ -92,7 +92,7 @@ export function TagsField(props: { posting: Posting }) {
                 aria-busy={tags.isFetching || undefined}
               >
                 <Combobox.Input
-                  className="h-9 w-full rounded-none border-b border-popover-border bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-gray-600/70 [@media(any-pointer:coarse)]:text-md"
+                  render={<PopupSearchInput />}
                   placeholder="Change or add tags..."
                   aria-label="Change or add tags..."
                 />

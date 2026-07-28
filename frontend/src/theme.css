@@ -18,14 +18,14 @@
   --input-bg-popover: var(--color-gray-170);
   --input-bg-alt-popover: var(--color-gray-240);
   --input-placeholder: var(--color-gray-600);
-  --input-ring-hover: var(--color-gray-350);
-  --input-ring-active: var(--color-gray-440);
+  --input-ring-hover: var(--color-gray-325);
+  --input-ring-active: var(--color-gray-400);
 
   --red-fg: var(--color-red-625);
   --green-fg: var(--color-green-900);
 
   --input-invalid-text: var(--danger-fg-strong);
-  --input-invalid-ring: var(--danger-outline);
+  --input-invalid-ring: var(--color-red-450);
 
   --danger-surface: var(--color-red-200);
   --danger-surface-hover: var(--color-red-300);
@@ -63,11 +63,11 @@
     --input-bg-popover: var(--color-gray-245);
     --input-bg-alt-popover: var(--color-gray-275);
     --input-placeholder: var(--color-gray-600);
-    --input-ring-hover: var(--color-gray-300);
-    --input-ring-active: var(--color-gray-450);
+    --input-ring-hover: var(--color-gray-275);
+    --input-ring-active: var(--color-gray-400);
 
     --input-invalid-text: oklch(72% 0.2 25deg);
-    --input-invalid-ring: oklch(56% 0.18 25deg);
+    --input-invalid-ring: var(--color-red-350);
 
     --danger-surface: oklch(24% 0.045 25deg);
     --danger-surface-hover: oklch(29% 0.065 25deg);

@@ -193,7 +193,7 @@ function CategoryField(props: { posting: Posting; transactionId: string }) {
               bucket,
             })
           }
-          placeholder="Select category"
+          placeholder="Filter categories..."
         />
       </div>
     </Field>

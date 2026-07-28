@@ -1,0 +1,91 @@
+.shell:hover {
+  outline-color: var(--input-ring-hover);
+}
+
+.shell:not([data-invalid="true"]):has(
+  > .control:focus-visible,
+  > [role="button"]:focus-visible
+) {
+  outline-color: var(--input-ring-active);
+}
+
+.shell[data-invalid="true"] {
+  outline-color: var(--input-invalid-ring);
+}
+
+.paddingStartWide {
+  padding-inline-start: 2.25rem;
+}
+
+.paddingEndWide {
+  padding-inline-end: 2.25rem;
+}
+
+.paddingEndExtraWide {
+  padding-inline-end: 5rem;
+}
+
+.shellPaddingEndWide > .control {
+  padding-inline-end: 2.25rem;
+}
+
+.group > .shell {
+  border-radius: 0;
+}
+
+.group > .groupInput {
+  width: 0;
+  min-width: 0;
+  flex: 1 1 0%;
+}
+
+.group > .groupSelect {
+  width: 5rem;
+  flex: 0 0 5rem;
+}
+
+.group > .shell:first-child {
+  border-start-start-radius: 0.75rem;
+  border-end-start-radius: 0.75rem;
+}
+
+.group > .shell:last-child {
+  border-start-end-radius: 0.75rem;
+  border-end-end-radius: 0.75rem;
+}
+
+@media (any-pointer: coarse) {
+  .control {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+    width: 114.285714%;
+    height: 114.285714%;
+    transform: scale(0.875);
+    transform-origin: top left;
+    padding-inline-start: 0.857143rem;
+    padding-inline-end: 0.857143rem;
+    font-size: 16px;
+    line-height: 16px;
+  }
+
+  .control.paddingStartWide {
+    padding-inline-start: 2.571429rem;
+  }
+
+  .control.paddingEndWide {
+    padding-inline-end: 2.571429rem;
+  }
+
+  .control.paddingEndExtraWide {
+    padding-inline-end: 5.714286rem;
+  }
+
+  .shellPaddingEndWide > .control {
+    padding-inline-end: 2.571429rem;
+  }
+
+  :dir(rtl) .control {
+    transform-origin: top right;
+  }
+}

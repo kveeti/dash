@@ -54,7 +54,7 @@ export function Panel() {
               >
                 <Radio.Root
                   value={value}
-                  className="flex size-[1.15rem] shrink-0 items-center justify-center rounded-full border border-gray-350 bg-(--input-bg)/80 p-0 outline-[1.5px] outline-transparent outline-offset-2 hover:bg-(--input-bg-alt)/80 focus-visible:outline-gray-500 data-checked:border-success-solid"
+                  className="flex size-[1.15rem] shrink-0 items-center justify-center rounded-full border border-gray-350 bg-(--input-bg)/80 p-0 outline-2 outline-transparent outline-offset-2 hover:bg-(--input-bg-alt)/80 focus-visible:outline-gray-500 data-checked:border-success-solid"
                 >
                   <Radio.Indicator className="size-[.55rem] rounded-full bg-success-solid data-unchecked:hidden" />
                 </Radio.Root>

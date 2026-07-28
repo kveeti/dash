@@ -147,7 +147,11 @@ export default function DesignPage() {
             </InputGroup>
           </Field>
           <Field label="Statement">
-            <FileInput accept=".csv,text/csv" />
+            <FileInput
+              aria-label="Statement"
+              acceptedFileTypes={[".csv", "text/csv"]}
+              allowsMultiple
+            />
           </Field>
           <Field label="Invalid field" error="Enter a description">
             <Input placeholder="Description" />
