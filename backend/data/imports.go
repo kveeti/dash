@@ -100,7 +100,7 @@ type importParser interface {
 }
 
 // parserFor builds the parser for a source. loc is the timezone the batch was
-// uploaded with; parsers interpret dates as midnight in it.
+// uploaded with; parsers interpret offset-free dates and timestamps in it.
 func parserFor(source string, r io.Reader, loc *time.Location, currencies map[string]int) (importParser, error) {
 	switch source {
 	case "nordea":

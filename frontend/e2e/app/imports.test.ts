@@ -46,6 +46,11 @@ async function upload(
   } else {
     await page.getByRole("option", { name: 'Asset "E2E Checking"' }).click();
   }
+  if (format === "revolut") {
+    await expect(page.getByLabel("Dates in timezone")).toHaveValue(
+      "Europe/Helsinki",
+    );
+  }
   const created = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/v1/imports") &&

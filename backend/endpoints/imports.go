@@ -58,9 +58,6 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			return NewErr("bucket_id is required", http.StatusBadRequest)
 		}
 		timezone := r.FormValue("timezone")
-		if format == "revolut" {
-			timezone = "UTC"
-		}
 		if _, err := time.LoadLocation(timezone); err != nil || timezone == "" {
 			return NewErr("valid timezone is required", http.StatusBadRequest)
 		}

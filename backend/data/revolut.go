@@ -72,7 +72,7 @@ func ValidRevolutHeader(line string) bool {
 	return validHeader(line, ",", revolutHeaderCols)
 }
 
-func parseRevolutRow(cols []string, _ *time.Location, currencies map[string]int) (ParsedRow, bool, error) {
+func parseRevolutRow(cols []string, loc *time.Location, currencies map[string]int) (ParsedRow, bool, error) {
 	col := func(i int) string {
 		if i < len(cols) {
 			return strings.TrimSpace(cols[i])
@@ -84,7 +84,7 @@ func parseRevolutRow(cols []string, _ *time.Location, currencies map[string]int)
 		return ParsedRow{}, false, nil
 	}
 	dateText := col(2)
-	date, err := time.ParseInLocation("2006-01-02 15:04:05", dateText, time.UTC)
+	date, err := time.ParseInLocation("2006-01-02 15:04:05", dateText, loc)
 	if err != nil {
 		return ParsedRow{}, false, fmt.Errorf("invalid date: %s", dateText)
 	}

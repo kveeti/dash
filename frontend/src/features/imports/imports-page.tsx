@@ -151,21 +151,19 @@ function ImportForm() {
               </Select>
             </Field>
 
-            {formatField.input !== "revolut" && (
-              <FormField of={form} path={["timezone"]}>
-                {(field) => (
-                  <Field label="Dates in timezone" error={field.errors?.[0]}>
-                    <Select {...field.props}>
-                      {timezones.map((tz) => (
-                        <option key={tz} value={tz}>
-                          {tz}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                )}
-              </FormField>
-            )}
+            <FormField of={form} path={["timezone"]}>
+              {(field) => (
+                <Field label="Dates in timezone" error={field.errors?.[0]}>
+                  <Select {...field.props}>
+                    {timezones.map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
+            </FormField>
           </>
         )}
       </FormField>

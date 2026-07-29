@@ -43,9 +43,7 @@ func importCSVFormat(t *testing.T, app *testApp, bucketID, format, csv string) *
 	mw := multipart.NewWriter(&buf)
 	require.NoError(t, mw.WriteField("bucket_id", bucketID))
 	require.NoError(t, mw.WriteField("format", format))
-	if format != "revolut" {
-		require.NoError(t, mw.WriteField("timezone", "Europe/Helsinki"))
-	}
+	require.NoError(t, mw.WriteField("timezone", "Europe/Helsinki"))
 	fw, err := mw.CreateFormFile("file", "export.csv")
 	require.NoError(t, err)
 	_, err = fw.Write([]byte(csv))
@@ -148,7 +146,9 @@ func TestImportRevolut(t *testing.T) {
 	rows := getInbox(t, app, "")
 	require.Len(t, rows, 1)
 	require.Equal(t, "Cafe", rows[0].Counterparty)
-	require.Equal(t, "2026-07-01T12:30:00Z", rows[0].Date)
+	// Revolut timestamps have no offset, so the selected Helsinki timezone
+	// turns 12:30 local time into 09:30 UTC in summer.
+	require.Equal(t, "2026-07-01T09:30:00Z", rows[0].Date)
 	require.Equal(t, int64(-1050), rows[0].Amount)
 	require.Equal(t, "Type: CARD_PAYMENT, Fee: 0.50", rows[0].Description)
 }
