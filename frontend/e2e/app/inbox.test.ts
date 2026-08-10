@@ -7,6 +7,7 @@ test("search, select all, and create a category against the real inbox", async (
 }, testInfo) => {
   await login(page, testInfo);
   const checking = await createBucket(page, "asset", "Checking");
+  await createBucket(page, "expense", "Food");
   await importNordea(
     page,
     checking.id,
@@ -31,13 +32,28 @@ test("search, select all, and create a category against the real inbox", async (
   await expect(page.getByText("3 selected")).toBeVisible();
   await page.getByRole("button", { name: "Deselect all" }).click();
   await expect(page.getByText("0 selected")).toBeVisible();
+  const hotelRow = page.getByRole("listitem").filter({ hasText: "Hotel" });
+  await hotelRow.locator("div").first().click();
+  await expect(page.getByText("1 selected")).toBeVisible();
+  await expect(
+    page.getByRole("combobox").filter({ hasText: "Categorize as..." }),
+  ).toBeVisible();
+  await hotelRow.locator("div").first().click();
   await page.getByRole("button", { name: "Select all" }).click();
 
   await page
     .getByRole("combobox")
-    .filter({ hasText: "Category or person" })
+    .filter({ hasText: "Categorize all as..." })
     .click();
-  await page.getByRole("combobox", { name: "Filter buckets" }).fill("Travel");
+  const actionFilter = page.getByRole("combobox", { name: "Filter buckets" });
+  await expect(actionFilter).toHaveAttribute(
+    "placeholder",
+    "Filter categories...",
+  );
+  await expect(
+    page.getByText("Categorize as...", { exact: true }),
+  ).toBeVisible();
+  await actionFilter.fill("Travel");
   await page.getByRole("option", { name: 'Expense "Travel"' }).click();
   await expect(page.getByText("No transactions to categorize")).toBeVisible();
 

@@ -41,6 +41,8 @@ export function BucketPicker(props: {
   value?: Bucket | null;
   onPick: (bucket: Bucket) => void;
   placeholder?: string;
+  inputPlaceholder?: string;
+  groupLabel?: string;
 }) {
   const createBucket = useCreateBucketMutation();
   const [open, setOpen] = useState(false);
@@ -62,7 +64,7 @@ export function BucketPicker(props: {
     if (buckets.length) {
       currentGroups.push({
         id: "buckets",
-        name: "Choose…",
+        name: props.groupLabel ?? "Choose…",
         items: buckets.map((bucket) => ({
           type: "bucket",
           id: bucket.id,
@@ -149,7 +151,9 @@ export function BucketPicker(props: {
           >
             <Combobox.Input
               render={<PopupSearchInput className="h-10" />}
-              placeholder={props.placeholder ?? "Search…"}
+              placeholder={
+                props.inputPlaceholder ?? props.placeholder ?? "Search…"
+              }
               aria-label="Filter buckets"
             />
 

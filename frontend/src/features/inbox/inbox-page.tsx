@@ -322,7 +322,13 @@ function FloatingBar(props: { selection: UseSelectionReturn }) {
           kinds={["expense", "income", "person"]}
           createKinds={["expense", "income", "person"]}
           value={null}
-          placeholder="Category or person"
+          placeholder={
+            props.selection.selected.size > 1
+              ? "Categorize all as..."
+              : "Categorize as..."
+          }
+          inputPlaceholder="Filter categories..."
+          groupLabel="Categorize as..."
           onPick={(bucket) => {
             const ids = [...props.selection.selected];
             void undo.run(
