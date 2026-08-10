@@ -25,7 +25,20 @@ type Config struct {
 	ImportDir       string
 	DisableRateSync bool
 
-	OIDC OIDCConfig
+	OIDC          OIDCConfig
+	EnableBanking EnableBankingConfig
+}
+
+// EnableBankingConfig is optional. The integration is available only when both
+// the application ID and private key path are set.
+type EnableBankingConfig struct {
+	ApplicationID  string
+	PrivateKeyPath string
+	APIOrigin      string
+}
+
+func (c EnableBankingConfig) Enabled() bool {
+	return c.ApplicationID != "" && c.PrivateKeyPath != ""
 }
 
 // callbackPath must match the OIDC callback route in the router.
@@ -63,6 +76,11 @@ func LoadConfig() (*Config, error) {
 		ImportStore:     os.Getenv("IMPORT_STORE"),
 		ImportDir:       os.Getenv("IMPORT_DIR"),
 		DisableRateSync: os.Getenv("DISABLE_RATE_SYNC") == "1",
+		EnableBanking: EnableBankingConfig{
+			ApplicationID:  os.Getenv("ENABLEBANKING_APP_ID"),
+			PrivateKeyPath: os.Getenv("ENABLEBANKING_PRIVATE_KEY"),
+			APIOrigin:      os.Getenv("ENABLEBANKING_API_ORIGIN"),
+		},
 		OIDC: OIDCConfig{
 			Issuer:       os.Getenv("OIDC_ISSUER"),
 			ClientID:     os.Getenv("OIDC_CLIENT_ID"),
@@ -82,6 +100,13 @@ func LoadConfig() (*Config, error) {
 		if value == "" {
 			return nil, fmt.Errorf("invalid config: %s not set", name)
 		}
+	}
+
+	if config.EnableBanking.APIOrigin == "" {
+		config.EnableBanking.APIOrigin = "https://api.enablebanking.com"
+	}
+	if (config.EnableBanking.ApplicationID == "") != (config.EnableBanking.PrivateKeyPath == "") {
+		return nil, fmt.Errorf("invalid config: ENABLEBANKING_APP_ID and ENABLEBANKING_PRIVATE_KEY must be set together")
 	}
 
 	// OIDC_REDIRECT_URL defaults to the backend's own callback; set it

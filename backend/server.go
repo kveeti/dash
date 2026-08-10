@@ -10,6 +10,7 @@ import (
 	"money/backend/auth"
 	"money/backend/config"
 	"money/backend/data"
+	"money/backend/enablebanking"
 	"money/backend/endpoints"
 	"money/backend/state"
 )
@@ -38,7 +39,18 @@ func App(config *config.Config, started chan struct{}) {
 		d.StartRateSync(workerCtx)
 	}
 
-	router := endpoints.GetRouter(state.NewState(d, config, oidc), frontendFS())
+	appState := state.NewState(d, config, oidc)
+	if config.EnableBanking.Enabled() {
+		client, err := enablebanking.New(config.EnableBanking.ApplicationID, config.EnableBanking.PrivateKeyPath, config.EnableBanking.APIOrigin)
+		if err != nil {
+			panic(fmt.Errorf("creating Enable Banking client: %w", err))
+		}
+		appState.EnableBankingClient = client
+		appState.EnableBankingSyncer = enablebanking.NewSyncer(d, client)
+		appState.EnableBankingSyncer.Start(workerCtx)
+	}
+
+	router := endpoints.GetRouter(appState, frontendFS())
 
 	s := NewHttpServer(router, ":"+config.Port)
 	if err := s.Start(); err != nil {

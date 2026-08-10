@@ -1,10 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const nordeaHeader =
-  "Kirjauspäivä;Määrä;Maksaja;Maksunsaaja;Nimi;Otsikko;Viesti;Viitenumero;Saldo;Valuutta;\n";
+const nordeaHeader = "date,occurred_at,amount,currency,counterparty,note\n";
 
 function nordeaRow(date: string, amount: string, payee: string) {
-  return `${date};${amount};;;;${payee};;;;EUR\n`;
+  return `${date.replaceAll("/", "-")},,${amount.replace(",", ".")},EUR,${payee},\n`;
 }
 
 async function login(page: Page, user: string) {
@@ -32,7 +31,6 @@ async function importRows(page: Page, bucketID: string, csv: string) {
   const response = await page.request.post("/api/v1/imports", {
     multipart: {
       bucket_id: bucketID,
-      format: "nordea",
       timezone: "Europe/Helsinki",
       file: {
         name: "export.csv",

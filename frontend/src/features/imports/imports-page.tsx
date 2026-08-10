@@ -1,5 +1,5 @@
 import { Field as FormField, Form, setInput, useForm } from "@formisch/react";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import * as v from "valibot";
 import { Link } from "wouter";
 
@@ -12,13 +12,11 @@ import { Button } from "../../ui/button/button";
 import { Field, FileInput, Select } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
-import { detectImportFormat } from "./detect-import-format";
 import { useImportDrop } from "./import-drop-context";
 
 const schema = v.object({
   file: v.instance(File, "Choose a file"),
   bucket: v.pipe(v.string(), v.nonEmpty("Select an account")),
-  format: v.string(),
   timezone: v.pipe(v.string(), v.nonEmpty("Select a timezone")),
 });
 
@@ -52,33 +50,14 @@ function ImportForm() {
 
   const form = useForm({
     schema,
-    initialInput: { format: "nordea", timezone: timeZone },
+    initialInput: { timezone: timeZone },
   });
-  const selectedFile = useRef<File | null>(null);
-
-  const detectSelectedFile = useCallback(
-    async (file: File | null) => {
-      selectedFile.current = file;
-      if (!file) return;
-
-      try {
-        const format = await detectImportFormat(file);
-        if (format && selectedFile.current === file) {
-          setInput(form, { path: ["format"], input: format });
-        }
-      } catch {
-        // Keep the format editable when the file cannot be read.
-      }
-    },
-    [form],
-  );
 
   useEffect(() => {
     if (!droppedFile) return;
     setInput(form, { path: ["file"], input: droppedFile });
-    void detectSelectedFile(droppedFile);
     clearDroppedFile();
-  }, [clearDroppedFile, detectSelectedFile, droppedFile, form]);
+  }, [clearDroppedFile, droppedFile, form]);
 
   const onSubmit = async (values: v.InferOutput<typeof schema>) => {
     if (mutation.isPending) return;
@@ -86,7 +65,6 @@ function ImportForm() {
       await mutation.mutateAsync({
         file: values.file,
         bucketId: values.bucket,
-        format: values.format,
         timezone: values.timezone,
       });
     } catch {
@@ -99,9 +77,6 @@ function ImportForm() {
       of={form}
       className="flex w-full flex-col gap-4 min-[30rem]:grid min-[30rem]:grid-cols-[auto_minmax(0,22rem)] min-[30rem]:items-center min-[30rem]:gap-x-8 min-[30rem]:gap-y-3 min-[30rem]:[&>*]:col-span-full"
       onSubmit={onSubmit}
-      onReset={() => {
-        selectedFile.current = null;
-      }}
     >
       <FormField of={form} path={["file"]}>
         {(field) => (
@@ -111,7 +86,6 @@ function ImportForm() {
               aria-label="File"
               acceptedFileTypes={[".csv", "text/csv"]}
               files={field.input instanceof File ? [field.input] : []}
-              onSelect={(files) => void detectSelectedFile(files?.[0] ?? null)}
             />
           </Field>
         )}
@@ -133,38 +107,17 @@ function ImportForm() {
         )}
       </FormField>
 
-      <FormField of={form} path={["format"]}>
-        {(formatField) => (
-          <>
-            <Field label="Format">
-              <Select
-                {...formatField.props}
-                value={formatField.input ?? ""}
-                onChange={(event) => {
-                  selectedFile.current = null;
-                  formatField.onChange(event.currentTarget.value);
-                }}
-              >
-                <option value="nordea">Nordea</option>
-                <option value="op">OP</option>
-                <option value="revolut">Revolut</option>
-              </Select>
-            </Field>
-
-            <FormField of={form} path={["timezone"]}>
-              {(field) => (
-                <Field label="Dates in timezone" error={field.errors?.[0]}>
-                  <Select {...field.props}>
-                    {timezones.map((tz) => (
-                      <option key={tz} value={tz}>
-                        {tz}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-            </FormField>
-          </>
+      <FormField of={form} path={["timezone"]}>
+        {(field) => (
+          <Field label="Timestamps without an offset" error={field.errors?.[0]}>
+            <Select {...field.props}>
+              {timezones.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz}
+                </option>
+              ))}
+            </Select>
+          </Field>
         )}
       </FormField>
 
@@ -230,7 +183,10 @@ function PastImports() {
       <ul className="m-0 flex list-none flex-col p-0">
         {batches.map((batch) => {
           const processing =
-            batch.status === "uploaded" || batch.status === "processing";
+            batch.status === "uploaded" ||
+            batch.status === "processing" ||
+            batch.status === "queued" ||
+            batch.status === "syncing";
           return (
             <li
               key={batch.id}

@@ -19,24 +19,28 @@ const (
 )
 
 type Bucket struct {
-	ID                string
-	OwnerUserID       string
-	Kind              BucketKind
-	Name              string
-	ParentID          *string
-	CounterpartUserID *string
-	Hidden            bool
-	CreatedAt         time.Time
+	ID                      string
+	OwnerUserID             string
+	Kind                    BucketKind
+	Name                    string
+	ParentID                *string
+	CounterpartUserID       *string
+	IBAN                    *string
+	ActiveBankIntegrationID *string
+	Hidden                  bool
+	CreatedAt               time.Time
 }
 
 func insertBucketTx(ctx context.Context, tx *sql.Tx, b Bucket) error {
 	if _, err := tx.ExecContext(ctx, `
 		insert into buckets (
-			id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
+			id, owner_user_id, kind, name, parent_id, counterpart_user_id, iban,
+			active_bank_integration_id, hidden, created_at
 		)
-		values ($1, $2, $3, $4, $5, $6, $7, $8)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`,
-		b.ID, b.OwnerUserID, b.Kind, b.Name, b.ParentID, b.CounterpartUserID, b.Hidden, b.CreatedAt.UTC()); err != nil {
+		b.ID, b.OwnerUserID, b.Kind, b.Name, b.ParentID, b.CounterpartUserID, b.IBAN,
+		b.ActiveBankIntegrationID, b.Hidden, b.CreatedAt.UTC()); err != nil {
 		return err
 	}
 	return auditWrite(ctx, tx, b.OwnerUserID, "buckets", b.ID, "insert", nil)
@@ -57,7 +61,8 @@ func (d *Data) CreateBucket(ctx context.Context, b Bucket) error {
 
 func (d *Data) ListBuckets(ctx context.Context, ownerID string) ([]Bucket, error) {
 	rows, err := d.db.QueryContext(ctx, `
-		select id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
+		select id, owner_user_id, kind, name, parent_id, counterpart_user_id,
+		       iban, active_bank_integration_id, hidden, created_at
 		from buckets
 		where owner_user_id = $1
 		  and hidden = false
@@ -71,7 +76,7 @@ func (d *Data) ListBuckets(ctx context.Context, ownerID string) ([]Bucket, error
 	var buckets []Bucket
 	for rows.Next() {
 		var b Bucket
-		if err := rows.Scan(&b.ID, &b.OwnerUserID, &b.Kind, &b.Name, &b.ParentID, &b.CounterpartUserID, &b.Hidden, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.OwnerUserID, &b.Kind, &b.Name, &b.ParentID, &b.CounterpartUserID, &b.IBAN, &b.ActiveBankIntegrationID, &b.Hidden, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		buckets = append(buckets, b)
@@ -92,7 +97,8 @@ func (d *Data) SearchBuckets(ctx context.Context, ownerID, query string, kinds [
 	}
 
 	rows, err := d.db.QueryContext(ctx, `
-		select id, owner_user_id, kind, name, parent_id, counterpart_user_id, hidden, created_at
+		select id, owner_user_id, kind, name, parent_id, counterpart_user_id,
+		       iban, active_bank_integration_id, hidden, created_at
 		from buckets
 		where owner_user_id = $1
 		  and hidden = false
@@ -113,7 +119,7 @@ func (d *Data) SearchBuckets(ctx context.Context, ownerID, query string, kinds [
 	var buckets []Bucket
 	for rows.Next() {
 		var b Bucket
-		if err := rows.Scan(&b.ID, &b.OwnerUserID, &b.Kind, &b.Name, &b.ParentID, &b.CounterpartUserID, &b.Hidden, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.OwnerUserID, &b.Kind, &b.Name, &b.ParentID, &b.CounterpartUserID, &b.IBAN, &b.ActiveBankIntegrationID, &b.Hidden, &b.CreatedAt); err != nil {
 			return nil, err
 		}
 		buckets = append(buckets, b)

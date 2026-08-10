@@ -33,6 +33,7 @@ export const inboxKeys = {
 export interface InboxItem {
   id: string;
   date: string;
+  occurred_at: string | null;
   amount: number;
   currency: string;
   counterparty: string;

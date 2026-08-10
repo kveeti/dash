@@ -32,7 +32,7 @@ func (d *Data) ListCurrencies(ctx context.Context) ([]Currency, error) {
 	return currencies, rows.Err()
 }
 
-func (d *Data) currencyExponents(ctx context.Context) (map[string]int, error) {
+func (d *Data) CurrencyExponents(ctx context.Context) (map[string]int, error) {
 	currencies, err := d.ListCurrencies(ctx)
 	if err != nil {
 		return nil, err

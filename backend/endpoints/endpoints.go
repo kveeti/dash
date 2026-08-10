@@ -59,6 +59,16 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 	mux.HandleFunc("POST /api/v1/imports/rows/{id}/import", NewHandler(HandleForceImportRow(state, getUserID)))
 	mux.HandleFunc("DELETE /api/v1/imports/{id}", NewHandler(HandleDeleteImport(state, getUserID)))
 
+	mux.HandleFunc("GET /api/v1/enablebanking/banks", NewHandler(HandleListEnableBankingBanks(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/enablebanking/connect", NewHandler(HandleStartEnableBanking(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/enablebanking/callback", NewHandler(HandleEnableBankingCallback(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/enablebanking/connections", NewHandler(HandleListEnableBankingConnections(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/enablebanking/sync", NewHandler(HandleSyncSelectedEnableBankingAccounts(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/enablebanking/connections/{id}/accounts/{uid}/map", NewHandler(HandleMapEnableBankingAccount(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/enablebanking/connections/{id}/accounts/{uid}/sync", NewHandler(HandleSyncEnableBankingAccount(state, getUserID)))
+	mux.HandleFunc("POST /api/v1/enablebanking/connections/{id}/sync", NewHandler(HandleSyncAllEnableBankingAccounts(state, getUserID)))
+	mux.HandleFunc("DELETE /api/v1/enablebanking/connections/{id}", NewHandler(HandleDeleteEnableBankingConnection(state, getUserID)))
+
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})

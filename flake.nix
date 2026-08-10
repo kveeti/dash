@@ -50,6 +50,9 @@
               fi
             done
 
+            export PORT=8000
+            export DEVIDP_PORT=5557
+
             if [ -f .env ]; then
               set -a
               source .env
@@ -66,9 +69,9 @@
             }
 
             export PGDATA="$PWD/.pg"
-            export PORT="$(free_port "''${PORT:-8000}")"
-            export VITE_PORT="$(free_port "''${VITE_PORT:-3000}" "$PORT")"
-            export DEVIDP_PORT="$(free_port "''${DEVIDP_PORT:-5557}" "$PORT" "$VITE_PORT")"
+            export PORT="''${PORT:-8000}"
+            export DEVIDP_PORT="''${DEVIDP_PORT:-5557}"
+            export VITE_PORT="$(free_port "''${VITE_PORT:-3000}" "$PORT" "$DEVIDP_PORT")"
 
             if pg_ctl -D "$PGDATA" status >/dev/null 2>&1; then
               export PGPORT="$(awk 'NR == 4 { print; exit }' "$PGDATA/postmaster.pid")"
@@ -86,12 +89,25 @@
             fi
 
             export PGHOST="$PGDATA"
-            export BACKEND_URL="http://localhost:$PORT"
             export DEV_VITE_URL="http://localhost:$VITE_PORT"
-            export DEVIDP_ISSUER="http://localhost:$DEVIDP_PORT"
             export DB_URL="postgres://postgres:postgres@localhost:$PGPORT/postgres"
 
+            if command -v dev-url >/dev/null 2>&1; then
+              dev-url dash-8000 "$PORT" >/dev/null
+              dev-url dash-oidc "$DEVIDP_PORT" >/dev/null
+              export BACKEND_URL="https://dash-8000.dev-internal.veetik.com"
+              export DEVIDP_ISSUER="https://dash-oidc.dev-internal.veetik.com"
+              export VITE_HMR_CLIENT_PORT=443
+            else
+              export BACKEND_URL="http://localhost:$PORT"
+              export DEVIDP_ISSUER="http://localhost:$DEVIDP_PORT"
+            fi
+
+            export OIDC_CLIENT_ID=dev
+            export OIDC_CLIENT_SECRET=dev
+
             echo "Ports: backend $PORT, frontend $VITE_PORT, IdP $DEVIDP_PORT, Postgres $PGPORT"
+            echo "URLs: app $BACKEND_URL, IdP $DEVIDP_ISSUER"
 
             alias fin="pg_ctl -D $PGDATA stop && exit"
             alias pg="psql -U postgres -d postgres"

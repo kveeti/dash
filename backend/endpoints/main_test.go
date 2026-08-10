@@ -135,7 +135,7 @@ func postingTotals(t *testing.T, app *testApp) map[string]map[string]int64 {
 func postingTotalsAt(t *testing.T, app *testApp, at time.Time) map[string]map[string]int64 {
 	t.Helper()
 	return queryPostingTotals(t, app, `select p.bucket_id,p.currency,sum(p.amount) from postings p
-		join transactions t on t.id=p.transaction_id where t.occurred_at<=$1 group by p.bucket_id,p.currency`, at)
+		join transactions t on t.id=p.transaction_id where t.occurred_on<=$1::date group by p.bucket_id,p.currency`, at.Format(time.DateOnly))
 }
 
 func queryPostingTotals(t *testing.T, app *testApp, query string, args ...any) map[string]map[string]int64 {

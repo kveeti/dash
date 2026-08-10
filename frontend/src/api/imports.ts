@@ -14,7 +14,13 @@ export const importKeys = {
   batch: (id: string) => [...importKeys.all, id] as const,
 };
 
-export type ImportStatus = "uploaded" | "processing" | "done" | "failed";
+export type ImportStatus =
+  | "uploaded"
+  | "processing"
+  | "queued"
+  | "syncing"
+  | "done"
+  | "failed";
 
 export interface ParseError {
   line: number;
@@ -27,6 +33,7 @@ export interface ImportBatchSummary {
   filename: string;
   created_at: string;
   status: ImportStatus;
+  error?: string | null;
   imported: number;
   duplicates: number;
   // Only the single-batch report populates this; the list omits it.
@@ -43,9 +50,11 @@ export interface ImportResult {
 
 export interface DuplicateTarget {
   date: string;
+  occurred_at: string | null;
   amount: number;
   currency: string;
-  raw_description: string;
+  counterparty: string;
+  note: string;
   transaction_id: string | null;
   batch_id: string;
   created_at: string;
@@ -54,10 +63,11 @@ export interface DuplicateTarget {
 export interface DuplicateRow {
   id: string;
   date: string;
+  occurred_at: string | null;
   amount: number;
   currency: string;
-  raw_description: string;
-  raw: Record<string, string>;
+  counterparty: string;
+  note: string;
   duplicate_of: string | null;
   duplicate_target: DuplicateTarget | null;
 }
@@ -120,16 +130,10 @@ export function useCreateImportMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: {
-      file: File;
-      bucketId: string;
-      format: string;
-      timezone: string;
-    }) => {
+    mutationFn: (input: { file: File; bucketId: string; timezone: string }) => {
       const form = new FormData();
       form.append("file", input.file);
       form.append("bucket_id", input.bucketId);
-      form.append("format", input.format);
       form.append("timezone", input.timezone);
       return api<ImportResult>("/api/v1/imports", {
         method: "POST",

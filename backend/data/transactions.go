@@ -10,14 +10,6 @@ import (
 	"time"
 )
 
-const visiblePostings = `
-	p.bucket_id in (
-		select id
-		from buckets
-		where owner_user_id = $1
-		  and hidden = false
-	)`
-
 var (
 	ErrUnbalanced         = errors.New("transaction does not balance: each currency must net to zero")
 	ErrInvalidPostings    = errors.New("transaction needs at least two postings with nonzero amounts")
@@ -32,7 +24,8 @@ var (
 type Transaction struct {
 	ID           string
 	OwnerUserID  string
-	OccurredAt   time.Time
+	OccurredOn   time.Time
+	OccurredAt   *time.Time
 	Counterparty string
 	Description  string
 	Memo         string
@@ -44,7 +37,8 @@ type TransferInfo struct {
 	MatchID               string
 	Side                  string
 	CounterpartID         string
-	CounterpartOccurredAt time.Time
+	CounterpartOccurredOn time.Time
+	CounterpartOccurredAt *time.Time
 	CounterpartBucket     *PostingBucket
 	CounterpartAmount     int64
 	CounterpartCurrency   string
@@ -77,10 +71,10 @@ func insertTransactionTx(ctx context.Context, tx *sql.Tx, txn *Transaction, post
 	txn.CreatedAt = time.Now().UTC()
 	_, err := tx.ExecContext(ctx, `
 		insert into transactions (
-			id, owner_user_id, occurred_at, counterparty, description, memo, created_at
+			id, owner_user_id, occurred_on, occurred_at, counterparty, description, memo, created_at
 		)
-		values ($1, $2, $3, $4, $5, $6, $7)
-	`, txn.ID, txn.OwnerUserID, txn.OccurredAt,
+		values ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, txn.ID, txn.OwnerUserID, txn.OccurredOn, txn.OccurredAt,
 		txn.Counterparty, txn.Description, txn.Memo, txn.CreatedAt)
 	if err != nil {
 		return err
@@ -300,12 +294,12 @@ func (d *Data) CategorizePosting(ctx context.Context, userID, id, bucketID strin
 func loadOwnedTransaction(ctx context.Context, tx *sql.Tx, userID, id string) (*Transaction, error) {
 	var t Transaction
 	err := tx.QueryRowContext(ctx, `
-		select id, owner_user_id, occurred_at, counterparty, description, memo, created_at
+		select id, owner_user_id, occurred_on, occurred_at, counterparty, description, memo, created_at
 		from transactions
 		where id = $1
 		  and owner_user_id = $2
 		for update
-	`, id, userID).Scan(&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt)
+	`, id, userID).Scan(&t.ID, &t.OwnerUserID, &t.OccurredOn, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, ErrNotFound
 	}
@@ -501,14 +495,14 @@ type TransactionFilter struct {
 }
 
 func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cursor time.Time, cursorID string, filter TransactionFilter) ([]Transaction, map[string][]Posting, error) {
-	args := []any{userID, timezone}
+	args := []any{userID, timezone != ""}
 	addArg := func(value any) string {
 		args = append(args, value)
 		return "$" + strconv.Itoa(len(args))
 	}
 	clauses := []string{}
 	if cursorID != "" {
-		clauses = append(clauses, "and (t.occurred_at, t.id) < ("+addArg(cursor)+"::timestamptz, "+addArg(cursorID)+"::uuid)")
+		clauses = append(clauses, "and (t.occurred_on, t.id) < ("+addArg(cursor)+"::date, "+addArg(cursorID)+"::uuid)")
 	}
 	if filter.Search != "" {
 		arg := addArg("%" + filter.Search + "%")
@@ -536,10 +530,10 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 		)`)
 	}
 	if filter.OccurredFrom != nil {
-		clauses = append(clauses, "and t.occurred_at >= "+addArg(*filter.OccurredFrom)+"::timestamptz")
+		clauses = append(clauses, "and t.occurred_on >= "+addArg(*filter.OccurredFrom)+"::date")
 	}
 	if filter.OccurredBefore != nil {
-		clauses = append(clauses, "and t.occurred_at < "+addArg(*filter.OccurredBefore)+"::timestamptz")
+		clauses = append(clauses, "and t.occurred_on < "+addArg(*filter.OccurredBefore)+"::date")
 	}
 	if len(filter.Accounts) > 0 || filter.Direction != "" || filter.Amount != nil || filter.AmountMin != nil || filter.AmountMax != nil {
 		legClauses := []string{"b.kind in ('asset','liability')"}
@@ -578,18 +572,16 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 			and `+strings.Join(legClauses, " and ")+`
 		)`)
 	}
-	query := `with page as materialized (
-		select t.id,t.owner_user_id,t.occurred_at,t.counterparty,t.description,t.memo,t.created_at from transactions t
-		where t.owner_user_id=$1 ` + strings.Join(clauses, " ") + `
+	rows, err := d.db.QueryContext(ctx, `with page as materialized (
+		select t.id,t.owner_user_id,t.occurred_on,t.occurred_at,t.counterparty,t.description,t.memo,t.created_at from transactions t
+		where t.owner_user_id=$1 `+strings.Join(clauses, " ")+`
 		and not exists (
 			select 1 from account_movement_matches movement
 			join transactions outgoing on outgoing.id=movement.outgoing_transaction_id
 			where movement.owner_user_id=t.owner_user_id and movement.incoming_transaction_id=t.id
-			and case when $2='' then false else
-				timezone($2,outgoing.occurred_at)::date=timezone($2,t.occurred_at)::date
-			end
+			  and $2 and outgoing.occurred_on=t.occurred_on
 		)
-		order by t.occurred_at desc,t.id desc limit ` + strconv.Itoa(TransactionPageSize) + `
+		order by t.occurred_on desc,t.id desc limit `+strconv.Itoa(TransactionPageSize)+`
 	), page_postings as (
 		select p.id,p.transaction_id,p.bucket_id,b.name as bucket_name,b.kind as bucket_kind,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,p.created_at,
 			coalesce(jsonb_agg(pt.tag order by pt.tag) filter(where pt.tag is not null),'[]'::jsonb) as tags
@@ -599,7 +591,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 	), transit_transactions as (
 		select distinct p.transaction_id from page join postings p on p.transaction_id=page.id join buckets b on b.id=p.bucket_id and b.kind='transit'
 	)
-	select page.id,page.owner_user_id,page.occurred_at,page.counterparty,page.description,page.memo,page.created_at,
+	select page.id,page.owner_user_id,page.occurred_on,page.occurred_at,page.counterparty,page.description,page.memo,page.created_at,
 		p.id,p.bucket_id,p.bucket_name,p.bucket_kind,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,p.tags,
 		coalesce(outgoing_match.id,incoming_match.id),
 		case
@@ -608,7 +600,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 			when transit_transactions.transaction_id is not null and p.amount < 0 then 'outgoing'
 			when transit_transactions.transaction_id is not null then 'incoming'
 		end,
-		counterpart.id,counterpart.occurred_at,counterpart_bucket.id,counterpart_bucket.name,counterpart_bucket.kind,
+		counterpart.id,counterpart.occurred_on,counterpart.occurred_at,counterpart_bucket.id,counterpart_bucket.name,counterpart_bucket.kind,
 		counterpart_posting.amount,counterpart_posting.currency,
 		transit_transactions.transaction_id is not null and outgoing_match.id is null and incoming_match.id is null
 	from page
@@ -619,8 +611,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 	left join postings counterpart_posting on counterpart_posting.transaction_id=counterpart.id and counterpart_posting.import_row_id is not null
 	left join buckets counterpart_bucket on counterpart_bucket.id=counterpart_posting.bucket_id
 	left join transit_transactions on transit_transactions.transaction_id=page.id
-	order by page.occurred_at desc,page.id desc,p.created_at,p.id`
-	rows, err := d.db.QueryContext(ctx, query, args...)
+	order by page.occurred_on desc,page.id desc,p.created_at,p.id`, args...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -633,12 +624,12 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 		var p Posting
 		var tags []byte
 		var matchID, side, counterpartID, counterpartBucketID, counterpartBucketName, counterpartBucketKind, counterpartCurrency sql.NullString
-		var counterpartOccurredAt sql.NullTime
+		var counterpartOccurredOn, counterpartOccurredAt sql.NullTime
 		var counterpartAmount sql.NullInt64
 		var unmatched bool
-		if err = rows.Scan(&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt,
+		if err = rows.Scan(&t.ID, &t.OwnerUserID, &t.OccurredOn, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt,
 			&p.ID, &p.Bucket.ID, &p.Bucket.Name, &p.Bucket.Kind, &p.Amount, &p.Currency, &p.StatsDate, &p.Memo, &p.ImportRowID, &p.MirrorID, &tags,
-			&matchID, &side, &counterpartID, &counterpartOccurredAt, &counterpartBucketID, &counterpartBucketName, &counterpartBucketKind,
+			&matchID, &side, &counterpartID, &counterpartOccurredOn, &counterpartOccurredAt, &counterpartBucketID, &counterpartBucketName, &counterpartBucketKind,
 			&counterpartAmount, &counterpartCurrency, &unmatched); err != nil {
 			return nil, nil, err
 		}
@@ -652,10 +643,13 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 				MatchID:               matchID.String,
 				Side:                  side.String,
 				CounterpartID:         counterpartID.String,
-				CounterpartOccurredAt: counterpartOccurredAt.Time,
+				CounterpartOccurredOn: counterpartOccurredOn.Time,
 				CounterpartBucket:     &PostingBucket{ID: counterpartBucketID.String, Name: counterpartBucketName.String, Kind: BucketKind(counterpartBucketKind.String)},
 				CounterpartAmount:     counterpartAmount.Int64,
 				CounterpartCurrency:   counterpartCurrency.String,
+			}
+			if counterpartOccurredAt.Valid {
+				t.Transfer.CounterpartOccurredAt = &counterpartOccurredAt.Time
 			}
 		} else if unmatched {
 			t.Transfer = &TransferInfo{Side: side.String, Unmatched: true}
@@ -675,7 +669,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transaction, []Posting, error) {
 	rows, err := d.db.QueryContext(ctx, `
 		with target as materialized (
-			select id, owner_user_id, occurred_at, counterparty, description, memo, created_at
+			select id, owner_user_id, occurred_on, occurred_at, counterparty, description, memo, created_at
 			from transactions
 			where id = $1 and owner_user_id = $2
 		), target_postings as (
@@ -700,7 +694,7 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 			join account_movement_matches m on m.incoming_transaction_id = target.id
 		), matched_transfer as (
 			select s.match_id, s.transaction_id, s.counterpart_id, s.side,
-				counterpart.occurred_at, b.id as bucket_id, b.name as bucket_name, b.kind as bucket_kind,
+				counterpart.occurred_on, counterpart.occurred_at, b.id as bucket_id, b.name as bucket_name, b.kind as bucket_kind,
 				p.amount, p.currency
 			from matched_sides s
 			join transactions counterpart on counterpart.id = s.counterpart_id
@@ -719,11 +713,11 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 				select 1 from account_movement_matches m where m.incoming_transaction_id = p.transaction_id
 			)
 		)
-		select target.id, target.owner_user_id, target.occurred_at, target.counterparty,
+		select target.id, target.owner_user_id, target.occurred_on, target.occurred_at, target.counterparty,
 			target.description, target.memo, target.created_at,
 			p.id, p.bucket_id, p.bucket_name, p.bucket_kind, p.amount, p.currency,
 			p.stats_date, p.memo, p.import_row_id, p.mirror_id, p.tags,
-			m.match_id, m.side, m.counterpart_id, m.occurred_at, m.bucket_id,
+			m.match_id, m.side, m.counterpart_id, m.occurred_on, m.occurred_at, m.bucket_id,
 			m.bucket_name, m.bucket_kind, m.amount, m.currency, u.side
 		from target
 		left join target_postings p on p.transaction_id = target.id
@@ -748,17 +742,17 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 			postingMemo, importRowID, mirrorID                    sql.NullString
 			tags                                                  []byte
 			matchID, matchSide, counterpartID                     sql.NullString
-			counterpartOccurredAt                                 sql.NullTime
+			counterpartOccurredOn, counterpartOccurredAt          sql.NullTime
 			counterpartBucketID, counterpartBucketName            sql.NullString
 			counterpartBucketKind, counterpartCurrency            sql.NullString
 			counterpartAmount                                     sql.NullInt64
 			unmatchedSide                                         sql.NullString
 		)
 		if err = rows.Scan(
-			&t.ID, &t.OwnerUserID, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt,
+			&t.ID, &t.OwnerUserID, &t.OccurredOn, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt,
 			&postingID, &bucketID, &bucketName, &bucketKind, &postingAmount, &currency,
 			&statsDate, &postingMemo, &importRowID, &mirrorID, &tags,
-			&matchID, &matchSide, &counterpartID, &counterpartOccurredAt, &counterpartBucketID,
+			&matchID, &matchSide, &counterpartID, &counterpartOccurredOn, &counterpartOccurredAt, &counterpartBucketID,
 			&counterpartBucketName, &counterpartBucketKind, &counterpartAmount, &counterpartCurrency, &unmatchedSide,
 		); err != nil {
 			return nil, nil, err
@@ -792,12 +786,15 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 				MatchID:               matchID.String,
 				Side:                  matchSide.String,
 				CounterpartID:         counterpartID.String,
-				CounterpartOccurredAt: counterpartOccurredAt.Time,
+				CounterpartOccurredOn: counterpartOccurredOn.Time,
 				CounterpartBucket: &PostingBucket{
 					ID: counterpartBucketID.String, Name: counterpartBucketName.String, Kind: BucketKind(counterpartBucketKind.String),
 				},
 				CounterpartAmount:   counterpartAmount.Int64,
 				CounterpartCurrency: counterpartCurrency.String,
+			}
+			if counterpartOccurredAt.Valid {
+				t.Transfer.CounterpartOccurredAt = &counterpartOccurredAt.Time
 			}
 		} else if unmatchedSide.Valid {
 			t.Transfer = &TransferInfo{Side: unmatchedSide.String, Unmatched: true}

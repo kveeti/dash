@@ -1,10 +1,10 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
 
 export const nordeaHeader =
-  "Kirjauspäivä;Määrä;Maksaja;Maksunsaaja;Nimi;Otsikko;Viesti;Viitenumero;Saldo;Valuutta;\n";
+  "date,occurred_at,amount,currency,counterparty,note\n";
 
 export function nordeaRow(date: string, amount: string, payee: string) {
-  return `${date};${amount};;;;${payee};;;;EUR\n`;
+  return `${date.replaceAll("/", "-")},,${amount.replace(",", ".")},EUR,${payee},\n`;
 }
 
 export async function login(page: Page, testInfo: TestInfo) {
@@ -84,7 +84,6 @@ export async function importNordea(
   const response = await page.request.post("/api/v1/imports", {
     multipart: {
       bucket_id: bucketId,
-      format: "nordea",
       timezone,
       file: {
         name: "transactions.csv",

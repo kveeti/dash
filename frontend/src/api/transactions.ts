@@ -62,7 +62,8 @@ export interface Posting {
 
 export interface Transaction {
   id: string;
-  occurred_at: string;
+  occurred_on: string;
+  occurred_at: string | null;
   counterparty: string;
   description: string;
   memo: string;
@@ -71,6 +72,7 @@ export interface Transaction {
     match_id?: string;
     side?: "outgoing" | "incoming";
     counterpart_id?: string;
+    counterpart_occurred_on?: string;
     counterpart_occurred_at?: string;
     counterpart_bucket?: Posting["bucket"];
     counterpart_amount?: number;

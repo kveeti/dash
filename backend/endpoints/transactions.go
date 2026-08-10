@@ -16,6 +16,7 @@ import (
 const dateLayout = time.RFC3339
 
 func formatDate(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+func formatDay(t time.Time) string  { return t.Format(time.DateOnly) }
 
 type postingBucketResponse struct {
 	ID   string          `json:"id"`
@@ -36,7 +37,8 @@ type transferResponse struct {
 	MatchID               string                 `json:"match_id,omitempty"`
 	Side                  string                 `json:"side,omitempty"`
 	CounterpartID         string                 `json:"counterpart_id,omitempty"`
-	CounterpartOccurredAt string                 `json:"counterpart_occurred_at,omitempty"`
+	CounterpartOccurredOn string                 `json:"counterpart_occurred_on,omitempty"`
+	CounterpartOccurredAt *string                `json:"counterpart_occurred_at,omitempty"`
 	CounterpartBucket     *postingBucketResponse `json:"counterpart_bucket,omitempty"`
 	CounterpartAmount     int64                  `json:"counterpart_amount,omitempty"`
 	CounterpartCurrency   string                 `json:"counterpart_currency,omitempty"`
@@ -44,7 +46,8 @@ type transferResponse struct {
 }
 type transactionResponse struct {
 	ID           string            `json:"id"`
-	OccurredAt   string            `json:"occurred_at"`
+	OccurredOn   string            `json:"occurred_on"`
+	OccurredAt   *string           `json:"occurred_at"`
 	Counterparty string            `json:"counterparty"`
 	Description  string            `json:"description"`
 	Memo         string            `json:"memo"`
@@ -71,6 +74,18 @@ func parseCursor(r *http.Request) (time.Time, string, error) {
 	}
 	return date, id, nil
 }
+
+func parseDayCursor(r *http.Request) (time.Time, string, error) {
+	id := r.URL.Query().Get("before_id")
+	if id == "" {
+		return time.Time{}, "", nil
+	}
+	date, err := time.Parse(time.DateOnly, r.URL.Query().Get("before_date"))
+	if err != nil {
+		return time.Time{}, "", NewErr("before_date must use YYYY-MM-DD", http.StatusBadRequest)
+	}
+	return date, id, nil
+}
 func toPostingResponse(p data.Posting) postingResponse {
 	var date *string
 	if p.StatsDate != nil {
@@ -80,7 +95,11 @@ func toPostingResponse(p data.Posting) postingResponse {
 	return postingResponse{ID: p.ID, Bucket: postingBucketResponse{p.Bucket.ID, p.Bucket.Name, p.Bucket.Kind}, Amount: p.Amount, Currency: p.Currency, StatsDate: date, Memo: p.Memo, Imported: p.ImportRowID != nil, Tags: p.Tags}
 }
 func toTransactionResponse(t data.Transaction, ps []data.Posting) transactionResponse {
-	out := transactionResponse{ID: t.ID, OccurredAt: formatDate(t.OccurredAt), Counterparty: t.Counterparty, Description: t.Description, Memo: t.Memo, Postings: make([]postingResponse, len(ps))}
+	out := transactionResponse{ID: t.ID, OccurredOn: formatDay(t.OccurredOn), Counterparty: t.Counterparty, Description: t.Description, Memo: t.Memo, Postings: make([]postingResponse, len(ps))}
+	if t.OccurredAt != nil {
+		value := formatDate(*t.OccurredAt)
+		out.OccurredAt = &value
+	}
 	for i, p := range ps {
 		out.Postings[i] = toPostingResponse(p)
 	}
@@ -93,8 +112,12 @@ func toTransactionResponse(t data.Transaction, ps []data.Posting) transactionRes
 			CounterpartCurrency: t.Transfer.CounterpartCurrency,
 			Unmatched:           t.Transfer.Unmatched,
 		}
-		if !t.Transfer.CounterpartOccurredAt.IsZero() {
-			out.Transfer.CounterpartOccurredAt = formatDate(t.Transfer.CounterpartOccurredAt)
+		if !t.Transfer.CounterpartOccurredOn.IsZero() {
+			out.Transfer.CounterpartOccurredOn = formatDay(t.Transfer.CounterpartOccurredOn)
+		}
+		if t.Transfer.CounterpartOccurredAt != nil {
+			value := formatDate(*t.Transfer.CounterpartOccurredAt)
+			out.Transfer.CounterpartOccurredAt = &value
 		}
 		if t.Transfer.CounterpartBucket != nil {
 			out.Transfer.CounterpartBucket = &postingBucketResponse{
@@ -251,7 +274,7 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		date, id, err := parseCursor(r)
+		date, id, err := parseDayCursor(r)
 		if err != nil {
 			return err
 		}
@@ -276,7 +299,7 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 		}
 		if len(txns) == data.TransactionPageSize {
 			last := txns[len(txns)-1]
-			out.NextCursor = &cursor{formatDate(last.OccurredAt), last.ID}
+			out.NextCursor = &cursor{formatDay(last.OccurredOn), last.ID}
 		}
 		Json(w, out)
 		return nil
@@ -312,9 +335,13 @@ func parseTransactionFilter(r *http.Request, state *state.State) (data.Transacti
 		to   **time.Time
 	}{{"occurred_from", &filter.OccurredFrom}, {"occurred_before", &filter.OccurredBefore}} {
 		if value := query.Get(field.name); value != "" {
-			parsed, err := time.Parse(time.RFC3339, value)
+			parsed, err := time.Parse(time.DateOnly, value)
 			if err != nil {
-				return data.TransactionFilter{}, NewErr(field.name+" must be an RFC3339 timestamp", http.StatusBadRequest)
+				if instant, instantErr := time.Parse(time.RFC3339, value); instantErr == nil {
+					parsed = time.Date(instant.Year(), instant.Month(), instant.Day(), 0, 0, 0, 0, time.UTC)
+				} else {
+					return data.TransactionFilter{}, NewErr(field.name+" must use YYYY-MM-DD", http.StatusBadRequest)
+				}
 			}
 			*field.to = &parsed
 		}

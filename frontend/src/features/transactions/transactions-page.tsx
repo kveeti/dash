@@ -198,7 +198,7 @@ function List(props: {
         className={`-mt-1 flex list-none flex-col ${props.selection.selectMode ? "select-none" : ""}`}
       >
         {props.txns.map((txn) => {
-          const date = new Date(txn.occurred_at);
+          const date = new Date(`${txn.occurred_on}T00:00:00`);
           let dateHeading: string | null = null;
           if (!prevDate || !isSameDay(date, prevDate)) {
             dateHeading = isSameYear(date, today)

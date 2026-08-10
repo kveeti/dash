@@ -41,76 +41,6 @@ type Stats struct {
 	Valuation    map[string]Valuation
 }
 
-const statsValuesSQL = `
-with requested_ranges(label, from_date, to_date) as (
-    values ('current', $2::date, $3::date),
-           ('comparison', $4::date, $5::date),
-           ('full_comparison', $6::date, $7::date)
-), ranges as (
-    select * from requested_ranges where from_date is not null
-), native as (
-    select r.label, p.bucket_id, b.kind, coalesce(p.stats_date,(t.occurred_at at time zone $9)::date) as date,
-           upper(p.currency) as currency, sum(p.amount) as amount
-    from postings p
-    join transactions t on t.id = p.transaction_id
-    join buckets b on b.id = p.bucket_id
-    join ranges r on coalesce(p.stats_date,(t.occurred_at at time zone $9)::date) between r.from_date and r.to_date
-    where ` + visiblePostings + ` and b.kind in ('expense', 'income')
-    group by r.label, p.bucket_id, b.kind, coalesce(p.stats_date,(t.occurred_at at time zone $9)::date), upper(p.currency)
-)
-select n.label, n.bucket_id, n.kind, n.date, n.currency, n.amount,
-       source_currency.exponent, home_currency.exponent,
-       x.date, x.source_rate::text, x.home_rate::text
-from native n
-join currencies source_currency on source_currency.code = n.currency
-join currencies home_currency on home_currency.code = $8
-left join lateral (
-    select source.date, source.rate as source_rate, home.rate as home_rate
-    from rates source
-    join rates home on home.date = source.date and home.currency = $8
-    where source.currency = n.currency and source.date <= n.date
-    order by source.date desc
-    limit 1
-) x on n.currency <> $8
-order by n.label, n.bucket_id, n.date, n.currency`
-
-const statsFallbacksSQL = `
-with user_config as (
-    select upper(home_currency) as home_currency from users where id = $1
-), requested_ranges(label, from_date, to_date) as (
-    values ('current', $2::date, $3::date),
-           ('comparison', $4::date, $5::date),
-           ('full_comparison', $6::date, $7::date)
-), ranges as (
-    select * from requested_ranges where from_date is not null
-), category_postings as (
-    select r.label, t.id as transaction_id, coalesce(p.stats_date,(t.occurred_at at time zone $8)::date) as date,
-           upper(p.currency) as currency
-    from postings p
-    join transactions t on t.id = p.transaction_id
-    join buckets b on b.id = p.bucket_id
-    join ranges r on coalesce(p.stats_date,(t.occurred_at at time zone $8)::date) between r.from_date and r.to_date
-    where ` + visiblePostings + ` and b.kind in ('expense', 'income')
-      and upper(p.currency) <> (select home_currency from user_config)
-), fallbacks as (
-    select c.label, count(distinct c.transaction_id) as transaction_count, max(c.date - x.date) as maximum_days
-    from category_postings c
-    join lateral (
-        select source.date
-        from rates source
-        join rates home on home.date = source.date
-                       and home.currency = (select home_currency from user_config)
-        where source.currency = c.currency and source.date <= c.date
-        order by source.date desc
-        limit 1
-    ) x on x.date < c.date
-    group by c.label
-)
-select u.home_currency, f.label, f.transaction_count, f.maximum_days
-from user_config u
-left join fallbacks f on true
-order by f.label`
-
 type statKey struct {
 	label    string
 	bucketID string
@@ -126,12 +56,12 @@ func rangeArgs(userID string, current, comparison DateRange, full *DateRange) []
 	return args
 }
 
-func rateArgs(userID string, current, comparison DateRange, full *DateRange, home, timezone string) []any {
-	return append(rangeArgs(userID, current, comparison, full), home, timezone)
+func rateArgs(userID string, current, comparison DateRange, full *DateRange, home string) []any {
+	return append(rangeArgs(userID, current, comparison, full), home)
 }
 
-func fallbackArgs(userID string, current, comparison DateRange, full *DateRange, timezone string) []any {
-	return append(rangeArgs(userID, current, comparison, full), timezone)
+func fallbackArgs(userID string, current, comparison DateRange, full *DateRange) []any {
+	return rangeArgs(userID, current, comparison, full)
 }
 
 func pow10(n int) *big.Int {
@@ -175,7 +105,67 @@ func (d *Data) GetStats(ctx context.Context, userID string, current, comparison 
 		"comparison":      {},
 		"full_comparison": {},
 	}
-	fallbackRows, err := d.db.QueryContext(ctx, statsFallbacksSQL, fallbackArgs(userID, current, comparison, full, timezone)...)
+	fallbackRows, err := d.db.QueryContext(ctx, `
+		with user_config as (
+			select upper(home_currency) as home_currency
+			from users
+			where id = $1
+		), requested_ranges(label, from_date, to_date) as (
+			values ('current', $2::date, $3::date),
+			       ('comparison', $4::date, $5::date),
+			       ('full_comparison', $6::date, $7::date)
+		), ranges as (
+			select *
+			from requested_ranges
+			where from_date is not null
+		), category_postings as (
+			select
+				r.label,
+				t.id as transaction_id,
+				coalesce(p.stats_date, t.occurred_on) as date,
+				upper(p.currency) as currency
+			from postings p
+			join transactions t on t.id = p.transaction_id
+			join buckets b on b.id = p.bucket_id
+			join ranges r
+			  on coalesce(p.stats_date, t.occurred_on)
+			     between r.from_date and r.to_date
+			where p.bucket_id in (
+				select id
+				from buckets
+				where owner_user_id = $1
+				  and not hidden
+			)
+			  and b.kind in ('expense', 'income')
+			  and upper(p.currency) <> (select home_currency from user_config)
+		), fallbacks as (
+			select
+				posting.label,
+				count(distinct posting.transaction_id) as transaction_count,
+				max(posting.date - rate.date) as maximum_days
+			from category_postings posting
+			join lateral (
+				select source.date
+				from rates source
+				join rates home
+				  on home.date = source.date
+				 and home.currency = (select home_currency from user_config)
+				where source.currency = posting.currency
+				  and source.date <= posting.date
+				order by source.date desc
+				limit 1
+			) rate on rate.date < posting.date
+			group by posting.label
+		)
+		select
+			user_config.home_currency,
+			fallbacks.label,
+			fallbacks.transaction_count,
+			fallbacks.maximum_days
+		from user_config
+		left join fallbacks on true
+		order by fallbacks.label
+	`, fallbackArgs(userID, current, comparison, full)...)
 	if err != nil {
 		return nil, err
 	}
@@ -211,7 +201,74 @@ func (d *Data) GetStats(ctx context.Context, userID string, current, comparison 
 		missing[label] = map[string]bool{}
 	}
 
-	rows, err := d.db.QueryContext(ctx, statsValuesSQL, rateArgs(userID, current, comparison, full, home, timezone)...)
+	rows, err := d.db.QueryContext(ctx, `
+		with requested_ranges(label, from_date, to_date) as (
+			values ('current', $2::date, $3::date),
+			       ('comparison', $4::date, $5::date),
+			       ('full_comparison', $6::date, $7::date)
+		), ranges as (
+			select *
+			from requested_ranges
+			where from_date is not null
+		), native_amounts as (
+			select
+				r.label,
+				p.bucket_id,
+				b.kind,
+				coalesce(p.stats_date, t.occurred_on) as date,
+				upper(p.currency) as currency,
+				sum(p.amount) as amount
+			from postings p
+			join transactions t on t.id = p.transaction_id
+			join buckets b on b.id = p.bucket_id
+			join ranges r
+			  on coalesce(p.stats_date, t.occurred_on)
+			     between r.from_date and r.to_date
+			where p.bucket_id in (
+				select id
+				from buckets
+				where owner_user_id = $1
+				  and not hidden
+			)
+			  and b.kind in ('expense', 'income')
+			group by
+				r.label,
+				p.bucket_id,
+				b.kind,
+				coalesce(p.stats_date, t.occurred_on),
+				upper(p.currency)
+		)
+		select
+			amount.label,
+			amount.bucket_id,
+			amount.kind,
+			amount.date,
+			amount.currency,
+			amount.amount,
+			source_currency.exponent,
+			home_currency.exponent,
+			rate.date,
+			rate.source_rate::text,
+			rate.home_rate::text
+		from native_amounts amount
+		join currencies source_currency on source_currency.code = amount.currency
+		join currencies home_currency on home_currency.code = $8
+		left join lateral (
+			select
+				source.date,
+				source.rate as source_rate,
+				home.rate as home_rate
+			from rates source
+			join rates home
+			  on home.date = source.date
+			 and home.currency = $8
+			where source.currency = amount.currency
+			  and source.date <= amount.date
+			order by source.date desc
+			limit 1
+		) rate on amount.currency <> $8
+		order by amount.label, amount.bucket_id, amount.date, amount.currency
+	`, rateArgs(userID, current, comparison, full, home)...)
 	if err != nil {
 		return nil, err
 	}

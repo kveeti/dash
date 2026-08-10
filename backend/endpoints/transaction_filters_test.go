@@ -62,8 +62,8 @@ func TestTransactionAccountLegFiltersMatchBothTransferSides(t *testing.T) {
 		id, bucket string
 		amount     int64
 	}{{outgoing, checking, -1000}, {incoming, savings, 1000}} {
-		_, err := app.d.Users.Exec(`insert into transactions(id,owner_user_id,occurred_at,counterparty,description,memo,created_at)
-			values($1,$2,$3,'','','',now())`, transaction.id, userID, occurredAt)
+		_, err := app.d.Users.Exec(`insert into transactions(id,owner_user_id,occurred_on,occurred_at,counterparty,description,memo,created_at)
+			values($1,$2,$3::date,$4,'','','',now())`, transaction.id, userID, occurredAt.Format(time.DateOnly), occurredAt)
 		require.NoError(t, err)
 		_, err = app.d.Users.Exec(`insert into postings(id,transaction_id,bucket_id,amount,currency,created_at)
 			values($1,$2,$3,$4,'EUR',now())`, data.NewPrivateID(), transaction.id, transaction.bucket, transaction.amount)

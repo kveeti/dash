@@ -63,11 +63,11 @@ func TestInboxFilters(t *testing.T) {
 	require.Equal(t, []string{"Food"}, parties(list(url.Values{"currency": {"EUR"}, "amount_min": {"10"}, "amount_max": {"20"}})))
 
 	food := inboxByParty(getInbox(t, app, ""))["Food"]
-	foodDate, err := time.Parse(time.RFC3339, food.Date)
+	foodDate, err := time.Parse(time.DateOnly, food.Date)
 	require.NoError(t, err)
 	require.Equal(t, []string{"Food"}, parties(list(url.Values{
-		"occurred_from":   {foodDate.Add(-time.Second).Format(time.RFC3339)},
-		"occurred_before": {foodDate.Add(time.Second).Format(time.RFC3339)},
+		"occurred_from":   {foodDate.Format(time.DateOnly)},
+		"occurred_before": {foodDate.AddDate(0, 0, 1).Format(time.DateOnly)},
 	})))
 }
 
@@ -322,11 +322,11 @@ func TestRestoreInboxRejectsAnotherUsersRows(t *testing.T) {
 	rowID := data.NewPrivateID()
 	_, err := app.d.Users.Exec(`insert into import_batches
 		(id, user_id, bucket_id, source, filename, timezone, created_at, status)
-		values ($1, $2, $3, 'nordea', 'other.csv', 'Europe/Helsinki', now(), 'done')`, batchID, otherUserID, assetID)
+		values ($1, $2, $3, 'csv', 'other.csv', 'Europe/Helsinki', now(), 'done')`, batchID, otherUserID, assetID)
 	require.NoError(t, err)
 	_, err = app.d.Users.Exec(`insert into import_rows
-		(id, batch_id, date, amount, currency, raw_description, raw, dedup_hash, status)
-		values ($1, $2, '2026-06-30T21:00:00Z', -500, 'EUR', '', '{"payee":"Other row"}', $3, 'pending')`, rowID, batchID, rowID)
+		(id, batch_id, occurred_on, amount, currency, counterparty, note, dedup_hash, status)
+		values ($1, $2, '2026-07-01', -500, 'EUR', 'Other row', '', $3, 'pending')`, rowID, batchID, rowID)
 	require.NoError(t, err)
 	categorized, err := app.d.CategorizeInboxRows(context.Background(), otherUserID, []string{rowID}, categoryID)
 	require.NoError(t, err)
@@ -482,8 +482,10 @@ func TestMatchInboxTransfer(t *testing.T) {
 
 	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
 	require.Len(t, page.Transactions, 2)
-	require.Equal(t, map[string]bool{"2026-06-30T21:00:00Z": true, "2026-07-01T21:00:00Z": true}, map[string]bool{
-		page.Transactions[0].OccurredAt: true, page.Transactions[1].OccurredAt: true,
+	require.Nil(t, page.Transactions[0].OccurredAt)
+	require.Nil(t, page.Transactions[1].OccurredAt)
+	require.Equal(t, map[string]bool{"2026-07-01": true, "2026-07-02": true}, map[string]bool{
+		page.Transactions[0].OccurredOn: true, page.Transactions[1].OccurredOn: true,
 	})
 	for _, txn := range page.Transactions {
 		require.Len(t, txn.Postings, 1)
@@ -607,7 +609,8 @@ func TestMatchInboxExchange(t *testing.T) {
 	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
 	require.Len(t, page.Transactions, 2)
 	for _, txn := range page.Transactions {
-		require.Equal(t, "2026-06-30T21:00:00Z", txn.OccurredAt)
+		require.Equal(t, "2026-07-01", txn.OccurredOn)
+		require.Nil(t, txn.OccurredAt)
 		require.Len(t, txn.Postings, 1)
 		require.NotNil(t, txn.Transfer)
 		require.NotNil(t, txn.Transfer.CounterpartBucket)
@@ -839,12 +842,12 @@ func TestMatchInboxRejectsAnotherUsersRow(t *testing.T) {
 	otherRowID := data.NewPrivateID()
 	_, err := app.d.Users.Exec(`insert into import_batches
 		(id, user_id, bucket_id, source, filename, timezone, created_at, status)
-		values ($1, $2, $3, 'nordea', 'other.csv', 'Europe/Helsinki', now(), 'done')`,
+		values ($1, $2, $3, 'csv', 'other.csv', 'Europe/Helsinki', now(), 'done')`,
 		otherBatchID, otherUserID, otherAccountID)
 	require.NoError(t, err)
 	_, err = app.d.Users.Exec(`insert into import_rows
-		(id, batch_id, date, amount, currency, raw_description, raw, dedup_hash, status)
-		values ($1, $2, '2026-06-30T21:00:00Z', 500, 'EUR', '', '{"payee":"Other row"}', $3, 'pending')`,
+		(id, batch_id, occurred_on, amount, currency, counterparty, note, dedup_hash, status)
+		values ($1, $2, '2026-07-01', 500, 'EUR', 'Other row', '', $3, 'pending')`,
 		otherRowID, otherBatchID, otherRowID)
 	require.NoError(t, err)
 

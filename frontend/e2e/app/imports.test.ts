@@ -4,12 +4,6 @@ import { login, nordeaHeader, nordeaRow } from "../helpers";
 
 const nordeaCSV =
   nordeaHeader + nordeaRow("2026/07/01", "-12,34", "Duplicate shop");
-const opCSV =
-  '"Kirjauspäivä";"Arvopäivä";"Määrä EUROA";"Laji";"Selitys";"Saaja/Maksaja";"Saajan tilinumero";"Saajan pankin BIC";"Viite";"Viesti";"Arkistointitunnus"\n' +
-  "2026-07-01;2026-07-01;-12,34;Korttimaksu;Ruoka;K-Market;FI123;;;Viesti: Groceries;A1\n";
-const revolutCSV =
-  "Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n" +
-  "CARD_PAYMENT,Current,2026-07-01 12:30:00,2026-07-01 12:31:00,Cafe,-10.00,0.50,EUR,COMPLETED,90.00\n";
 const duplicatePageCSV =
   nordeaHeader +
   [
@@ -19,17 +13,12 @@ const duplicatePageCSV =
     nordeaRow("2026/07/01", "-1,00", "Older duplicate page"),
   ].join("");
 
-async function upload(
-  page: Page,
-  input: { csv?: string; format?: "nordea" | "op" | "revolut" } = {},
-) {
-  const format = input.format ?? "nordea";
+async function upload(page: Page, input: { csv?: string } = {}) {
   await page.getByLabel("File", { exact: true }).setInputFiles({
-    name: `${format}.csv`,
+    name: "transactions.csv",
     mimeType: "text/csv",
     buffer: Buffer.from(input.csv ?? nordeaCSV),
   });
-  await expect(page.getByLabel("Format")).toHaveValue(format);
   await page
     .getByRole("combobox")
     .filter({ hasText: "Select account" })
@@ -46,11 +35,9 @@ async function upload(
   } else {
     await page.getByRole("option", { name: 'Asset "E2E Checking"' }).click();
   }
-  if (format === "revolut") {
-    await expect(page.getByLabel("Dates in timezone")).toHaveValue(
-      "Europe/Helsinki",
-    );
-  }
+  await expect(page.getByLabel("Timestamps without an offset")).toHaveValue(
+    "Europe/Helsinki",
+  );
   const created = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/v1/imports") &&
@@ -70,7 +57,9 @@ test("dropping a CSV anywhere opens a recognized import", async ({
 
   await page.evaluate((csv) => {
     const transfer = new DataTransfer();
-    transfer.items.add(new File([csv], "op.csv", { type: "text/csv" }));
+    transfer.items.add(
+      new File([csv], "transactions.csv", { type: "text/csv" }),
+    );
     window.dispatchEvent(
       new DragEvent("dragenter", {
         bubbles: true,
@@ -78,13 +67,15 @@ test("dropping a CSV anywhere opens a recognized import", async ({
         dataTransfer: transfer,
       }),
     );
-  }, opCSV);
+  }, nordeaCSV);
   await expect(page.getByText("Drop CSV to import")).toBeVisible();
   await expect(page.getByText("You’ll choose the account next")).toBeVisible();
 
   await page.evaluate((csv) => {
     const transfer = new DataTransfer();
-    transfer.items.add(new File([csv], "op.csv", { type: "text/csv" }));
+    transfer.items.add(
+      new File([csv], "transactions.csv", { type: "text/csv" }),
+    );
     window.dispatchEvent(
       new DragEvent("drop", {
         bubbles: true,
@@ -92,12 +83,13 @@ test("dropping a CSV anywhere opens a recognized import", async ({
         dataTransfer: transfer,
       }),
     );
-  }, opCSV);
+  }, nordeaCSV);
 
   await expect(page).toHaveURL(/\/imports$/);
   await expect(page.getByText("Drop CSV to import")).not.toBeVisible();
-  await expect(page.getByText("op.csv", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Format")).toHaveValue("op");
+  await expect(
+    page.getByText("transactions.csv", { exact: true }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page.getByText("Choose a file")).toHaveCount(0);
@@ -140,19 +132,6 @@ test("upload, duplicate import, import anyway, and undo use the real backend", a
     .dispatchEvent("mousedown", { button: 0 });
   await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByText("Duplicate shop")).toHaveCount(1);
-});
-
-test("OP and Revolut files import through the real app", async ({
-  page,
-}, testInfo) => {
-  await login(page, testInfo);
-  await page.getByRole("link", { name: "import", exact: true }).click();
-  await upload(page, { csv: opCSV, format: "op" });
-  await expect(page.getByText("1 imported · 0 duplicates")).toBeVisible();
-
-  await page.getByRole("link", { name: "import", exact: true }).click();
-  await upload(page, { csv: revolutCSV, format: "revolut" });
-  await expect(page.getByText("1 imported · 0 duplicates")).toBeVisible();
 });
 
 test("an import report loads older duplicate rows", async ({

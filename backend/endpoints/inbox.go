@@ -9,14 +9,15 @@ import (
 )
 
 type inboxRowResponse struct {
-	ID           string `json:"id"`
-	Date         string `json:"date"`
-	Amount       int64  `json:"amount"`
-	Currency     string `json:"currency"`
-	Counterparty string `json:"counterparty"`
-	Description  string `json:"description"`
-	Account      string `json:"account"`
-	Kind         string `json:"kind,omitempty"`
+	ID           string  `json:"id"`
+	Date         string  `json:"date"`
+	OccurredAt   *string `json:"occurred_at"`
+	Amount       int64   `json:"amount"`
+	Currency     string  `json:"currency"`
+	Counterparty string  `json:"counterparty"`
+	Description  string  `json:"description"`
+	Account      string  `json:"account"`
+	Kind         string  `json:"kind,omitempty"`
 }
 
 type inboxResponse struct {
@@ -30,7 +31,7 @@ func HandleListInbox(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		cursorDate, cursorID, err := parseCursor(r)
+		cursorDate, cursorID, err := parseDayCursor(r)
 		if err != nil {
 			return err
 		}
@@ -46,19 +47,11 @@ func HandleListInbox(state *state.State, getUserID GetUserID) Handler {
 
 		out := inboxResponse{Rows: make([]inboxRowResponse, len(rows))}
 		for i, row := range rows {
-			out.Rows[i] = inboxRowResponse{
-				ID:           row.ID,
-				Date:         formatDate(row.Date),
-				Amount:       row.Amount,
-				Currency:     row.Currency,
-				Counterparty: row.Counterparty,
-				Description:  row.Description,
-				Account:      row.Account,
-			}
+			out.Rows[i] = inboxRowToResponse(row)
 		}
 		if len(rows) == data.InboxPageSize {
 			last := rows[len(rows)-1]
-			out.NextCursor = &cursor{Date: formatDate(last.Date), ID: last.ID}
+			out.NextCursor = &cursor{Date: formatDay(last.Date), ID: last.ID}
 		}
 		Json(w, out)
 		return nil
@@ -78,7 +71,12 @@ func parseInboxFilter(r *http.Request, state *state.State) (data.TransactionFilt
 }
 
 func inboxRowToResponse(row data.InboxRow) inboxRowResponse {
-	return inboxRowResponse{ID: row.ID, Date: formatDate(row.Date), Amount: row.Amount, Currency: row.Currency, Counterparty: row.Counterparty, Description: row.Description, Account: row.Account}
+	out := inboxRowResponse{ID: row.ID, Date: formatDay(row.Date), Amount: row.Amount, Currency: row.Currency, Counterparty: row.Counterparty, Description: row.Description, Account: row.Account}
+	if row.OccurredAt != nil {
+		value := formatDate(*row.OccurredAt)
+		out.OccurredAt = &value
+	}
+	return out
 }
 
 func HandleGetInboxMatches(state *state.State, getUserID GetUserID) Handler {

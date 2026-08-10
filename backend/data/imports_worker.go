@@ -48,7 +48,7 @@ func (d *Data) importWorker(ctx context.Context) {
 
 func (d *Data) drainImports(ctx context.Context) {
 	for {
-		did, err := d.stageBatch(ctx)
+		did, err := d.processNextCSVImport(ctx)
 		if ctx.Err() != nil {
 			return
 		}

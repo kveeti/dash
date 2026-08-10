@@ -49,10 +49,6 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			}
 			return NewErr("invalid multipart form", http.StatusBadRequest)
 		}
-		format := r.FormValue("format")
-		if format != "nordea" && format != "op" && format != "revolut" {
-			return NewErr("unsupported format", http.StatusBadRequest)
-		}
 		bucketID := r.FormValue("bucket_id")
 		if bucketID == "" {
 			return NewErr("bucket_id is required", http.StatusBadRequest)
@@ -75,13 +71,8 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			}
 			return NewErr("could not read file", http.StatusBadRequest)
 		}
-		validHeader := map[string]func(string) bool{
-			"nordea":  data.ValidNordeaHeader,
-			"op":      data.ValidOPHeader,
-			"revolut": data.ValidRevolutHeader,
-		}[format]
-		if !validHeader(firstLine) {
-			return NewErr("CSV header does not match selected format", http.StatusBadRequest)
+		if !data.ValidGenericCSVHeader(firstLine) {
+			return NewErr("CSV header must be date,occurred_at,amount,currency,counterparty,note", http.StatusBadRequest)
 		}
 
 		tmp, err := os.CreateTemp("", "import-*.csv")
@@ -104,7 +95,7 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			return NewUnexpectedErr("temp seek: %w", err)
 		}
 
-		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, format, header.Filename, timezone, tmp)
+		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, "csv", header.Filename, timezone, tmp)
 		if err != nil {
 			return mapImportErr(err)
 		}
@@ -182,6 +173,7 @@ func HandleGetImport(state *state.State, getUserID GetUserID) Handler {
 			"filename":     batch.Filename,
 			"created_at":   batch.CreatedAt,
 			"status":       batch.Status,
+			"error":        batch.Error,
 			"imported":     batch.Imported,
 			"duplicates":   batch.Duplicates,
 			"parse_errors": parseErrors,
@@ -216,23 +208,26 @@ func HandleListDuplicates(state *state.State, getUserID GetUserID) Handler {
 		out := make([]JSON, len(rows))
 		for i, row := range rows {
 			out[i] = JSON{
-				"id":              row.ID,
-				"date":            formatDate(row.Date),
-				"amount":          row.Amount,
-				"currency":        row.Currency,
-				"raw_description": row.RawDescription,
-				"raw":             row.Raw,
-				"duplicate_of":    row.DuplicateOf,
+				"id":           row.ID,
+				"date":         row.OccurredOn.Format(time.DateOnly),
+				"occurred_at":  row.OccurredAt,
+				"amount":       row.Amount,
+				"currency":     row.Currency,
+				"counterparty": row.Counterparty,
+				"note":         row.Note,
+				"duplicate_of": row.DuplicateOf,
 			}
 			if t := row.Target; t != nil {
 				out[i]["duplicate_target"] = JSON{
-					"date":            formatDate(t.Date),
-					"amount":          t.Amount,
-					"currency":        t.Currency,
-					"raw_description": t.RawDescription,
-					"transaction_id":  t.TransactionID,
-					"batch_id":        t.BatchID,
-					"created_at":      t.CreatedAt,
+					"date":           t.OccurredOn.Format(time.DateOnly),
+					"occurred_at":    t.OccurredAt,
+					"amount":         t.Amount,
+					"currency":       t.Currency,
+					"counterparty":   t.Counterparty,
+					"note":           t.Note,
+					"transaction_id": t.TransactionID,
+					"batch_id":       t.BatchID,
+					"created_at":     t.CreatedAt,
 				}
 			}
 		}

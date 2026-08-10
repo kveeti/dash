@@ -93,7 +93,9 @@ function TransactionDetail(props: { transaction: Transaction }) {
         )}
         <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-700">
           <CalendarDaysIcon className="size-4" aria-hidden="true" />
-          {f.longDateTime(new Date(props.transaction.occurred_at))}
+          {props.transaction.occurred_at
+            ? f.longDateTime(new Date(props.transaction.occurred_at))
+            : f.longDate(new Date(`${props.transaction.occurred_on}T00:00:00`))}
         </p>
       </header>
 

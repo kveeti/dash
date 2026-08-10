@@ -31,6 +31,7 @@ type testApp struct {
 	mock   *mockoidc.MockOIDC
 	client *http.Client
 	d      *data.Data
+	state  *state.State
 }
 
 // appOpts tweaks the config a test app is built with. Zero values mean: CORS
@@ -71,7 +72,8 @@ func newTestAppWith(t *testing.T, opts appOpts) *testApp {
 	})
 	require.NoError(t, err)
 
-	st := state.NewState(d, &config.Config{BackendUrl: appURL, FrontUrl: opts.frontURL}, oidcClient)
+	appConfig := &config.Config{BackendUrl: appURL, FrontUrl: opts.frontURL}
+	st := state.NewState(d, appConfig, oidcClient)
 
 	srv := &http.Server{Handler: GetRouter(st, testFrontendFS())}
 	go func() { _ = srv.Serve(ln) }()
@@ -83,7 +85,8 @@ func newTestAppWith(t *testing.T, opts appOpts) *testApp {
 		client: &http.Client{
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
-		d: d,
+		d:     d,
+		state: st,
 	}
 }
 

@@ -2,8 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 test.use({ viewport: { width: 390, height: 844 } });
 
-const nordeaHeader =
-  "Kirjauspäivä;Määrä;Maksaja;Maksunsaaja;Nimi;Otsikko;Viesti;Viitenumero;Saldo;Valuutta;\n";
+const nordeaHeader = "date,occurred_at,amount,currency,counterparty,note\n";
 
 async function login(page: Page, user: string) {
   await page.goto("/");
@@ -29,12 +28,11 @@ async function createBucket(
 async function importRow(
   page: Page,
   bucketID: string,
-  row = "2026/07/01;-12,34;;;;Undo shop;;;;EUR\n",
+  row = "2026-07-01,,-12.34,EUR,Undo shop,\n",
 ) {
   const response = await page.request.post("/api/v1/imports", {
     multipart: {
       bucket_id: bucketID,
-      format: "nordea",
       timezone: "Europe/Helsinki",
       file: {
         name: "export.csv",
@@ -145,9 +143,9 @@ test("real app: undo restores selection and confirms before replacing a newer on
   await login(page, `inbox-selection-undo-${Date.now()}`);
   const checking = await createBucket(page, "asset", "Checking");
   await createBucket(page, "expense", "Groceries");
-  await importRow(page, checking.id, "2026/07/01;-12,34;;;;Undo one;;;;EUR\n");
-  await importRow(page, checking.id, "2026/07/02;-5,00;;;;Undo two;;;;EUR\n");
-  await importRow(page, checking.id, "2026/07/03;-2,00;;;;Undo three;;;;EUR\n");
+  await importRow(page, checking.id, "2026-07-01,,-12.34,EUR,Undo one,\n");
+  await importRow(page, checking.id, "2026-07-02,,-5.00,EUR,Undo two,\n");
+  await importRow(page, checking.id, "2026-07-03,,-2.00,EUR,Undo three,\n");
 
   await page.goto("/inbox");
   await page.getByRole("checkbox", { name: "Select rows" }).click();
@@ -190,16 +188,8 @@ test("real app: undo restores both matched rows", async ({ page }) => {
   await login(page, `inbox-match-undo-${Date.now()}`);
   const checking = await createBucket(page, "asset", "Checking");
   const savings = await createBucket(page, "asset", "Savings");
-  await importRow(
-    page,
-    checking.id,
-    "2026/07/01;-500,00;;;;Transfer out;;;;EUR\n",
-  );
-  await importRow(
-    page,
-    savings.id,
-    "2026/07/02;500,00;;;;Transfer in;;;;EUR\n",
-  );
+  await importRow(page, checking.id, "2026-07-01,,-500.00,EUR,Transfer out,\n");
+  await importRow(page, savings.id, "2026-07-02,,500.00,EUR,Transfer in,\n");
 
   await page.goto("/inbox");
   await page.getByRole("button", { name: /Transfer out/ }).click();

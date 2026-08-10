@@ -8,18 +8,6 @@ import (
 
 var ErrInvalidTag = errors.New("tag cannot be empty")
 
-const editablePostingTags = `
-	p.import_row_id is null
-	and not b.hidden
-	and b.kind in ('expense', 'income')
-	and not exists (
-		select 1
-		from postings p3
-		join buckets b3 on b3.id = p3.bucket_id
-		where p3.transaction_id = p.transaction_id
-		  and b3.kind = 'transit'
-	)`
-
 func normalizeTag(tag string) string { return strings.ToLower(strings.TrimSpace(tag)) }
 
 func (d *Data) AddPostingTag(ctx context.Context, userID string, postingIDs []string, tag string) (int, error) {
@@ -41,7 +29,16 @@ func (d *Data) AddPostingTag(ctx context.Context, userID string, postingIDs []st
 			join transactions t on t.id = p.transaction_id
 			join buckets b on b.id = p.bucket_id
 			where t.owner_user_id = $1
-			  and `+editablePostingTags+`
+			  and 	p.import_row_id is null
+	and not b.hidden
+	and b.kind in ('expense', 'income')
+	and not exists (
+		select 1
+		from postings p3
+		join buckets b3 on b3.id = p3.bucket_id
+		where p3.transaction_id = p.transaction_id
+		  and b3.kind = 'transit'
+	)
 		), added as (
 			insert into posting_tags (id, posting_id, tag, created_at)
 			select uuidv7(), id, $3, now()
@@ -86,7 +83,16 @@ func (d *Data) RemovePostingTag(ctx context.Context, userID string, postingIDs [
 			join transactions t on t.id = p.transaction_id
 			join buckets b on b.id = p.bucket_id
 			where t.owner_user_id = $1
-			  and `+editablePostingTags+`
+			  and 	p.import_row_id is null
+	and not b.hidden
+	and b.kind in ('expense', 'income')
+	and not exists (
+		select 1
+		from postings p3
+		join buckets b3 on b3.id = p3.bucket_id
+		where p3.transaction_id = p.transaction_id
+		  and b3.kind = 'transit'
+	)
 		), doomed as materialized (
 			select pt.*
 			from posting_tags pt

@@ -52,7 +52,10 @@ export default function ImportReportPage() {
 
   const batch = useImportQuery(id);
   const processing =
-    batch.data?.status === "uploaded" || batch.data?.status === "processing";
+    batch.data?.status === "uploaded" ||
+    batch.data?.status === "processing" ||
+    batch.data?.status === "queued" ||
+    batch.data?.status === "syncing";
 
   const dupes = useInfiniteDuplicatesQuery(id, !processing);
   const dupeRows = dupes.data?.pages.flatMap((p) => p.rows) ?? [];
@@ -92,7 +95,9 @@ export default function ImportReportPage() {
         <p className={processing ? "font-medium text-success-fg!" : undefined}>
           {processing
             ? "Processing…"
-            : `${data.imported} imported · ${data.duplicates} duplicates`}
+            : data.status === "failed"
+              ? `Failed${data.error ? `: ${data.error}` : ""}`
+              : `${data.imported} imported · ${data.duplicates} duplicates`}
         </p>
       </header>
 
@@ -128,7 +133,7 @@ export default function ImportReportPage() {
                 >
                   <span className="flex min-w-0 flex-col">
                     <span>
-                      {row.date} · {row.raw.payee}
+                      {row.date} · {row.counterparty}
                     </span>
                     {row.duplicate_target && (
                       <span className="text-base text-gray-700">

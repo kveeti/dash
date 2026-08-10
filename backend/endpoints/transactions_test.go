@@ -54,11 +54,11 @@ func seedCategorizedTransaction(t *testing.T, app *testApp, occurredAt time.Time
 	batchID := data.NewPrivateID()
 	rowID := data.NewPrivateID()
 	_, err := app.d.Users.Exec(`insert into import_batches(id,user_id,bucket_id,source,filename,timezone,created_at,status)
-		values($1,$2,$3,'nordea','test.csv','UTC',now(),'done')`, batchID, userID, accountID)
+		values($1,$2,$3,'csv','test.csv','UTC',now(),'done')`, batchID, userID, accountID)
 	require.NoError(t, err)
-	_, err = app.d.Users.Exec(`insert into import_rows(id,batch_id,date,amount,currency,raw_description,raw,dedup_hash,status)
-		values($1,$2,$3,$4,$5,$6,jsonb_build_object('payee',$6::text),$1::uuid::text,'pending')`,
-		rowID, batchID, occurredAt, amount, currency, counterparty)
+	_, err = app.d.Users.Exec(`insert into import_rows(id,batch_id,occurred_on,occurred_at,amount,currency,counterparty,note,dedup_hash,status)
+		values($1,$2,$3::date,$4,$5,$6,$7,'',$1::uuid::text,'pending')`,
+		rowID, batchID, occurredAt.Format(time.DateOnly), occurredAt, amount, currency, counterparty)
 	require.NoError(t, err)
 
 	n, err := app.d.CategorizeInboxRows(t.Context(), userID, []string{rowID}, categoryID)
@@ -108,7 +108,9 @@ func TestTransactionListAndDetailUseImportedSource(t *testing.T) {
 	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
 	require.Len(t, page.Transactions, 1)
 	require.Equal(t, seed.TransactionID, page.Transactions[0].ID)
-	require.Equal(t, "2026-07-01T12:30:00Z", page.Transactions[0].OccurredAt)
+	require.Equal(t, "2026-07-01", page.Transactions[0].OccurredOn)
+	require.NotNil(t, page.Transactions[0].OccurredAt)
+	require.Equal(t, "2026-07-01T12:30:00Z", *page.Transactions[0].OccurredAt)
 	require.Len(t, page.Transactions[0].Postings, 2)
 	require.True(t, postingByID(t, page.Transactions[0].Postings, seed.ImportedID).Imported)
 	require.False(t, postingByID(t, page.Transactions[0].Postings, seed.UserPostingID).Imported)
@@ -131,7 +133,9 @@ func TestPatchTransactionOnlyChangesMemo(t *testing.T) {
 	require.Equal(t, "Market", updated.Counterparty)
 	require.Empty(t, updated.Description)
 	require.Equal(t, "Work", updated.Memo)
-	require.Equal(t, "2026-07-01T00:00:00Z", updated.OccurredAt)
+	require.Equal(t, "2026-07-01", updated.OccurredOn)
+	require.NotNil(t, updated.OccurredAt)
+	require.Equal(t, "2026-07-01T00:00:00Z", *updated.OccurredAt)
 
 	resp = authed(t, app, http.MethodPatch, "/api/v1/transactions/"+seed.TransactionID, map[string]any{
 		"counterparty": "Shop", "description": "Lunch", "occurred_at": "2030-01-01T00:00:00Z",
@@ -140,7 +144,9 @@ func TestPatchTransactionOnlyChangesMemo(t *testing.T) {
 	unchanged := getTransaction(t, app, seed.TransactionID)
 	require.Equal(t, "Market", unchanged.Counterparty)
 	require.Empty(t, unchanged.Description)
-	require.Equal(t, "2026-07-01T00:00:00Z", unchanged.OccurredAt)
+	require.Equal(t, "2026-07-01", unchanged.OccurredOn)
+	require.NotNil(t, unchanged.OccurredAt)
+	require.Equal(t, "2026-07-01T00:00:00Z", *unchanged.OccurredAt)
 }
 
 func TestPatchPostingOnlyChangesSingleTransactionCategory(t *testing.T) {

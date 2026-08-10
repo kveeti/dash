@@ -6,6 +6,7 @@ const inboxRows = Array.from({ length: 5 }, (_, i) => ({
   id: `r${i + 1}`,
   counterparty: `Inbox row ${i + 1}`,
   date: "2026-07-01",
+  occurred_at: null,
   amount: -1000,
   currency: "EUR",
   description: "",
@@ -17,6 +18,7 @@ const transactions = Array.from({ length: 5 }, (_, i) => ({
   counterparty: `Transaction ${i + 1}`,
   description: "",
   memo: "",
+  occurred_on: "2026-07-01",
   occurred_at: "2026-07-01T12:00:00Z",
   postings: [
     {
