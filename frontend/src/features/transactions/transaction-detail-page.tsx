@@ -60,6 +60,7 @@ export default function TransactionDetailPage(props: {
 
 function TransactionDetail(props: { transaction: Transaction }) {
   const categoryPosting = getCategoryPosting(props.transaction);
+  const accountNames = getAccountNames(props.transaction);
   const importedPosting = props.transaction.postings.find(
     (posting) => posting.imported,
   );
@@ -108,6 +109,11 @@ function TransactionDetail(props: { transaction: Transaction }) {
         className="-mx-3 rounded-2xl border border-border-subtle bg-form p-6 sm:-mx-6"
       >
         <div className="flex w-full flex-col gap-4 min-[30rem]:grid min-[30rem]:grid-cols-[auto_minmax(0,22rem)] min-[30rem]:items-center min-[30rem]:gap-x-8 min-[30rem]:gap-y-3 min-[30rem]:[&>*]:col-span-full">
+          {accountNames.length > 0 && (
+            <Field label="Account" as="div">
+              <p className="text-gray-950">{accountNames.join(" → ")}</p>
+            </Field>
+          )}
           <MemoField
             transactionId={props.transaction.id}
             memo={props.transaction.memo}
@@ -125,6 +131,20 @@ function TransactionDetail(props: { transaction: Transaction }) {
       </section>
     </div>
   );
+}
+
+function getAccountNames(transaction: Transaction) {
+  return [
+    ...new Set(
+      transaction.postings
+        .filter(
+          (posting) =>
+            posting.bucket.kind === "asset" ||
+            posting.bucket.kind === "liability",
+        )
+        .map((posting) => posting.bucket.name),
+    ),
+  ];
 }
 
 function getCategoryPosting(transaction: Transaction) {

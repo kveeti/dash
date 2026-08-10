@@ -14,6 +14,7 @@ export type TransactionRow =
       to: string;
       amount: number;
       currency: string;
+      account?: string;
     }
   | {
       kind: "exchange";
@@ -23,6 +24,7 @@ export type TransactionRow =
       fromCurrency: string;
       toAmount: number;
       toCurrency: string;
+      account?: string;
     }
   | {
       kind: "generic";
@@ -38,6 +40,11 @@ export function toTransactionRow(txn: Transaction): TransactionRow {
     const counterpartBucket = txn.transfer.counterpart_bucket;
     const counterpartAmount = txn.transfer.counterpart_amount;
     const counterpartCurrency = txn.transfer.counterpart_currency;
+    const account =
+      txn.transfer.counterpart_occurred_on &&
+      txn.transfer.counterpart_occurred_on !== txn.occurred_on
+        ? name(posting)
+        : undefined;
 
     if (
       counterpartBucket &&
@@ -78,6 +85,7 @@ export function toTransactionRow(txn: Transaction): TransactionRow {
           fromCurrency: outgoing.currency,
           toAmount: incoming.amount,
           toCurrency: incoming.currency,
+          account,
         };
       }
       return {
@@ -86,6 +94,7 @@ export function toTransactionRow(txn: Transaction): TransactionRow {
         to: incoming.name,
         amount: posting.amount,
         currency: posting.currency,
+        account,
       };
     }
 

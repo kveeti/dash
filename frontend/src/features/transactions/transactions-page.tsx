@@ -348,10 +348,17 @@ function Row(props: { txn: Transaction; onFilterTag: (tag: string) => void }) {
         <span className="whitespace-nowrap text-base font-normal text-gray-700">
           {f.amount(transfer.amount, transfer.currency)}
         </span>
-        <span className="col-span-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal text-gray-700">
-          Transfer
-          <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
-        </span>
+        <div className="col-span-full grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3">
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal text-gray-700">
+            Transfer
+            <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
+          </span>
+          {transfer.account && (
+            <span className="whitespace-nowrap text-sm font-normal text-gray-700">
+              {transfer.account}
+            </span>
+          )}
+        </div>
       </>
     );
   }
@@ -373,10 +380,17 @@ function Row(props: { txn: Transaction; onFilterTag: (tag: string) => void }) {
           {f.amount(exchange.fromAmount, exchange.fromCurrency)} →{" "}
           {f.amount(exchange.toAmount, exchange.toCurrency)}
         </span>
-        <span className="col-span-full min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal text-gray-700">
-          Exchange
-          <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
-        </span>
+        <div className="col-span-full grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3">
+          <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-sm font-normal text-gray-700">
+            Exchange
+            <TagList tags={props.txn.tags} onFilter={props.onFilterTag} />
+          </span>
+          {exchange.account && (
+            <span className="whitespace-nowrap text-sm font-normal text-gray-700">
+              {exchange.account}
+            </span>
+          )}
+        </div>
       </>
     );
   }

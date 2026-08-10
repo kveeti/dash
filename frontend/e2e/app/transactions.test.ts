@@ -286,6 +286,8 @@ test("transaction detail edits memo, category, and tags", async ({
     page.getByRole("heading", { name: "Detail Market" }),
   ).toBeVisible();
   const fields = page.getByRole("region", { name: "Transaction fields" });
+  await expect(fields.getByText("Account", { exact: true })).toBeVisible();
+  await expect(fields.getByText("Checking", { exact: true })).toBeVisible();
   await expect(fields.getByLabel("Counterparty")).toHaveCount(0);
   await expect(fields.getByLabel("Description")).toHaveCount(0);
   await Promise.all([
@@ -407,7 +409,7 @@ test("income transaction detail shows category and tags", async ({
   await expect(page.getByRole("heading", { name: "Postings" })).toHaveCount(0);
 });
 
-async function setupMatchedTransfer(page: Page) {
+async function setupMatchedTransfer(page: Page, incomingDate = "2026/07/01") {
   const checking = await createBucket(page, "asset", "Checking");
   const savings = await createBucket(page, "asset", "Savings");
   await importNordea(
@@ -418,7 +420,7 @@ async function setupMatchedTransfer(page: Page) {
   await importNordea(
     page,
     savings.id,
-    nordeaRow("2026/07/01", "50,00", "Transfer in"),
+    nordeaRow(incomingDate, "50,00", "Transfer in"),
   );
   const inboxResponse = await page.request.get("/api/v1/inbox");
   const inbox = (await inboxResponse.json()) as {
@@ -447,6 +449,25 @@ async function setupMatchedTransfer(page: Page) {
   )!;
 }
 
+test("transfers on separate days show the account for each row", async ({
+  page,
+}, testInfo) => {
+  await login(page, testInfo);
+  await setupMatchedTransfer(page, "2026/07/02");
+  await page.goto("/transactions?range=all-time");
+
+  const outgoingRow = page
+    .getByRole("link", { name: "View Transfer out" })
+    .locator("..");
+  const incomingRow = page
+    .getByRole("link", { name: "View Transfer in" })
+    .locator("..");
+  await expect(
+    outgoingRow.getByText("Checking", { exact: true }),
+  ).toBeVisible();
+  await expect(incomingRow.getByText("Savings", { exact: true })).toBeVisible();
+});
+
 test("removing one transfer side leaves the counterpart unmatched", async ({
   page,
 }, testInfo) => {
@@ -463,6 +484,8 @@ test("removing one transfer side leaves the counterpart unmatched", async ({
   ).toHaveCount(0);
   await page.goto(`/transactions/${transaction.id}`);
   const fields = page.getByRole("region", { name: "Transaction fields" });
+  await expect(fields.getByText("Account", { exact: true })).toBeVisible();
+  await expect(fields.getByText("Checking", { exact: true })).toBeVisible();
   await expect(fields.getByLabel("Memo")).toBeVisible();
   await expect(page.getByLabel("Category")).toHaveCount(0);
   await expect(page.getByLabel("Tags", { exact: true })).toHaveCount(0);
