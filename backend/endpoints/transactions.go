@@ -15,8 +15,9 @@ import (
 
 const dateLayout = time.RFC3339
 
-func formatDate(t time.Time) string { return t.UTC().Format(time.RFC3339) }
-func formatDay(t time.Time) string  { return t.Format(time.DateOnly) }
+func formatDate(t time.Time) string      { return t.UTC().Format(time.RFC3339) }
+func formatTimestamp(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+func formatDay(t time.Time) string       { return t.Format(time.DateOnly) }
 
 type postingBucketResponse struct {
 	ID   string          `json:"id"`
@@ -45,14 +46,15 @@ type transferResponse struct {
 	Unmatched             bool                   `json:"unmatched,omitempty"`
 }
 type transactionResponse struct {
-	ID           string            `json:"id"`
-	OccurredOn   string            `json:"occurred_on"`
-	OccurredAt   *string           `json:"occurred_at"`
-	Counterparty string            `json:"counterparty"`
-	Description  string            `json:"description"`
-	Memo         string            `json:"memo"`
-	Postings     []postingResponse `json:"postings"`
-	Transfer     *transferResponse `json:"transfer,omitempty"`
+	ID                     string            `json:"id"`
+	OccurredOn             string            `json:"occurred_on"`
+	OccurredAt             *string           `json:"occurred_at"`
+	Counterparty           string            `json:"counterparty"`
+	Description            string            `json:"description"`
+	Memo                   string            `json:"memo"`
+	Postings               []postingResponse `json:"postings"`
+	LatestPostingTimestamp string            `json:"latest_posting_timestamp"`
+	Transfer               *transferResponse `json:"transfer,omitempty"`
 }
 type cursor struct {
 	Date string `json:"date"`
@@ -100,8 +102,19 @@ func toTransactionResponse(t data.Transaction, ps []data.Posting) transactionRes
 		value := formatDate(*t.OccurredAt)
 		out.OccurredAt = &value
 	}
+	var latestPostingTimestamp time.Time
 	for i, p := range ps {
 		out.Postings[i] = toPostingResponse(p)
+		postingTimestamp := p.UpdatedAt
+		if p.CreatedAt.After(postingTimestamp) {
+			postingTimestamp = p.CreatedAt
+		}
+		if postingTimestamp.After(latestPostingTimestamp) {
+			latestPostingTimestamp = postingTimestamp
+		}
+	}
+	if !latestPostingTimestamp.IsZero() {
+		out.LatestPostingTimestamp = formatTimestamp(latestPostingTimestamp)
 	}
 	if t.Transfer != nil {
 		out.Transfer = &transferResponse{
@@ -133,6 +146,8 @@ func mapTransactionErr(err error) error {
 	switch {
 	case errors.Is(err, data.ErrNotFound):
 		return NewErr(err.Error(), http.StatusNotFound)
+	case errors.Is(err, data.ErrPostingConflict):
+		return NewErr(err.Error(), http.StatusConflict)
 	case errors.Is(err, data.ErrUnbalanced), errors.Is(err, data.ErrInvalidPostings), errors.Is(err, data.ErrInvalidBucket), errors.Is(err, data.ErrInvalidCategory), errors.Is(err, data.ErrInvalidCurrency), errors.Is(err, data.ErrInvalidTag), errors.Is(err, data.ErrPostingNotEditable), errors.Is(err, data.ErrTransferSplit):
 		return NewErr(err.Error(), http.StatusBadRequest)
 	default:
@@ -443,7 +458,8 @@ func HandleSplitTransaction(state *state.State, getUserID GetUserID) Handler {
 			return err
 		}
 		var body struct {
-			Postings []struct {
+			ExpectedLatestPostingTimestamp string `json:"expected_latest_posting_timestamp"`
+			Postings                       []struct {
 				ID        string  `json:"id"`
 				BucketID  string  `json:"bucket_id"`
 				Amount    int64   `json:"amount"`
@@ -454,6 +470,10 @@ func HandleSplitTransaction(state *state.State, getUserID GetUserID) Handler {
 		}
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
+		}
+		expectedLatestPostingTimestamp, err := time.Parse(time.RFC3339, body.ExpectedLatestPostingTimestamp)
+		if err != nil {
+			return NewErr("expected_latest_posting_timestamp must be an RFC3339 timestamp", http.StatusBadRequest)
 		}
 		input := make([]data.SplitPosting, len(body.Postings))
 		for i, p := range body.Postings {
@@ -467,7 +487,7 @@ func HandleSplitTransaction(state *state.State, getUserID GetUserID) Handler {
 			}
 			input[i] = data.SplitPosting{ID: p.ID, BucketID: p.BucketID, Amount: p.Amount, Currency: p.Currency, StatsDate: date, Memo: p.Memo}
 		}
-		if err = state.Data.SplitTransaction(r.Context(), userID, r.PathValue("id"), input); err != nil {
+		if err = state.Data.SplitTransaction(r.Context(), userID, r.PathValue("id"), expectedLatestPostingTimestamp, input); err != nil {
 			return mapTransactionErr(err)
 		}
 		txn, ps, err := state.Data.GetTransaction(r.Context(), userID, r.PathValue("id"))

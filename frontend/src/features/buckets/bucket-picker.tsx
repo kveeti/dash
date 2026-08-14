@@ -1,6 +1,6 @@
 import { Combobox } from "@base-ui/react/combobox";
 import { ChevronDownIcon } from "@heroicons/react/24/outline";
-import { useState } from "react";
+import { useState, type RefObject } from "react";
 
 import {
   useBucketSearchQuery,
@@ -43,6 +43,7 @@ export function BucketPicker(props: {
   placeholder?: string;
   inputPlaceholder?: string;
   groupLabel?: string;
+  portalContainer?: RefObject<HTMLElement | null>;
 }) {
   const createBucket = useCreateBucketMutation();
   const [open, setOpen] = useState(false);
@@ -139,7 +140,7 @@ export function BucketPicker(props: {
         </Combobox.Icon>
       </Combobox.Trigger>
 
-      <Combobox.Portal>
+      <Combobox.Portal container={props.portalContainer}>
         <Combobox.Positioner
           align="start"
           sideOffset={6}

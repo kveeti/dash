@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,12 @@ type InboxRow struct {
 type InboxMatch struct {
 	InboxRow
 	Kind string
+}
+
+type InboxSplitPosting struct {
+	ID       string `json:"id"`
+	BucketID string `json:"bucket_id"`
+	Amount   int64  `json:"amount"`
 }
 
 const InboxPageSize = 100
@@ -94,6 +101,25 @@ func (d *Data) ListInbox(ctx context.Context, userID string, cursorDate time.Tim
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+func (d *Data) GetInboxRow(ctx context.Context, userID, rowID string) (InboxRow, error) {
+	var row InboxRow
+	err := d.db.QueryRowContext(ctx, `
+		select r.id, r.occurred_on, r.occurred_at, r.amount, r.currency,
+			r.counterparty, r.note, batch.bucket_id, bucket.name
+		from import_rows r
+		join import_batches batch on batch.id = r.batch_id
+		join buckets bucket on bucket.id = batch.bucket_id
+		where r.id = $2 and batch.user_id = $1 and r.status = 'pending'
+	`, userID, rowID).Scan(
+		&row.ID, &row.Date, &row.OccurredAt, &row.Amount, &row.Currency,
+		&row.Counterparty, &row.Description, &row.BucketID, &row.Account,
+	)
+	if err == sql.ErrNoRows {
+		return InboxRow{}, ErrNotFound
+	}
+	return row, err
 }
 
 // GetInboxMatches returns transfer and exchange candidates. Transfers must be
@@ -397,6 +423,136 @@ func (d *Data) RestoreInboxRows(ctx context.Context, userID string, rowIDs []str
 		return 0, err
 	}
 	return restored, nil
+}
+
+func (d *Data) SplitInboxRow(ctx context.Context, userID, rowID string, postings []InboxSplitPosting) error {
+	if len(postings) < 2 {
+		return ErrInvalidPostings
+	}
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var row InboxRow
+	err = tx.QueryRowContext(ctx, `
+		select r.id, r.occurred_on, r.occurred_at, r.amount, r.currency,
+			r.counterparty, r.note, batch.bucket_id
+		from import_rows r
+		join import_batches batch on batch.id = r.batch_id
+		where r.id = $2 and batch.user_id = $1 and r.status = 'pending'
+		for update of r
+	`, userID, rowID).Scan(
+		&row.ID, &row.Date, &row.OccurredAt, &row.Amount, &row.Currency,
+		&row.Counterparty, &row.Description, &row.BucketID,
+	)
+	if err == sql.ErrNoRows {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if row.Amount == 0 {
+		return ErrInvalidPostings
+	}
+	total := row.Amount
+	if total < 0 {
+		total = -total
+	}
+	bucketIDs := make([]string, 0, len(postings))
+	seenBuckets := map[string]bool{}
+	var allocated int64
+	for i := range postings {
+		posting := &postings[i]
+		if posting.Amount <= 0 || posting.Amount > total-allocated {
+			return ErrUnbalanced
+		}
+		allocated += posting.Amount
+		posting.ID = NewPrivateID()
+		if !seenBuckets[posting.BucketID] {
+			seenBuckets[posting.BucketID] = true
+			bucketIDs = append(bucketIDs, posting.BucketID)
+		}
+		if row.Amount > 0 {
+			posting.Amount = -posting.Amount
+		}
+	}
+	if allocated != total {
+		return ErrUnbalanced
+	}
+	var validBuckets int
+	if err = tx.QueryRowContext(ctx, `
+		select count(*)
+		from buckets
+		where id = any($1::uuid[])
+		  and owner_user_id = $2
+		  and kind in ('expense', 'income', 'person')
+		  and hidden = false
+	`, bucketIDs, userID).Scan(&validBuckets); err != nil {
+		return err
+	}
+	if validBuckets != len(bucketIDs) {
+		return ErrInvalidCategory
+	}
+
+	payload, err := json.Marshal(postings)
+	if err != nil {
+		return err
+	}
+	transactionID := NewPrivateID()
+	accountPostingID := NewPrivateID()
+	_, err = tx.ExecContext(ctx, `
+		with desired as materialized (
+			select *
+			from jsonb_to_recordset($12::jsonb) as posting (
+				id uuid, bucket_id uuid, amount bigint
+			)
+		), inserted_transaction as (
+			insert into transactions (
+				id, owner_user_id, occurred_on, occurred_at, counterparty,
+				description, memo, created_at
+			)
+			values ($3, $1, $4, $5, $6, $7, '', now())
+			returning id
+		), inserted_postings as (
+			insert into postings (
+				id, transaction_id, bucket_id, amount, currency,
+				import_row_id, created_at
+			)
+			select $8, $3, $9, $10, $11, $2::uuid, now()
+			union all
+			select desired.id, $3, desired.bucket_id, desired.amount, $11, null::uuid, now()
+			from desired
+			returning id
+		), audited_transaction as (
+			insert into audit_logs (
+				id, actor_user_id, table_name, row_id, operation, before, created_at
+			)
+			select uuidv7(), $1, 'transactions', id, 'insert', null, now()
+			from inserted_transaction
+		), audited_postings as (
+			insert into audit_logs (
+				id, actor_user_id, table_name, row_id, operation, before, created_at
+			)
+			select uuidv7(), $1, 'postings', id, 'insert', null, now()
+			from inserted_postings
+		), audited_row as (
+			insert into audit_logs (
+				id, actor_user_id, table_name, row_id, operation, before, created_at
+			)
+			select uuidv7(), $1, 'import_rows', id, 'update', to_jsonb(import_rows), now()
+			from import_rows
+			where id = $2
+		)
+		update import_rows set status = 'categorized' where id = $2
+	`, userID, row.ID, transactionID, row.Date, row.OccurredAt,
+		row.Counterparty, row.Description, accountPostingID, row.BucketID,
+		row.Amount, row.Currency, payload)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (d *Data) CategorizeInboxRows(ctx context.Context, userID string, rowIDs []string, bucketID string) (int, error) {

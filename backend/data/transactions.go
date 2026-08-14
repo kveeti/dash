@@ -19,6 +19,7 @@ var (
 	ErrNotFound           = errors.New("transaction not found")
 	ErrPostingNotEditable = errors.New("posting cannot be edited")
 	ErrTransferSplit      = errors.New("transfer transactions cannot be split")
+	ErrPostingConflict    = errors.New("transaction postings changed since you opened the editor")
 )
 
 type Transaction struct {
@@ -62,6 +63,8 @@ type Posting struct {
 	ImportRowID *string
 	MirrorID    *string
 	Tags        []string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 func insertTransactionTx(ctx context.Context, tx *sql.Tx, txn *Transaction, postings []Posting) error {
@@ -181,7 +184,7 @@ func (d *Data) BulkCategorize(ctx context.Context, userID string, txnIDs []strin
 	}
 	res, err := tx.ExecContext(ctx, `
 		update postings p
-		set bucket_id = $3
+		set bucket_id = $3, updated_at = clock_timestamp()
 		where `+scope, userID, txnIDs, bucketID)
 	if err != nil {
 		return 0, err
@@ -283,7 +286,7 @@ func (d *Data) CategorizePosting(ctx context.Context, userID, id, bucketID strin
 	}
 	if _, err = tx.ExecContext(ctx, `
 		update postings
-		set bucket_id = $1
+		set bucket_id = $1, updated_at = clock_timestamp()
 		where id = $2
 	`, bucketID, id); err != nil {
 		return err
@@ -583,7 +586,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 		)
 		order by t.occurred_on desc,t.id desc limit `+strconv.Itoa(TransactionPageSize)+`
 	), page_postings as (
-		select p.id,p.transaction_id,p.bucket_id,b.name as bucket_name,b.kind as bucket_kind,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,p.created_at,
+		select p.id,p.transaction_id,p.bucket_id,b.name as bucket_name,b.kind as bucket_kind,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,p.created_at,p.updated_at,
 			coalesce(jsonb_agg(pt.tag order by pt.tag) filter(where pt.tag is not null),'[]'::jsonb) as tags
 		from page join postings p on p.transaction_id=page.id join buckets b on b.id=p.bucket_id and b.hidden=false
 		left join posting_tags pt on pt.posting_id=p.id
@@ -592,7 +595,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 		select distinct p.transaction_id from page join postings p on p.transaction_id=page.id join buckets b on b.id=p.bucket_id and b.kind='transit'
 	)
 	select page.id,page.owner_user_id,page.occurred_on,page.occurred_at,page.counterparty,page.description,page.memo,page.created_at,
-		p.id,p.bucket_id,p.bucket_name,p.bucket_kind,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,p.tags,
+		p.id,p.bucket_id,p.bucket_name,p.bucket_kind,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,p.created_at,p.updated_at,p.tags,
 		coalesce(outgoing_match.id,incoming_match.id),
 		case
 			when outgoing_match.id is not null then 'outgoing'
@@ -628,7 +631,7 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 		var counterpartAmount sql.NullInt64
 		var unmatched bool
 		if err = rows.Scan(&t.ID, &t.OwnerUserID, &t.OccurredOn, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt,
-			&p.ID, &p.Bucket.ID, &p.Bucket.Name, &p.Bucket.Kind, &p.Amount, &p.Currency, &p.StatsDate, &p.Memo, &p.ImportRowID, &p.MirrorID, &tags,
+			&p.ID, &p.Bucket.ID, &p.Bucket.Name, &p.Bucket.Kind, &p.Amount, &p.Currency, &p.StatsDate, &p.Memo, &p.ImportRowID, &p.MirrorID, &p.CreatedAt, &p.UpdatedAt, &tags,
 			&matchID, &side, &counterpartID, &counterpartOccurredOn, &counterpartOccurredAt, &counterpartBucketID, &counterpartBucketName, &counterpartBucketKind,
 			&counterpartAmount, &counterpartCurrency, &unmatched); err != nil {
 			return nil, nil, err
@@ -674,7 +677,7 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 			where id = $1 and owner_user_id = $2
 		), target_postings as (
 			select p.id, p.transaction_id, p.bucket_id, b.name as bucket_name, b.kind as bucket_kind,
-				p.amount, p.currency, p.stats_date, p.memo, p.import_row_id, p.mirror_id, p.created_at,
+				p.amount, p.currency, p.stats_date, p.memo, p.import_row_id, p.mirror_id, p.created_at, p.updated_at,
 				coalesce(jsonb_agg(pt.tag order by pt.tag) filter (where pt.tag is not null), '[]'::jsonb) as tags
 			from target
 			join postings p on p.transaction_id = target.id
@@ -716,7 +719,7 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 		select target.id, target.owner_user_id, target.occurred_on, target.occurred_at, target.counterparty,
 			target.description, target.memo, target.created_at,
 			p.id, p.bucket_id, p.bucket_name, p.bucket_kind, p.amount, p.currency,
-			p.stats_date, p.memo, p.import_row_id, p.mirror_id, p.tags,
+			p.stats_date, p.memo, p.import_row_id, p.mirror_id, p.created_at, p.updated_at, p.tags,
 			m.match_id, m.side, m.counterpart_id, m.occurred_on, m.occurred_at, m.bucket_id,
 			m.bucket_name, m.bucket_kind, m.amount, m.currency, u.side
 		from target
@@ -747,11 +750,12 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 			counterpartBucketKind, counterpartCurrency            sql.NullString
 			counterpartAmount                                     sql.NullInt64
 			unmatchedSide                                         sql.NullString
+			createdAt, updatedAt                                  time.Time
 		)
 		if err = rows.Scan(
 			&t.ID, &t.OwnerUserID, &t.OccurredOn, &t.OccurredAt, &t.Counterparty, &t.Description, &t.Memo, &t.CreatedAt,
 			&postingID, &bucketID, &bucketName, &bucketKind, &postingAmount, &currency,
-			&statsDate, &postingMemo, &importRowID, &mirrorID, &tags,
+			&statsDate, &postingMemo, &importRowID, &mirrorID, &createdAt, &updatedAt, &tags,
 			&matchID, &matchSide, &counterpartID, &counterpartOccurredOn, &counterpartOccurredAt, &counterpartBucketID,
 			&counterpartBucketName, &counterpartBucketKind, &counterpartAmount, &counterpartCurrency, &unmatchedSide,
 		); err != nil {
@@ -765,7 +769,7 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 					ID: bucketID.String, Name: bucketName.String, Kind: BucketKind(bucketKind.String),
 				},
 				Amount: postingAmount.Int64, Currency: currency.String, Memo: postingMemo.String,
-				Tags: []string{},
+				Tags: []string{}, CreatedAt: createdAt, UpdatedAt: updatedAt,
 			}
 			if statsDate.Valid {
 				p.StatsDate = &statsDate.Time
@@ -842,7 +846,7 @@ type SplitPosting struct {
 
 // SplitTransaction replaces only user-managed postings. Imported and system
 // postings are always carried into the balance check unchanged.
-func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID string, input []SplitPosting) error {
+func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID string, expectedLatestPostingTimestamp time.Time, input []SplitPosting) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -854,7 +858,7 @@ func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID strin
 	rows, err := tx.QueryContext(ctx, `
 		select
 			p.id, p.bucket_id, p.amount, p.currency, p.stats_date, p.memo,
-			p.import_row_id, p.mirror_id, b.hidden, b.kind
+			p.import_row_id, p.mirror_id, p.created_at, p.updated_at, b.hidden, b.kind
 		from postings p
 		join buckets b on b.id = p.bucket_id
 		where p.transaction_id = $1
@@ -866,15 +870,23 @@ func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID strin
 	var current []Posting
 	mutable := map[string]bool{}
 	transfer := false
+	var latestPostingTimestamp time.Time
 	for rows.Next() {
 		var p Posting
 		var hidden bool
 		var kind BucketKind
-		if err = rows.Scan(&p.ID, &p.BucketID, &p.Amount, &p.Currency, &p.StatsDate, &p.Memo, &p.ImportRowID, &p.MirrorID, &hidden, &kind); err != nil {
+		if err = rows.Scan(&p.ID, &p.BucketID, &p.Amount, &p.Currency, &p.StatsDate, &p.Memo, &p.ImportRowID, &p.MirrorID, &p.CreatedAt, &p.UpdatedAt, &hidden, &kind); err != nil {
 			rows.Close()
 			return err
 		}
 		current = append(current, p)
+		postingTimestamp := p.UpdatedAt
+		if p.CreatedAt.After(postingTimestamp) {
+			postingTimestamp = p.CreatedAt
+		}
+		if postingTimestamp.After(latestPostingTimestamp) {
+			latestPostingTimestamp = postingTimestamp
+		}
 		if !hidden && p.ImportRowID == nil {
 			mutable[p.ID] = true
 		}
@@ -888,6 +900,9 @@ func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID strin
 	}
 	if transfer {
 		return ErrTransferSplit
+	}
+	if !latestPostingTimestamp.Equal(expectedLatestPostingTimestamp) {
+		return ErrPostingConflict
 	}
 	buckets, err := ownedBuckets(ctx, tx, userID)
 	if err != nil {
@@ -973,7 +988,8 @@ func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID strin
 			    amount = d.amount,
 			    currency = d.currency,
 			    stats_date = d.stats_date,
-			    memo = d.memo
+			    memo = d.memo,
+			    updated_at = clock_timestamp()
 			from desired d
 			where p.id = d.id
 		), deleted as (
@@ -985,9 +1001,9 @@ func (d *Data) SplitTransaction(ctx context.Context, userID, transactionID strin
 			)
 		), inserted as (
 			insert into postings (
-				id, transaction_id, bucket_id, amount, currency, stats_date, memo, created_at
+				id, transaction_id, bucket_id, amount, currency, stats_date, memo, created_at, updated_at
 			)
-			select d.id, $2, d.bucket_id, d.amount, d.currency, d.stats_date, d.memo, now()
+			select d.id, $2, d.bucket_id, d.amount, d.currency, d.stats_date, d.memo, clock_timestamp(), clock_timestamp()
 			from desired d
 			where d.id not in (select id from old)
 			returning id

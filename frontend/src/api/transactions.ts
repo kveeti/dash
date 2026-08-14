@@ -68,6 +68,7 @@ export interface Transaction {
   description: string;
   memo: string;
   postings: Posting[];
+  latest_posting_timestamp: string;
   transfer?: {
     match_id?: string;
     side?: "outgoing" | "incoming";
@@ -229,6 +230,79 @@ export function usePatchTransactionMutation() {
           ? { ...transaction, ...input }
           : transaction,
       );
+      return { previous };
+    },
+    onError: (_error, _input, context) =>
+      restoreQueries(queryClient, context?.previous ?? []),
+    onSuccess: (transaction) =>
+      updateTransactionCaches(queryClient, (current) =>
+        current.id === transaction.id ? transaction : current,
+      ),
+    onSettled: () => invalidateRelated(queryClient),
+  });
+}
+
+export function useSplitTransactionMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      transactionId: string;
+      expectedLatestPostingTimestamp: string;
+      postings: Array<{
+        id?: string;
+        bucket: Posting["bucket"];
+        amount: number;
+        currency: string;
+        statsDate: string | null;
+        memo: string;
+      }>;
+    }) =>
+      api<TransactionWire>(
+        `/api/v1/transactions/${input.transactionId}/postings`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            expected_latest_posting_timestamp:
+              input.expectedLatestPostingTimestamp,
+            postings: input.postings.map((posting) => ({
+              id: posting.id ?? "",
+              bucket_id: posting.bucket.id,
+              amount: posting.amount,
+              currency: posting.currency,
+              stats_date: posting.statsDate,
+              memo: posting.memo,
+            })),
+          }),
+        },
+      ).then(withTags),
+    onMutate: async (input) => {
+      const previous = await snapshotTransactions(queryClient);
+      updateTransactionCaches(queryClient, (transaction) => {
+        if (transaction.id !== input.transactionId) return transaction;
+        const fixed = transaction.postings.filter(
+          (posting) => posting.imported,
+        );
+        return {
+          ...transaction,
+          postings: [
+            ...fixed,
+            ...input.postings.map((posting, index) => ({
+              id: posting.id ?? `new-split-${index}`,
+              bucket: posting.bucket,
+              amount: posting.amount,
+              currency: posting.currency,
+              stats_date: posting.statsDate,
+              memo: posting.memo,
+              imported: false,
+              tags:
+                transaction.postings.find(
+                  (current) => current.id === posting.id,
+                )?.tags ?? [],
+            })),
+          ],
+        };
+      });
       return { previous };
     },
     onError: (_error, _input, context) =>

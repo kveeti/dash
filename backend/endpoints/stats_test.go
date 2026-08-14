@@ -171,7 +171,7 @@ func TestStatsDateControlsPeriodAndRateDateOnly(t *testing.T) {
 	july := getStats(t, app, url.Values{"period": {"custom"}, "from": {"2026-07-01"}, "to": {"2026-07-01"}, "today": {"2026-07-02"}, "compare": {"previous"}})
 	require.Equal(t, int64(10000), july.Summary.Expenses.Current)
 
-	resp := authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"postings": []map[string]any{
+	resp := authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"expected_latest_posting_timestamp": getTransaction(t, app, seed.TransactionID).LatestPostingTimestamp, "postings": []map[string]any{
 		{"id": seed.UserPostingID, "bucket_id": travel, "amount": 6000, "currency": "USD", "stats_date": "2026-06-30"},
 		{"bucket_id": travel, "amount": 4000, "currency": "USD", "stats_date": "2026-06-30"},
 	}})

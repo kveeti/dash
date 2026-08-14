@@ -48,6 +48,11 @@ type BucketComboItem =
       type: "match";
       id: "match";
       name: string;
+    }
+  | {
+      type: "split";
+      id: "split";
+      name: string;
     };
 
 type BucketComboGroup = {
@@ -67,6 +72,7 @@ type BucketComboSession = {
 export function BucketComboRoot(props: {
   children: ReactNode;
   onMatchAction?: (rowId: string) => void;
+  onSplitAction?: (rowId: string) => void;
 }) {
   const { mutateAsync } = useCategorizeInboxMutation();
   const undo = useInboxUndo();
@@ -122,12 +128,13 @@ export function BucketComboRoot(props: {
   }
 
   const groups = [...useLastSettledValue(currentBucketGroups, settled)];
-  if (props.onMatchAction) {
-    groups.push({
-      id: "actions",
-      name: "Actions",
-      items: [{ type: "match", id: "match", name: "Match transactions" }],
-    });
+  const actions: BucketComboItem[] = [];
+  if (props.onMatchAction)
+    actions.push({ type: "match", id: "match", name: "Match transactions" });
+  if (props.onSplitAction)
+    actions.push({ type: "split", id: "split", name: "Split transaction" });
+  if (actions.length) {
+    groups.push({ id: "actions", name: "Actions", items: actions });
   }
 
   const openFor = useCallback((rowId: string, anchor: HTMLButtonElement) => {
@@ -154,6 +161,10 @@ export function BucketComboRoot(props: {
 
     if (item.type === "match") {
       props.onMatchAction?.(session.rowId);
+      return;
+    }
+    if (item.type === "split") {
+      props.onSplitAction?.(session.rowId);
       return;
     }
 

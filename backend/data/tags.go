@@ -45,11 +45,15 @@ func (d *Data) AddPostingTag(ctx context.Context, userID string, postingIDs []st
 			from editable
 			where (select count(*) from requested) = (select count(*) from editable)
 			on conflict (posting_id, tag) do nothing
-			returning id
+			returning id, posting_id
 		), audited as (
 			insert into audit_logs
 			select uuidv7(), $1, 'posting_tags', id, 'insert', null, now()
 			from added
+		), touched as (
+			update postings
+			set updated_at = clock_timestamp()
+			where id in (select posting_id from added)
 		)
 		select
 			(select count(*) from requested),
@@ -107,6 +111,10 @@ func (d *Data) RemovePostingTag(ctx context.Context, userID string, postingIDs [
 			delete from posting_tags
 			where id in (select id from doomed)
 			returning id
+		), touched as (
+			update postings
+			set updated_at = clock_timestamp()
+			where id in (select posting_id from doomed)
 		)
 		select
 			(select count(*) from requested),

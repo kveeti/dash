@@ -6,6 +6,8 @@ import (
 	"money/backend/state"
 	"net/http"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type inboxRowResponse struct {
@@ -77,6 +79,56 @@ func inboxRowToResponse(row data.InboxRow) inboxRowResponse {
 		out.OccurredAt = &value
 	}
 	return out
+}
+
+func HandleGetInboxRow(state *state.State, getUserID GetUserID) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		userID, err := getUserID(r)
+		if err != nil {
+			return err
+		}
+		row, err := state.Data.GetInboxRow(r.Context(), userID, r.PathValue("id"))
+		if err != nil {
+			return mapTransactionErr(err)
+		}
+		Json(w, inboxRowToResponse(row))
+		return nil
+	}
+}
+
+func HandleSplitInboxRow(state *state.State, getUserID GetUserID) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		userID, err := getUserID(r)
+		if err != nil {
+			return err
+		}
+		var body struct {
+			Postings []struct {
+				BucketID string `json:"bucket_id"`
+				Amount   int64  `json:"amount"`
+			} `json:"postings"`
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&body) != nil {
+			return NewErr("invalid request body", http.StatusBadRequest)
+		}
+		postings := make([]data.InboxSplitPosting, len(body.Postings))
+		for i, posting := range body.Postings {
+			if _, parseErr := uuid.Parse(posting.BucketID); parseErr != nil {
+				return NewErr("invalid bucket id", http.StatusBadRequest)
+			}
+			postings[i] = data.InboxSplitPosting{
+				BucketID: posting.BucketID,
+				Amount:   posting.Amount,
+			}
+		}
+		if err = state.Data.SplitInboxRow(r.Context(), userID, r.PathValue("id"), postings); err != nil {
+			return mapTransactionErr(err)
+		}
+		Json(w, map[string]bool{"split": true})
+		return nil
+	}
 }
 
 func HandleGetInboxMatches(state *state.State, getUserID GetUserID) Handler {

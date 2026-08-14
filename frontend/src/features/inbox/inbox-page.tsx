@@ -45,6 +45,8 @@ import {
   MatchTransactions,
   useMatchTransactions,
 } from "./match-transactions-dialog";
+import { useSplitInbox } from "./split-inbox-context";
+import { SplitInboxTransactions } from "./split-inbox-dialog";
 
 export default function InboxPage() {
   const selection = useSelection();
@@ -91,17 +93,19 @@ function InboxPageContent(props: { selection: UseSelectionReturn }) {
         end={<InboxFiltersButton />}
       />
 
-      <MatchTransactions>
-        <List
-          selection={selection}
-          searchQuery={searchQuery}
-          dateRange={dateRange}
-          filters={filters}
-          inboxQuery={inboxQuery}
-          inboxItems={inboxItems}
-          visibleIds={visibleIds}
-        />
-      </MatchTransactions>
+      <SplitInboxTransactions>
+        <MatchTransactions>
+          <List
+            selection={selection}
+            searchQuery={searchQuery}
+            dateRange={dateRange}
+            filters={filters}
+            inboxQuery={inboxQuery}
+            inboxItems={inboxItems}
+            visibleIds={visibleIds}
+          />
+        </MatchTransactions>
+      </SplitInboxTransactions>
 
       <FloatingBar selection={selection} />
 
@@ -121,6 +125,7 @@ function List(props: {
 }) {
   const { f, isLoading: i18nLoading, isError: i18nError } = useI18n();
   const matchContext = useMatchTransactions();
+  const splitContext = useSplitInbox();
 
   if (props.inboxQuery.isLoading || i18nLoading) {
     return <ListSkeleton />;
@@ -153,7 +158,10 @@ function List(props: {
   };
 
   return (
-    <BucketComboRoot onMatchAction={matchContext.openMatchingTo}>
+    <BucketComboRoot
+      onMatchAction={matchContext.openMatchingTo}
+      onSplitAction={splitContext.open}
+    >
       {props.inboxItems.length ? (
         <ul
           className={`-mt-1 flex list-none flex-col ${props.selection.selectMode ? "select-none" : ""}`}

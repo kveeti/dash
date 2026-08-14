@@ -24,10 +24,13 @@ export interface InboxFilters {
 
 export const inboxKeys = {
   all: ["inbox"] as const,
+  lists: ["inbox", "list"] as const,
   list: (props: { searchQuery: string | null; filters: InboxFilters }) => [
     "inbox",
+    "list",
     props,
   ],
+  detail: (id: string) => ["inbox", "detail", id] as const,
 };
 
 export interface InboxItem {
@@ -51,6 +54,13 @@ export interface InboxPage {
 }
 
 export type InboxCacheSnapshot = QuerySnapshot<InfiniteData<InboxPage>>;
+
+export function useInboxItemQuery(id: string) {
+  return useQuery({
+    queryKey: inboxKeys.detail(id),
+    queryFn: () => api<InboxItem>(`/api/v1/inbox/${id}`),
+  });
+}
 
 export function restoreInboxRows(rowIds: string[]) {
   return api<{ restored: number }>("/api/v1/inbox/restore", {
@@ -132,11 +142,11 @@ export function useCategorizeInboxMutation() {
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.all });
       const previous = queryClient.getQueriesData<InfiniteData<InboxPage>>({
-        queryKey: inboxKeys.all,
+        queryKey: inboxKeys.lists,
       });
 
       queryClient.setQueriesData<InfiniteData<InboxPage>>(
-        { queryKey: inboxKeys.all },
+        { queryKey: inboxKeys.lists },
         (data) =>
           data && {
             ...data,
@@ -167,6 +177,53 @@ export function useCategorizeInboxMutation() {
   });
 }
 
+export function useSplitInboxMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: {
+      rowId: string;
+      postings: { bucketId: string; amount: number }[];
+    }) =>
+      api<{ split: true }>(`/api/v1/inbox/${input.rowId}/split`, {
+        method: "POST",
+        body: JSON.stringify({
+          postings: input.postings.map((posting) => ({
+            bucket_id: posting.bucketId,
+            amount: posting.amount,
+          })),
+        }),
+      }),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: inboxKeys.all });
+      const previous = queryClient.getQueriesData<InfiniteData<InboxPage>>({
+        queryKey: inboxKeys.lists,
+      });
+      queryClient.setQueriesData<InfiniteData<InboxPage>>(
+        { queryKey: inboxKeys.lists },
+        (data) =>
+          data && {
+            ...data,
+            pages: data.pages.map((page) => ({
+              ...page,
+              rows: page.rows.filter((row) => row.id !== input.rowId),
+            })),
+          },
+      );
+      return { previous };
+    },
+    onError: (_error, _input, context) =>
+      restoreQueries(queryClient, context?.previous ?? []),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+    },
+  });
+}
+
 export function useMatchInboxMutation() {
   const queryClient = useQueryClient();
 
@@ -179,11 +236,11 @@ export function useMatchInboxMutation() {
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: inboxKeys.all });
       const previous = queryClient.getQueriesData<InfiniteData<InboxPage>>({
-        queryKey: inboxKeys.all,
+        queryKey: inboxKeys.lists,
       });
 
       queryClient.setQueriesData<InfiniteData<InboxPage>>(
-        { queryKey: inboxKeys.all },
+        { queryKey: inboxKeys.lists },
         (data) =>
           data && {
             ...data,

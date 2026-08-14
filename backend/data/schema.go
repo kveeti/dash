@@ -99,8 +99,10 @@ create table if not exists postings (
     import_row_id uuid unique,
     mirror_id uuid,
     created_at timestamptz not null,
+    updated_at timestamptz not null default now(),
     check (amount <> 0)
 );
+alter table postings add column if not exists updated_at timestamptz not null default now();
 create index if not exists idx_postings_transaction on postings(transaction_id);
 create index if not exists idx_postings_bucket on postings(bucket_id);
 create unique index if not exists idx_postings_one_import on postings(transaction_id) where import_row_id is not null;

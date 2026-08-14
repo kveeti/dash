@@ -114,6 +114,17 @@ func categorizeInboxTransactions(t *testing.T, app *testApp, rowIDs []string, bu
 	return transactionIDs
 }
 
+func postingByBucket(t *testing.T, postings []postingResponse, bucketID string) postingResponse {
+	t.Helper()
+	for _, posting := range postings {
+		if posting.Bucket.ID == bucketID {
+			return posting
+		}
+	}
+	t.Fatalf("posting for bucket %s not found", bucketID)
+	return postingResponse{}
+}
+
 func inboxByParty(rows []inboxRow) map[string]inboxRow {
 	m := map[string]inboxRow{}
 	for _, r := range rows {
@@ -162,6 +173,53 @@ func TestInboxCategorizeCreatesTransactions(t *testing.T) {
 	balances := postingTotals(t, app)
 	require.Equal(t, int64(-1234+10000), balances[bank]["EUR"])
 	require.Equal(t, int64(1234-10000), balances[groceries]["EUR"])
+}
+
+func TestSplitInboxRowCreatesBalancedCategoryPostings(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	food := createBucket(t, app, "expense", "Food")
+	travel := createBucket(t, app, "expense", "Travel")
+	doImport(t, app, bank, nordeaHeader+nordeaRow("2026/07/01", "-10,00", "Market", "Split"))
+	rows := getInbox(t, app, "")
+	require.Len(t, rows, 1)
+
+	response := authed(t, app, http.MethodGet, "/api/v1/inbox/"+rows[0].ID, nil)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	var source inboxRowResponse
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&source))
+	require.Equal(t, int64(-1000), source.Amount)
+
+	response = authed(t, app, http.MethodPost, "/api/v1/inbox/"+rows[0].ID+"/split", map[string]any{"postings": []map[string]any{
+		{"bucket_id": food, "amount": 600},
+		{"bucket_id": travel, "amount": 400},
+	}})
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	require.Empty(t, getInbox(t, app, ""))
+
+	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
+	require.Len(t, page.Transactions, 1)
+	require.Len(t, page.Transactions[0].Postings, 3)
+	require.Equal(t, int64(-1000), postingByBucket(t, page.Transactions[0].Postings, bank).Amount)
+	require.Equal(t, int64(600), postingByBucket(t, page.Transactions[0].Postings, food).Amount)
+	require.Equal(t, int64(400), postingByBucket(t, page.Transactions[0].Postings, travel).Amount)
+}
+
+func TestSplitInboxRowRejectsAnUnbalancedSplit(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	food := createBucket(t, app, "expense", "Food")
+	travel := createBucket(t, app, "expense", "Travel")
+	doImport(t, app, bank, nordeaHeader+nordeaRow("2026/07/01", "-10,00", "Market", "Split"))
+	row := getInbox(t, app, "")[0]
+
+	response := authed(t, app, http.MethodPost, "/api/v1/inbox/"+row.ID+"/split", map[string]any{"postings": []map[string]any{
+		{"bucket_id": food, "amount": 600},
+		{"bucket_id": travel, "amount": 300},
+	}})
+	require.Equal(t, http.StatusBadRequest, response.StatusCode)
+	require.Len(t, getInbox(t, app, ""), 1)
+	require.Empty(t, decodeTxns(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil)))
 }
 
 func TestRemoveTransactionsRestoresImportedRows(t *testing.T) {
@@ -568,7 +626,7 @@ func TestUnmatchTransferRestoresBothRows(t *testing.T) {
 	require.NoError(t, app.d.Users.QueryRow(`select p.id from postings p join buckets b on b.id=p.bucket_id where p.transaction_id=$1 and b.kind='transit'`, page.Transactions[0].ID).Scan(&transitPostingID))
 	resp := authed(t, app, http.MethodPatch, "/api/v1/postings/"+transitPostingID, map[string]any{"memo": "no"})
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+page.Transactions[0].ID+"/postings", map[string]any{"postings": []any{}})
+	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+page.Transactions[0].ID+"/postings", map[string]any{"expected_latest_posting_timestamp": page.Transactions[0].LatestPostingTimestamp, "postings": []any{}})
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	resp = authed(t, app, http.MethodDelete, "/api/v1/transfer-matches/"+matchID, nil)

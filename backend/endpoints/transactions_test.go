@@ -235,7 +235,8 @@ func TestSplitKeepsSurvivingPostingIDMetadataAndTags(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"postings": []map[string]any{
+	latest := getTransaction(t, app, seed.TransactionID).LatestPostingTimestamp
+	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"expected_latest_posting_timestamp": latest, "postings": []map[string]any{
 		{"id": seed.UserPostingID, "bucket_id": food, "amount": 600, "currency": "EUR", "memo": "kept", "stats_date": "2026-06-30"},
 		{"bucket_id": travel, "amount": 400, "currency": "EUR"},
 	}})
@@ -249,7 +250,7 @@ func TestSplitKeepsSurvivingPostingIDMetadataAndTags(t *testing.T) {
 	require.Equal(t, []string{"shared"}, survivor.Tags)
 	require.Equal(t, "2026-06-30", *survivor.StatsDate)
 
-	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"postings": []map[string]any{
+	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"expected_latest_posting_timestamp": split.LatestPostingTimestamp, "postings": []map[string]any{
 		{"id": seed.UserPostingID, "bucket_id": food, "amount": 500, "currency": "EUR"},
 	}})
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -260,6 +261,30 @@ func TestSplitKeepsSurvivingPostingIDMetadataAndTags(t *testing.T) {
 	require.NoError(t, app.d.Users.QueryRow("select count(*) from audit_logs where table_name='postings' and operation='insert' and before is null").Scan(&inserts))
 	require.Positive(t, updates)
 	require.Positive(t, inserts)
+}
+
+func TestSplitRejectsPostingChangesMadeAfterTheTransactionWasRead(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	bank := createBucket(t, app, "asset", "Bank")
+	food := createBucket(t, app, "expense", "Food")
+	travel := createBucket(t, app, "expense", "Travel")
+	seed := seedCategorizedTransaction(t, app, time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), bank, food, -1000, "EUR", "Market")
+	read := getTransaction(t, app, seed.TransactionID)
+
+	resp := authed(t, app, http.MethodPatch, "/api/v1/postings/"+seed.UserPostingID, map[string]any{"bucket_id": travel})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{
+		"expected_latest_posting_timestamp": read.LatestPostingTimestamp,
+		"postings": []map[string]any{
+			{"id": seed.UserPostingID, "bucket_id": food, "amount": 600, "currency": "EUR"},
+			{"bucket_id": travel, "amount": 400, "currency": "EUR"},
+		},
+	})
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	posting := postingByID(t, getTransaction(t, app, seed.TransactionID).Postings, seed.UserPostingID)
+	require.Equal(t, travel, posting.Bucket.ID)
+	require.Equal(t, int64(1000), posting.Amount)
 }
 
 func TestDeleteImportedTransactionReturnsRowToInbox(t *testing.T) {
@@ -287,7 +312,7 @@ func TestImportedFactsCannotChangeThroughWrites(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	resp = authed(t, app, http.MethodPatch, "/api/v1/postings/"+seed.ImportedID, map[string]any{"bucket_id": other})
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"postings": []map[string]any{
+	resp = authed(t, app, http.MethodPut, "/api/v1/transactions/"+seed.TransactionID+"/postings", map[string]any{"expected_latest_posting_timestamp": getTransaction(t, app, seed.TransactionID).LatestPostingTimestamp, "postings": []map[string]any{
 		{"id": seed.ImportedID, "bucket_id": bank, "amount": -1000, "currency": "EUR"},
 		{"id": seed.UserPostingID, "bucket_id": food, "amount": 1000, "currency": "EUR"},
 	}})

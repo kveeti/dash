@@ -11,11 +11,13 @@ import {
   useCategorizePostingMutation,
   useDeleteTransactionMutation,
   usePatchTransactionMutation,
+  useSplitTransactionMutation,
   useTransactionQuery,
   useUnmatchTransferMutation,
   type Posting,
   type Transaction,
 } from "../../api/transactions";
+import { setSearchParam, useSearchParam } from "../../lib/search-param";
 import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { AlertDialog } from "../../ui/alert-dialog/alert-dialog";
 import {
@@ -26,6 +28,10 @@ import { Button } from "../../ui/button/button";
 import { Field, Input } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
+import {
+  SplitTransactionDialog,
+  type SplitAllocation,
+} from "./split-transaction-dialog";
 import { TagsField } from "./transaction-details/tag-field";
 
 export default function TransactionDetailPage(props: {
@@ -60,11 +66,71 @@ export default function TransactionDetailPage(props: {
 
 function TransactionDetail(props: { transaction: Transaction }) {
   const categoryPosting = getCategoryPosting(props.transaction);
+  const splitPostings = getSplitPostings(props.transaction);
   const accountNames = getAccountNames(props.transaction);
   const importedPosting = props.transaction.postings.find(
     (posting) => posting.imported,
   );
+  const splitOpen = useSearchParam("edit-splits") !== null;
+  const split = useSplitTransactionMutation();
+  const buckets = useBucketsQuery();
+  const splitVersion = useRef(props.transaction.latest_posting_timestamp);
+  if (!splitOpen) {
+    splitVersion.current = props.transaction.latest_posting_timestamp;
+  }
   const { f } = useI18n();
+  const canSplit =
+    !props.transaction.transfer &&
+    importedPosting &&
+    splitPostings.length >= 1 &&
+    props.transaction.postings.length === splitPostings.length + 1 &&
+    splitPostings.every(
+      (posting) => posting.currency === importedPosting.currency,
+    );
+  const allocations = canSplit ? initialSplitAllocations(splitPostings) : [];
+
+  function openSplit() {
+    split.reset();
+    splitVersion.current = props.transaction.latest_posting_timestamp;
+    setSearchParam("edit-splits", "1");
+  }
+
+  function closeSplit() {
+    setSearchParam("edit-splits", undefined);
+  }
+
+  function saveSplit(next: SplitAllocation[]) {
+    if (!canSplit || split.isPending) return;
+    const postings = next.flatMap((allocation) => {
+      const bucket = buckets.data?.find(
+        (candidate) => candidate.id === allocation.bucketId,
+      );
+      if (!bucket) return [];
+      const current = splitPostings.find(
+        (posting) => posting.id === allocation.id,
+      );
+      return [
+        {
+          ...(allocation.id ? { id: allocation.id } : {}),
+          bucket,
+          amount:
+            importedPosting.amount > 0 ? -allocation.amount : allocation.amount,
+          currency: importedPosting.currency,
+          statsDate: current?.stats_date ?? null,
+          memo: current?.memo ?? "",
+        },
+      ];
+    });
+    if (postings.length !== next.length) return;
+    split.mutate(
+      {
+        transactionId: props.transaction.id,
+        expectedLatestPostingTimestamp: splitVersion.current,
+        postings,
+      },
+      { onSuccess: closeSplit },
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-(--page-width) flex-col gap-8 px-3 py-4 pb-16 sm:px-6 sm:py-6">
@@ -104,6 +170,18 @@ function TransactionDetail(props: { transaction: Transaction }) {
         <TransferCard transaction={props.transaction} />
       )}
 
+      {splitPostings.length > 1 && canSplit && (
+        <SplitDetails postings={splitPostings} onEdit={openSplit} />
+      )}
+
+      {splitPostings.length === 1 && canSplit && (
+        <div>
+          <Button type="button" variant="outline" onClick={openSplit}>
+            Split transaction
+          </Button>
+        </div>
+      )}
+
       <section
         aria-label="Transaction fields"
         className="-mx-3 rounded-2xl border border-border-subtle bg-form p-6 sm:-mx-6"
@@ -118,7 +196,7 @@ function TransactionDetail(props: { transaction: Transaction }) {
             transactionId={props.transaction.id}
             memo={props.transaction.memo}
           />
-          {categoryPosting && (
+          {categoryPosting && splitPostings.length === 1 && (
             <>
               <CategoryField
                 posting={categoryPosting}
@@ -129,6 +207,25 @@ function TransactionDetail(props: { transaction: Transaction }) {
           )}
         </div>
       </section>
+
+      {canSplit && (
+        <SplitTransactionDialog
+          open={splitOpen}
+          source={{
+            counterparty: props.transaction.counterparty,
+            description: props.transaction.description,
+            amount: importedPosting.amount,
+            currency: importedPosting.currency,
+            date: props.transaction.occurred_on,
+            account: importedPosting.bucket.name,
+          }}
+          allocations={allocations}
+          minimumAllocations={1}
+          error={split.error?.message}
+          onClose={closeSplit}
+          onSubmit={saveSplit}
+        />
+      )}
     </div>
   );
 }
@@ -145,6 +242,62 @@ function getAccountNames(transaction: Transaction) {
         .map((posting) => posting.bucket.name),
     ),
   ];
+}
+
+function getSplitPostings(transaction: Transaction) {
+  return transaction.postings.filter(
+    (posting) =>
+      posting.bucket.kind === "expense" ||
+      posting.bucket.kind === "income" ||
+      posting.bucket.kind === "person",
+  );
+}
+
+function initialSplitAllocations(postings: Posting[]) {
+  if (postings.length > 1) {
+    return postings.map((posting) => ({
+      id: posting.id,
+      bucketId: posting.bucket.id,
+      amount: Math.abs(posting.amount),
+    }));
+  }
+  return [
+    {
+      id: postings[0].id,
+      bucketId: postings[0].bucket.id,
+      amount: Math.abs(postings[0].amount),
+    },
+    { bucketId: "", amount: 0 },
+  ];
+}
+
+function SplitDetails(props: { postings: Posting[]; onEdit: () => void }) {
+  const { f } = useI18n();
+  return (
+    <section className="-mx-3 rounded-2xl border border-border-subtle bg-form p-6 sm:-mx-6">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="font-medium">Splits</h2>
+        <Button type="button" variant="ghost" onClick={props.onEdit}>
+          Edit splits
+        </Button>
+      </div>
+      <ul className="flex list-none flex-col">
+        {props.postings.map((posting) => (
+          <li
+            key={posting.id}
+            className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 border-t border-gray-200 py-2 first:border-t-0"
+          >
+            <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+              {posting.bucket.name}
+            </span>
+            <span className="whitespace-nowrap tabular-nums">
+              {f.amount(Math.abs(posting.amount), posting.currency)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 function getCategoryPosting(transaction: Transaction) {

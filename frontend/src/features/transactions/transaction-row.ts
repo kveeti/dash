@@ -9,6 +9,13 @@ export type TransactionRow =
       account?: string;
     }
   | {
+      kind: "split";
+      categories: string[];
+      amount: number;
+      currency: string;
+      account: string;
+    }
+  | {
       kind: "transfer";
       from: string;
       to: string;
@@ -112,6 +119,26 @@ export function toTransactionRow(txn: Transaction): TransactionRow {
     (p) =>
       kind(p) === "expense" || kind(p) === "income" || kind(p) === "person",
   );
+  const accountLegs = txn.postings.filter(
+    (p) => kind(p) === "asset" || kind(p) === "liability",
+  );
+  if (
+    categoryLegs.length > 1 &&
+    accountLegs.length === 1 &&
+    categoryLegs.every((p) => p.currency === accountLegs[0].currency) &&
+    categoryLegs.reduce((sum, p) => sum + p.amount, 0) ===
+      -accountLegs[0].amount
+  ) {
+    const account = accountLegs[0];
+    return {
+      kind: "split",
+      categories: categoryLegs.map(name),
+      amount: account.amount,
+      currency: account.currency,
+      account: name(account),
+    };
+  }
+
   if (categoryLegs.length === 1) {
     const leg = categoryLegs[0];
     const other =
