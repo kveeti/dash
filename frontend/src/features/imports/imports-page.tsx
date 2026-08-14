@@ -179,7 +179,7 @@ function PastImports() {
   if (!batches.length) return <p>no imports yet</p>;
 
   return (
-    <div className="-mx-6 max-h-[calc(5*4.75rem)] overflow-y-auto rounded-2xl border border-gray-200 bg-form">
+    <div className="-mx-3 max-h-[calc(5*4.75rem)] overflow-y-auto rounded-2xl border border-gray-200 bg-form sm:-mx-6">
       <ul className="m-0 flex list-none flex-col p-0">
         {batches.map((batch) => {
           const processing =
