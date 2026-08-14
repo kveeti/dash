@@ -1,8 +1,15 @@
 import { Combobox } from "@base-ui/react/combobox";
 import { Dialog } from "@base-ui/react/dialog";
+import { Menu } from "@base-ui/react/menu";
+import { ArrowPathIcon, Bars3Icon } from "@heroicons/react/24/outline";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 
+import {
+  useEnableBankingConnections,
+  useEnableBankingSyncStatus,
+  useSyncEnableBankingAccounts,
+} from "../../api/enablebanking";
 import { PopupSearchInput } from "../../ui/input/input";
 
 const pages = [
@@ -12,6 +19,13 @@ const pages = [
   { label: "import", href: "/imports" },
   { label: "banks", href: "/connections" },
 ];
+
+const navPages = pages.filter(
+  (page) => page.href !== "/imports" && page.href !== "/connections",
+);
+const menuPages = pages.filter(
+  (page) => page.href === "/imports" || page.href === "/connections",
+);
 
 export function Nav() {
   const [open, setOpen] = useState(false);
@@ -29,18 +43,83 @@ export function Nav() {
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-10 h-(--nav-height) bg-gray-125/80 backdrop-blur-md sm:sticky sm:top-0 sm:pl-(--scrollbar-pl)">
-      <div className="mx-auto flex h-full max-w-(--page-width) px-3">
+      <div className="mx-auto flex h-full w-full min-w-0 max-w-(--page-width) justify-between px-1 min-[18rem]:px-3">
         <ul className="flex list-none">
-          {pages.map((page) => (
+          {navPages.map((page) => (
             <li key={page.href}>
               <ImmediateNavLink href={page.href}>{page.label}</ImmediateNavLink>
             </li>
           ))}
         </ul>
+        <NavMenu />
       </div>
 
       <CommandPalette open={open} onOpenChange={setOpen} />
     </nav>
+  );
+}
+
+function NavMenu() {
+  const connections = useEnableBankingConnections();
+  const syncStatus = useEnableBankingSyncStatus();
+  const sync = useSyncEnableBankingAccounts();
+  const accounts = (connections.data ?? []).flatMap((connection) =>
+    connection.accounts.flatMap((account) =>
+      account.bucket_id
+        ? [{ connectionId: connection.id, accountUid: account.uid }]
+        : [],
+    ),
+  );
+
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        className="inline-flex h-full items-center px-2 text-gray-900 outline-2 outline-transparent outline-offset-[-2px] hover:bg-gray-200/80 focus-visible:outline-(--input-ring-active) min-[18rem]:px-3"
+        aria-label="Open menu"
+      >
+        <Bars3Icon className="size-4" aria-hidden="true" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner
+          align="end"
+          sideOffset={6}
+          className="z-20 outline-none"
+        >
+          <Menu.Popup className="min-w-44 origin-(--transform-origin) rounded-xl border border-popover-border bg-popover p-1 text-base text-gray-900 shadow-float outline-none transition-[opacity,scale] duration-150 ease-[cubic-bezier(.16,1,.3,1)] data-ending-style:scale-[.97] data-ending-style:opacity-0 data-starting-style:scale-[.97] data-starting-style:opacity-0 motion-reduce:duration-[1ms]">
+            {menuPages.map((page) => (
+              <Menu.LinkItem
+                key={page.href}
+                render={<Link href={page.href} />}
+                closeOnClick
+                className="flex h-9 cursor-default items-center rounded-lg px-3 capitalize no-underline outline-none data-highlighted:bg-popover-item-selected"
+              >
+                {page.label}
+              </Menu.LinkItem>
+            ))}
+            {accounts.length > 0 && (
+              <>
+                <Menu.Separator className="my-1 h-px bg-popover-border" />
+                <Menu.Item
+                  closeOnClick={false}
+                  className="flex h-9 cursor-default items-center gap-2 rounded-lg px-3 outline-none data-highlighted:bg-popover-item-selected"
+                  onClick={() => {
+                    if (!sync.isPending && !syncStatus.data?.syncing)
+                      sync.mutate(accounts);
+                  }}
+                >
+                  <ArrowPathIcon
+                    className={`size-3.5 ${syncStatus.data?.syncing ? "motion-safe:animate-spin" : ""}`}
+                    data-sync-icon
+                    aria-hidden="true"
+                  />
+                  Sync all
+                </Menu.Item>
+              </>
+            )}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
   );
 }
 
@@ -53,7 +132,7 @@ function ImmediateNavLink(props: { href: string; children: ReactNode }) {
     <Link
       href={props.href}
       className={(isActive) =>
-        `inline-flex h-full items-center px-3 text-base text-inherit no-underline outline-2 outline-transparent outline-offset-[-2px] ${isActive ? "underline" : ""} hover:bg-gray-200/80 focus-visible:rounded-none focus-visible:outline-(--input-ring-active)`
+        `inline-flex h-full items-center px-1.5 text-sm text-inherit no-underline outline-2 outline-transparent outline-offset-[-2px] min-[18rem]:px-3 min-[18rem]:text-base ${isActive ? "underline" : ""} hover:bg-gray-200/80 focus-visible:rounded-none focus-visible:outline-(--input-ring-active)`
       }
       onClick={(event) => {
         if (

@@ -298,6 +298,21 @@ func HandleMapEnableBankingAccount(s *state.State, getUserID GetUserID) Handler 
 	}
 }
 
+func HandleEnableBankingSyncStatus(s *state.State, getUserID GetUserID) Handler {
+	return func(w http.ResponseWriter, r *http.Request) error {
+		userID, err := getUserID(r)
+		if err != nil {
+			return err
+		}
+		active, err := s.Data.HasActiveEnableBankingSyncs(r.Context(), userID)
+		if err != nil {
+			return NewUnexpectedErr("check Enable Banking sync status: %w", err)
+		}
+		Json(w, JSON{"syncing": active})
+		return nil
+	}
+}
+
 func HandleSyncEnableBankingAccount(s *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)

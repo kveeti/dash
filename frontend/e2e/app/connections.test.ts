@@ -6,7 +6,8 @@ test("bank connections page exposes connect and re-auth entry points", async ({
   page,
 }, testInfo) => {
   await login(page, testInfo);
-  await page.getByRole("link", { name: "banks", exact: true }).click();
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "banks" }).click();
   await expect(page).toHaveURL(/\/connections$/);
   await expect(
     page.getByRole("heading", { name: "Connect a bank" }),

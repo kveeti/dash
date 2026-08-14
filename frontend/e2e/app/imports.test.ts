@@ -13,6 +13,11 @@ const duplicatePageCSV =
     nordeaRow("2026/07/01", "-1,00", "Older duplicate page"),
   ].join("");
 
+async function goToImports(page: Page) {
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "import" }).click();
+}
+
 async function upload(page: Page, input: { csv?: string } = {}) {
   await page.getByLabel("File", { exact: true }).setInputFiles({
     name: "transactions.csv",
@@ -100,7 +105,7 @@ test("upload, duplicate import, import anyway, and undo use the real backend", a
   page,
 }, testInfo) => {
   await login(page, testInfo);
-  await page.getByRole("link", { name: "import", exact: true }).click();
+  await goToImports(page);
 
   await page.getByRole("button", { name: "Import", exact: true }).click();
   await expect(page.getByText("Choose a file")).toBeVisible();
@@ -116,7 +121,7 @@ test("upload, duplicate import, import anyway, and undo use the real backend", a
   await upload(page);
   await expect(page.getByText("1 imported · 0 duplicates")).toBeVisible();
 
-  await page.getByRole("link", { name: "import", exact: true }).click();
+  await goToImports(page);
   await upload(page);
   await expect(page.getByText("0 imported · 1 duplicates")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Duplicates" })).toBeVisible();
@@ -138,10 +143,10 @@ test("an import report loads older duplicate rows", async ({
   page,
 }, testInfo) => {
   await login(page, testInfo);
-  await page.getByRole("link", { name: "import", exact: true }).click();
+  await goToImports(page);
   await upload(page, { csv: duplicatePageCSV });
 
-  await page.getByRole("link", { name: "import", exact: true }).click();
+  await goToImports(page);
   await upload(page, { csv: duplicatePageCSV });
   await expect(page.getByText("0 imported · 51 duplicates")).toBeVisible();
   await expect(page.getByText("Older duplicate page")).not.toBeVisible();
@@ -151,7 +156,7 @@ test("an import report loads older duplicate rows", async ({
 
 test("an import report shows skipped CSV rows", async ({ page }, testInfo) => {
   await login(page, testInfo);
-  await page.getByRole("link", { name: "import", exact: true }).click();
+  await goToImports(page);
   await upload(page, {
     csv:
       nordeaHeader +

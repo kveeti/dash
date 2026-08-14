@@ -43,6 +43,20 @@ type EnableBankingSyncJob struct {
 	Attempts        int
 }
 
+func (d *Data) HasActiveEnableBankingSyncs(ctx context.Context, userID string) (bool, error) {
+	var active bool
+	err := d.db.QueryRowContext(ctx, `
+		select exists (
+			select 1
+			from import_batches
+			where user_id = $1
+			  and source = $2
+			  and status in ('queued', 'syncing')
+		)
+	`, userID, EnableBankingSource).Scan(&active)
+	return active, err
+}
+
 // EnqueueEnableBankingSyncs creates every requested import batch and provider
 // job atomically. No bank request is made on the caller's request path.
 func (d *Data) EnqueueEnableBankingSyncs(ctx context.Context, userID string, requests []EnableBankingSyncRequest, dateTo time.Time) ([]string, error) {

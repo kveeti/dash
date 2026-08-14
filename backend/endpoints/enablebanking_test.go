@@ -170,6 +170,30 @@ func enqueueEnableBankingAccountSync(t *testing.T, app *testApp, integrationID, 
 	return result.BatchID
 }
 
+func enableBankingSyncing(t *testing.T, app *testApp) bool {
+	t.Helper()
+	response := authed(t, app, http.MethodGet, "/api/v1/enablebanking/sync-status", nil)
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	var result struct {
+		Syncing bool `json:"syncing"`
+	}
+	require.NoError(t, json.NewDecoder(response.Body).Decode(&result))
+	return result.Syncing
+}
+
+func TestEnableBankingSyncStatusTracksQueuedBatches(t *testing.T) {
+	provider := httptest.NewServer(http.NotFoundHandler())
+	defer provider.Close()
+	app, _, integrationID, _ := newEnableBankingSyncTest(t, provider.URL)
+
+	require.False(t, enableBankingSyncing(t, app))
+	batchID := enqueueEnableBankingSync(t, app, integrationID)
+	require.True(t, enableBankingSyncing(t, app))
+	_, err := app.d.Users.Exec("update import_batches set status='done' where id=$1", batchID)
+	require.NoError(t, err)
+	require.False(t, enableBankingSyncing(t, app))
+}
+
 func waitFailedImport(t *testing.T, app *testApp, batchID string) batchReport {
 	t.Helper()
 	var report batchReport

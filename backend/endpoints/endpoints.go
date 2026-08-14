@@ -63,6 +63,7 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 	mux.HandleFunc("GET /api/v1/enablebanking/connect", NewHandler(HandleStartEnableBanking(state, getUserID)))
 	mux.HandleFunc("GET /api/v1/enablebanking/callback", NewHandler(HandleEnableBankingCallback(state, getUserID)))
 	mux.HandleFunc("GET /api/v1/enablebanking/connections", NewHandler(HandleListEnableBankingConnections(state, getUserID)))
+	mux.HandleFunc("GET /api/v1/enablebanking/sync-status", NewHandler(HandleEnableBankingSyncStatus(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/enablebanking/sync", NewHandler(HandleSyncSelectedEnableBankingAccounts(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/enablebanking/connections/{id}/accounts/{uid}/map", NewHandler(HandleMapEnableBankingAccount(state, getUserID)))
 	mux.HandleFunc("POST /api/v1/enablebanking/connections/{id}/accounts/{uid}/sync", NewHandler(HandleSyncEnableBankingAccount(state, getUserID)))

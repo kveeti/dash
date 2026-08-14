@@ -24,6 +24,7 @@ export interface EnableBankingConnection {
 export const enableBankingKeys = {
   all: ["enable-banking"] as const,
   connections: ["enable-banking", "connections"] as const,
+  syncStatus: ["enable-banking", "sync-status"] as const,
 };
 
 export function useEnableBankingConnections() {
@@ -31,6 +32,15 @@ export function useEnableBankingConnections() {
     queryKey: enableBankingKeys.connections,
     queryFn: () =>
       api<EnableBankingConnection[]>("/api/v1/enablebanking/connections"),
+  });
+}
+
+export function useEnableBankingSyncStatus() {
+  return useQuery({
+    queryKey: enableBankingKeys.syncStatus,
+    queryFn: () =>
+      api<{ syncing: boolean }>("/api/v1/enablebanking/sync-status"),
+    refetchInterval: (query) => (query.state.data?.syncing ? 800 : false),
   });
 }
 
@@ -98,8 +108,24 @@ export function useSyncEnableBankingAccounts() {
           })),
         }),
       }),
+    onMutate: async () => {
+      await queryClient.cancelQueries({
+        queryKey: enableBankingKeys.syncStatus,
+      });
+      const previous = queryClient.getQueryData<{ syncing: boolean }>(
+        enableBankingKeys.syncStatus,
+      );
+      queryClient.setQueryData(enableBankingKeys.syncStatus, { syncing: true });
+      return { previous };
+    },
+    onError: (_error, _accounts, context) =>
+      queryClient.setQueryData(enableBankingKeys.syncStatus, context?.previous),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: importKeys.all }),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: enableBankingKeys.syncStatus,
+      }),
   });
 }
 

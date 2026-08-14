@@ -7,6 +7,21 @@ test("login, navigation, and command palette use the real app", async ({
 }, testInfo) => {
   await login(page, testInfo);
 
+  const nav = page.getByRole("navigation");
+  await expect(
+    nav.getByRole("link", { name: "import", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    nav.getByRole("link", { name: "banks", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "import" }).click();
+  await expect(page).toHaveURL(/\/imports$/);
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("menuitem", { name: "banks" }).click();
+  await expect(page).toHaveURL(/\/connections$/);
+  await page.getByRole("link", { name: "transactions", exact: true }).click();
+
   await page.getByRole("link", { name: "inbox", exact: true }).click();
   await expect(page).toHaveURL(/\/inbox$/);
   await expect(page.getByText("No transactions to categorize")).toBeVisible();
