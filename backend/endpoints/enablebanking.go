@@ -1,6 +1,7 @@
 package endpoints
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
@@ -68,7 +69,9 @@ func HandleListEnableBankingBanks(s *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		banks, err := client.ListASPSPs(r.Context(), country, psuType)
+		ctx, cancel := context.WithTimeout(r.Context(), externalRequestTimeout)
+		defer cancel()
+		banks, err := client.ListASPSPs(ctx, country, psuType)
 		if err != nil {
 			return NewUnexpectedErr("list Enable Banking banks: %w", err)
 		}
@@ -112,7 +115,9 @@ func HandleStartEnableBanking(s *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		banks, err := client.ListASPSPs(r.Context(), attempt.Country, attempt.PSUType)
+		ctx, cancel := context.WithTimeout(r.Context(), externalRequestTimeout)
+		defer cancel()
+		banks, err := client.ListASPSPs(ctx, attempt.Country, attempt.PSUType)
 		if err != nil {
 			return NewUnexpectedErr("list Enable Banking banks: %w", err)
 		}
@@ -131,7 +136,7 @@ func HandleStartEnableBanking(s *state.State, getUserID GetUserID) Handler {
 			return NewUnexpectedErr("authorization state: %w", err)
 		}
 		redirectURL := s.Config.BackendUrl + "/api/v1/enablebanking/callback"
-		authURL, err := client.StartAuthorization(r.Context(), *selected, attempt.PSUType, stateValue, redirectURL)
+		authURL, err := client.StartAuthorization(ctx, *selected, attempt.PSUType, stateValue, redirectURL)
 		if err != nil {
 			return NewUnexpectedErr("start Enable Banking authorization: %w", err)
 		}
@@ -176,7 +181,9 @@ func HandleEnableBankingCallback(s *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		session, err := client.CreateSession(r.Context(), code)
+		ctx, cancel := context.WithTimeout(r.Context(), externalRequestTimeout)
+		defer cancel()
+		session, err := client.CreateSession(ctx, code)
 		if err != nil {
 			return NewUnexpectedErr("create Enable Banking session: %w", err)
 		}
@@ -211,7 +218,7 @@ func HandleEnableBankingCallback(s *state.State, getUserID GetUserID) Handler {
 				return mapIntegrationError(err)
 			}
 			if oldData.SessionID != "" && oldData.SessionID != saved.SessionID {
-				_ = client.DeleteSession(r.Context(), oldData.SessionID)
+				_ = client.DeleteSession(ctx, oldData.SessionID)
 			}
 		}
 		expireAuthCookies(w, s.Config.IsProd)
@@ -508,7 +515,9 @@ func HandleDeleteEnableBankingConnection(s *state.State, getUserID GetUserID) Ha
 			return mapIntegrationError(err)
 		}
 		if client, err := enableBankingClient(s); err == nil && saved.SessionID != "" {
-			_ = client.DeleteSession(r.Context(), saved.SessionID)
+			ctx, cancel := context.WithTimeout(r.Context(), externalRequestTimeout)
+			defer cancel()
+			_ = client.DeleteSession(ctx, saved.SessionID)
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return nil

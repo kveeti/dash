@@ -92,7 +92,11 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 
 type req_ctx_key string
 
-const REQ_ID_KEY req_ctx_key = "req_id"
+const (
+	REQ_ID_KEY             req_ctx_key = "req_id"
+	maxJSONBodyBytes                   = 1 << 20
+	externalRequestTimeout             = 10 * time.Second
+)
 
 func RequestID(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -206,6 +210,9 @@ type Handler func(w http.ResponseWriter, r *http.Request) error
 
 func NewHandler(handler Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/imports" {
+			r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodyBytes)
+		}
 		if err := handler(w, r); err != nil {
 			reqID := GetRequestID(r)
 

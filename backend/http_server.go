@@ -9,7 +9,13 @@ import (
 	"time"
 )
 
-const GRACE_PERIOD = time.Second * 5
+const (
+	GRACE_PERIOD      = 5 * time.Second
+	readHeaderTimeout = 5 * time.Second
+	readTimeout       = 30 * time.Second
+	writeTimeout      = 30 * time.Second
+	idleTimeout       = time.Minute
+)
 
 type HttpServer struct {
 	server *http.Server
@@ -20,8 +26,12 @@ type HttpServer struct {
 
 func NewHttpServer(handler http.Handler, addr string) HttpServer {
 	server := &http.Server{
-		Addr:    addr,
-		Handler: handler,
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 
 	return HttpServer{

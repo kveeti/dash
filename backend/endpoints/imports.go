@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	duplicatesPageSize = 50
-	importsPageSize    = 5
+	duplicatesPageSize   = 50
+	importsPageSize      = 5
+	importRequestTimeout = 5 * time.Minute
 )
 
 // maxImportBytes caps the upload body; a var so tests can lower it.
@@ -37,6 +38,15 @@ func mapImportErr(err error) error {
 // selected format's header, then buffers to a temp file before storing it.
 func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
+		deadline := time.Now().Add(importRequestTimeout)
+		controller := http.NewResponseController(w)
+		if err := controller.SetReadDeadline(deadline); err != nil {
+			return NewUnexpectedErr("setting import read deadline: %w", err)
+		}
+		if err := controller.SetWriteDeadline(deadline); err != nil {
+			return NewUnexpectedErr("setting import write deadline: %w", err)
+		}
+
 		userID, err := getUserID(r)
 		if err != nil {
 			return err

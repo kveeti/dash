@@ -1,6 +1,7 @@
 package endpoints
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"money/backend/auth"
@@ -69,7 +70,9 @@ func HandleCallback(st *state.State) Handler {
 			return NewErr("oidc state mismatch", http.StatusBadRequest)
 		}
 
-		claims, err := st.OIDC.Exchange(r.Context(), r.URL.Query().Get("code"), flow.Nonce, flow.Verifier)
+		ctx, cancel := context.WithTimeout(r.Context(), externalRequestTimeout)
+		defer cancel()
+		claims, err := st.OIDC.Exchange(ctx, r.URL.Query().Get("code"), flow.Nonce, flow.Verifier)
 		if err != nil {
 			return NewErr("oidc verification failed", http.StatusUnauthorized)
 		}
