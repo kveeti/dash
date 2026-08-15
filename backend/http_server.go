@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -19,9 +20,7 @@ const (
 
 type HttpServer struct {
 	server *http.Server
-
-	Done    chan struct{}
-	Started chan struct{}
+	Done   chan error
 }
 
 func NewHttpServer(handler http.Handler, addr string) HttpServer {
@@ -35,9 +34,8 @@ func NewHttpServer(handler http.Handler, addr string) HttpServer {
 	}
 
 	return HttpServer{
-		server:  server,
-		Done:    make(chan struct{}),
-		Started: make(chan struct{}),
+		server: server,
+		Done:   make(chan error, 1),
 	}
 }
 
@@ -49,24 +47,29 @@ func (s *HttpServer) Start() error {
 		return fmt.Errorf("error listening on %s: %w", addr, err)
 	}
 
+	slog.Info("listening on " + addr)
 	go func() {
-		s.Started <- struct{}{}
-		slog.Info("listening on " + addr)
-		if err = s.server.Serve(listener); err != nil {
-			slog.Error("server error: " + err.Error())
+		err := s.server.Serve(listener)
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
 		}
+		s.Done <- err
 	}()
 
 	return nil
 }
 
-func (s *HttpServer) Shutdown() {
+func (s *HttpServer) Shutdown() error {
 	slog.Info("shutting down...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), GRACE_PERIOD)
 	defer cancel()
 
-	s.server.Shutdown(ctx)
-
-	s.Done <- struct{}{}
+	if err := s.server.Shutdown(ctx); err != nil {
+		if closeErr := s.server.Close(); closeErr != nil {
+			return errors.Join(err, closeErr)
+		}
+		return err
+	}
+	return nil
 }

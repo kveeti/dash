@@ -44,6 +44,10 @@ func NewData(ctx context.Context, dbUrl, importStore, importDir string) (*Data, 
 	}, nil
 }
 
+func (d *Data) Close() error {
+	return d.db.Close()
+}
+
 func connectPostgres(ctx context.Context, dbURL string) (*sql.DB, error) {
 	db, err := sql.Open("pgx", dbURL)
 	if err != nil {

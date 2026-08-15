@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"syscall"
 
 	"money/backend/auth"
 	"money/backend/config"
@@ -16,27 +17,34 @@ import (
 )
 
 func App(config *config.Config, started chan struct{}) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+
 	if config.IsProd {
 		slog.Info("starting in prod")
 	} else {
 		slog.Info("starting in dev")
 	}
 
-	d, err := data.NewData(context.TODO(), config.DbUrl, config.ImportStore, config.ImportDir)
+	d, err := data.NewData(ctx, config.DbUrl, config.ImportStore, config.ImportDir)
+	if err != nil {
+		stop()
+		panic(err)
+	}
+	defer func() {
+		if err := d.Close(); err != nil {
+			slog.Error("closing database", "err", err)
+		}
+	}()
+	defer stop()
+
+	oidc, err := auth.NewOIDC(ctx, config.OIDC)
 	if err != nil {
 		panic(err)
 	}
 
-	oidc, err := auth.NewOIDC(context.TODO(), config.OIDC)
-	if err != nil {
-		panic(err)
-	}
-
-	workerCtx, stopWorkers := context.WithCancel(context.Background())
-	defer stopWorkers()
-	d.StartImportWorkers(workerCtx)
+	d.StartImportWorkers(ctx)
 	if !config.DisableRateSync {
-		d.StartRateSync(workerCtx)
+		d.StartRateSync(ctx)
 	}
 
 	appState := state.NewState(d, config, oidc)
@@ -47,7 +55,7 @@ func App(config *config.Config, started chan struct{}) {
 		}
 		appState.EnableBankingClient = client
 		appState.EnableBankingSyncer = enablebanking.NewSyncer(d, client)
-		appState.EnableBankingSyncer.Start(workerCtx)
+		appState.EnableBankingSyncer.Start(ctx)
 	}
 
 	router := endpoints.GetRouter(appState, frontendFS())
@@ -57,17 +65,21 @@ func App(config *config.Config, started chan struct{}) {
 		panic(fmt.Errorf("error starting server: %w", err))
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt)
-	go func() {
-		<-stop
-		s.Shutdown()
-	}()
-
-	<-s.Started
 	if started != nil {
 		started <- struct{}{}
 	}
 
-	<-s.Done
+	select {
+	case err := <-s.Done:
+		if err != nil {
+			panic(fmt.Errorf("server failed: %w", err))
+		}
+	case <-ctx.Done():
+		if err := s.Shutdown(); err != nil {
+			panic(fmt.Errorf("shutting down server: %w", err))
+		}
+		if err := <-s.Done; err != nil {
+			panic(fmt.Errorf("server failed during shutdown: %w", err))
+		}
+	}
 }
