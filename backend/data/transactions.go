@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -112,15 +113,18 @@ func validatePostings(postings []Posting) error {
 	if len(postings) < 2 {
 		return ErrInvalidPostings
 	}
-	sums := map[string]int64{}
+	sums := map[string]*big.Int{}
 	for _, p := range postings {
 		if p.Amount == 0 || p.Currency == "" {
 			return ErrInvalidPostings
 		}
-		sums[p.Currency] += p.Amount
+		if sums[p.Currency] == nil {
+			sums[p.Currency] = new(big.Int)
+		}
+		sums[p.Currency].Add(sums[p.Currency], big.NewInt(p.Amount))
 	}
 	for _, sum := range sums {
-		if sum != 0 {
+		if sum.Sign() != 0 {
 			return ErrUnbalanced
 		}
 	}
