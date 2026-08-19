@@ -149,14 +149,6 @@ function List(props: {
     (props.dateRange !== null && props.dateRange !== "all-time"),
   );
 
-  const currentYear = new Date().getFullYear();
-  const formatDate = (value: string) => {
-    const date = new Date(value);
-    return currentYear === date.getFullYear()
-      ? f.shortDate(date)
-      : f.longDate(date);
-  };
-
   return (
     <BucketComboRoot
       onMatchAction={matchContext.openMatchingTo}
@@ -167,7 +159,7 @@ function List(props: {
           className={`-mt-1 flex list-none flex-col ${props.selection.selectMode ? "select-none" : ""}`}
         >
           {props.inboxItems.map((item) => {
-            const dateFormatted = formatDate(item.date);
+            const dateFormatted = f.dateOnly(item.date);
             const showDateHeader = dateFormatted !== prevDate;
             prevDate = dateFormatted;
 

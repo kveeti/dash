@@ -29,6 +29,7 @@ function useI18nValue(props: {
     [locale],
   );
   const hourCycle: 12 | 24 = 24;
+  const currentYear = new Date().getFullYear();
 
   const shortDateFormatter = useMemo(
     () =>
@@ -50,6 +51,28 @@ function useI18nValue(props: {
         timeZone,
       }),
     [locale, timeZone],
+  );
+
+  const shortDateOnlyFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        timeZone: "UTC",
+      }),
+    [locale],
+  );
+
+  const longDateOnlyFormatter = useMemo(
+    () =>
+      new Intl.DateTimeFormat(locale, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        timeZone: "UTC",
+      }),
+    [locale],
   );
 
   const longDateTimeFormatter = useMemo(
@@ -142,6 +165,12 @@ function useI18nValue(props: {
       percent: percentFormatter.format,
       shortDate: shortDateFormatter.format,
       longDate: longDateFormatter.format,
+      dateOnly: (value: string) => {
+        const date = new Date(`${value}T00:00:00Z`);
+        return date.getUTCFullYear() === currentYear
+          ? shortDateOnlyFormatter.format(date)
+          : longDateOnlyFormatter.format(date);
+      },
       longDateTime: longDateTimeFormatter.format,
       month: monthFormatter.format,
       monthYear: monthYearFormatter.format,

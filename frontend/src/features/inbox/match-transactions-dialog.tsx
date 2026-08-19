@@ -237,7 +237,5 @@ function Source(props: { row: InboxItem }) {
 
 function ListDate(props: { date: string }) {
   const { f } = useI18n();
-  const date = new Date(props.date);
-  const isCurrentYear = new Date().getFullYear() === date.getFullYear();
-  return <>{isCurrentYear ? f.shortDate(date) : f.longDate(date)}</>;
+  return <>{f.dateOnly(props.date)}</>;
 }
