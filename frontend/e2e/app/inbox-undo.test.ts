@@ -33,7 +33,6 @@ async function importRow(
   const response = await page.request.post("/api/v1/imports", {
     multipart: {
       bucket_id: bucketID,
-      timezone: "Europe/Helsinki",
       file: {
         name: "export.csv",
         mimeType: "text/csv",

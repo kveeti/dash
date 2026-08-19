@@ -37,7 +37,6 @@ func importCSVFormat(t *testing.T, app *testApp, bucketID, _ string, csv string)
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	require.NoError(t, mw.WriteField("bucket_id", bucketID))
-	require.NoError(t, mw.WriteField("timezone", "Europe/Helsinki"))
 	fw, err := mw.CreateFormFile("file", "export.csv")
 	require.NoError(t, err)
 	_, err = fw.Write([]byte(csv))
@@ -269,13 +268,17 @@ func TestImportCollectsRowErrors(t *testing.T) {
 	csv := nordeaHeader +
 		nordeaRow("2026/07/01", "-12,34", "K-Market", "Groceries") +
 		nordeaRow("bad-date", "-1,00", "Broken", "x") +
-		nordeaRow("2026/07/03", "50,00", "Refund", "y")
+		nordeaRow("2026/07/03", "50,00", "Refund", "y") +
+		"2026-07-04,2026-07-04 12:00:00,-1.00,EUR,No offset,z\n" +
+		",2026-07-05T12:00:00Z,-1.00,EUR,UTC timestamp,z\n"
 
 	// Parsing is async now, so per-row errors surface on the finished report.
 	rep := doImport(t, app, bank, csv)
-	require.Equal(t, 2, rep.Imported)
-	require.Len(t, rep.ParseErrors, 1)
+	require.Equal(t, 3, rep.Imported)
+	require.Len(t, rep.ParseErrors, 2)
 	require.Equal(t, 3, rep.ParseErrors[0].Line)
+	require.Equal(t, 5, rep.ParseErrors[1].Line)
+	require.Equal(t, "invalid occurred_at: must be an RFC3339 UTC timestamp", rep.ParseErrors[1].Error)
 }
 
 func TestImportRejectsNonNordeaFile(t *testing.T) {

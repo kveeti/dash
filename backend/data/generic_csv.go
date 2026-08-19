@@ -29,7 +29,6 @@ type RowError struct {
 
 type GenericCSVParser struct {
 	reader     *csv.Reader
-	loc        *time.Location
 	currencies map[string]int
 	line       int
 	row        ParsedRow
@@ -37,10 +36,10 @@ type GenericCSVParser struct {
 	err        error
 }
 
-func NewGenericCSVParser(r io.Reader, loc *time.Location, currencies map[string]int) *GenericCSVParser {
+func NewGenericCSVParser(r io.Reader, currencies map[string]int) *GenericCSVParser {
 	reader := csv.NewReader(r)
 	reader.FieldsPerRecord = -1
-	return &GenericCSVParser{reader: reader, loc: loc, currencies: currencies}
+	return &GenericCSVParser{reader: reader, currencies: currencies}
 }
 
 func (p *GenericCSVParser) Next() bool {
@@ -61,7 +60,7 @@ func (p *GenericCSVParser) Next() bool {
 			p.err = err
 			return false
 		}
-		row, err := parseGenericCSVRow(record, p.loc, p.currencies)
+		row, err := parseGenericCSVRow(record, p.currencies)
 		if err != nil {
 			p.errs = append(p.errs, RowError{Line: p.line, Error: err.Error()})
 			continue
@@ -89,7 +88,7 @@ func ValidGenericCSVHeader(line string) bool {
 	return true
 }
 
-func parseGenericCSVRow(columns []string, loc *time.Location, currencies map[string]int) (ParsedRow, error) {
+func parseGenericCSVRow(columns []string, currencies map[string]int) (ParsedRow, error) {
 	if len(columns) != len(genericCSVHeader) {
 		return ParsedRow{}, fmt.Errorf("expected %d columns, got %d", len(genericCSVHeader), len(columns))
 	}
@@ -100,10 +99,11 @@ func parseGenericCSVRow(columns []string, loc *time.Location, currencies map[str
 	if value := column(1); value != "" {
 		parsed, err := time.Parse(time.RFC3339, value)
 		if err != nil {
-			parsed, err = time.ParseInLocation("2006-01-02 15:04:05", value, loc)
-			if err != nil {
-				return ParsedRow{}, fmt.Errorf("invalid occurred_at: %s", value)
-			}
+			return ParsedRow{}, fmt.Errorf("invalid occurred_at: must be an RFC3339 UTC timestamp")
+		}
+		_, offset := parsed.Zone()
+		if offset != 0 {
+			return ParsedRow{}, fmt.Errorf("invalid occurred_at: must be an RFC3339 UTC timestamp")
 		}
 		sourceTime = parsed
 		utc := parsed.UTC()

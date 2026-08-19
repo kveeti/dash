@@ -40,9 +40,6 @@ async function upload(page: Page, input: { csv?: string } = {}) {
   } else {
     await page.getByRole("option", { name: 'Asset "E2E Checking"' }).click();
   }
-  await expect(page.getByLabel("Timestamps without an offset")).toHaveValue(
-    "Europe/Helsinki",
-  );
   const created = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/v1/imports") &&

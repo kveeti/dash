@@ -130,11 +130,10 @@ export function useCreateImportMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { file: File; bucketId: string; timezone: string }) => {
+    mutationFn: (input: { file: File; bucketId: string }) => {
       const form = new FormData();
       form.append("file", input.file);
       form.append("bucket_id", input.bucketId);
-      form.append("timezone", input.timezone);
       return api<ImportResult>("/api/v1/imports", {
         method: "POST",
         body: form,

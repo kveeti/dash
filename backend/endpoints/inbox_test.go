@@ -379,8 +379,8 @@ func TestRestoreInboxRejectsAnotherUsersRows(t *testing.T) {
 	batchID := data.NewPrivateID()
 	rowID := data.NewPrivateID()
 	_, err := app.d.Users.Exec(`insert into import_batches
-		(id, user_id, bucket_id, source, filename, timezone, created_at, status)
-		values ($1, $2, $3, 'csv', 'other.csv', 'Europe/Helsinki', now(), 'done')`, batchID, otherUserID, assetID)
+		(id, user_id, bucket_id, source, filename, created_at, status)
+		values ($1, $2, $3, 'csv', 'other.csv', now(), 'done')`, batchID, otherUserID, assetID)
 	require.NoError(t, err)
 	_, err = app.d.Users.Exec(`insert into import_rows
 		(id, batch_id, occurred_on, amount, currency, counterparty, note, dedup_hash, status)
@@ -899,8 +899,8 @@ func TestMatchInboxRejectsAnotherUsersRow(t *testing.T) {
 	otherBatchID := data.NewPrivateID()
 	otherRowID := data.NewPrivateID()
 	_, err := app.d.Users.Exec(`insert into import_batches
-		(id, user_id, bucket_id, source, filename, timezone, created_at, status)
-		values ($1, $2, $3, 'csv', 'other.csv', 'Europe/Helsinki', now(), 'done')`,
+		(id, user_id, bucket_id, source, filename, created_at, status)
+		values ($1, $2, $3, 'csv', 'other.csv', now(), 'done')`,
 		otherBatchID, otherUserID, otherAccountID)
 	require.NoError(t, err)
 	_, err = app.d.Users.Exec(`insert into import_rows

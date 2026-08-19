@@ -130,12 +130,12 @@ create table if not exists import_batches (
     bucket_id uuid not null references buckets(id),
     source text not null,
     filename text not null,
-    timezone text not null,
     created_at timestamptz not null,
     status text not null default 'uploaded' check (status in ('uploaded', 'processing', 'queued', 'syncing', 'done', 'failed')),
     error text,
     parse_errors jsonb
 );
+alter table import_batches drop column if exists timezone;
 create index if not exists idx_import_batches_user on import_batches(user_id);
 create index if not exists idx_import_batches_claim on import_batches(created_at) where status = 'uploaded';
 create index if not exists idx_import_batches_sync_claim on import_batches(created_at) where status = 'queued';

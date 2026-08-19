@@ -53,8 +53,8 @@ func seedCategorizedTransaction(t *testing.T, app *testApp, occurredAt time.Time
 
 	batchID := data.NewPrivateID()
 	rowID := data.NewPrivateID()
-	_, err := app.d.Users.Exec(`insert into import_batches(id,user_id,bucket_id,source,filename,timezone,created_at,status)
-		values($1,$2,$3,'csv','test.csv','UTC',now(),'done')`, batchID, userID, accountID)
+	_, err := app.d.Users.Exec(`insert into import_batches(id,user_id,bucket_id,source,filename,created_at,status)
+		values($1,$2,$3,'csv','test.csv',now(),'done')`, batchID, userID, accountID)
 	require.NoError(t, err)
 	_, err = app.d.Users.Exec(`insert into import_rows(id,batch_id,occurred_on,occurred_at,amount,currency,counterparty,note,dedup_hash,status)
 		values($1,$2,$3::date,$4,$5,$6,$7,'',$1::uuid::text,'pending')`,

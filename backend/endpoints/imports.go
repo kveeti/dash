@@ -66,10 +66,6 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 		if err := validateUUID("bucket id", bucketID); err != nil {
 			return err
 		}
-		timezone := r.FormValue("timezone")
-		if _, err := time.LoadLocation(timezone); err != nil || timezone == "" {
-			return NewErr("valid timezone is required", http.StatusBadRequest)
-		}
 		file, header, err := r.FormFile("file")
 		if err != nil {
 			return NewErr("file is required", http.StatusBadRequest)
@@ -108,7 +104,7 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			return NewUnexpectedErr("temp seek: %w", err)
 		}
 
-		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, "csv", header.Filename, timezone, tmp)
+		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, "csv", header.Filename, tmp)
 		if err != nil {
 			return mapImportErr(err)
 		}

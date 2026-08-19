@@ -54,7 +54,6 @@ export async function createTransaction(
     page,
     input.accountId,
     nordeaRow(input.date.replaceAll("-", "/"), amount, input.counterparty),
-    "UTC",
   );
 
   const inboxResponse = await page.request.get("/api/v1/inbox");
@@ -75,16 +74,10 @@ export async function createTransaction(
   )!;
 }
 
-export async function importNordea(
-  page: Page,
-  bucketId: string,
-  rows: string,
-  timezone = "Europe/Helsinki",
-) {
+export async function importNordea(page: Page, bucketId: string, rows: string) {
   const response = await page.request.post("/api/v1/imports", {
     multipart: {
       bucket_id: bucketId,
-      timezone,
       file: {
         name: "transactions.csv",
         mimeType: "text/csv",

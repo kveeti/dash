@@ -11,7 +11,6 @@ import {
 import { Button } from "../../ui/button/button";
 import { Field } from "../../ui/input/field";
 import { FileInput } from "../../ui/input/file-input";
-import { Select } from "../../ui/input/select";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
 import { useImportDrop } from "./import-drop-context";
@@ -19,7 +18,6 @@ import { useImportDrop } from "./import-drop-context";
 const schema = v.object({
   file: v.instance(File, "Choose a file"),
   bucket: v.pipe(v.string(), v.nonEmpty("Select an account")),
-  timezone: v.pipe(v.string(), v.nonEmpty("Select a timezone")),
 });
 
 export default function ImportsPage() {
@@ -44,16 +42,7 @@ function ImportForm() {
   const buckets = useBucketsQuery();
   const mutation = useCreateImportMutation();
   const { file: droppedFile, clearFile: clearDroppedFile } = useImportDrop();
-  const { timeZone } = useI18n();
-  const timezones = [
-    timeZone,
-    ...Intl.supportedValuesOf("timeZone").filter((tz) => tz !== timeZone),
-  ];
-
-  const form = useForm({
-    schema,
-    initialInput: { timezone: timeZone },
-  });
+  const form = useForm({ schema });
 
   useEffect(() => {
     if (!droppedFile) return;
@@ -67,7 +56,6 @@ function ImportForm() {
       await mutation.mutateAsync({
         file: values.file,
         bucketId: values.bucket,
-        timezone: values.timezone,
       });
     } catch {
       // surfaced via mutation.isError below
@@ -105,20 +93,6 @@ function ImportForm() {
                 onPick={(bucket) => field.onChange(bucket.id)}
               />
             </div>
-          </Field>
-        )}
-      </FormField>
-
-      <FormField of={form} path={["timezone"]}>
-        {(field) => (
-          <Field label="Timestamps without an offset" error={field.errors?.[0]}>
-            <Select {...field.props}>
-              {timezones.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </Select>
           </Field>
         )}
       </FormField>

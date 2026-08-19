@@ -22,7 +22,6 @@ type ImportBatch struct {
 	BucketID    string
 	Source      string
 	Filename    string
-	Timezone    string
 	CreatedAt   time.Time
 	Status      string
 	Error       *string
@@ -61,8 +60,8 @@ type DupTarget struct {
 }
 
 // CreateImport stores an uploaded CSV and queues its import batch.
-func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filename, timezone string, r io.Reader) (*ImportBatch, error) {
-	batch := ImportBatch{ID: NewPrivateID(), UserID: userID, BucketID: bucketID, Source: source, Filename: filename, Timezone: timezone, CreatedAt: time.Now().UTC(), Status: "uploaded"}
+func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filename string, r io.Reader) (*ImportBatch, error) {
+	batch := ImportBatch{ID: NewPrivateID(), UserID: userID, BucketID: bucketID, Source: source, Filename: filename, CreatedAt: time.Now().UTC(), Status: "uploaded"}
 
 	var tx *sql.Tx
 	var err error
@@ -105,9 +104,9 @@ func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filen
 	err = tx.QueryRowContext(ctx, `
 		with added as (
 			insert into import_batches (
-				id, user_id, bucket_id, source, filename, timezone, created_at, status
+				id, user_id, bucket_id, source, filename, created_at, status
 			)
-			select $1, $2, $3, $4, $5, $6, $7, 'uploaded'
+			select $1, $2, $3, $4, $5, $6, 'uploaded'
 			from buckets
 			where id = $3
 			  and owner_user_id = $2
@@ -123,7 +122,7 @@ func (d *Data) CreateImport(ctx context.Context, userID, bucketID, source, filen
 		)
 		select count(*)
 		from added
-	`, batch.ID, batch.UserID, batch.BucketID, batch.Source, batch.Filename, batch.Timezone, batch.CreatedAt).Scan(&inserted)
+	`, batch.ID, batch.UserID, batch.BucketID, batch.Source, batch.Filename, batch.CreatedAt).Scan(&inserted)
 	if err != nil {
 		return nil, err
 	}

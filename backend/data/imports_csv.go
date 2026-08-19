@@ -97,14 +97,13 @@ func (d *Data) claimCSVImport(ctx context.Context) (ImportBatch, bool, error) {
 		update import_batches
 		set status = 'processing'
 		where id in (select id from ready_batch)
-		returning id, user_id, bucket_id, source, filename, timezone
+		returning id, user_id, bucket_id, source, filename
 	`).Scan(
 		&batch.ID,
 		&batch.UserID,
 		&batch.BucketID,
 		&batch.Source,
 		&batch.Filename,
-		&batch.Timezone,
 	)
 	if err == sql.ErrNoRows {
 		return ImportBatch{}, false, nil
@@ -145,10 +144,6 @@ func (d *Data) importCSVWithRetry(ctx context.Context, batch ImportBatch) (int, 
 	if batch.Source != "csv" {
 		return 0, 0, nil, fmt.Errorf("unsupported file import source %q", batch.Source)
 	}
-	location, err := time.LoadLocation(batch.Timezone)
-	if err != nil {
-		return 0, 0, nil, fmt.Errorf("invalid batch timezone %q: %w", batch.Timezone, err)
-	}
 	currencies, err := d.CurrencyExponents(ctx)
 	if err != nil {
 		return 0, 0, nil, err
@@ -160,7 +155,7 @@ func (d *Data) importCSVWithRetry(ctx context.Context, batch ImportBatch) (int, 
 		if err != nil {
 			return 0, 0, nil, err
 		}
-		parser := NewGenericCSVParser(file, location, currencies)
+		parser := NewGenericCSVParser(file, currencies)
 		added, duplicates, err := d.importCSV(ctx, batch, parser)
 		file.Close()
 		if err == nil {

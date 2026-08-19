@@ -125,9 +125,9 @@ func (d *Data) EnqueueEnableBankingSyncs(ctx context.Context, userID string, req
 			  and requested.identification_hash <> ''
 		), created_batches as (
 			insert into import_batches (
-				id, user_id, bucket_id, source, filename, timezone, created_at, status
+				id, user_id, bucket_id, source, filename, created_at, status
 			)
-			select batch_id, $1, bucket_id, $2, filename, 'UTC', $9, 'queued'
+			select batch_id, $1, bucket_id, $2, filename, $9, 'queued'
 			from mapped_accounts
 			returning id
 		), created_syncs as (

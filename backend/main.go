@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"money/backend/config"
 	"os"
-	_ "time/tzdata" // embed the IANA tz database so import timezone parsing works on any image
+	_ "time/tzdata" // embed the IANA tz database for date filters and stats
 )
 
 func main() {
