@@ -6,8 +6,6 @@ import (
 	"money/backend/state"
 	"net/http"
 	"time"
-
-	"github.com/google/uuid"
 )
 
 type inboxRowResponse struct {
@@ -87,7 +85,11 @@ func HandleGetInboxRow(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		row, err := state.Data.GetInboxRow(r.Context(), userID, r.PathValue("id"))
+		id := r.PathValue("id")
+		if err := validateUUID("inbox row id", id); err != nil {
+			return err
+		}
+		row, err := state.Data.GetInboxRow(r.Context(), userID, id)
 		if err != nil {
 			return mapTransactionErr(err)
 		}
@@ -100,6 +102,10 @@ func HandleSplitInboxRow(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)
 		if err != nil {
+			return err
+		}
+		id := r.PathValue("id")
+		if err := validateUUID("inbox row id", id); err != nil {
 			return err
 		}
 		var body struct {
@@ -115,15 +121,15 @@ func HandleSplitInboxRow(state *state.State, getUserID GetUserID) Handler {
 		}
 		postings := make([]data.InboxSplitPosting, len(body.Postings))
 		for i, posting := range body.Postings {
-			if _, parseErr := uuid.Parse(posting.BucketID); parseErr != nil {
-				return NewErr("invalid bucket id", http.StatusBadRequest)
+			if err := validateUUID("bucket id", posting.BucketID); err != nil {
+				return err
 			}
 			postings[i] = data.InboxSplitPosting{
 				BucketID: posting.BucketID,
 				Amount:   posting.Amount,
 			}
 		}
-		if err = state.Data.SplitInboxRow(r.Context(), userID, r.PathValue("id"), postings); err != nil {
+		if err = state.Data.SplitInboxRow(r.Context(), userID, id, postings); err != nil {
 			return mapTransactionErr(err)
 		}
 		Json(w, map[string]bool{"split": true})
@@ -137,7 +143,11 @@ func HandleGetInboxMatches(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		source, matches, err := state.Data.GetInboxMatches(r.Context(), userID, r.PathValue("id"), r.URL.Query().Get("q"))
+		id := r.PathValue("id")
+		if err := validateUUID("inbox row id", id); err != nil {
+			return err
+		}
+		source, matches, err := state.Data.GetInboxMatches(r.Context(), userID, id, r.URL.Query().Get("q"))
 		if err != nil {
 			return mapTransactionErr(err)
 		}
@@ -160,13 +170,20 @@ func HandleMatchInboxRows(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
+		id := r.PathValue("id")
+		if err := validateUUID("inbox row id", id); err != nil {
+			return err
+		}
 		var body struct {
 			MatchID string `json:"match_id"`
 		}
 		if json.NewDecoder(r.Body).Decode(&body) != nil || body.MatchID == "" {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
-		if err := state.Data.MatchInboxRows(r.Context(), userID, r.PathValue("id"), body.MatchID); err != nil {
+		if err := validateUUID("match id", body.MatchID); err != nil {
+			return err
+		}
+		if err := state.Data.MatchInboxRows(r.Context(), userID, id, body.MatchID); err != nil {
 			return mapTransactionErr(err)
 		}
 		Json(w, map[string]bool{"matched": true})
@@ -185,6 +202,9 @@ func HandleRestoreInbox(state *state.State, getUserID GetUserID) Handler {
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
+		}
+		if err := validateUUIDs("inbox row id", body.RowIDs); err != nil {
+			return err
 		}
 		restored, err := state.Data.RestoreInboxRows(r.Context(), userID, body.RowIDs)
 		if err != nil {
@@ -214,6 +234,14 @@ func HandleCategorizeInbox(state *state.State, getUserID GetUserID) Handler {
 		}
 		if (body.BucketID == "") == (body.Bucket == nil) {
 			return NewErr("provide either bucket_id or bucket", http.StatusBadRequest)
+		}
+		if err := validateUUIDs("inbox row id", body.RowIDs); err != nil {
+			return err
+		}
+		if body.BucketID != "" {
+			if err := validateUUID("bucket id", body.BucketID); err != nil {
+				return err
+			}
 		}
 
 		var bucket *data.Bucket

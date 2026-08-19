@@ -70,6 +70,9 @@ func parseCursor(r *http.Request) (time.Time, string, error) {
 	if id == "" {
 		return time.Time{}, "", nil
 	}
+	if err := validateUUID("before_id", id); err != nil {
+		return time.Time{}, "", err
+	}
 	date, err := time.Parse(dateLayout, r.URL.Query().Get("before_date"))
 	if err != nil {
 		return time.Time{}, "", NewErr("before_date must be an RFC3339 timestamp", http.StatusBadRequest)
@@ -81,6 +84,9 @@ func parseDayCursor(r *http.Request) (time.Time, string, error) {
 	id := r.URL.Query().Get("before_id")
 	if id == "" {
 		return time.Time{}, "", nil
+	}
+	if err := validateUUID("before_id", id); err != nil {
+		return time.Time{}, "", err
 	}
 	date, err := time.Parse(time.DateOnly, r.URL.Query().Get("before_date"))
 	if err != nil {
@@ -161,6 +167,10 @@ func HandlePatchTransaction(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
+		id := r.PathValue("id")
+		if err := validateUUID("transaction id", id); err != nil {
+			return err
+		}
 		var body struct {
 			Memo *string `json:"memo"`
 		}
@@ -169,10 +179,10 @@ func HandlePatchTransaction(state *state.State, getUserID GetUserID) Handler {
 		if decoder.Decode(&body) != nil || body.Memo == nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
-		if err = state.Data.PatchTransactionMemo(r.Context(), userID, r.PathValue("id"), *body.Memo); err != nil {
+		if err = state.Data.PatchTransactionMemo(r.Context(), userID, id, *body.Memo); err != nil {
 			return mapTransactionErr(err)
 		}
-		txn, ps, err := state.Data.GetTransaction(r.Context(), userID, r.PathValue("id"))
+		txn, ps, err := state.Data.GetTransaction(r.Context(), userID, id)
 		if err != nil {
 			return mapTransactionErr(err)
 		}
@@ -186,6 +196,10 @@ func HandlePatchPosting(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
+		id := r.PathValue("id")
+		if err := validateUUID("posting id", id); err != nil {
+			return err
+		}
 		var body struct {
 			BucketID *string `json:"bucket_id"`
 		}
@@ -194,7 +208,10 @@ func HandlePatchPosting(state *state.State, getUserID GetUserID) Handler {
 		if decoder.Decode(&body) != nil || body.BucketID == nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
-		if err = state.Data.CategorizePosting(r.Context(), userID, r.PathValue("id"), *body.BucketID); err != nil {
+		if err := validateUUID("bucket id", *body.BucketID); err != nil {
+			return err
+		}
+		if err = state.Data.CategorizePosting(r.Context(), userID, id, *body.BucketID); err != nil {
 			return mapTransactionErr(err)
 		}
 		Json(w, map[string]bool{"updated": true})
@@ -213,6 +230,12 @@ func HandleBulkCategorize(state *state.State, getUserID GetUserID) Handler {
 		}
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
+		}
+		if err := validateUUIDs("transaction id", body.TransactionIDs); err != nil {
+			return err
+		}
+		if err := validateUUID("bucket id", body.BucketID); err != nil {
+			return err
 		}
 		n, err := state.Data.BulkCategorize(r.Context(), userID, body.TransactionIDs, body.BucketID)
 		if err != nil {
@@ -234,6 +257,9 @@ func HandleRemoveTransactions(state *state.State, getUserID GetUserID) Handler {
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
+		if err := validateUUIDs("transaction id", body.TransactionIDs); err != nil {
+			return err
+		}
 		removed, restored, err := state.Data.RemoveTransactions(r.Context(), userID, body.TransactionIDs)
 		if err != nil {
 			return mapTransactionErr(err)
@@ -248,7 +274,11 @@ func HandleDeleteTransaction(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		if err = state.Data.DeleteTransaction(r.Context(), userID, r.PathValue("id")); err != nil {
+		id := r.PathValue("id")
+		if err := validateUUID("transaction id", id); err != nil {
+			return err
+		}
+		if err = state.Data.DeleteTransaction(r.Context(), userID, id); err != nil {
 			return mapTransactionErr(err)
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -261,7 +291,11 @@ func HandleUnmatchTransfer(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		n, err := state.Data.UnmatchTransfer(r.Context(), userID, r.PathValue("id"))
+		id := r.PathValue("id")
+		if err := validateUUID("transfer match id", id); err != nil {
+			return err
+		}
+		n, err := state.Data.UnmatchTransfer(r.Context(), userID, id)
 		if err != nil {
 			return mapTransactionErr(err)
 		}
@@ -275,7 +309,11 @@ func HandleGetTransaction(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		t, ps, err := state.Data.GetTransaction(r.Context(), userID, r.PathValue("id"))
+		id := r.PathValue("id")
+		if err := validateUUID("transaction id", id); err != nil {
+			return err
+		}
+		t, ps, err := state.Data.GetTransaction(r.Context(), userID, id)
 		if err != nil {
 			return mapTransactionErr(err)
 		}
@@ -457,6 +495,10 @@ func HandleSplitTransaction(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
+		id := r.PathValue("id")
+		if err := validateUUID("transaction id", id); err != nil {
+			return err
+		}
 		var body struct {
 			ExpectedLatestPostingTimestamp string `json:"expected_latest_posting_timestamp"`
 			Postings                       []struct {
@@ -477,6 +519,14 @@ func HandleSplitTransaction(state *state.State, getUserID GetUserID) Handler {
 		}
 		input := make([]data.SplitPosting, len(body.Postings))
 		for i, p := range body.Postings {
+			if p.ID != "" {
+				if err := validateUUID("posting id", p.ID); err != nil {
+					return err
+				}
+			}
+			if err := validateUUID("bucket id", p.BucketID); err != nil {
+				return err
+			}
 			var date *time.Time
 			if p.StatsDate != nil && *p.StatsDate != "" {
 				x, e := time.Parse("2006-01-02", *p.StatsDate)
@@ -487,10 +537,10 @@ func HandleSplitTransaction(state *state.State, getUserID GetUserID) Handler {
 			}
 			input[i] = data.SplitPosting{ID: p.ID, BucketID: p.BucketID, Amount: p.Amount, Currency: p.Currency, StatsDate: date, Memo: p.Memo}
 		}
-		if err = state.Data.SplitTransaction(r.Context(), userID, r.PathValue("id"), expectedLatestPostingTimestamp, input); err != nil {
+		if err = state.Data.SplitTransaction(r.Context(), userID, id, expectedLatestPostingTimestamp, input); err != nil {
 			return mapTransactionErr(err)
 		}
-		txn, ps, err := state.Data.GetTransaction(r.Context(), userID, r.PathValue("id"))
+		txn, ps, err := state.Data.GetTransaction(r.Context(), userID, id)
 		if err != nil {
 			return mapTransactionErr(err)
 		}

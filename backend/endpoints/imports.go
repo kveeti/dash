@@ -63,6 +63,9 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 		if bucketID == "" {
 			return NewErr("bucket_id is required", http.StatusBadRequest)
 		}
+		if err := validateUUID("bucket id", bucketID); err != nil {
+			return err
+		}
 		timezone := r.FormValue("timezone")
 		if _, err := time.LoadLocation(timezone); err != nil || timezone == "" {
 			return NewErr("valid timezone is required", http.StatusBadRequest)
@@ -168,7 +171,11 @@ func HandleGetImport(state *state.State, getUserID GetUserID) Handler {
 			return err
 		}
 
-		batch, err := state.Data.GetImportStatus(r.Context(), userID, r.PathValue("id"))
+		id := r.PathValue("id")
+		if err := validateUUID("import id", id); err != nil {
+			return err
+		}
+		batch, err := state.Data.GetImportStatus(r.Context(), userID, id)
 		if err != nil {
 			return mapImportErr(err)
 		}
@@ -202,6 +209,10 @@ func HandleListDuplicates(state *state.State, getUserID GetUserID) Handler {
 			return err
 		}
 
+		id := r.PathValue("id")
+		if err := validateUUID("import id", id); err != nil {
+			return err
+		}
 		limit := duplicatesPageSize
 		if v := r.URL.Query().Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
@@ -209,8 +220,13 @@ func HandleListDuplicates(state *state.State, getUserID GetUserID) Handler {
 			}
 		}
 		cursor := r.URL.Query().Get("cursor")
+		if cursor != "" {
+			if err := validateUUID("cursor", cursor); err != nil {
+				return err
+			}
+		}
 
-		rows, err := state.Data.ListDuplicates(r.Context(), userID, r.PathValue("id"), cursor, limit)
+		rows, err := state.Data.ListDuplicates(r.Context(), userID, id, cursor, limit)
 		if err != nil {
 			return NewUnexpectedErr("error listing duplicates: %w", err)
 		}
@@ -258,7 +274,11 @@ func HandleForceImportRow(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		if err := state.Data.ForceImport(r.Context(), userID, r.PathValue("id")); err != nil {
+		id := r.PathValue("id")
+		if err := validateUUID("import row id", id); err != nil {
+			return err
+		}
+		if err := state.Data.ForceImport(r.Context(), userID, id); err != nil {
 			return mapImportErr(err)
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -272,7 +292,11 @@ func HandleDeleteImport(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		if err := state.Data.DeleteImport(r.Context(), userID, r.PathValue("id")); err != nil {
+		id := r.PathValue("id")
+		if err := validateUUID("import id", id); err != nil {
+			return err
+		}
+		if err := state.Data.DeleteImport(r.Context(), userID, id); err != nil {
 			return mapImportErr(err)
 		}
 		w.WriteHeader(http.StatusNoContent)

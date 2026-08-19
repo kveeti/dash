@@ -21,6 +21,9 @@ func HandleAddTransactionTag(state *state.State, getUserID GetUserID) Handler {
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
 		}
+		if err := validateUUIDs("posting id", body.PostingIDs); err != nil {
+			return err
+		}
 		count, err := state.Data.AddPostingTag(r.Context(), userID, body.PostingIDs, body.Tag)
 		if err != nil {
 			return mapTransactionErr(err)
@@ -39,6 +42,9 @@ func HandleRemoveTransactionTag(state *state.State, getUserID GetUserID) Handler
 		var body tagBody
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			return NewErr("invalid request body", http.StatusBadRequest)
+		}
+		if err := validateUUIDs("posting id", body.PostingIDs); err != nil {
+			return err
 		}
 		count, err := state.Data.RemovePostingTag(r.Context(), userID, body.PostingIDs, body.Tag)
 		if err != nil {

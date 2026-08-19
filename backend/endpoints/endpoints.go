@@ -14,6 +14,8 @@ import (
 	"money/backend/auth"
 	"money/backend/data"
 	"money/backend/state"
+
+	"github.com/google/uuid"
 )
 
 func GetRouter(state *state.State, dist fs.FS) http.Handler {
@@ -207,6 +209,22 @@ func (e *ApiError) Error() string {
 }
 
 type Handler func(w http.ResponseWriter, r *http.Request) error
+
+func validateUUID(name, value string) error {
+	if _, err := uuid.Parse(value); err != nil {
+		return NewErr("invalid "+name, http.StatusBadRequest)
+	}
+	return nil
+}
+
+func validateUUIDs(name string, values []string) error {
+	for _, value := range values {
+		if err := validateUUID(name, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func NewHandler(handler Handler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
