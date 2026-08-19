@@ -2,11 +2,14 @@ package endpoints
 
 import (
 	"encoding/json"
+	"errors"
 	"money/backend/data"
 	"money/backend/state"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // userCreatableKinds are the bucket kinds a user may create directly.
@@ -87,6 +90,11 @@ func HandleCreateBucket(state *state.State, getUserID GetUserID) Handler {
 		if body.Name == "" {
 			return NewErr("name is required", http.StatusBadRequest)
 		}
+		if body.ParentID != nil {
+			if _, err := uuid.Parse(*body.ParentID); err != nil {
+				return NewErr(data.ErrInvalidBucketParent.Error(), http.StatusBadRequest)
+			}
+		}
 
 		bucket := data.Bucket{
 			ID:          data.NewPrivateID(),
@@ -97,6 +105,9 @@ func HandleCreateBucket(state *state.State, getUserID GetUserID) Handler {
 			CreatedAt:   time.Now(),
 		}
 		if err := state.Data.CreateBucket(r.Context(), bucket); err != nil {
+			if errors.Is(err, data.ErrInvalidBucketParent) {
+				return NewErr(err.Error(), http.StatusBadRequest)
+			}
 			return NewUnexpectedErr("error creating bucket: %w", err)
 		}
 

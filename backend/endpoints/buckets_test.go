@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"money/backend/auth"
+	"money/backend/data"
 
 	"github.com/stretchr/testify/require"
 )
@@ -113,6 +115,68 @@ func TestSearchBuckets(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	for _, bucket := range decodeBuckets(t, resp) {
 		require.NotEqual(t, "clearing", bucket["kind"])
+	}
+}
+
+func TestCreateBucketWithParent(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	parentID := createBucket(t, app, "expense", "Food")
+
+	resp := authed(t, app, http.MethodPost, "/api/v1/buckets", map[string]any{
+		"kind": "expense", "name": "Groceries", "parent_id": parentID,
+	})
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var child map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&child))
+	require.Equal(t, parentID, child["parent_id"])
+}
+
+func TestCreateBucketRejectsInvalidParent(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	expenseID := createBucket(t, app, "expense", "Food")
+	incomeID := createBucket(t, app, "income", "Salary")
+	assetID := createBucket(t, app, "asset", "Bank")
+
+	childResponse := authed(t, app, http.MethodPost, "/api/v1/buckets", map[string]any{
+		"kind": "expense", "name": "Groceries", "parent_id": expenseID,
+	})
+	require.Equal(t, http.StatusCreated, childResponse.StatusCode)
+	var child map[string]any
+	require.NoError(t, json.NewDecoder(childResponse.Body).Decode(&child))
+	childID := child["id"].(string)
+
+	otherUserID := data.NewPrivateID()
+	require.NoError(t, app.d.CreateUser(t.Context(), data.User{
+		ID: otherUserID, Subject: "other-bucket-parent", Issuer: "test",
+		Email: "other@example.com", CreatedAt: time.Now(),
+	}))
+	otherParentID := data.NewPrivateID()
+	require.NoError(t, app.d.CreateBucket(t.Context(), data.Bucket{
+		ID: otherParentID, OwnerUserID: otherUserID, Kind: data.KindExpense,
+		Name: "Private", CreatedAt: time.Now(),
+	}))
+
+	hiddenParentID := data.NewPrivateID()
+	var userID string
+	require.NoError(t, app.d.Users.QueryRow("select owner_user_id from buckets where id=$1", expenseID).Scan(&userID))
+	require.NoError(t, app.d.CreateBucket(t.Context(), data.Bucket{
+		ID: hiddenParentID, OwnerUserID: userID, Kind: data.KindExpense,
+		Name: "Hidden", Hidden: true, CreatedAt: time.Now(),
+	}))
+
+	for name, body := range map[string]map[string]any{
+		"malformed":       {"kind": "expense", "name": "Bad", "parent_id": "bad"},
+		"missing":         {"kind": "expense", "name": "Bad", "parent_id": data.NewPrivateID()},
+		"wrong kind":      {"kind": "expense", "name": "Bad", "parent_id": incomeID},
+		"non-category":    {"kind": "asset", "name": "Bad", "parent_id": assetID},
+		"nested":          {"kind": "expense", "name": "Bad", "parent_id": childID},
+		"another user":    {"kind": "expense", "name": "Bad", "parent_id": otherParentID},
+		"hidden category": {"kind": "expense", "name": "Bad", "parent_id": hiddenParentID},
+	} {
+		t.Run(name, func(t *testing.T) {
+			resp := authed(t, app, http.MethodPost, "/api/v1/buckets", body)
+			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		})
 	}
 }
 

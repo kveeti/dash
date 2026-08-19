@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 )
 
@@ -18,6 +19,8 @@ const (
 	KindFXConversion BucketKind = "fx_conversion"
 )
 
+var ErrInvalidBucketParent = errors.New("invalid bucket parent")
+
 type Bucket struct {
 	ID                      string
 	OwnerUserID             string
@@ -32,16 +35,37 @@ type Bucket struct {
 }
 
 func insertBucketTx(ctx context.Context, tx *sql.Tx, b Bucket) error {
-	if _, err := tx.ExecContext(ctx, `
+	result, err := tx.ExecContext(ctx, `
 		insert into buckets (
 			id, owner_user_id, kind, name, parent_id, counterpart_user_id, iban,
 			active_bank_integration_id, hidden, created_at
 		)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		select $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+		where $5::uuid is null
+		   or (
+			$3 in ('expense', 'income')
+			and exists (
+				select 1
+				from buckets parent
+				where parent.id = $5
+				  and parent.owner_user_id = $2
+				  and parent.kind = $3
+				  and parent.parent_id is null
+				  and not parent.hidden
+			)
+		   )
 	`,
 		b.ID, b.OwnerUserID, b.Kind, b.Name, b.ParentID, b.CounterpartUserID, b.IBAN,
-		b.ActiveBankIntegrationID, b.Hidden, b.CreatedAt.UTC()); err != nil {
+		b.ActiveBankIntegrationID, b.Hidden, b.CreatedAt.UTC())
+	if err != nil {
 		return err
+	}
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if inserted == 0 {
+		return ErrInvalidBucketParent
 	}
 	return auditWrite(ctx, tx, b.OwnerUserID, "buckets", b.ID, "insert", nil)
 }
