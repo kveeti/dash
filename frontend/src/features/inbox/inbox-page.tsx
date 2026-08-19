@@ -49,21 +49,11 @@ import { useSplitInbox } from "./split-inbox-context";
 import { SplitInboxTransactions } from "./split-inbox-dialog";
 
 export default function InboxPage() {
-  const selection = useSelection();
-
-  return (
-    <InboxUndoProvider selection={selection}>
-      <InboxPageContent selection={selection} />
-    </InboxUndoProvider>
-  );
-}
-
-function InboxPageContent(props: { selection: UseSelectionReturn }) {
   const searchQuery = useSearchParam("q");
   const dateRange = useSearchParam("range");
   const filters = useInboxFilters();
   const queryFilters = useDebouncedAmountFilters(filters);
-  const selection = props.selection;
+  const selection = useSelection();
   const inboxQuery = useInfiniteInboxQuery({
     searchQuery,
     filters: queryFilters,
@@ -75,42 +65,44 @@ function InboxPageContent(props: { selection: UseSelectionReturn }) {
     visibleIds.every((id) => selection.selected.has(id));
 
   return (
-    <div>
-      <Filterbar
-        selectLabel="Select rows"
-        selectMode={selection.selectMode}
-        onSelectMode={(on) =>
-          on ? selection.setSelectMode(true) : selection.exitSelect()
-        }
-        allVisibleSelected={allVisibleSelected}
-        onToggleAll={() =>
-          allVisibleSelected
-            ? selection.drop(visibleIds)
-            : selection.select(visibleIds)
-        }
-        search={searchQuery || undefined}
-        onSearch={(value) => setSearchParam("q", value, { replace: true })}
-        end={<InboxFiltersButton />}
-      />
+    <InboxUndoProvider selection={selection}>
+      <div>
+        <Filterbar
+          selectLabel="Select rows"
+          selectMode={selection.selectMode}
+          onSelectMode={(on) =>
+            on ? selection.setSelectMode(true) : selection.exitSelect()
+          }
+          allVisibleSelected={allVisibleSelected}
+          onToggleAll={() =>
+            allVisibleSelected
+              ? selection.drop(visibleIds)
+              : selection.select(visibleIds)
+          }
+          search={searchQuery || undefined}
+          onSearch={(value) => setSearchParam("q", value, { replace: true })}
+          end={<InboxFiltersButton />}
+        />
 
-      <SplitInboxTransactions>
-        <MatchTransactions>
-          <List
-            selection={selection}
-            searchQuery={searchQuery}
-            dateRange={dateRange}
-            filters={filters}
-            inboxQuery={inboxQuery}
-            inboxItems={inboxItems}
-            visibleIds={visibleIds}
-          />
-        </MatchTransactions>
-      </SplitInboxTransactions>
+        <SplitInboxTransactions>
+          <MatchTransactions>
+            <List
+              selection={selection}
+              searchQuery={searchQuery}
+              dateRange={dateRange}
+              filters={filters}
+              inboxQuery={inboxQuery}
+              inboxItems={inboxItems}
+              visibleIds={visibleIds}
+            />
+          </MatchTransactions>
+        </SplitInboxTransactions>
 
-      <FloatingBar selection={selection} />
+        <FloatingBar selection={selection} />
 
-      <UndoNotice raised={selection.selectMode} />
-    </div>
+        <UndoNotice raised={selection.selectMode} />
+      </div>
+    </InboxUndoProvider>
   );
 }
 

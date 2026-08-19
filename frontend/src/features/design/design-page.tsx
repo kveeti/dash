@@ -8,12 +8,15 @@ import { AnimatedHeight } from "../../ui/animated-height/animated-height";
 import { Button, type ButtonVariant } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
 import {
-  Field,
-  FileInput,
-  Input,
-  InputGroup,
-  Select,
-} from "../../ui/input/input";
+  Dialog,
+  DialogBackdrop,
+  DialogPopup,
+  DialogTitle,
+} from "../../ui/dialog/dialog";
+import { Field, InputGroup } from "../../ui/input/field";
+import { FileInput } from "../../ui/input/file-input";
+import { Input } from "../../ui/input/input";
+import { Select } from "../../ui/input/select";
 
 const alertDialogHandle = createAlertDialogHandle();
 const buttonVariants: ButtonVariant[] = [
@@ -167,6 +170,13 @@ export default function DesignPage() {
       </Section>
 
       <Section
+        title="Dialog"
+        description="A modal surface for focused tasks and information."
+      >
+        <DialogDemo />
+      </Section>
+
+      <Section
         title="Alert dialog"
         description="A modal confirmation for consequential actions."
       >
@@ -218,6 +228,35 @@ function Section(props: {
       </div>
       {props.children}
     </section>
+  );
+}
+
+function DialogDemo() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        Open dialog
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogBackdrop className="bg-black/10" />
+        <DialogPopup className="start-1/2 top-1/2 w-[min(24rem,calc(100vw-1rem))] -translate-y-1/2 gap-4 p-4 text-gray-900">
+          <DialogTitle className="text-md font-semibold">
+            Example dialog
+          </DialogTitle>
+          <p className="text-sm text-gray-700">
+            A standard dialog can hold focused content without asking for
+            confirmation.
+          </p>
+          <div className="flex justify-end">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogPopup>
+      </Dialog>
+    </>
   );
 }
 

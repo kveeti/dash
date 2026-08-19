@@ -13,7 +13,9 @@ import {
 } from "../../api/enablebanking";
 import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
-import { Field, Input, Select } from "../../ui/input/input";
+import { Field } from "../../ui/input/field";
+import { Input } from "../../ui/input/input";
+import { Select } from "../../ui/input/select";
 import { BucketPicker } from "../buckets/bucket-picker";
 
 const connectSchema = v.object({

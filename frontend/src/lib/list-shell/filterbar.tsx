@@ -4,11 +4,11 @@ import {
   useIsPresent,
   useReducedMotion,
 } from "motion/react";
-import { useEffect, useRef, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "../../ui/button/button";
 import { Checkbox } from "../../ui/checkbox/checkbox";
-import { SearchInput } from "../../ui/input/input";
+import { DebouncedSearchInput } from "../../ui/input/search-input";
 
 export function Filterbar(props: {
   selectLabel: string;
@@ -20,14 +20,6 @@ export function Filterbar(props: {
   onSearch: (value: string | undefined) => void;
   end?: ReactNode;
 }) {
-  const debounce = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const reduceMotion = useReducedMotion();
-  useEffect(() => () => clearTimeout(debounce.current), []);
-
-  const transition = reduceMotion
-    ? { duration: 0 }
-    : { duration: 0.22, ease: [0.25, 0.8, 0.25, 1] as const };
-
   return (
     <div className="fixed inset-x-0 bottom-(--nav-height) z-2 border-t border-gray-200 bg-canvas/80 backdrop-blur-md sm:sticky sm:top-[var(--nav-height)] sm:flex sm:items-center sm:border-0">
       <div className="mx-auto flex h-(--filterbar-height) w-full max-w-(--page-width) items-center gap-2 px-3 sm:p-2 sm:px-6">
@@ -42,24 +34,16 @@ export function Filterbar(props: {
               <SelectAllButton
                 allVisibleSelected={props.allVisibleSelected}
                 onClick={props.onToggleAll}
-                transition={transition}
               />
             )}
           </AnimatePresence>
         </div>
         <div className="min-w-0 flex-1">
-          <SearchInput
+          <DebouncedSearchInput
             placeholder="Search..."
             defaultValue={props.search}
-            onChange={(e) => {
-              const value = e.currentTarget.value || undefined;
-              clearTimeout(debounce.current);
-              debounce.current = setTimeout(() => props.onSearch(value), 150);
-            }}
-            onClear={() => {
-              clearTimeout(debounce.current);
-              props.onSearch(undefined);
-            }}
+            onDebouncedChange={(value) => props.onSearch(value || undefined)}
+            onClear={() => props.onSearch(undefined)}
           />
         </div>
         {props.end}
@@ -71,13 +55,14 @@ export function Filterbar(props: {
 function SelectAllButton(props: {
   allVisibleSelected: boolean;
   onClick: () => void;
-  transition: {
-    duration: number;
-    ease?: readonly [number, number, number, number];
-  };
 }) {
   const isPresent = useIsPresent();
   const label = props.allVisibleSelected ? "Deselect all" : "Select all";
+
+  const reduceMotion = useReducedMotion();
+  const transition = reduceMotion
+    ? { duration: 0 }
+    : { duration: 0.22, ease: [0.25, 0.8, 0.25, 1] as const };
 
   return (
     <motion.div
@@ -86,7 +71,7 @@ function SelectAllButton(props: {
       animate={{ width: "auto" }}
       exit={{ width: 0 }}
       layout="size"
-      transition={{ ...props.transition, layout: props.transition }}
+      transition={{ ...transition, layout: transition }}
       inert={!isPresent}
     >
       <div className="pl-2">
@@ -105,7 +90,7 @@ function SelectAllButton(props: {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={props.transition}
+              transition={transition}
             >
               {label}
             </motion.span>

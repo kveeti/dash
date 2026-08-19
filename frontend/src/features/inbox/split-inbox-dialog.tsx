@@ -52,18 +52,16 @@ function SplitInboxDialog(props: { rowId: string; onClose: () => void }) {
       minimumAllocations={2}
       error={row.error?.message ?? split.error?.message}
       onClose={props.onClose}
-      onSubmit={(postings) => {
+      onSubmit={async (postings) => {
         if (split.isPending) return;
-        void (async () => {
-          try {
-            await undo.run([row.data.id], "Split transaction", () =>
-              split.mutateAsync({ rowId: row.data.id, postings }),
-            );
-            props.onClose();
-          } catch {
-            // The dialog keeps the input and shows the mutation error.
-          }
-        })();
+        try {
+          await undo.run([row.data.id], "Split transaction", () =>
+            split.mutateAsync({ rowId: row.data.id, postings }),
+          );
+          props.onClose();
+        } catch {
+          // The dialog keeps the input and shows the mutation error.
+        }
       }}
     />
   );

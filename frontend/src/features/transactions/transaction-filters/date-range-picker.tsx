@@ -3,7 +3,8 @@ import { ChevronDownIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 
 import { AnimatedHeight } from "../../../ui/animated-height/animated-height";
-import { InputTrigger, PopupSearchInput } from "../../../ui/input/input";
+import { InputTrigger } from "../../../ui/input/input-trigger";
+import { PopupSearchInput } from "../../../ui/input/search-input";
 import { dateRanges, type DateRange } from "./date-range";
 
 export function DateRangePicker(props: {

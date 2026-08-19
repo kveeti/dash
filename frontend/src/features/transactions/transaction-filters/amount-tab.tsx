@@ -5,7 +5,8 @@ import { BanknotesIcon } from "@heroicons/react/24/outline";
 import { useCurrenciesQuery } from "../../../api/currencies";
 import { useMeQuery } from "../../../api/user";
 import { setSearchParams, useSearchParam } from "../../../lib/search-param";
-import { Input, Select } from "../../../ui/input/input";
+import { Input } from "../../../ui/input/input";
+import { Select } from "../../../ui/input/select";
 import { TabPanel, TabTrigger } from "./filter-button";
 
 export function Trigger(props: { applied: boolean }) {

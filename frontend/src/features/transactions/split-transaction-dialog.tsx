@@ -1,4 +1,3 @@
-import { Dialog } from "@base-ui/react/dialog";
 import {
   Field as FormField,
   FieldArray,
@@ -17,6 +16,12 @@ import * as v from "valibot";
 import { useBucketsQuery } from "../../api/buckets";
 import { useCurrenciesQuery } from "../../api/currencies";
 import { Button } from "../../ui/button/button";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPopup,
+  DialogTitle,
+} from "../../ui/dialog/dialog";
 import { Input } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
@@ -42,6 +47,8 @@ interface SplitInput {
   amount: string;
 }
 
+const emptySplit = { bucketId: "", amount: "" };
+
 export function SplitTransactionDialog(props: {
   open: boolean;
   source: SplitSource;
@@ -59,33 +66,31 @@ export function SplitTransactionDialog(props: {
   )?.exponent;
 
   return (
-    <Dialog.Root
+    <Dialog
       open={props.open}
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-20 bg-black/10 transition-opacity duration-180 ease-[cubic-bezier(.16,1,.3,1)] data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-120 data-ending-style:ease-[cubic-bezier(.4,0,1,1)] motion-reduce:duration-[1ms]" />
-        <Dialog.Popup
-          ref={popupRef}
-          className="fixed start-1/2 top-1/2 z-21 flex max-h-[calc(100dvh-1rem)] w-[min(30rem,calc(100vw-1rem))] -translate-x-1/2 -translate-y-1/2 flex-col rounded-xl border border-popover-border bg-popover text-base text-gray-900 shadow-float transition-[opacity,scale] duration-240 ease-[cubic-bezier(.16,1,.3,1)] data-starting-style:scale-[.97] data-starting-style:opacity-0 data-ending-style:scale-[.97] data-ending-style:opacity-0 data-ending-style:duration-100 motion-reduce:duration-[1ms]"
-        >
-          <Dialog.Title className="sr-only">Split transaction</Dialog.Title>
-          {exponent === undefined || i18n.isLoading ? (
-            <p className="p-4">Loading transaction…</p>
-          ) : Math.abs(props.source.amount) < 2 ? (
-            <TooSmall source={props.source} onClose={props.onClose} />
-          ) : (
-            <SplitForm
-              {...props}
-              exponent={exponent}
-              portalContainer={popupRef}
-            />
-          )}
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+      <DialogBackdrop className="bg-black/10" />
+      <DialogPopup
+        ref={popupRef}
+        className="start-1/2 top-1/2 max-h-[calc(100dvh-1rem)] w-[min(30rem,calc(100vw-1rem))] -translate-y-1/2 text-gray-900"
+      >
+        <DialogTitle className="sr-only">Split transaction</DialogTitle>
+        {exponent === undefined || i18n.isLoading ? (
+          <p className="p-4">Loading transaction…</p>
+        ) : Math.abs(props.source.amount) < 2 ? (
+          <TooSmall source={props.source} onClose={props.onClose} />
+        ) : (
+          <SplitForm
+            {...props}
+            exponent={exponent}
+            portalContainer={popupRef}
+          />
+        )}
+      </DialogPopup>
+    </Dialog>
   );
 }
 
@@ -118,26 +123,19 @@ function SplitForm(props: {
     },
   });
 
-  function appendTrailingSplit(index: number, value: string) {
-    if (!value) return;
+  function addTrailingSplit(index: number) {
     const postings = getInput(form, { path: ["postings"] }) ?? [];
-    const current = postings[index];
-    if (
-      index === postings.length - 1 &&
-      !current?.bucketId &&
-      !current?.amount
-    ) {
-      insert(form, {
-        path: ["postings"],
-        initialInput: emptySplit(),
-      });
-    }
+    if (index !== postings.length - 1 || isStarted(postings[index])) return;
+    insert(form, {
+      path: ["postings"],
+      initialInput: emptySplit,
+    });
   }
 
   function removeSplit(index: number) {
     const postings = getInput(form, { path: ["postings"] }) ?? [];
     if (postings.length === 1) {
-      setInput(form, { path: ["postings", index], input: emptySplit() });
+      setInput(form, { path: ["postings", index], input: emptySplit });
       return;
     }
     remove(form, { path: ["postings"], at: index });
@@ -215,7 +213,7 @@ function SplitForm(props: {
                                 inputPlaceholder="Filter categories..."
                                 portalContainer={props.portalContainer}
                                 onPick={(bucket) => {
-                                  appendTrailingSplit(index, bucket.id);
+                                  if (bucket.id) addTrailingSplit(index);
                                   field.onChange(bucket.id);
                                 }}
                               />
@@ -235,7 +233,7 @@ function SplitForm(props: {
                               aria-label={`Split ${index + 1} amount`}
                               onChange={(event) => {
                                 const value = event.currentTarget.value;
-                                appendTrailingSplit(index, value);
+                                if (value) addTrailingSplit(index);
                                 field.onChange(value);
                               }}
                             />
@@ -351,18 +349,14 @@ function Source(props: { source: SplitSource }) {
   );
 }
 
-function emptySplit(): SplitInput {
-  return { bucketId: "", amount: "" };
-}
-
 function withTrailingEmpty(postings: SplitInput[]) {
   return postings.length && !isStarted(postings[postings.length - 1])
     ? postings
-    : [...postings, emptySplit()];
+    : [...postings, emptySplit];
 }
 
-function isStarted(posting: { bucketId?: string; amount?: string }) {
-  return Boolean(posting.bucketId || posting.amount);
+function isStarted(posting?: { bucketId?: string; amount?: string }) {
+  return Boolean(posting?.bucketId || posting?.amount);
 }
 
 function parseMinor(value: string, exponent: number) {

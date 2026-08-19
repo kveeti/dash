@@ -25,7 +25,8 @@ import {
   type AlertDialogHandle,
 } from "../../ui/alert-dialog/alert-dialog-handle";
 import { Button } from "../../ui/button/button";
-import { Field, Input } from "../../ui/input/input";
+import { Field } from "../../ui/input/field";
+import { Input } from "../../ui/input/input";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
 import {

@@ -1,5 +1,9 @@
 import styles from "./input.module.css";
 
+export function hasBackgroundClass(className?: string) {
+  return className?.split(/\s+/).some((name) => name.startsWith("bg-"));
+}
+
 export const inputShellClassName = `${styles.shell} relative block h-9 w-full overflow-hidden rounded-xl outline-2 outline-transparent outline-offset-[-2px]`;
 
 export const inputControlClassName = `${styles.control} h-full w-full rounded-none border-0 bg-transparent px-3 font-[inherit] text-gray-900 outline-none placeholder:text-(--input-placeholder) placeholder:opacity-100`;

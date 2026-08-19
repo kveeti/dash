@@ -11,7 +11,8 @@ import { useDebouncedValue } from "../../../lib/use-debounced-value";
 import { useLastSettledValue } from "../../../lib/use-last-settled-value";
 import { AnimatedHeight } from "../../../ui/animated-height/animated-height";
 import { Checkbox } from "../../../ui/checkbox/checkbox";
-import { Field, PopupSearchInput } from "../../../ui/input/input";
+import { Field } from "../../../ui/input/field";
+import { PopupSearchInput } from "../../../ui/input/search-input";
 import type { TagActionItem, TagState } from "../transaction-action-types";
 
 export function TagsField(props: { posting: Posting }) {

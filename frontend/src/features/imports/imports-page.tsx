@@ -9,7 +9,9 @@ import {
   useInfiniteImportsQuery,
 } from "../../api/imports";
 import { Button } from "../../ui/button/button";
-import { Field, FileInput, Select } from "../../ui/input/input";
+import { Field } from "../../ui/input/field";
+import { FileInput } from "../../ui/input/file-input";
+import { Select } from "../../ui/input/select";
 import { BucketPicker } from "../buckets/bucket-picker";
 import { useI18n } from "../i18n/use-i18n";
 import { useImportDrop } from "./import-drop-context";

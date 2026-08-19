@@ -15,7 +15,7 @@ import { createContext } from "../../lib/create-context";
 import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { useLastSettledValue } from "../../lib/use-last-settled-value";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
-import { PopupSearchInput } from "../../ui/input/input";
+import { PopupSearchInput } from "../../ui/input/search-input";
 import { useInboxUndo } from "./inbox-undo-context";
 
 const [useBucketCombo, BucketComboContext] = createContext<{

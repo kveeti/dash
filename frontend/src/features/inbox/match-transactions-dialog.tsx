@@ -1,6 +1,5 @@
 import { Combobox } from "@base-ui/react/combobox";
-import { Dialog } from "@base-ui/react/dialog";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import {
   useInboxMatchesQuery,
@@ -10,7 +9,14 @@ import {
 } from "../../api/inbox";
 import { createContext } from "../../lib/create-context";
 import { setSearchParam, useSearchParam } from "../../lib/search-param";
-import { PopupSearchInput } from "../../ui/input/input";
+import { useDebouncedValue } from "../../lib/use-debounced-value";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPopup,
+  DialogTitle,
+} from "../../ui/dialog/dialog";
+import { PopupSearchInput } from "../../ui/input/search-input";
 import { useI18n } from "../i18n/use-i18n";
 import { useInboxUndo } from "./inbox-undo-context";
 
@@ -63,7 +69,7 @@ function MatchTransactionsContent(props: {
   onClose: () => any;
 }) {
   const [input, setInput] = useState("");
-  const [search, setSearch] = useState("");
+  const search = useDebouncedValue(input, 250);
   const paramId = useRef(props.paramId);
 
   const match = useMatchInboxMutation();
@@ -76,11 +82,6 @@ function MatchTransactionsContent(props: {
     );
     props.onClose();
   }
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setSearch(input), 250);
-    return () => window.clearTimeout(timeout);
-  }, [input]);
 
   const matches = useInboxMatchesQuery({
     id: paramId.current,
@@ -146,28 +147,28 @@ function MatchTransactionsDialog(props: {
   children: ReactNode;
 }) {
   return (
-    <Dialog.Root
+    <Dialog
       open={props.isOpen}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) props.onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-20 bg-black/10 transition-opacity duration-180 ease-[cubic-bezier(.16,1,.3,1)] data-starting-style:opacity-0 data-ending-style:opacity-0 data-ending-style:duration-120 data-ending-style:ease-[cubic-bezier(.4,0,1,1)] motion-reduce:duration-[1ms]" />
-        <Dialog.Popup className="fixed start-1/2 top-1/2 z-21 flex max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-1rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-popover-border bg-popover text-base text-gray-900 shadow-float transition-[opacity,scale] duration-240 ease-[cubic-bezier(.16,1,.3,1)] data-starting-style:scale-[.97] data-starting-style:opacity-0 data-ending-style:scale-[.97] data-ending-style:opacity-0 data-ending-style:duration-100 motion-reduce:duration-[1ms]">
-          <Dialog.Title className="absolute m-[-1px] size-px overflow-hidden p-0 [clip-path:inset(50%)] whitespace-nowrap">
-            Match transactions
-          </Dialog.Title>
+      <DialogBackdrop className="bg-black/10" />
+      <DialogPopup className="start-1/2 top-1/2 max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-1rem))] -translate-y-1/2 overflow-hidden text-gray-900">
+        <DialogTitle className="absolute m-[-1px] size-px overflow-hidden p-0 [clip-path:inset(50%)] whitespace-nowrap">
+          Match transactions
+        </DialogTitle>
 
-          {props.children}
-        </Dialog.Popup>
-      </Dialog.Portal>
-    </Dialog.Root>
+        {props.children}
+      </DialogPopup>
+    </Dialog>
   );
 }
 
 function MatchRow(props: { item: InboxMatch; source: InboxItem | undefined }) {
   const { item, source } = props;
+  const { f } = useI18n();
+
   return (
     <Combobox.Item
       value={item}
@@ -179,7 +180,7 @@ function MatchRow(props: { item: InboxMatch; source: InboxItem | undefined }) {
       <MatchAmount source={source} match={item} />
       <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base text-gray-600">
         {item.kind === "exchange" ? "Exchange" : "Transfer"} ·{" "}
-        <ListDate date={item.date} />
+        {f.dateOnly(item.date)}
       </span>
       <span className="text-end whitespace-nowrap text-base text-gray-600">
         {item.account}
@@ -214,9 +215,8 @@ function MatchAmount(props: {
   );
 }
 
-function Source(props: { row: InboxItem }) {
+function Source({ row }: { row: InboxItem }) {
   const { f } = useI18n();
-  const { row } = props;
   return (
     <section className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 border-b border-popover-border p-3">
       <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-medium">
@@ -226,16 +226,11 @@ function Source(props: { row: InboxItem }) {
         {f.amount(row.amount, row.currency)}
       </span>
       <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-base text-gray-600">
-        <ListDate date={row.date} />
+        {f.dateOnly(row.date)}
       </span>
       <span className="text-end whitespace-nowrap text-base text-gray-600">
         {row.account}
       </span>
     </section>
   );
-}
-
-function ListDate(props: { date: string }) {
-  const { f } = useI18n();
-  return <>{f.dateOnly(props.date)}</>;
 }

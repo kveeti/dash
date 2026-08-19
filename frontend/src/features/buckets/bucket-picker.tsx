@@ -11,7 +11,8 @@ import {
 import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { useLastSettledValue } from "../../lib/use-last-settled-value";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
-import { InputTrigger, PopupSearchInput } from "../../ui/input/input";
+import { InputTrigger } from "../../ui/input/input-trigger";
+import { PopupSearchInput } from "../../ui/input/search-input";
 
 const kindLabels: Record<BucketKind, string> = {
   asset: "Asset",

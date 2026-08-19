@@ -77,25 +77,34 @@ export function useInfiniteInboxQuery(props: {
     queryKey: inboxKeys.list(props),
     queryFn: async ({ pageParam }: { pageParam: InboxPage["next_cursor"] }) => {
       const params = new URLSearchParams();
+
       if (pageParam) {
         params.set("before_date", pageParam.date);
         params.set("before_id", pageParam.id);
       }
 
       if (props.searchQuery) params.set("q", props.searchQuery);
+
       if (props.filters.direction)
         params.set("direction", props.filters.direction);
+
       if (props.filters.amount) params.set("amount", props.filters.amount);
+
       if (props.filters.amountMin)
         params.set("amount_min", props.filters.amountMin);
+
       if (props.filters.amountMax)
         params.set("amount_max", props.filters.amountMax);
+
       if (props.filters.currency)
         params.set("currency", props.filters.currency);
+
       for (const account of props.filters.accounts ?? [])
         params.append("account", account);
+
       if (props.filters.occurredFrom)
         params.set("occurred_from", props.filters.occurredFrom);
+
       if (props.filters.occurredBefore)
         params.set("occurred_before", props.filters.occurredBefore);
 

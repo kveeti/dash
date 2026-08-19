@@ -6,7 +6,8 @@ import { useDebouncedValue } from "../../lib/use-debounced-value";
 import { AlertDialog } from "../../ui/alert-dialog/alert-dialog";
 import { AnimatedHeight } from "../../ui/animated-height/animated-height";
 import { Checkbox } from "../../ui/checkbox/checkbox";
-import { InputTrigger, PopupSearchInput } from "../../ui/input/input";
+import { InputTrigger } from "../../ui/input/input-trigger";
+import { PopupSearchInput } from "../../ui/input/search-input";
 import type {
   TransactionActionGroup,
   TransactionActionItem,
