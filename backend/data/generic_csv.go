@@ -173,6 +173,9 @@ func parseAmountToMinor(raw string, exponent int) (int64, error) {
 		return 0, fmt.Errorf("invalid amount: %s", raw)
 	}
 	sign, integer, fraction := match[1], match[2], match[3]
+	if len(fraction) > exponent {
+		return 0, fmt.Errorf("amount has more than %d decimal places: %s", exponent, raw)
+	}
 	factor := int64(1)
 	for range exponent {
 		factor *= 10

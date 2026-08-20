@@ -66,6 +66,21 @@ func TestGenericCSVRejectsNonUTCTimestamps(t *testing.T) {
 	require.Equal(t, "invalid occurred_at: must be an RFC3339 UTC timestamp", parser.Errors()[1].Error)
 }
 
+func TestParseCanonicalAmountRejectsExcessPrecision(t *testing.T) {
+	currencies := map[string]int{"EUR": 2, "JPY": 0}
+
+	_, _, err := ParseCanonicalAmount("1.999", "EUR", currencies)
+	require.EqualError(t, err, "amount has more than 2 decimal places: 1.999")
+
+	_, _, err = ParseCanonicalAmount("1.5", "JPY", currencies)
+	require.EqualError(t, err, "amount has more than 0 decimal places: 1.5")
+
+	amount, currency, err := ParseCanonicalAmount("1.9", "EUR", currencies)
+	require.NoError(t, err)
+	require.Equal(t, int64(190), amount)
+	require.Equal(t, "EUR", currency)
+}
+
 func TestValidGenericCSVHeader(t *testing.T) {
 	require.True(t, ValidGenericCSVHeader("date,occurred_at,amount,currency,counterparty,note\n"))
 	require.True(t, ValidGenericCSVHeader("\ufeffDate,Occurred_At,Amount,Currency,Counterparty,Note\r\n"))
