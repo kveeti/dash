@@ -238,15 +238,30 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 		occurredAt                                      *time.Time
 		amount                                          int64
 	}
-	rows, err := tx.QueryContext(ctx, `select r.id,r.occurred_on,r.occurred_at,r.amount,r.currency,r.counterparty,r.note,b.bucket_id
-		from import_rows r join import_batches b on b.id=r.batch_id where r.id=any($2::uuid[]) and b.user_id=$1 and r.status='pending' for update of r`, userID, []string{rowID, matchID})
+	rows, err := tx.QueryContext(ctx, `
+		select
+			r.id, r.occurred_on, r.occurred_at, r.amount, r.currency,
+			r.counterparty, r.note, batch.bucket_id, transit.id, fx.id
+		from import_rows r
+		join import_batches batch on batch.id = r.batch_id
+		join buckets transit on transit.owner_user_id = $1 and transit.kind = 'transit'
+		join buckets fx on fx.owner_user_id = $1 and fx.kind = 'fx_conversion'
+		where r.id = any($2::uuid[])
+		  and batch.user_id = $1
+		  and r.status = 'pending'
+		for update of r
+	`, userID, []string{rowID, matchID})
 	if err != nil {
 		return err
 	}
 	var pair []row
+	var transit, fx string
 	for rows.Next() {
 		var r row
-		if err = rows.Scan(&r.id, &r.date, &r.occurredAt, &r.amount, &r.currency, &r.counterparty, &r.description, &r.bucket); err != nil {
+		if err = rows.Scan(
+			&r.id, &r.date, &r.occurredAt, &r.amount, &r.currency,
+			&r.counterparty, &r.description, &r.bucket, &transit, &fx,
+		); err != nil {
 			rows.Close()
 			return err
 		}
@@ -261,6 +276,7 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 	if len(pair) != 2 {
 		return ErrInvalidPostings
 	}
+
 	a, b := pair[0], pair[1]
 	distance := a.date.Sub(b.date)
 	if distance < -7*24*time.Hour || distance > 7*24*time.Hour {
@@ -271,110 +287,186 @@ func (d *Data) MatchInboxRows(ctx context.Context, userID, rowID, matchID string
 	if !transfer && !exchange {
 		return ErrInvalidPostings
 	}
-	var transit, fx string
-	if err = tx.QueryRowContext(ctx, `
-		select id
-		from buckets
-		where owner_user_id = $1
-		  and kind = 'transit'
-	`, userID).Scan(&transit); err != nil {
-		return err
-	}
-	if exchange {
-		if err = tx.QueryRowContext(ctx, `
-			select id
-			from buckets
-			where owner_user_id = $1
-			  and kind = 'fx_conversion'
-		`, userID).Scan(&fx); err != nil {
-			return err
-		}
-	}
+
 	// Exchange settlement follows source time, with the outgoing row first on a tie.
 	first, second := a, b
 	if second.date.Before(first.date) || (second.date.Equal(first.date) && second.amount < 0) {
 		first, second = second, first
 	}
-	ids := map[string]string{}
-	create := func(r row, postings []Posting) error {
-		rid := r.id
-		txn := Transaction{ID: NewPrivateID(), OwnerUserID: userID, OccurredOn: r.date, OccurredAt: r.occurredAt, Counterparty: r.counterparty, Description: r.description}
-		postings[0].ImportRowID = &rid
-		if err := insertTransactionTx(ctx, tx, &txn, postings); err != nil {
+
+	type desiredTransaction struct {
+		ID           string     `json:"id"`
+		OccurredOn   time.Time  `json:"occurred_on"`
+		OccurredAt   *time.Time `json:"occurred_at"`
+		Counterparty string     `json:"counterparty"`
+		Description  string     `json:"description"`
+	}
+	type desiredPosting struct {
+		ID            string  `json:"id"`
+		TransactionID string  `json:"transaction_id"`
+		BucketID      string  `json:"bucket_id"`
+		Amount        int64   `json:"amount"`
+		Currency      string  `json:"currency"`
+		ImportRowID   *string `json:"import_row_id"`
+	}
+
+	transactionIDs := map[string]string{}
+	var transactions []desiredTransaction
+	var desiredPostings []desiredPosting
+	addTransaction := func(r row, postings []Posting) error {
+		if err := validatePostings(postings); err != nil {
 			return err
 		}
-		ids[r.id] = txn.ID
+		transactionID := NewPrivateID()
+		transactionIDs[r.id] = transactionID
+		transactions = append(transactions, desiredTransaction{
+			ID: transactionID, OccurredOn: r.date, OccurredAt: r.occurredAt,
+			Counterparty: r.counterparty, Description: r.description,
+		})
+		for i, posting := range postings {
+			var importRowID *string
+			if i == 0 {
+				rowID := r.id
+				importRowID = &rowID
+			}
+			desiredPostings = append(desiredPostings, desiredPosting{
+				ID: NewPrivateID(), TransactionID: transactionID, BucketID: posting.BucketID,
+				Amount: posting.Amount, Currency: posting.Currency, ImportRowID: importRowID,
+			})
+		}
 		return nil
 	}
+
 	if transfer {
-		if err = create(a, []Posting{{BucketID: a.bucket, Amount: a.amount, Currency: a.currency}, {BucketID: transit, Amount: -a.amount, Currency: a.currency}}); err != nil {
+		if err = addTransaction(a, []Posting{
+			{BucketID: a.bucket, Amount: a.amount, Currency: a.currency},
+			{BucketID: transit, Amount: -a.amount, Currency: a.currency},
+		}); err != nil {
 			return err
 		}
-		if err = create(b, []Posting{{BucketID: b.bucket, Amount: b.amount, Currency: b.currency}, {BucketID: transit, Amount: -b.amount, Currency: b.currency}}); err != nil {
+		if err = addTransaction(b, []Posting{
+			{BucketID: b.bucket, Amount: b.amount, Currency: b.currency},
+			{BucketID: transit, Amount: -b.amount, Currency: b.currency},
+		}); err != nil {
 			return err
 		}
 	} else {
-		if err = create(first, []Posting{{BucketID: first.bucket, Amount: first.amount, Currency: first.currency}, {BucketID: transit, Amount: -first.amount, Currency: first.currency}}); err != nil {
+		if err = addTransaction(first, []Posting{
+			{BucketID: first.bucket, Amount: first.amount, Currency: first.currency},
+			{BucketID: transit, Amount: -first.amount, Currency: first.currency},
+		}); err != nil {
 			return err
 		}
-		if err = create(second, []Posting{{BucketID: second.bucket, Amount: second.amount, Currency: second.currency}, {BucketID: fx, Amount: -second.amount, Currency: second.currency}, {BucketID: transit, Amount: first.amount, Currency: first.currency}, {BucketID: fx, Amount: -first.amount, Currency: first.currency}}); err != nil {
+		if err = addTransaction(second, []Posting{
+			{BucketID: second.bucket, Amount: second.amount, Currency: second.currency},
+			{BucketID: fx, Amount: -second.amount, Currency: second.currency},
+			{BucketID: transit, Amount: first.amount, Currency: first.currency},
+			{BucketID: fx, Amount: -first.amount, Currency: first.currency},
+		}); err != nil {
 			return err
 		}
 	}
-	var transitClear bool
-	if err = tx.QueryRowContext(ctx, `
-		select not exists (
-			select 1
-			from postings
-			where transaction_id = any($1::uuid[])
-			  and bucket_id = $2
-			group by currency
-			having sum(amount) <> 0
-		)
-	`, []string{ids[a.id], ids[b.id]}, transit).Scan(&transitClear); err != nil {
-		return err
-	}
-	if !transitClear {
-		return ErrUnbalanced
-	}
+
 	out, in := a, b
 	if in.amount < 0 {
 		out, in = in, out
 	}
-	_, err = tx.ExecContext(ctx, `
-		with added as (
-			insert into account_movement_matches (
-				id, owner_user_id, outgoing_transaction_id, incoming_transaction_id, created_at
-			)
-			values (uuidv7(), $1, $2, $3, now())
-			returning id
-		)
-		insert into audit_logs
-		select uuidv7(), $1, 'account_movement_matches', id, 'insert', null, now()
-		from added
-	`, userID, ids[out.id], ids[in.id])
+	transactionPayload, err := json.Marshal(transactions)
 	if err != nil {
 		return err
 	}
+	postingPayload, err := json.Marshal(desiredPostings)
+	if err != nil {
+		return err
+	}
+	movementID := NewPrivateID()
 	rowIDs := []string{a.id, b.id}
-	_, err = tx.ExecContext(ctx, `
-		insert into audit_logs (
-			id, actor_user_id, table_name, row_id, operation, before, created_at
+	var insertedTransactions, insertedPostings, updatedRows, insertedMovements int
+	err = tx.QueryRowContext(ctx, `
+		with desired_transactions as materialized (
+			select *
+			from jsonb_to_recordset($2::jsonb) as txn (
+				id uuid, occurred_on date, occurred_at timestamptz,
+				counterparty text, description text
+			)
+		), desired_postings as materialized (
+			select *
+			from jsonb_to_recordset($3::jsonb) as posting (
+				id uuid, transaction_id uuid, bucket_id uuid, amount bigint,
+				currency text, import_row_id uuid
+			)
+		), old_rows as materialized (
+			select *
+			from import_rows
+			where id = any($7::uuid[])
+		), added_transactions as (
+			insert into transactions (
+				id, owner_user_id, occurred_on, occurred_at, counterparty,
+				description, memo, created_at
+			)
+			select id, $1, occurred_on, occurred_at, counterparty, description, '', now()
+			from desired_transactions
+			returning id
+		), added_postings as (
+			insert into postings (
+				id, transaction_id, bucket_id, amount, currency, import_row_id,
+				created_at, updated_at
+			)
+			select posting.id, posting.transaction_id, posting.bucket_id,
+				posting.amount, posting.currency, posting.import_row_id, now(), now()
+			from desired_postings posting
+			join added_transactions txn on txn.id = posting.transaction_id
+			returning id
+		), added_movement as (
+			insert into account_movement_matches (
+				id, owner_user_id, outgoing_transaction_id,
+				incoming_transaction_id, created_at
+			)
+			select $4, $1, outgoing.id, incoming.id, now()
+			from added_transactions outgoing
+			join added_transactions incoming on incoming.id = $6
+			where outgoing.id = $5
+			returning id
+		), updated_rows as (
+			update import_rows row
+			set status = 'categorized'
+			from old_rows old
+			where row.id = old.id
+			returning row.id
+		), audited_transactions as (
+			insert into audit_logs
+			select uuidv7(), $1, 'transactions', id, 'insert', null, now()
+			from added_transactions
+		), audited_postings as (
+			insert into audit_logs
+			select uuidv7(), $1, 'postings', id, 'insert', null, now()
+			from added_postings
+		), audited_movement as (
+			insert into audit_logs
+			select uuidv7(), $1, 'account_movement_matches', id, 'insert', null, now()
+			from added_movement
+		), audited_rows as (
+			insert into audit_logs
+			select uuidv7(), $1, 'import_rows', id, 'update', to_jsonb(old_rows), now()
+			from old_rows
 		)
-		select uuidv7(), $1, 'import_rows', id, 'update', to_jsonb(import_rows), now()
-		from import_rows
-		where id = any($2::uuid[])
-	`, userID, rowIDs)
+		select
+			(select count(*) from added_transactions),
+			(select count(*) from added_postings),
+			(select count(*) from updated_rows),
+			(select count(*) from added_movement)
+	`, userID, transactionPayload, postingPayload, movementID,
+		transactionIDs[out.id], transactionIDs[in.id], rowIDs).Scan(
+		&insertedTransactions, &insertedPostings, &updatedRows, &insertedMovements,
+	)
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `
-		update import_rows
-		set status = 'categorized'
-		where id = any($1::uuid[])
-	`, rowIDs)
-	if err != nil {
-		return err
+	if insertedTransactions != len(transactions) ||
+		insertedPostings != len(desiredPostings) ||
+		updatedRows != 2 ||
+		insertedMovements != 1 {
+		return ErrInvalidPostings
 	}
 	return tx.Commit()
 }
@@ -383,46 +475,8 @@ func (d *Data) RestoreInboxRows(ctx context.Context, userID string, rowIDs []str
 	if len(rowIDs) == 0 {
 		return 0, nil
 	}
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-
-	rows, err := tx.QueryContext(ctx, `select t.id
-		from transactions t join postings p on p.transaction_id=t.id
-		join import_rows r on r.id=p.import_row_id join import_batches b on b.id=r.batch_id
-		where t.owner_user_id=$1 and r.id=any($2::uuid[]) and b.user_id=$1 for update of t`, userID, rowIDs)
-	if err != nil {
-		return 0, err
-	}
-	var transactionIDs []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		transactionIDs = append(transactionIDs, id)
-	}
-	if err := rows.Close(); err != nil {
-		return 0, err
-	}
-	if err := rows.Err(); err != nil {
-		return 0, err
-	}
-	if len(transactionIDs) == 0 {
-		return 0, nil
-	}
-
-	restored, err := removeTransactionsTx(ctx, tx, userID, transactionIDs)
-	if err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return restored, nil
+	_, restored, err := removeTransactions(ctx, d.db, userID, nil, nil, rowIDs)
+	return restored, err
 }
 
 func (d *Data) SplitInboxRow(ctx context.Context, userID, rowID string, postings []InboxSplitPosting) error {

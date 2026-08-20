@@ -14,6 +14,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	slog.Info("loaded config", "config", config)
 
 	App(config, nil)
 

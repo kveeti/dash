@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 )
 
@@ -58,6 +59,38 @@ func (c *Config) EffectiveFrontUrl() string {
 		return c.FrontUrl
 	}
 	return c.BackendUrl
+}
+
+func (c Config) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.Bool("is_prod", c.IsProd),
+		slog.String("port", c.Port),
+		slog.String("backend_url", c.BackendUrl),
+		slog.String("front_url", c.FrontUrl),
+		slog.String("dev_vite_url", c.DevViteUrl),
+		slog.String("db_url", redact(c.DbUrl)),
+		slog.String("import_store", c.ImportStore),
+		slog.String("import_dir", c.ImportDir),
+		slog.Bool("disable_rate_sync", c.DisableRateSync),
+		slog.Group("oidc",
+			slog.String("issuer", c.OIDC.Issuer),
+			slog.String("client_id", c.OIDC.ClientID),
+			slog.String("client_secret", redact(c.OIDC.ClientSecret)),
+			slog.String("redirect_url", c.OIDC.RedirectURL),
+		),
+		slog.Group("enable_banking",
+			slog.String("application_id", c.EnableBanking.ApplicationID),
+			slog.String("private_key_path", redact(c.EnableBanking.PrivateKeyPath)),
+			slog.String("api_origin", c.EnableBanking.APIOrigin),
+		),
+	)
+}
+
+func redact(value string) string {
+	if value == "" {
+		return ""
+	}
+	return "[REDACTED]"
 }
 
 func LoadConfig() (*Config, error) {

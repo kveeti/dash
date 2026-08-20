@@ -7,7 +7,6 @@ import {
   type InfiniteData,
 } from "@tanstack/react-query";
 
-import { useI18n } from "../features/i18n/use-i18n";
 import { api } from "./api";
 import type { Bucket, BucketKind } from "./buckets";
 import { restoreQueries, type QuerySnapshot } from "./query-snapshot";
@@ -31,12 +30,10 @@ export const transactionKeys = {
   list: ({
     searchQuery,
     filters,
-    timezone,
   }: {
     searchQuery?: string;
     filters: TransactionFilters;
-    timezone: string;
-  }) => [...transactionKeys.lists, searchQuery, filters, timezone] as const,
+  }) => [...transactionKeys.lists, searchQuery, filters] as const,
   details: ["transactions", "detail"] as const,
   detail: (id: string) => [...transactionKeys.details, id] as const,
 };
@@ -156,12 +153,10 @@ export function useInfiniteTransactionsQuery(props: {
   searchQuery?: string;
   filters: TransactionFilters;
 }) {
-  const { timeZone } = useI18n();
   return useInfiniteQuery({
     queryKey: transactionKeys.list({
       searchQuery: props.searchQuery,
       filters: props.filters,
-      timezone: timeZone,
     }),
     queryFn: ({ pageParam }: { pageParam: Cursor | null }) => {
       const params = new URLSearchParams();
@@ -200,8 +195,6 @@ export function useInfiniteTransactionsQuery(props: {
 
       if (props.filters.occurredBefore)
         params.set("occurred_before", props.filters.occurredBefore);
-
-      params.set("timezone", timeZone);
 
       return api<
         Omit<TransactionsPage, "transactions"> & {

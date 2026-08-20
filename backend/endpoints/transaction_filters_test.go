@@ -74,7 +74,7 @@ func TestTransactionAccountLegFiltersMatchBothTransferSides(t *testing.T) {
 	require.NoError(t, err)
 
 	response := decodeTransactionPage(t, authed(t, app, http.MethodGet,
-		"/api/v1/transactions?timezone=UTC&account="+savings+"&direction=in&currency=EUR&amount=10", nil))
+		"/api/v1/transactions?account="+savings+"&direction=in&currency=EUR&amount=10", nil))
 	require.Len(t, response.Transactions, 1)
 	require.Equal(t, outgoing, response.Transactions[0].ID)
 }

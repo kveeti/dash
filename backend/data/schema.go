@@ -225,6 +225,23 @@ create table if not exists account_movement_matches (
     check (outgoing_transaction_id <> incoming_transaction_id)
 );
 create index if not exists idx_account_movement_matches_owner on account_movement_matches(owner_user_id);
+
+create or replace view account_movement_sides as
+select
+    id as match_id,
+    owner_user_id,
+    outgoing_transaction_id as transaction_id,
+    incoming_transaction_id as counterpart_id,
+    'outgoing'::text as side
+from account_movement_matches
+union all
+select
+    id,
+    owner_user_id,
+    incoming_transaction_id,
+    outgoing_transaction_id,
+    'incoming'::text
+from account_movement_matches;
 `)
 	return err
 }

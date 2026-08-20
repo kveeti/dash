@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"money/backend/data"
 	"money/backend/enablebanking"
 	"money/backend/state"
@@ -136,6 +137,7 @@ func HandleStartEnableBanking(s *state.State, getUserID GetUserID) Handler {
 			return NewUnexpectedErr("authorization state: %w", err)
 		}
 		redirectURL := s.Config.BackendUrl + "/api/v1/enablebanking/callback"
+		slog.InfoContext(ctx, "starting Enable Banking authorization", "redirect_url", redirectURL)
 		authURL, err := client.StartAuthorization(ctx, *selected, attempt.PSUType, stateValue, redirectURL)
 		if err != nil {
 			return NewUnexpectedErr("start Enable Banking authorization: %w", err)

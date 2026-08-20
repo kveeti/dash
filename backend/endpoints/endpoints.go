@@ -44,7 +44,7 @@ func GetRouter(state *state.State, dist fs.FS) http.Handler {
 	mux.HandleFunc("PUT /api/v1/transactions/{id}/postings", NewHandler(HandleSplitTransaction(state, getUserID)))
 	mux.HandleFunc("DELETE /api/v1/transactions/{id}", NewHandler(HandleDeleteTransaction(state, getUserID)))
 	mux.HandleFunc("PATCH /api/v1/postings/{id}", NewHandler(HandlePatchPosting(state, getUserID)))
-	mux.HandleFunc("DELETE /api/v1/transfer-matches/{id}", NewHandler(HandleUnmatchTransfer(state, getUserID)))
+	mux.HandleFunc("DELETE /api/v1/transfer-matches/{id}", NewHandler(HandleRestoreMatchedInboxRows(state, getUserID)))
 
 	mux.HandleFunc("GET /api/v1/stats", NewHandler(HandleGetStats(state, getUserID)))
 

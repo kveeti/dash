@@ -68,47 +68,6 @@ type Posting struct {
 	UpdatedAt   time.Time
 }
 
-func insertTransactionTx(ctx context.Context, tx *sql.Tx, txn *Transaction, postings []Posting) error {
-	if err := validatePostings(postings); err != nil {
-		return err
-	}
-	txn.CreatedAt = time.Now().UTC()
-	_, err := tx.ExecContext(ctx, `
-		insert into transactions (
-			id, owner_user_id, occurred_on, occurred_at, counterparty, description, memo, created_at
-		)
-		values ($1, $2, $3, $4, $5, $6, $7, $8)
-	`, txn.ID, txn.OwnerUserID, txn.OccurredOn, txn.OccurredAt,
-		txn.Counterparty, txn.Description, txn.Memo, txn.CreatedAt)
-	if err != nil {
-		return err
-	}
-	if err = auditWrite(ctx, tx, txn.OwnerUserID, "transactions", txn.ID, "insert", nil); err != nil {
-		return err
-	}
-	for i := range postings {
-		if postings[i].ID == "" {
-			postings[i].ID = NewPrivateID()
-		}
-		p := postings[i]
-		_, err = tx.ExecContext(ctx, `
-			insert into postings (
-				id, transaction_id, bucket_id, amount, currency, stats_date, memo,
-				import_row_id, mirror_id, created_at
-			)
-			values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
-		`, p.ID, txn.ID, p.BucketID,
-			p.Amount, p.Currency, p.StatsDate, p.Memo, p.ImportRowID, p.MirrorID)
-		if err != nil {
-			return err
-		}
-		if err = auditWrite(ctx, tx, txn.OwnerUserID, "postings", p.ID, "insert", nil); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func validatePostings(postings []Posting) error {
 	if len(postings) < 2 {
 		return ErrInvalidPostings
@@ -317,167 +276,120 @@ func (d *Data) RemoveTransactions(ctx context.Context, userID string, ids []stri
 	if len(ids) == 0 {
 		return 0, 0, nil
 	}
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, 0, err
-	}
-	defer tx.Rollback()
-	rows, err := tx.QueryContext(ctx, `
-		select id
-		from transactions
-		where owner_user_id = $1
-		  and id = any($2::uuid[])
-		for update
-	`, userID, ids)
-	if err != nil {
-		return 0, 0, err
-	}
-	var owned []string
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			rows.Close()
-			return 0, 0, err
-		}
-		owned = append(owned, id)
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return 0, 0, err
-	}
-	if len(owned) == 0 {
-		return 0, 0, nil
-	}
-	restored, err := removeTransactionsTx(ctx, tx, userID, owned)
-	if err != nil {
-		return 0, 0, err
-	}
-	if err = tx.Commit(); err != nil {
-		return 0, 0, err
-	}
-	return len(owned), restored, nil
+	return removeTransactions(ctx, d.db, userID, ids, nil, nil)
 }
 
-func removeTransactionsTx(ctx context.Context, tx *sql.Tx, userID string, ids []string) (int, error) {
-	// Removing one side drops the match first, leaving its counterpart as an unmatched side.
-	_, err := tx.ExecContext(ctx, `
-		with doomed as materialized (
-			select *
-			from account_movement_matches
-			where owner_user_id = $1
-			  and (
-				outgoing_transaction_id = any($2::uuid[])
-				or incoming_transaction_id = any($2::uuid[])
+type queryRower interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+// removeTransactions removes transactions selected directly, through a
+// movement match, or through an import row. Foreign-key cascades delete their
+// postings, tags, and match rows after this statement captures every
+// before-image for the audit log.
+func removeTransactions(
+	ctx context.Context,
+	db queryRower,
+	userID string,
+	transactionIDs, matchIDs, importRowIDs []string,
+) (int, int, error) {
+	var removed, restored int
+	err := db.QueryRowContext(ctx, `
+		with requested_transactions as (
+			select unnest($2::uuid[]) as id
+			union
+			select movement.transaction_id
+			from account_movement_sides movement
+			where movement.owner_user_id = $1
+			  and movement.match_id = any($3::uuid[])
+			union
+			select posting.transaction_id
+			from postings posting
+			join import_rows row on row.id = posting.import_row_id
+			join import_batches batch on batch.id = row.batch_id
+			where batch.user_id = $1
+			  and row.id = any($4::uuid[])
+		), target_transactions as materialized (
+			select transaction.*
+			from transactions transaction
+			join requested_transactions requested on requested.id = transaction.id
+			where transaction.owner_user_id = $1
+			for update of transaction
+		), target_matches as materialized (
+			select match.*
+			from account_movement_matches match
+			where match.owner_user_id = $1
+			  and exists (
+				select 1
+				from account_movement_sides movement
+				join target_transactions transaction
+				  on transaction.id = movement.transaction_id
+				where movement.match_id = match.id
 			  )
-		), audited as (
+		), target_postings as materialized (
+			select posting.*
+			from postings posting
+			join target_transactions transaction
+			  on transaction.id = posting.transaction_id
+		), target_tags as materialized (
+			select tag.*
+			from posting_tags tag
+			join target_postings posting on posting.id = tag.posting_id
+		), target_import_rows as materialized (
+			select row.*
+			from import_rows row
+			join target_postings posting on posting.import_row_id = row.id
+		), audited_matches as (
 			insert into audit_logs
-			select uuidv7(), $1, 'account_movement_matches', id, 'delete', to_jsonb(doomed), now()
-			from doomed
-		)
-		delete from account_movement_matches
-		where id in (select id from doomed)
-	`, userID, ids)
-	if err != nil {
-		return 0, err
-	}
-	_, err = tx.ExecContext(ctx, `
-		insert into audit_logs (
-			id, actor_user_id, table_name, row_id, operation, before, created_at
-		)
-		select uuidv7(), $1, 'import_rows', r.id, 'update', to_jsonb(r), now()
-		from import_rows r
-		join postings p on p.import_row_id = r.id
-		where p.transaction_id = any($2::uuid[])
-	`, userID, ids)
-	if err != nil {
-		return 0, err
-	}
-	res, err := tx.ExecContext(ctx, `
-		update import_rows r
-		set status = 'pending'
-		from postings p
-		where p.import_row_id = r.id
-		  and p.transaction_id = any($1::uuid[])
-	`, ids)
-	if err != nil {
-		return 0, err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	_, err = tx.ExecContext(ctx, `
-		with doomed as (
-			select pt.*
-			from posting_tags pt
-			join postings p on p.id = pt.posting_id
-			where p.transaction_id = any($2::uuid[])
-		), audited as (
+			select uuidv7(), $1, 'account_movement_matches', id,
+				'delete', to_jsonb(target_matches), now()
+			from target_matches
+		), audited_import_rows as (
 			insert into audit_logs
-			select uuidv7(), $1, 'posting_tags', id, 'delete', to_jsonb(doomed), now()
-			from doomed
+			select uuidv7(), $1, 'import_rows', id,
+				'update', to_jsonb(target_import_rows), now()
+			from target_import_rows
+		), audited_tags as (
+			insert into audit_logs
+			select uuidv7(), $1, 'posting_tags', id,
+				'delete', to_jsonb(target_tags), now()
+			from target_tags
+		), audited_postings as (
+			insert into audit_logs
+			select uuidv7(), $1, 'postings', id,
+				'delete', to_jsonb(target_postings), now()
+			from target_postings
+		), audited_transactions as (
+			insert into audit_logs
+			select uuidv7(), $1, 'transactions', id,
+				'delete', to_jsonb(target_transactions), now()
+			from target_transactions
+		), restored_rows as (
+			update import_rows row
+			set status = 'pending'
+			where row.id in (select id from target_import_rows)
+			returning row.id
+		), deleted_transactions as (
+			delete from transactions transaction
+			where transaction.id in (select id from target_transactions)
+			returning transaction.id
 		)
-		delete from posting_tags
-		where id in (select id from doomed)
-	`, userID, ids)
-	if err != nil {
-		return 0, err
-	}
-	for _, table := range []string{"postings", "transactions"} {
-		where := "transaction_id=any($2::uuid[])"
-		if table == "transactions" {
-			where = "id=any($2::uuid[])"
-		}
-		_, err = tx.ExecContext(ctx, `
-			with doomed as (
-				select *
-				from `+table+`
-				where `+where+`
-			), audited as (
-				insert into audit_logs
-				select uuidv7(), $1, '`+table+`', id, 'delete', to_jsonb(doomed), now()
-				from doomed
-			)
-			delete from `+table+`
-			where id in (select id from doomed)
-		`, userID, ids)
-		if err != nil {
-			return 0, err
-		}
-	}
-	return int(n), nil
+		select
+			(select count(*) from deleted_transactions),
+			(select count(*) from restored_rows)
+	`, userID, transactionIDs, matchIDs, importRowIDs).Scan(&removed, &restored)
+	return removed, restored, err
 }
 
-func (d *Data) UnmatchTransfer(ctx context.Context, userID, matchID string) (int, error) {
-	tx, err := d.db.BeginTx(ctx, nil)
+func (d *Data) RestoreMatchedInboxRows(ctx context.Context, userID, matchID string) (int, error) {
+	removed, restored, err := removeTransactions(ctx, d.db, userID, nil, []string{matchID}, nil)
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
-	var ids []string
-	var a, b string
-	err = tx.QueryRowContext(ctx, `
-		select outgoing_transaction_id, incoming_transaction_id
-		from account_movement_matches
-		where id = $1
-		  and owner_user_id = $2
-		for update
-	`, matchID, userID).Scan(&a, &b)
-	if err == sql.ErrNoRows {
+	if removed == 0 {
 		return 0, ErrNotFound
 	}
-	if err != nil {
-		return 0, err
-	}
-	ids = []string{a, b}
-	n, err := removeTransactionsTx(ctx, tx, userID, ids)
-	if err != nil {
-		return 0, err
-	}
-	if err = tx.Commit(); err != nil {
-		return 0, err
-	}
-	return n, nil
+	return restored, nil
 }
 
 func (d *Data) DeleteTransaction(ctx context.Context, userID, id string) error {
@@ -501,8 +413,8 @@ type TransactionFilter struct {
 	OccurredFrom, OccurredBefore *time.Time
 }
 
-func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cursor time.Time, cursorID string, filter TransactionFilter) ([]Transaction, map[string][]Posting, error) {
-	args := []any{userID, timezone != ""}
+func (d *Data) ListTransactions(ctx context.Context, userID string, cursor time.Time, cursorID string, filter TransactionFilter) ([]Transaction, map[string][]Posting, error) {
+	args := []any{userID}
 	addArg := func(value any) string {
 		args = append(args, value)
 		return "$" + strconv.Itoa(len(args))
@@ -570,10 +482,10 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 			where p.transaction_id in (
 				t.id,
 				coalesce((
-					select case when m.outgoing_transaction_id=t.id then m.incoming_transaction_id else m.outgoing_transaction_id end
-					from account_movement_matches m
-					where m.outgoing_transaction_id=t.id or m.incoming_transaction_id=t.id
-					limit 1
+					select movement.counterpart_id
+					from account_movement_sides movement
+					where movement.owner_user_id = $1
+					  and movement.transaction_id = t.id
 				), t.id)
 			)
 			and `+strings.Join(legClauses, " and ")+`
@@ -583,10 +495,13 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 		select t.id,t.owner_user_id,t.occurred_on,t.occurred_at,t.counterparty,t.description,t.memo,t.created_at from transactions t
 		where t.owner_user_id=$1 `+strings.Join(clauses, " ")+`
 		and not exists (
-			select 1 from account_movement_matches movement
-			join transactions outgoing on outgoing.id=movement.outgoing_transaction_id
-			where movement.owner_user_id=t.owner_user_id and movement.incoming_transaction_id=t.id
-			  and $2 and outgoing.occurred_on=t.occurred_on
+			select 1
+			from account_movement_sides movement
+			join transactions outgoing on outgoing.id = movement.counterpart_id
+			where movement.owner_user_id = t.owner_user_id
+			  and movement.transaction_id = t.id
+			  and movement.side = 'incoming'
+			  and outgoing.occurred_on = t.occurred_on
 		)
 		order by t.occurred_on desc,t.id desc limit `+strconv.Itoa(TransactionPageSize)+`
 	), page_postings as (
@@ -600,21 +515,19 @@ func (d *Data) ListTransactions(ctx context.Context, userID, timezone string, cu
 	)
 	select page.id,page.owner_user_id,page.occurred_on,page.occurred_at,page.counterparty,page.description,page.memo,page.created_at,
 		p.id,p.bucket_id,p.bucket_name,p.bucket_kind,p.amount,p.currency,p.stats_date,p.memo,p.import_row_id,p.mirror_id,p.created_at,p.updated_at,p.tags,
-		coalesce(outgoing_match.id,incoming_match.id),
+		movement.match_id,
 		case
-			when outgoing_match.id is not null then 'outgoing'
-			when incoming_match.id is not null then 'incoming'
+			when movement.match_id is not null then movement.side
 			when transit_transactions.transaction_id is not null and p.amount < 0 then 'outgoing'
 			when transit_transactions.transaction_id is not null then 'incoming'
 		end,
 		counterpart.id,counterpart.occurred_on,counterpart.occurred_at,counterpart_bucket.id,counterpart_bucket.name,counterpart_bucket.kind,
 		counterpart_posting.amount,counterpart_posting.currency,
-		transit_transactions.transaction_id is not null and outgoing_match.id is null and incoming_match.id is null
+		transit_transactions.transaction_id is not null and movement.match_id is null
 	from page
 	join page_postings p on p.transaction_id=page.id
-	left join account_movement_matches outgoing_match on outgoing_match.outgoing_transaction_id=page.id
-	left join account_movement_matches incoming_match on incoming_match.incoming_transaction_id=page.id
-	left join transactions counterpart on counterpart.id=coalesce(outgoing_match.incoming_transaction_id,incoming_match.outgoing_transaction_id)
+	left join account_movement_sides movement on movement.owner_user_id=page.owner_user_id and movement.transaction_id=page.id
+	left join transactions counterpart on counterpart.id=movement.counterpart_id
 	left join postings counterpart_posting on counterpart_posting.transaction_id=counterpart.id and counterpart_posting.import_row_id is not null
 	left join buckets counterpart_bucket on counterpart_bucket.id=counterpart_posting.bucket_id
 	left join transit_transactions on transit_transactions.transaction_id=page.id
@@ -688,23 +601,15 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 			join buckets b on b.id = p.bucket_id and b.hidden = false
 			left join posting_tags pt on pt.posting_id = p.id
 			group by p.id, b.id
-		), matched_sides as (
-			select m.id as match_id, m.outgoing_transaction_id as transaction_id,
-				m.incoming_transaction_id as counterpart_id, 'outgoing' as side
-			from target
-			join account_movement_matches m on m.outgoing_transaction_id = target.id
-
-			union all
-
-			select m.id, m.incoming_transaction_id, m.outgoing_transaction_id, 'incoming'
-			from target
-			join account_movement_matches m on m.incoming_transaction_id = target.id
 		), matched_transfer as (
-			select s.match_id, s.transaction_id, s.counterpart_id, s.side,
+			select movement.match_id, movement.transaction_id, movement.counterpart_id, movement.side,
 				counterpart.occurred_on, counterpart.occurred_at, b.id as bucket_id, b.name as bucket_name, b.kind as bucket_kind,
 				p.amount, p.currency
-			from matched_sides s
-			join transactions counterpart on counterpart.id = s.counterpart_id
+			from target
+			join account_movement_sides movement
+			  on movement.owner_user_id = target.owner_user_id
+			 and movement.transaction_id = target.id
+			join transactions counterpart on counterpart.id = movement.counterpart_id
 			join postings p on p.transaction_id = counterpart.id and p.import_row_id is not null
 			join buckets b on b.id = p.bucket_id
 		), unmatched_transfer as (
@@ -715,9 +620,10 @@ func (d *Data) GetTransaction(ctx context.Context, userID, id string) (*Transact
 			join buckets b on b.id = p.bucket_id and b.kind = 'transit'
 			join postings imported on imported.transaction_id = p.transaction_id and imported.import_row_id is not null
 			where not exists (
-				select 1 from account_movement_matches m where m.outgoing_transaction_id = p.transaction_id
-			) and not exists (
-				select 1 from account_movement_matches m where m.incoming_transaction_id = p.transaction_id
+				select 1
+				from account_movement_sides movement
+				where movement.owner_user_id = target.owner_user_id
+				  and movement.transaction_id = p.transaction_id
 			)
 		)
 		select target.id, target.owner_user_id, target.occurred_on, target.occurred_at, target.counterparty,

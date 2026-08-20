@@ -1,6 +1,9 @@
 package config
 
 import (
+	"bytes"
+	"encoding/json"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -64,4 +67,39 @@ func TestLoadConfig_MissingRequiredErrors(t *testing.T) {
 			require.ErrorContains(t, err, missing)
 		})
 	}
+}
+
+func TestConfigLogValueRedactsSensitiveValues(t *testing.T) {
+	c := &Config{
+		BackendUrl: "https://dash.example",
+		DbUrl:      "postgres://user:db-password@db.example/dash",
+		OIDC: OIDCConfig{
+			ClientSecret: "oidc-secret",
+		},
+		EnableBanking: EnableBankingConfig{
+			PrivateKeyPath: "/secret/private-key.pem",
+		},
+	}
+
+	var output bytes.Buffer
+	slog.New(slog.NewJSONHandler(&output, nil)).Info("loaded config", "config", c)
+
+	var event map[string]any
+	require.NoError(t, json.Unmarshal(output.Bytes(), &event))
+	loggedConfig, ok := event["config"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "https://dash.example", loggedConfig["backend_url"])
+	require.Equal(t, "[REDACTED]", loggedConfig["db_url"])
+
+	loggedOIDC, ok := loggedConfig["oidc"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "[REDACTED]", loggedOIDC["client_secret"])
+
+	loggedEnableBanking, ok := loggedConfig["enable_banking"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "[REDACTED]", loggedEnableBanking["private_key_path"])
+
+	require.NotContains(t, output.String(), "db-password")
+	require.NotContains(t, output.String(), "oidc-secret")
+	require.NotContains(t, output.String(), "private-key.pem")
 }

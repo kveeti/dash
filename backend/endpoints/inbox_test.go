@@ -538,6 +538,37 @@ func TestMatchInboxTransfer(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Empty(t, getInbox(t, app, ""))
 
+	var transactionAudits, postingAudits, movementAudits, rowAudits int
+	require.NoError(t, app.d.Users.QueryRow(`
+		with transaction_ids as (
+			select transaction_id
+			from postings
+			where import_row_id = any($1::uuid[])
+		)
+		select
+			count(*) filter (
+				where table_name = 'transactions'
+				  and row_id in (select transaction_id from transaction_ids)
+			),
+			count(*) filter (
+				where table_name = 'postings'
+				  and row_id in (
+					select id from postings
+					where transaction_id in (select transaction_id from transaction_ids)
+				  )
+			),
+			count(*) filter (where table_name = 'account_movement_matches'),
+			count(*) filter (
+				where table_name = 'import_rows'
+				  and row_id = any($1::uuid[])
+			)
+		from audit_logs
+	`, []string{sourceID, matchID}).Scan(&transactionAudits, &postingAudits, &movementAudits, &rowAudits))
+	require.Equal(t, 2, transactionAudits)
+	require.Equal(t, 4, postingAudits)
+	require.Equal(t, 1, movementAudits)
+	require.Equal(t, 2, rowAudits)
+
 	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
 	require.Len(t, page.Transactions, 2)
 	require.Nil(t, page.Transactions[0].OccurredAt)
@@ -587,7 +618,7 @@ func TestMatchInboxTransferIncomingFirst(t *testing.T) {
 	require.Zero(t, postingTotals(t, app)[transit]["EUR"])
 }
 
-func TestTransactionListCollapsesMovementOnFrontendDay(t *testing.T) {
+func TestTransactionListCollapsesSameDayMovement(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	checking := createBucket(t, app, "asset", "Checking")
 	savings := createBucket(t, app, "asset", "Savings")
@@ -596,19 +627,13 @@ func TestTransactionListCollapsesMovementOnFrontendDay(t *testing.T) {
 	rows := getInbox(t, app, "")
 	require.Equal(t, http.StatusOK, authed(t, app, http.MethodPost, "/api/v1/inbox/"+rows[0].ID+"/match", map[string]any{"match_id": rows[1].ID}).StatusCode)
 
-	raw := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
-	require.Len(t, raw.Transactions, 2)
-
-	helsinki := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions?timezone=Europe%2FHelsinki", nil))
-	require.Len(t, helsinki.Transactions, 1)
-	require.Equal(t, "outgoing", helsinki.Transactions[0].Transfer.Side)
-	require.Less(t, helsinki.Transactions[0].Postings[0].Amount, int64(0))
-
-	resp := authed(t, app, http.MethodGet, "/api/v1/transactions?timezone=not-a-timezone", nil)
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
+	require.Len(t, page.Transactions, 1)
+	require.Equal(t, "outgoing", page.Transactions[0].Transfer.Side)
+	require.Less(t, page.Transactions[0].Postings[0].Amount, int64(0))
 }
 
-func TestUnmatchTransferRestoresBothRows(t *testing.T) {
+func TestRestoreMatchedInboxRowsRestoresBothRows(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	checking := createBucket(t, app, "asset", "Checking")
 	savings := createBucket(t, app, "asset", "Savings")
@@ -665,8 +690,14 @@ func TestMatchInboxExchange(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Empty(t, getInbox(t, app, ""))
 	page := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions", nil))
-	require.Len(t, page.Transactions, 2)
-	for _, txn := range page.Transactions {
+	require.Len(t, page.Transactions, 1)
+	require.Equal(t, "outgoing", page.Transactions[0].Transfer.Side)
+
+	counterpartResponse := authed(t, app, http.MethodGet, "/api/v1/transactions/"+page.Transactions[0].Transfer.CounterpartID, nil)
+	require.Equal(t, http.StatusOK, counterpartResponse.StatusCode)
+	var counterpart transactionResponse
+	require.NoError(t, json.NewDecoder(counterpartResponse.Body).Decode(&counterpart))
+	for _, txn := range []transactionResponse{page.Transactions[0], counterpart} {
 		require.Equal(t, "2026-07-01", txn.OccurredOn)
 		require.Nil(t, txn.OccurredAt)
 		require.Len(t, txn.Postings, 1)
@@ -676,10 +707,7 @@ func TestMatchInboxExchange(t *testing.T) {
 		require.Equal(t, map[string]string{"EUR": "PLN", "PLN": "EUR"}[txn.Postings[0].Currency], txn.Transfer.CounterpartCurrency)
 		require.Equal(t, map[string]int64{"EUR": 43000, "PLN": -10000}[txn.Postings[0].Currency], txn.Transfer.CounterpartAmount)
 	}
-	collapsed := decodeTransactionPage(t, authed(t, app, http.MethodGet, "/api/v1/transactions?timezone=Europe%2FHelsinki", nil))
-	require.Len(t, collapsed.Transactions, 1)
-	require.Equal(t, "outgoing", collapsed.Transactions[0].Transfer.Side)
-	require.NotEqual(t, collapsed.Transactions[0].Postings[0].Currency, collapsed.Transactions[0].Transfer.CounterpartCurrency)
+	require.NotEqual(t, page.Transactions[0].Postings[0].Currency, page.Transactions[0].Transfer.CounterpartCurrency)
 
 	var sourceTransactionID string
 	require.NoError(t, app.d.Users.QueryRow("select transaction_id from postings where import_row_id=$1", source.ID).Scan(&sourceTransactionID))
@@ -950,7 +978,7 @@ func TestConcurrentInboxMatchesOnlyUseSourceOnce(t *testing.T) {
 	require.Equal(t, 1, successes)
 	require.Len(t, getInbox(t, app, ""), 1)
 	resp := authed(t, app, http.MethodGet, "/api/v1/transactions", nil)
-	require.Len(t, decodeTxns(t, resp), 2)
+	require.Len(t, decodeTxns(t, resp), 1)
 }
 
 func TestInboxSearch(t *testing.T) {

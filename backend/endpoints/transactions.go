@@ -285,7 +285,7 @@ func HandleDeleteTransaction(state *state.State, getUserID GetUserID) Handler {
 		return nil
 	}
 }
-func HandleUnmatchTransfer(state *state.State, getUserID GetUserID) Handler {
+func HandleRestoreMatchedInboxRows(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		userID, err := getUserID(r)
 		if err != nil {
@@ -295,7 +295,7 @@ func HandleUnmatchTransfer(state *state.State, getUserID GetUserID) Handler {
 		if err := validateUUID("transfer match id", id); err != nil {
 			return err
 		}
-		n, err := state.Data.UnmatchTransfer(r.Context(), userID, id)
+		n, err := state.Data.RestoreMatchedInboxRows(r.Context(), userID, id)
 		if err != nil {
 			return mapTransactionErr(err)
 		}
@@ -331,18 +331,12 @@ func HandleListTransactions(state *state.State, getUserID GetUserID) Handler {
 		if err != nil {
 			return err
 		}
-		timezone := r.URL.Query().Get("timezone")
-		if timezone != "" {
-			if _, err := time.LoadLocation(timezone); err != nil {
-				return NewErr("invalid timezone", http.StatusBadRequest)
-			}
-		}
 		filter, err := parseTransactionFilter(r, state)
 		if err != nil {
 			return err
 		}
 		filter.Search = r.URL.Query().Get("q")
-		txns, postings, err := state.Data.ListTransactions(r.Context(), userID, timezone, date, id, filter)
+		txns, postings, err := state.Data.ListTransactions(r.Context(), userID, date, id, filter)
 		if err != nil {
 			return NewUnexpectedErr("error listing transactions: %w", err)
 		}

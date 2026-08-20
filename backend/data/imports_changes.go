@@ -116,7 +116,7 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 		return err
 	}
 	if len(transactionIDs) > 0 {
-		if _, err = removeTransactionsTx(ctx, tx, userID, transactionIDs); err != nil {
+		if _, _, err = removeTransactions(ctx, tx, userID, transactionIDs, nil, nil); err != nil {
 			return err
 		}
 	}
