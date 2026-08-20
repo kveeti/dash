@@ -276,26 +276,45 @@ func (d *Data) RemoveTransactions(ctx context.Context, userID string, ids []stri
 	if len(ids) == 0 {
 		return 0, 0, nil
 	}
-	return removeTransactions(ctx, d.db, userID, ids, nil, nil)
+	result, err := removeLedgerData(ctx, d.db, userID, removalTargets{transactionIDs: ids})
+	return result.removedTransactions, result.restoredImportRows, err
 }
 
 type queryRower interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
 }
 
-// removeTransactions removes transactions selected directly, through a
-// movement match, or through an import row. Foreign-key cascades delete their
-// postings, tags, and match rows after this statement captures every
-// before-image for the audit log.
-func removeTransactions(
+type removalTargets struct {
+	transactionIDs []string
+	matchIDs       []string
+	importRowIDs   []string
+	importBatchIDs []string
+}
+
+type removalResult struct {
+	removedTransactions  int
+	restoredImportRows   int
+	removedImportBatches int
+}
+
+// removeLedgerData captures every before-image, writes the audits, and removes
+// the selected ledger data in one statement. Foreign-key cascades remove child
+// rows only after their snapshots have been selected.
+func removeLedgerData(
 	ctx context.Context,
 	db queryRower,
 	userID string,
-	transactionIDs, matchIDs, importRowIDs []string,
-) (int, int, error) {
-	var removed, restored int
+	targets removalTargets,
+) (removalResult, error) {
+	var result removalResult
 	err := db.QueryRowContext(ctx, `
-		with requested_transactions as (
+		with target_batches as materialized (
+			select batch.*
+			from import_batches batch
+			where batch.user_id = $1
+			  and batch.id = any($5::uuid[])
+			for update of batch
+		), requested_transactions as (
 			select unnest($2::uuid[]) as id
 			union
 			select movement.transaction_id
@@ -309,6 +328,11 @@ func removeTransactions(
 			join import_batches batch on batch.id = row.batch_id
 			where batch.user_id = $1
 			  and row.id = any($4::uuid[])
+			union
+			select posting.transaction_id
+			from postings posting
+			join import_rows row on row.id = posting.import_row_id
+			join target_batches batch on batch.id = row.batch_id
 		), target_transactions as materialized (
 			select transaction.*
 			from transactions transaction
@@ -339,6 +363,10 @@ func removeTransactions(
 			select row.*
 			from import_rows row
 			join target_postings posting on posting.import_row_id = row.id
+		), target_batch_rows as materialized (
+			select row.*
+			from import_rows row
+			join target_batches batch on batch.id = row.batch_id
 		), audited_matches as (
 			insert into audit_logs
 			select uuidv7(), $1, 'account_movement_matches', id,
@@ -349,6 +377,12 @@ func removeTransactions(
 			select uuidv7(), $1, 'import_rows', id,
 				'update', to_jsonb(target_import_rows), now()
 			from target_import_rows
+			where id not in (select id from target_batch_rows)
+		), audited_batch_rows as (
+			insert into audit_logs
+			select uuidv7(), $1, 'import_rows', id,
+				'delete', to_jsonb(target_batch_rows), now()
+			from target_batch_rows
 		), audited_tags as (
 			insert into audit_logs
 			select uuidv7(), $1, 'posting_tags', id,
@@ -364,32 +398,56 @@ func removeTransactions(
 			select uuidv7(), $1, 'transactions', id,
 				'delete', to_jsonb(target_transactions), now()
 			from target_transactions
+		), audited_batches as (
+			insert into audit_logs
+			select uuidv7(), $1, 'import_batches', id,
+				'delete', to_jsonb(target_batches), now()
+			from target_batches
 		), restored_rows as (
 			update import_rows row
 			set status = 'pending'
 			where row.id in (select id from target_import_rows)
+			  and row.id not in (select id from target_batch_rows)
 			returning row.id
 		), deleted_transactions as (
 			delete from transactions transaction
 			where transaction.id in (select id from target_transactions)
 			returning transaction.id
+		), deleted_batch_rows as (
+			delete from import_rows row
+			where row.id in (select id from target_batch_rows)
+			  and (select count(*) from deleted_transactions) =
+			      (select count(*) from target_transactions)
+			returning row.id
+		), deleted_batches as (
+			delete from import_batches batch
+			where batch.id in (select id from target_batches)
+			  and (select count(*) from deleted_batch_rows) =
+			      (select count(*) from target_batch_rows)
+			returning batch.id
 		)
 		select
 			(select count(*) from deleted_transactions),
-			(select count(*) from restored_rows)
-	`, userID, transactionIDs, matchIDs, importRowIDs).Scan(&removed, &restored)
-	return removed, restored, err
+			(select count(*) from restored_rows),
+			(select count(*) from deleted_batches)
+	`, userID, targets.transactionIDs, targets.matchIDs,
+		targets.importRowIDs, targets.importBatchIDs).Scan(
+		&result.removedTransactions,
+		&result.restoredImportRows,
+		&result.removedImportBatches,
+	)
+	return result, err
 }
 
 func (d *Data) RestoreMatchedInboxRows(ctx context.Context, userID, matchID string) (int, error) {
-	removed, restored, err := removeTransactions(ctx, d.db, userID, nil, []string{matchID}, nil)
+	result, err := removeLedgerData(ctx, d.db, userID, removalTargets{matchIDs: []string{matchID}})
 	if err != nil {
 		return 0, err
 	}
-	if removed == 0 {
+	if result.removedTransactions == 0 {
 		return 0, ErrNotFound
 	}
-	return restored, nil
+	return result.restoredImportRows, nil
 }
 
 func (d *Data) DeleteTransaction(ctx context.Context, userID, id string) error {

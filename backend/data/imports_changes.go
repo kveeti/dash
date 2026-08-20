@@ -74,89 +74,14 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 }
 
 func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
-	tx, err := d.db.BeginTx(ctx, nil)
+	result, err := removeLedgerData(ctx, d.db, userID, removalTargets{
+		importBatchIDs: []string{batchID},
+	})
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-
-	var owner string
-	err = tx.QueryRowContext(ctx, `
-		select user_id
-		from import_batches
-		where id = $1
-	`, batchID).Scan(&owner)
-	if err == sql.ErrNoRows || (err == nil && owner != userID) {
+	if result.removedImportBatches == 0 {
 		return ErrImportNotFound
-	}
-	if err != nil {
-		return err
-	}
-
-	rows, err := tx.QueryContext(ctx, `
-		select posting.transaction_id
-		from postings posting
-		join import_rows row on row.id = posting.import_row_id
-		where row.batch_id = $1
-	`, batchID)
-	if err != nil {
-		return err
-	}
-	var transactionIDs []string
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			rows.Close()
-			return err
-		}
-		transactionIDs = append(transactionIDs, id)
-	}
-	rows.Close()
-	if err = rows.Err(); err != nil {
-		return err
-	}
-	if len(transactionIDs) > 0 {
-		if _, _, err = removeTransactions(ctx, tx, userID, transactionIDs, nil, nil); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `
-		with doomed as materialized (
-			select *
-			from import_rows
-			where batch_id = $2
-		), audited as (
-			insert into audit_logs (
-				id, actor_user_id, table_name, row_id, operation, before, created_at
-			)
-			select uuidv7(), $1, 'import_rows', id, 'delete', to_jsonb(doomed), now()
-			from doomed
-		)
-		delete from import_rows
-		where id in (select id from doomed)
-	`, userID, batchID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-		with doomed as materialized (
-			select *
-			from import_batches
-			where id = $2
-		), audited as (
-			insert into audit_logs (
-				id, actor_user_id, table_name, row_id, operation, before, created_at
-			)
-			select uuidv7(), $1, 'import_batches', id, 'delete', to_jsonb(doomed), now()
-			from doomed
-		)
-		delete from import_batches
-		where id in (select id from doomed)
-	`, userID, batchID); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return err
 	}
 	if err = d.files.Delete(ctx, batchID); err != nil {
 		slog.Error("import blob delete failed", "batch", batchID, "err", err)

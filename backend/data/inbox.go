@@ -475,8 +475,8 @@ func (d *Data) RestoreInboxRows(ctx context.Context, userID string, rowIDs []str
 	if len(rowIDs) == 0 {
 		return 0, nil
 	}
-	_, restored, err := removeTransactions(ctx, d.db, userID, nil, nil, rowIDs)
-	return restored, err
+	result, err := removeLedgerData(ctx, d.db, userID, removalTargets{importRowIDs: rowIDs})
+	return result.restoredImportRows, err
 }
 
 func (d *Data) SplitInboxRow(ctx context.Context, userID, rowID string, postings []InboxSplitPosting) error {

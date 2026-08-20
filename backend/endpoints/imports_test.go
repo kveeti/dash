@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"mime/multipart"
+	"money/backend/data"
 	"net/http"
 	"strings"
 	"testing"
@@ -200,6 +201,12 @@ func TestDeleteImportBatch(t *testing.T) {
 	require.Equal(t, 0, res.Duplicates)
 }
 
+func TestDeleteImportNotFound(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	resp := authed(t, app, http.MethodDelete, "/api/v1/imports/"+data.NewPrivateID(), nil)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
 func TestDeleteImportRemovesTaggedTransaction(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
@@ -213,8 +220,9 @@ func TestDeleteImportRemovesTaggedTransaction(t *testing.T) {
 	txns := decodeTxns(t, resp)
 	require.Len(t, txns, 1)
 	txnID := txns[0]["id"].(string)
+	tagPostingID := postingIDForTransaction(t, app, txnID)
 	resp = authed(t, app, http.MethodPost, "/api/v1/transactions/tags", map[string]any{
-		"posting_ids": []string{postingIDForTransaction(t, app, txnID)}, "tag": "imported",
+		"posting_ids": []string{tagPostingID}, "tag": "imported",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -228,6 +236,48 @@ func TestDeleteImportRemovesTaggedTransaction(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&tags))
 	require.Empty(t, tags.Tags)
+
+	var batchDeletes, rowDeletes, transactionDeletes, postingDeletes, tagDeletes int
+	require.NoError(t, app.d.Users.QueryRow(`
+		select
+			count(*) filter (
+				where table_name = 'import_batches'
+				  and operation = 'delete'
+				  and row_id = $1
+			),
+			count(*) filter (
+				where table_name = 'import_rows'
+				  and operation = 'delete'
+				  and row_id = $2
+			),
+			count(*) filter (
+				where table_name = 'transactions'
+				  and operation = 'delete'
+				  and row_id = $3
+			),
+			count(*) filter (
+				where table_name = 'postings'
+				  and operation = 'delete'
+				  and before->>'transaction_id' = $3::text
+			),
+			count(*) filter (
+				where table_name = 'posting_tags'
+				  and operation = 'delete'
+				  and before->>'posting_id' = $4
+			)
+		from audit_logs
+	`, batch.ID, rows[0].ID, txnID, tagPostingID).Scan(
+		&batchDeletes,
+		&rowDeletes,
+		&transactionDeletes,
+		&postingDeletes,
+		&tagDeletes,
+	))
+	require.Equal(t, 1, batchDeletes)
+	require.Equal(t, 1, rowDeletes)
+	require.Equal(t, 1, transactionDeletes)
+	require.Equal(t, 2, postingDeletes)
+	require.Equal(t, 1, tagDeletes)
 }
 
 func TestDeleteImportLeavesOtherTransferSideUnmatched(t *testing.T) {
