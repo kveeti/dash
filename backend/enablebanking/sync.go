@@ -13,7 +13,6 @@ import (
 const (
 	syncWorkers     = 2
 	syncMaxAttempts = 5
-	syncWindowDays  = 90
 	syncPoll        = time.Second
 )
 
@@ -79,31 +78,15 @@ func (s *Syncer) process(ctx context.Context, job data.EnableBankingSyncJob) {
 		return
 	}
 	for !job.FetchedAll {
-		daysToTarget := int(job.DateTo.Sub(job.DateFrom).Hours() / 24)
-		windowTo := job.DateFrom.AddDate(0, 0, daysToTarget%syncWindowDays)
-		var page TransactionPage
-		if job.UseLongest {
-			page, err = s.client.LongestTransactions(ctx, job.AccountUID, job.HistoryFrom.Format(time.DateOnly), job.ContinuationKey)
-		} else {
-			page, err = s.client.Transactions(ctx, job.AccountUID, job.DateFrom.Format(time.DateOnly), windowTo.Format(time.DateOnly), job.ContinuationKey)
-		}
+		page, err := s.client.LongestTransactions(
+			ctx,
+			job.AccountUID,
+			job.DateFrom.Format(time.DateOnly),
+			job.ContinuationKey,
+		)
 		if err != nil {
 			var apiErr *APIError
 			if errors.As(err, &apiErr) {
-				newestWindowFrom := job.DateTo.AddDate(0, 0, -(syncWindowDays - 1))
-				if newestWindowFrom.Before(job.HistoryFrom) {
-					newestWindowFrom = job.HistoryFrom
-				}
-				if !job.UseLongest && apiErr.Code == "WRONG_TRANSACTIONS_PERIOD" &&
-					job.ContinuationKey == "" && job.DateFrom.Before(newestWindowFrom) {
-					if switchErr := s.data.UseLongestEnableBankingSync(ctx, job); switchErr != nil {
-						s.retry(ctx, job, switchErr)
-						return
-					}
-					slog.Info("Enable Banking explicit history limit reached; using longest strategy", "batch", job.BatchID, "date_from", job.DateFrom.Format(time.DateOnly))
-					job.UseLongest = true
-					continue
-				}
 				if apiErr.Code == "EXPIRED_SESSION" || apiErr.Code == "REVOKED_SESSION" {
 					s.fail(ctx, job.BatchID, errors.New("bank connection needs re-authentication"))
 					return
@@ -117,22 +100,15 @@ func (s *Syncer) process(ctx context.Context, job data.EnableBankingSyncJob) {
 			return
 		}
 		rows, rowErrors := normalizeTransactions(page.Transactions, currencies, job.NextSequence)
-		nextDateFrom := job.DateFrom
-		fetchedAll := false
-		if page.ContinuationKey == "" {
-			if job.UseLongest {
-				fetchedAll = true
-			} else if job.DateFrom.After(job.HistoryFrom) {
-				nextWindowTo := job.DateFrom.AddDate(0, 0, -1)
-				nextDateFrom = nextWindowTo.AddDate(0, 0, -(syncWindowDays - 1))
-				if nextDateFrom.Before(job.HistoryFrom) {
-					nextDateFrom = job.HistoryFrom
-				}
-			} else {
-				fetchedAll = true
-			}
-		}
-		if err := s.data.StageEnableBankingPage(ctx, job, rows, rowErrors, page.ContinuationKey, nextDateFrom, fetchedAll); err != nil {
+		fetchedAll := page.ContinuationKey == ""
+		if err := s.data.StageEnableBankingPage(
+			ctx,
+			job,
+			rows,
+			rowErrors,
+			page.ContinuationKey,
+			fetchedAll,
+		); err != nil {
 			if errors.Is(err, data.ErrBankSyncRepeatedContinuation) {
 				s.fail(ctx, job.BatchID, err)
 			} else {
@@ -142,7 +118,6 @@ func (s *Syncer) process(ctx context.Context, job data.EnableBankingSyncJob) {
 		}
 		job.NextSequence += int64(len(rows))
 		job.ContinuationKey = page.ContinuationKey
-		job.DateFrom = nextDateFrom
 		job.FetchedAll = fetchedAll
 		job.Attempts = 0
 	}

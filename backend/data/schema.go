@@ -151,12 +151,10 @@ create table if not exists enable_banking_syncs (
     seen_continuation_keys text[] not null default '{}',
     next_sequence bigint not null default 0,
     fetched_all boolean not null default false,
-    use_longest boolean not null default false,
     attempts int not null default 0,
     next_attempt_at timestamptz not null default now(),
     completed_at timestamptz
 );
-alter table enable_banking_syncs add column if not exists use_longest boolean not null default false;
 create unique index if not exists idx_enable_banking_syncs_active_account
     on enable_banking_syncs(integration_id, identification_hash) where completed_at is null;
 create index if not exists idx_enable_banking_syncs_ready

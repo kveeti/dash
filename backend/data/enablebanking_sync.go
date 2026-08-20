@@ -34,12 +34,9 @@ type EnableBankingSyncJob struct {
 	BucketID        string
 	AccountUID      string
 	DateFrom        time.Time
-	DateTo          time.Time
-	HistoryFrom     time.Time
 	ContinuationKey string
 	NextSequence    int64
 	FetchedAll      bool
-	UseLongest      bool
 	Attempts        int
 }
 
@@ -109,7 +106,7 @@ func (d *Data) EnqueueEnableBankingSyncs(ctx context.Context, userID string, req
 						),
 						($10::date - interval '2 years')::date
 					),
-					$10::date - 89
+					($10::date - interval '2 years')::date
 				) as date_from
 			from requested
 			join buckets bucket on bucket.id = requested.bucket_id
@@ -194,28 +191,21 @@ func (d *Data) ClaimEnableBankingSync(ctx context.Context) (EnableBankingSyncJob
 			batch.bucket_id,
 			sync.account_uid,
 			sync.date_from,
-			sync.date_to,
-			coalesce(
-				(
-					select max(previous.date_to) - 2
-					from enable_banking_syncs previous
-					where previous.integration_id = sync.integration_id
-					  and previous.identification_hash = sync.identification_hash
-					  and previous.completed_at is not null
-					  and previous.batch_id <> sync.batch_id
-				),
-				(sync.date_to - interval '2 years')::date
-			) as history_from,
 			sync.continuation_key,
 			sync.next_sequence,
 			sync.fetched_all,
-			sync.use_longest,
 			sync.attempts
 		from claimed_batch batch
 		join enable_banking_syncs sync on sync.batch_id = batch.id
 	`).Scan(
-		&job.BatchID, &job.BucketID, &job.AccountUID,
-		&job.DateFrom, &job.DateTo, &job.HistoryFrom, &job.ContinuationKey, &job.NextSequence, &job.FetchedAll, &job.UseLongest, &job.Attempts,
+		&job.BatchID,
+		&job.BucketID,
+		&job.AccountUID,
+		&job.DateFrom,
+		&job.ContinuationKey,
+		&job.NextSequence,
+		&job.FetchedAll,
+		&job.Attempts,
 	)
 	if err == sql.ErrNoRows {
 		return EnableBankingSyncJob{}, false, nil
@@ -234,36 +224,9 @@ func (d *Data) RecoverEnableBankingSyncs(ctx context.Context) error {
 	return err
 }
 
-func (d *Data) UseLongestEnableBankingSync(ctx context.Context, job EnableBankingSyncJob) error {
-	result, err := d.db.ExecContext(ctx, `
-		update enable_banking_syncs sync
-		set use_longest = true,
-		    continuation_key = '',
-		    seen_continuation_keys = '{}',
-		    attempts = 0,
-		    next_attempt_at = now()
-		from import_batches batch
-		where sync.batch_id = $1
-		  and batch.id = sync.batch_id
-		  and batch.status = 'syncing'
-		  and sync.completed_at is null
-		  and sync.date_from = $2
-		  and sync.continuation_key = $3
-		  and not sync.use_longest
-	`, job.BatchID, job.DateFrom, job.ContinuationKey)
-	if err != nil {
-		return err
-	}
-	count, _ := result.RowsAffected()
-	if count == 0 {
-		return ErrBankSyncNotFound
-	}
-	return nil
-}
-
 // StageEnableBankingPage commits normalized rows and the next continuation key
 // together, making one complete provider page the retry unit.
-func (d *Data) StageEnableBankingPage(ctx context.Context, job EnableBankingSyncJob, rows []ParsedRow, rowErrors []RowError, nextContinuation string, nextDateFrom time.Time, fetchedAll bool) error {
+func (d *Data) StageEnableBankingPage(ctx context.Context, job EnableBankingSyncJob, rows []ParsedRow, rowErrors []RowError, nextContinuation string, fetchedAll bool) error {
 	conn, err := d.db.Conn(ctx)
 	if err != nil {
 		return err
@@ -281,23 +244,22 @@ func (d *Data) StageEnableBankingPage(ctx context.Context, job EnableBankingSync
 		var seenContinuations []string
 		var sequence int64
 		var dateFrom time.Time
-		var useLongest bool
 		err = tx.QueryRow(ctx, `
-			select sync.continuation_key, sync.seen_continuation_keys, sync.next_sequence, sync.date_from, sync.use_longest
+			select sync.continuation_key, sync.seen_continuation_keys, sync.next_sequence, sync.date_from
 			from enable_banking_syncs sync
 			join import_batches batch on batch.id = sync.batch_id
 			where sync.batch_id = $1
 			  and sync.completed_at is null
 			  and batch.status = 'syncing'
 			for update of sync, batch
-		`, job.BatchID).Scan(&continuation, &seenContinuations, &sequence, &dateFrom, &useLongest)
+		`, job.BatchID).Scan(&continuation, &seenContinuations, &sequence, &dateFrom)
 		if err == pgx.ErrNoRows {
 			return ErrBankSyncNotFound
 		}
 		if err != nil {
 			return err
 		}
-		if continuation != job.ContinuationKey || sequence != job.NextSequence || !dateFrom.Equal(job.DateFrom) || useLongest != job.UseLongest {
+		if continuation != job.ContinuationKey || sequence != job.NextSequence || !dateFrom.Equal(job.DateFrom) {
 			return fmt.Errorf("bank sync page changed while processing")
 		}
 		if nextContinuation != "" {
@@ -327,17 +289,15 @@ func (d *Data) StageEnableBankingPage(ctx context.Context, job EnableBankingSync
 			update enable_banking_syncs
 			set continuation_key = $2,
 			    seen_continuation_keys = case
-			        when $5 <> date_from then '{}'::text[]
 			        when $2 = '' then seen_continuation_keys
 			        else array_append(seen_continuation_keys, $2)
 			    end,
 			    next_sequence = $3,
 			    fetched_all = $4,
-			    date_from = $5,
 			    attempts = 0,
 			    next_attempt_at = now()
 			where batch_id = $1
-		`, job.BatchID, nextContinuation, sequence+int64(len(rows)), fetchedAll, nextDateFrom); err != nil {
+		`, job.BatchID, nextContinuation, sequence+int64(len(rows)), fetchedAll); err != nil {
 			return err
 		}
 		if len(rowErrors) > 0 {

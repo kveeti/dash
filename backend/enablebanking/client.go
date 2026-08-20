@@ -149,23 +149,6 @@ func (c *Client) DeleteSession(ctx context.Context, sessionID string) error {
 	return c.request(ctx, http.MethodDelete, "/sessions/"+url.PathEscape(sessionID), nil, nil, nil)
 }
 
-func (c *Client) Transactions(ctx context.Context, accountUID, from, to, continuation string) (TransactionPage, error) {
-	if from == "" || to == "" {
-		return TransactionPage{}, errors.New("transaction date range is required")
-	}
-	query := url.Values{
-		"transaction_status": {"BOOK"},
-		"date_from":          {from},
-		"date_to":            {to},
-	}
-	if continuation != "" {
-		query.Set("continuation_key", continuation)
-	}
-	var page TransactionPage
-	err := c.request(ctx, http.MethodGet, "/accounts/"+url.PathEscape(accountUID)+"/transactions", query, nil, &page)
-	return page, err
-}
-
 func (c *Client) LongestTransactions(ctx context.Context, accountUID, from, continuation string) (TransactionPage, error) {
 	if from == "" {
 		return TransactionPage{}, errors.New("transaction start date is required")

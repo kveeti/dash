@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -213,13 +212,10 @@ func TestSyncEnableBankingTracksRevolutWalletsSeparately(t *testing.T) {
 	}
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestNumber := requests.Add(1)
-		require.Empty(t, r.URL.Query().Get("strategy"))
-		from, err := time.Parse(time.DateOnly, r.URL.Query().Get("date_from"))
-		require.NoError(t, err)
-		to, err := time.Parse(time.DateOnly, r.URL.Query().Get("date_to"))
-		require.NoError(t, err)
-		require.LessOrEqual(t, int(to.Sub(from).Hours()/24)+1, 90)
-		if requestNumber == 28 {
+		require.Equal(t, "longest", r.URL.Query().Get("strategy"))
+		require.NotEmpty(t, r.URL.Query().Get("date_from"))
+		require.Empty(t, r.URL.Query().Get("date_to"))
+		if requestNumber == 4 {
 			require.Equal(t, "/accounts/eur-account/transactions", r.URL.Path)
 		}
 		_, _ = w.Write([]byte(`{"transactions":[],"continuation_key":""}`))
@@ -265,7 +261,7 @@ func TestSyncEnableBankingTracksRevolutWalletsSeparately(t *testing.T) {
 	}
 	batchID := enqueueEnableBankingAccountSync(t, app, integrationID, wallets[0].UID)
 	waitImport(t, app, batchID)
-	require.Equal(t, int32(28), requests.Load())
+	require.Equal(t, int32(4), requests.Load())
 }
 
 func TestSyncSelectedEnableBankingAccountsEnqueuesAtomicallyAcrossConnections(t *testing.T) {
@@ -315,9 +311,10 @@ func TestSyncEnableBankingKeepsProgressWhenAccountUIDChanges(t *testing.T) {
 	var requests atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestNumber := requests.Add(1)
-		require.Empty(t, r.URL.Query().Get("strategy"))
+		require.Equal(t, "longest", r.URL.Query().Get("strategy"))
 		require.NotEmpty(t, r.URL.Query().Get("date_from"))
-		if requestNumber <= 9 {
+		require.Empty(t, r.URL.Query().Get("date_to"))
+		if requestNumber == 1 {
 			require.Equal(t, "/accounts/account/transactions", r.URL.Path)
 		} else {
 			require.Equal(t, "/accounts/new-account/transactions", r.URL.Path)
@@ -344,18 +341,18 @@ func TestSyncEnableBankingKeepsProgressWhenAccountUIDChanges(t *testing.T) {
 	require.NoError(t, app.d.UpdateBankIntegration(t.Context(), userID, integrationID, enableBankingProvider, saved))
 
 	waitImport(t, app, enqueueEnableBankingAccountSync(t, app, integrationID, "new-account"))
-	require.Equal(t, int32(10), requests.Load())
+	require.Equal(t, int32(2), requests.Load())
 }
 
-func TestInitialEnableBankingSyncUsesTwoYearsOfNinetyDayWindows(t *testing.T) {
-	var ranges [][2]string
-	var rangesMu sync.Mutex
+func TestInitialEnableBankingSyncUsesLongestFromTwoYearsAgo(t *testing.T) {
+	var requests atomic.Int32
+	dateTo := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Empty(t, r.URL.Query().Get("strategy"))
-		if r.URL.Query().Get("continuation_key") == "" {
-			rangesMu.Lock()
-			ranges = append(ranges, [2]string{r.URL.Query().Get("date_from"), r.URL.Query().Get("date_to")})
-			rangesMu.Unlock()
+		require.Equal(t, "longest", r.URL.Query().Get("strategy"))
+		require.Equal(t, dateTo.AddDate(-2, 0, 0).Format(time.DateOnly), r.URL.Query().Get("date_from"))
+		require.Empty(t, r.URL.Query().Get("date_to"))
+		if requests.Add(1) == 1 {
+			require.Empty(t, r.URL.Query().Get("continuation_key"))
 			_, _ = w.Write([]byte(`{"transactions":[],"continuation_key":"next"}`))
 			return
 		}
@@ -367,7 +364,6 @@ func TestInitialEnableBankingSyncUsesTwoYearsOfNinetyDayWindows(t *testing.T) {
 	app, syncer, integrationID, bucketID := newEnableBankingSyncTest(t, provider.URL)
 	var userID string
 	require.NoError(t, app.d.Users.QueryRow("select user_id from bank_integrations where id=$1", integrationID).Scan(&userID))
-	dateTo := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
 	batchIDs, err := app.d.EnqueueEnableBankingSyncs(t.Context(), userID, []data.EnableBankingSyncRequest{{
 		IntegrationID: integrationID, Bank: "Test", BucketID: bucketID,
 		AccountUID: "account", IdentificationHash: "account-hash",
@@ -378,21 +374,7 @@ func TestInitialEnableBankingSyncUsesTwoYearsOfNinetyDayWindows(t *testing.T) {
 	t.Cleanup(cancel)
 	syncer.Start(ctx)
 	waitImport(t, app, batchIDs[0])
-
-	rangesMu.Lock()
-	defer rangesMu.Unlock()
-	expectedTo := dateTo
-	for i, window := range ranges {
-		from, err := time.Parse(time.DateOnly, window[0])
-		require.NoError(t, err)
-		to, err := time.Parse(time.DateOnly, window[1])
-		require.NoError(t, err)
-		require.Equal(t, expectedTo, to, "window %d does not end before the prior window", i)
-		require.LessOrEqual(t, int(to.Sub(from).Hours()/24)+1, 90)
-		expectedTo = from.AddDate(0, 0, -1)
-	}
-	require.Len(t, ranges, 9)
-	require.Equal(t, dateTo.AddDate(-2, 0, -1), expectedTo)
+	require.Equal(t, int32(2), requests.Load())
 }
 
 func TestSyncEnableBankingRejectsSecondActiveSync(t *testing.T) {
@@ -434,7 +416,7 @@ func TestSyncEnableBankingRetriesServerErrorFromLastCompletedPage(t *testing.T) 
 
 	report := waitImport(t, app, batchID)
 	require.Equal(t, 2, report.Imported)
-	require.Equal(t, int32(11), requests.Load())
+	require.Equal(t, int32(3), requests.Load())
 }
 
 func TestSyncEnableBankingDoesNotRetryPermanentErrors(t *testing.T) {
@@ -471,46 +453,55 @@ func TestSyncEnableBankingDoesNotRetryPermanentErrors(t *testing.T) {
 	}
 }
 
-func TestSyncEnableBankingUsesLongestAtBankHistoryLimit(t *testing.T) {
-	var requests atomic.Int32
-	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch requests.Add(1) {
-		case 1:
-			require.Empty(t, r.URL.Query().Get("strategy"))
-			_, _ = w.Write([]byte(`{"transactions":[],"continuation_key":""}`))
-		case 2:
-			require.Empty(t, r.URL.Query().Get("strategy"))
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, _ = w.Write([]byte(`{"error":"WRONG_TRANSACTIONS_PERIOD","message":"Wrong transactions period requested"}`))
-		case 3:
-			require.Equal(t, "longest", r.URL.Query().Get("strategy"))
-			require.NotEmpty(t, r.URL.Query().Get("date_from"))
-			require.Empty(t, r.URL.Query().Get("date_to"))
-			require.Empty(t, r.URL.Query().Get("continuation_key"))
-			_, _ = w.Write([]byte(`{"transactions":[{"transaction_amount":{"currency":"EUR","amount":"12.34"},"credit_debit_indicator":"DBIT","booking_date":"2026-07-01","status":"BOOK"}],"continuation_key":"next"}`))
-		case 4:
-			require.Equal(t, "longest", r.URL.Query().Get("strategy"))
-			require.Equal(t, "next", r.URL.Query().Get("continuation_key"))
-			_, _ = w.Write([]byte(`{"transactions":[{"transaction_amount":{"currency":"EUR","amount":"100.00"},"credit_debit_indicator":"CRDT","booking_date":"2026-07-02","status":"BOOK"}],"continuation_key":""}`))
-		default:
-			t.Fatalf("unexpected extra bank request")
-		}
-	}))
+func TestEnableBankingSyncDateFromIsAlwaysClampedToTwoYears(t *testing.T) {
+	provider := httptest.NewServer(http.NotFoundHandler())
 	defer provider.Close()
+	app, _, integrationID, bucketID := newEnableBankingSyncTest(t, provider.URL)
+	var userID string
+	require.NoError(t, app.d.Users.QueryRow("select user_id from bank_integrations where id=$1", integrationID).Scan(&userID))
+	request := []data.EnableBankingSyncRequest{{
+		IntegrationID:      integrationID,
+		Bank:               "Test",
+		BucketID:           bucketID,
+		AccountUID:         "account",
+		IdentificationHash: "account-hash",
+	}}
+	enqueue := func(dateTo time.Time) string {
+		batchIDs, err := app.d.EnqueueEnableBankingSyncs(t.Context(), userID, request, dateTo)
+		require.NoError(t, err)
+		return batchIDs[0]
+	}
+	complete := func(batchID string, dateTo time.Time) {
+		_, err := app.d.Users.Exec(`
+			update enable_banking_syncs
+			set date_to = $2, completed_at = now()
+			where batch_id = $1
+		`, batchID, dateTo)
+		require.NoError(t, err)
+		_, err = app.d.Users.Exec("update import_batches set status = 'done' where id = $1", batchID)
+		require.NoError(t, err)
+	}
+	dateFrom := func(batchID string) time.Time {
+		var date time.Time
+		require.NoError(t, app.d.Users.QueryRow(
+			"select date_from from enable_banking_syncs where batch_id=$1",
+			batchID,
+		).Scan(&date))
+		return date
+	}
 
-	app, syncer, integrationID, _ := newEnableBankingSyncTest(t, provider.URL)
-	batchID := enqueueEnableBankingSync(t, app, integrationID)
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	syncer.Start(ctx)
+	firstDateTo := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	firstBatch := enqueue(firstDateTo)
+	require.Equal(t, firstDateTo.AddDate(-2, 0, 0), dateFrom(firstBatch))
+	complete(firstBatch, time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
 
-	report := waitImport(t, app, batchID)
-	require.Equal(t, "done", report.Status)
-	require.Equal(t, 2, report.Imported)
-	require.Equal(t, int32(4), requests.Load())
-	var completed bool
-	require.NoError(t, app.d.Users.QueryRow("select completed_at is not null from enable_banking_syncs where batch_id=$1", batchID).Scan(&completed))
-	require.True(t, completed)
+	clampedBatch := enqueue(firstDateTo)
+	require.Equal(t, firstDateTo.AddDate(-2, 0, 0), dateFrom(clampedBatch))
+	complete(clampedBatch, firstDateTo)
+
+	laterDateTo := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
+	incrementalBatch := enqueue(laterDateTo)
+	require.Equal(t, firstDateTo.AddDate(0, 0, -2), dateFrom(incrementalBatch))
 }
 
 func TestSyncEnableBankingSkipsMalformedRows(t *testing.T) {
@@ -571,7 +562,7 @@ func TestEnableBankingSyncRecoveryKeepsCompletedPage(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	row := data.ParsedRow{OccurredOn: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Amount: -1234, Currency: "EUR"}
-	require.NoError(t, app.d.StageEnableBankingPage(t.Context(), job, []data.ParsedRow{row}, nil, "next", job.DateFrom, false))
+	require.NoError(t, app.d.StageEnableBankingPage(t.Context(), job, []data.ParsedRow{row}, nil, "next", false))
 	require.NoError(t, app.d.RecoverEnableBankingSyncs(t.Context()))
 
 	recovered, ok, err := app.d.ClaimEnableBankingSync(t.Context())
@@ -585,73 +576,23 @@ func TestEnableBankingSyncRecoveryKeepsCompletedPage(t *testing.T) {
 	require.Equal(t, 1, staged)
 
 	secondRow := data.ParsedRow{OccurredOn: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC), Amount: 10000, Currency: "EUR"}
-	require.NoError(t, app.d.StageEnableBankingPage(t.Context(), recovered, []data.ParsedRow{secondRow}, nil, "", recovered.DateTo, true))
+	require.NoError(t, app.d.StageEnableBankingPage(t.Context(), recovered, []data.ParsedRow{secondRow}, nil, "", true))
 	added, duplicates, err := app.d.FinalizeEnableBankingSync(t.Context(), batchID)
 	require.NoError(t, err)
 	require.Equal(t, 2, added)
 	require.Zero(t, duplicates)
 }
 
-func TestEnableBankingSyncRecoveryKeepsCompletedWindow(t *testing.T) {
-	provider := httptest.NewServer(http.NotFoundHandler())
-	defer provider.Close()
-	app, _, integrationID, _ := newEnableBankingSyncTest(t, provider.URL)
-	enqueueEnableBankingSync(t, app, integrationID)
-
-	job, ok, err := app.d.ClaimEnableBankingSync(t.Context())
-	require.NoError(t, err)
-	require.True(t, ok)
-	nextWindow := job.DateFrom.AddDate(0, 0, -90)
-	require.NoError(t, app.d.StageEnableBankingPage(t.Context(), job, nil, nil, "", nextWindow, false))
-	require.NoError(t, app.d.RecoverEnableBankingSyncs(t.Context()))
-
-	recovered, ok, err := app.d.ClaimEnableBankingSync(t.Context())
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.Equal(t, nextWindow, recovered.DateFrom)
-	require.Empty(t, recovered.ContinuationKey)
-	require.False(t, recovered.FetchedAll)
-}
-
-func TestEnableBankingSyncRecoveryKeepsLongestFallback(t *testing.T) {
-	provider := httptest.NewServer(http.NotFoundHandler())
-	defer provider.Close()
-	app, _, integrationID, _ := newEnableBankingSyncTest(t, provider.URL)
-	enqueueEnableBankingSync(t, app, integrationID)
-
-	job, ok, err := app.d.ClaimEnableBankingSync(t.Context())
-	require.NoError(t, err)
-	require.True(t, ok)
-	nextWindow := job.DateFrom.AddDate(0, 0, -90)
-	require.NoError(t, app.d.StageEnableBankingPage(t.Context(), job, nil, nil, "", nextWindow, false))
-	require.NoError(t, app.d.RecoverEnableBankingSyncs(t.Context()))
-	job, ok, err = app.d.ClaimEnableBankingSync(t.Context())
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.NoError(t, app.d.UseLongestEnableBankingSync(t.Context(), job))
-	require.NoError(t, app.d.RecoverEnableBankingSyncs(t.Context()))
-
-	recovered, ok, err := app.d.ClaimEnableBankingSync(t.Context())
-	require.NoError(t, err)
-	require.True(t, ok)
-	require.True(t, recovered.UseLongest)
-	require.Equal(t, nextWindow, recovered.DateFrom)
-	require.Empty(t, recovered.ContinuationKey)
-}
-
 func TestSyncEnableBankingAccountPagesIntoImportWorker(t *testing.T) {
 	var page atomic.Int32
-	var firstFrom string
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/accounts/account/transactions", r.URL.Path)
 		require.Equal(t, "BOOK", r.URL.Query().Get("transaction_status"))
-		require.Empty(t, r.URL.Query().Get("strategy"))
+		require.Equal(t, "longest", r.URL.Query().Get("strategy"))
+		require.Empty(t, r.URL.Query().Get("date_to"))
 		page.Add(1)
-		from := r.URL.Query().Get("date_from")
-		if firstFrom == "" {
-			firstFrom = from
-		}
-		if from == firstFrom && r.URL.Query().Get("continuation_key") == "" {
+		require.NotEmpty(t, r.URL.Query().Get("date_from"))
+		if r.URL.Query().Get("continuation_key") == "" {
 			_, _ = w.Write([]byte(`{"transactions":[{"transaction_amount":{"currency":"EUR","amount":"12.34"},"credit_debit_indicator":"DBIT","booking_date":"2026-07-01","creditor":{"name":"Cafe"},"status":"BOOK"}],"continuation_key":"next"}`))
 			return
 		}
@@ -696,7 +637,7 @@ func TestSyncEnableBankingAccountPagesIntoImportWorker(t *testing.T) {
 	rows := inboxByParty(getInbox(t, app, ""))
 	require.Equal(t, int64(-1234), rows["Cafe"].Amount)
 	require.Equal(t, int64(10000), rows["Employer"].Amount)
-	require.Equal(t, int32(10), page.Load())
+	require.Equal(t, int32(2), page.Load())
 	var staged, jobs int
 	require.NoError(t, app.d.Users.QueryRow("select count(*) from import_staged_rows where batch_id=$1", result.BatchID).Scan(&staged))
 	require.NoError(t, app.d.Users.QueryRow("select count(*) from enable_banking_syncs where batch_id=$1 and completed_at is not null", result.BatchID).Scan(&jobs))
@@ -725,5 +666,5 @@ func TestSyncEnableBankingAccountPagesIntoImportWorker(t *testing.T) {
 	secondReport := waitImport(t, app, allResult.BatchIDs[0])
 	require.Equal(t, 2, secondReport.Imported)
 	require.Zero(t, secondReport.Duplicates)
-	require.Equal(t, int32(20), page.Load())
+	require.Equal(t, int32(4), page.Load())
 }
