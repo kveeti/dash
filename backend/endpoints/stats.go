@@ -209,7 +209,7 @@ func HandleGetStats(state *state.State, getUserID GetUserID) Handler {
 			return err
 		}
 
-		stats, err := state.Data.GetStats(r.Context(), userID, current, comparison, full, timezone)
+		stats, err := state.Data.GetStats(r.Context(), userID, current, comparison, full)
 		if err != nil {
 			return NewUnexpectedErr("error getting stats: %w", err)
 		}

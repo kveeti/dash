@@ -175,6 +175,29 @@ func TestForceImportDuplicate(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 	require.Len(t, getInbox(t, app, ""), 2) // original + forced
+	var status string
+	var occurrence, audits int
+	var duplicateOf *string
+	require.NoError(t, app.d.Users.QueryRow(`
+		select status, occurrence, duplicate_of
+		from import_rows
+		where id = $1
+	`, dupID).Scan(&status, &occurrence, &duplicateOf))
+	require.Equal(t, "pending", status)
+	require.Equal(t, 1, occurrence)
+	require.Nil(t, duplicateOf)
+	require.NoError(t, app.d.Users.QueryRow(`
+		select count(*)
+		from audit_logs
+		where table_name = 'import_rows'
+		  and row_id = $1
+		  and operation = 'update'
+		  and before->>'status' = 'duplicate'
+	`, dupID).Scan(&audits))
+	require.Equal(t, 1, audits)
+
+	resp = authed(t, app, http.MethodPost, "/api/v1/imports/rows/"+dupID+"/import", nil)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 	// A third import of the same single-row file dups against both copies.
 	res = doImport(t, app, bank, nordeaHeader+row+row)

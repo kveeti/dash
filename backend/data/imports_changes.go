@@ -3,34 +3,61 @@ package data
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 )
 
 // ForceImport turns a duplicate row into a pending inbox row.
 func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
-	tx, err := d.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var status, hash string
-	var linked bool
-	err = tx.QueryRowContext(ctx, `
-		select
-			row.status,
-			row.dedup_hash,
-			exists (
-				select 1
-				from postings
-				where import_row_id = row.id
+	var status string
+	var linked, updated bool
+	err := d.db.QueryRowContext(ctx, `
+		with target as materialized (
+			select
+				row.*,
+				exists (
+					select 1
+					from postings
+					where import_row_id = row.id
+				) as linked
+			from import_rows row
+			join import_batches batch on batch.id = row.batch_id
+			where row.id = $1
+			  and batch.user_id = $2
+			for update of row
+		), next_occurrence as (
+			select coalesce(max(existing.occurrence) + 1, 0) as occurrence
+			from target
+			left join import_rows existing
+			  on existing.dedup_hash = target.dedup_hash
+			 and existing.status <> 'duplicate'
+		), audited as (
+			insert into audit_logs (
+				id, actor_user_id, table_name, row_id, operation, before, created_at
 			)
-		from import_rows row
-		join import_batches batch on batch.id = row.batch_id
-		where row.id = $1
-		  and batch.user_id = $2
-		for update of row
-	`, rowID, userID).Scan(&status, &hash, &linked)
+			select
+				uuidv7(), $2, 'import_rows', id, 'update',
+				to_jsonb(target) - 'linked', now()
+			from target
+			where status = 'duplicate'
+			  and not linked
+			returning row_id
+		), changed as (
+			update import_rows row
+			set status = 'pending',
+			    duplicate_of = null,
+			    occurrence = next_occurrence.occurrence
+			from target, next_occurrence, audited
+			where row.id = target.id
+			  and audited.row_id = target.id
+			returning row.id
+		)
+		select
+			target.status,
+			target.linked,
+			exists (select 1 from changed)
+		from target
+	`, rowID, userID).Scan(&status, &linked, &updated)
 	if err == sql.ErrNoRows {
 		return ErrImportNotFound
 	}
@@ -43,34 +70,10 @@ func (d *Data) ForceImport(ctx context.Context, userID, rowID string) error {
 	if linked {
 		return ErrInvalidPostings
 	}
-
-	var occurrence int
-	if err := tx.QueryRowContext(ctx, `
-		select coalesce(max(occurrence) + 1, 0)
-		from import_rows
-		where dedup_hash = $1
-		  and status <> 'duplicate'
-	`, hash).Scan(&occurrence); err != nil {
-		return err
+	if !updated {
+		return fmt.Errorf("force import update failed")
 	}
-
-	before, err := loadImportRow(ctx, tx, rowID)
-	if err != nil {
-		return err
-	}
-	if err := auditWrite(ctx, tx, userID, "import_rows", rowID, "update", before); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-		update import_rows
-		set status = 'pending',
-		    duplicate_of = null,
-		    occurrence = $1
-		where id = $2
-	`, occurrence, rowID); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return nil
 }
 
 func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
@@ -87,45 +90,4 @@ func (d *Data) DeleteImport(ctx context.Context, userID, batchID string) error {
 		slog.Error("import blob delete failed", "batch", batchID, "err", err)
 	}
 	return nil
-}
-
-func loadImportRow(ctx context.Context, tx *sql.Tx, rowID string) (*ImportRow, error) {
-	var row ImportRow
-	err := tx.QueryRowContext(ctx, `
-		select
-			row.id,
-			row.batch_id,
-			row.occurred_on,
-			row.occurred_at,
-			row.amount,
-			row.currency,
-			row.counterparty,
-			row.note,
-			row.dedup_hash,
-			row.occurrence,
-			row.status,
-			posting.transaction_id,
-			row.duplicate_of
-		from import_rows row
-		left join postings posting on posting.import_row_id = row.id
-		where row.id = $1
-	`, rowID).Scan(
-		&row.ID,
-		&row.BatchID,
-		&row.OccurredOn,
-		&row.OccurredAt,
-		&row.Amount,
-		&row.Currency,
-		&row.Counterparty,
-		&row.Note,
-		&row.DedupHash,
-		&row.Occurrence,
-		&row.Status,
-		&row.TransactionID,
-		&row.DuplicateOf,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &row, nil
 }

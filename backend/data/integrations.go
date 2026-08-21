@@ -253,27 +253,6 @@ func (d *Data) MapIntegrationAccount(ctx context.Context, userID, integrationID,
 	return tx.Commit()
 }
 
-func (d *Data) BucketForIntegrationAccount(ctx context.Context, userID, integrationID, iban string) (Bucket, error) {
-	var bucket Bucket
-	err := d.db.QueryRowContext(ctx, `
-		select
-			id, owner_user_id, kind, name, parent_id, counterpart_user_id,
-			iban, active_bank_integration_id, hidden, created_at
-		from buckets
-		where owner_user_id = $1
-		  and iban = $2
-		  and active_bank_integration_id = $3
-		  and not hidden
-	`, userID, NormalizeIBAN(iban), integrationID).Scan(
-		&bucket.ID, &bucket.OwnerUserID, &bucket.Kind, &bucket.Name, &bucket.ParentID, &bucket.CounterpartUserID,
-		&bucket.IBAN, &bucket.ActiveBankIntegrationID, &bucket.Hidden, &bucket.CreatedAt,
-	)
-	if err == sql.ErrNoRows {
-		return Bucket{}, ErrIntegrationAccount
-	}
-	return bucket, err
-}
-
 func (d *Data) DeleteBankIntegration(ctx context.Context, userID, id, provider string) error {
 	tx, err := d.db.BeginTx(ctx, nil)
 	if err != nil {

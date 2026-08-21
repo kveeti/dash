@@ -331,33 +331,15 @@ func HandleSyncEnableBankingAccount(s *state.State, getUserID GetUserID) Handler
 		if s.EnableBankingSyncer == nil {
 			return NewErr("Enable Banking sync worker is unavailable", http.StatusServiceUnavailable)
 		}
-		integration, err := s.Data.GetBankIntegration(r.Context(), userID, r.PathValue("id"), enableBankingProvider)
-		if err != nil {
-			return mapIntegrationError(err)
-		}
-		var saved enableBankingData
-		if json.Unmarshal(integration.Data, &saved) != nil {
-			return NewUnexpectedErr("decode Enable Banking integration")
-		}
-		var account *enableBankingAccount
-		for i := range saved.Accounts {
-			if saved.Accounts[i].UID == r.PathValue("uid") {
-				account = &saved.Accounts[i]
-				break
-			}
-		}
-		if account == nil {
-			return NewErr("bank account not found", http.StatusNotFound)
-		}
-		bucket, err := s.Data.BucketForIntegrationAccount(r.Context(), userID, integration.ID, account.IBAN)
-		if err != nil {
-			return mapIntegrationError(err)
-		}
-		batchIDs, err := s.Data.EnqueueEnableBankingSyncs(r.Context(), userID,
-			[]data.EnableBankingSyncRequest{{
-				IntegrationID: integration.ID, Bank: saved.Bank, BucketID: bucket.ID,
-				AccountUID: account.UID, IdentificationHash: account.IdentificationHash,
-			}}, time.Now().UTC())
+		batchIDs, err := s.Data.EnqueueEnableBankingSyncs(
+			r.Context(),
+			userID,
+			[]data.EnableBankingSyncTarget{{
+				IntegrationID: r.PathValue("id"),
+				AccountUID:    r.PathValue("uid"),
+			}},
+			time.Now().UTC(),
+		)
 		if err != nil {
 			return mapBankSyncError(err)
 		}
@@ -376,34 +358,15 @@ func HandleSyncAllEnableBankingAccounts(s *state.State, getUserID GetUserID) Han
 		if s.EnableBankingSyncer == nil {
 			return NewErr("Enable Banking sync worker is unavailable", http.StatusServiceUnavailable)
 		}
-		integration, err := s.Data.GetBankIntegration(r.Context(), userID, r.PathValue("id"), enableBankingProvider)
-		if err != nil {
-			return mapIntegrationError(err)
-		}
-		var saved enableBankingData
-		if json.Unmarshal(integration.Data, &saved) != nil {
-			return NewUnexpectedErr("decode Enable Banking integration")
-		}
-		buckets, err := s.Data.ListBuckets(r.Context(), userID)
-		if err != nil {
-			return NewUnexpectedErr("list buckets: %w", err)
-		}
-		bucketByIBAN := make(map[string]string, len(buckets))
-		for _, bucket := range buckets {
-			if bucket.IBAN != nil && bucket.ActiveBankIntegrationID != nil && *bucket.ActiveBankIntegrationID == integration.ID {
-				bucketByIBAN[*bucket.IBAN] = bucket.ID
-			}
-		}
-		requests := make([]data.EnableBankingSyncRequest, 0, len(saved.Accounts))
-		for _, account := range saved.Accounts {
-			if bucketID := bucketByIBAN[account.IBAN]; bucketID != "" {
-				requests = append(requests, data.EnableBankingSyncRequest{
-					IntegrationID: integration.ID, Bank: saved.Bank, BucketID: bucketID,
-					AccountUID: account.UID, IdentificationHash: account.IdentificationHash,
-				})
-			}
-		}
-		batchIDs, err := s.Data.EnqueueEnableBankingSyncs(r.Context(), userID, requests, time.Now().UTC())
+		batchIDs, err := s.Data.EnqueueEnableBankingSyncs(
+			r.Context(),
+			userID,
+			[]data.EnableBankingSyncTarget{{
+				IntegrationID: r.PathValue("id"),
+				AllAccounts:   true,
+			}},
+			time.Now().UTC(),
+		)
 		if err != nil {
 			return mapBankSyncError(err)
 		}
@@ -432,66 +395,14 @@ func HandleSyncSelectedEnableBankingAccounts(s *state.State, getUserID GetUserID
 			return NewErr("select at least one bank account", http.StatusBadRequest)
 		}
 
-		integrations, err := s.Data.ListBankIntegrations(r.Context(), userID, enableBankingProvider)
-		if err != nil {
-			return NewUnexpectedErr("list bank integrations: %w", err)
-		}
-		type savedIntegration struct {
-			ID   string
-			Data enableBankingData
-		}
-		integrationByID := make(map[string]savedIntegration, len(integrations))
-		for _, integration := range integrations {
-			var saved enableBankingData
-			if err := json.Unmarshal(integration.Data, &saved); err != nil {
-				return NewUnexpectedErr("decode Enable Banking integration: %w", err)
-			}
-			integrationByID[integration.ID] = savedIntegration{ID: integration.ID, Data: saved}
-		}
-		buckets, err := s.Data.ListBuckets(r.Context(), userID)
-		if err != nil {
-			return NewUnexpectedErr("list buckets: %w", err)
-		}
-		bucketByAccount := make(map[string]string, len(buckets))
-		for _, bucket := range buckets {
-			if bucket.IBAN != nil && bucket.ActiveBankIntegrationID != nil {
-				bucketByAccount[*bucket.ActiveBankIntegrationID+":"+*bucket.IBAN] = bucket.ID
+		targets := make([]data.EnableBankingSyncTarget, len(body.Accounts))
+		for i, selected := range body.Accounts {
+			targets[i] = data.EnableBankingSyncTarget{
+				IntegrationID: selected.ConnectionID,
+				AccountUID:    selected.AccountUID,
 			}
 		}
-
-		requests := make([]data.EnableBankingSyncRequest, 0, len(body.Accounts))
-		seen := make(map[string]bool, len(body.Accounts))
-		for _, selected := range body.Accounts {
-			key := selected.ConnectionID + ":" + selected.AccountUID
-			if seen[key] {
-				return NewErr("bank account was selected more than once", http.StatusBadRequest)
-			}
-			seen[key] = true
-			integration, ok := integrationByID[selected.ConnectionID]
-			if !ok {
-				return NewErr("bank account not found", http.StatusNotFound)
-			}
-			var account *enableBankingAccount
-			for i := range integration.Data.Accounts {
-				if integration.Data.Accounts[i].UID == selected.AccountUID {
-					account = &integration.Data.Accounts[i]
-					break
-				}
-			}
-			if account == nil {
-				return NewErr("bank account not found", http.StatusNotFound)
-			}
-			bucketID := bucketByAccount[integration.ID+":"+account.IBAN]
-			if bucketID == "" {
-				return NewErr(data.ErrIntegrationAccount.Error(), http.StatusBadRequest)
-			}
-			requests = append(requests, data.EnableBankingSyncRequest{
-				IntegrationID: integration.ID, Bank: integration.Data.Bank, BucketID: bucketID,
-				AccountUID: account.UID, IdentificationHash: account.IdentificationHash,
-			})
-		}
-
-		batchIDs, err := s.Data.EnqueueEnableBankingSyncs(r.Context(), userID, requests, time.Now().UTC())
+		batchIDs, err := s.Data.EnqueueEnableBankingSyncs(r.Context(), userID, targets, time.Now().UTC())
 		if err != nil {
 			return mapBankSyncError(err)
 		}
@@ -530,7 +441,9 @@ func mapBankSyncError(err error) error {
 	switch {
 	case errors.Is(err, data.ErrBankSyncInProgress):
 		return NewErr(err.Error(), http.StatusConflict)
-	case errors.Is(err, data.ErrIntegrationAccount):
+	case errors.Is(err, data.ErrIntegrationNotFound), errors.Is(err, data.ErrBankSyncAccountNotFound):
+		return NewErr(err.Error(), http.StatusNotFound)
+	case errors.Is(err, data.ErrIntegrationAccount), errors.Is(err, data.ErrBankSyncDuplicateAccount):
 		return NewErr(err.Error(), http.StatusBadRequest)
 	default:
 		return NewUnexpectedErr("queue bank sync: %w", err)

@@ -241,6 +241,15 @@ func TestSyncEnableBankingTracksRevolutWalletsSeparately(t *testing.T) {
 	require.NoError(t, app.d.Users.QueryRow("select count(*) from enable_banking_syncs where integration_id=$1", integrationID).Scan(&jobs))
 	require.Zero(t, jobs)
 
+	duplicateSelection := map[string]any{"accounts": []map[string]string{
+		{"connection_id": integrationID, "account_uid": wallets[0].UID},
+		{"connection_id": integrationID, "account_uid": wallets[0].UID},
+	}}
+	response = authed(t, app, http.MethodPost, "/api/v1/enablebanking/sync", duplicateSelection)
+	require.Equal(t, http.StatusBadRequest, response.StatusCode)
+	require.NoError(t, app.d.Users.QueryRow("select count(*) from enable_banking_syncs where integration_id=$1", integrationID).Scan(&jobs))
+	require.Zero(t, jobs)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	syncer.Start(ctx)
@@ -361,12 +370,12 @@ func TestInitialEnableBankingSyncUsesLongestFromTwoYearsAgo(t *testing.T) {
 	}))
 	defer provider.Close()
 
-	app, syncer, integrationID, bucketID := newEnableBankingSyncTest(t, provider.URL)
+	app, syncer, integrationID, _ := newEnableBankingSyncTest(t, provider.URL)
 	var userID string
 	require.NoError(t, app.d.Users.QueryRow("select user_id from bank_integrations where id=$1", integrationID).Scan(&userID))
-	batchIDs, err := app.d.EnqueueEnableBankingSyncs(t.Context(), userID, []data.EnableBankingSyncRequest{{
-		IntegrationID: integrationID, Bank: "Test", BucketID: bucketID,
-		AccountUID: "account", IdentificationHash: "account-hash",
+	batchIDs, err := app.d.EnqueueEnableBankingSyncs(t.Context(), userID, []data.EnableBankingSyncTarget{{
+		IntegrationID: integrationID,
+		AccountUID:    "account",
 	}}, dateTo)
 	require.NoError(t, err)
 
@@ -456,15 +465,12 @@ func TestSyncEnableBankingDoesNotRetryPermanentErrors(t *testing.T) {
 func TestEnableBankingSyncDateFromIsAlwaysClampedToTwoYears(t *testing.T) {
 	provider := httptest.NewServer(http.NotFoundHandler())
 	defer provider.Close()
-	app, _, integrationID, bucketID := newEnableBankingSyncTest(t, provider.URL)
+	app, _, integrationID, _ := newEnableBankingSyncTest(t, provider.URL)
 	var userID string
 	require.NoError(t, app.d.Users.QueryRow("select user_id from bank_integrations where id=$1", integrationID).Scan(&userID))
-	request := []data.EnableBankingSyncRequest{{
-		IntegrationID:      integrationID,
-		Bank:               "Test",
-		BucketID:           bucketID,
-		AccountUID:         "account",
-		IdentificationHash: "account-hash",
+	request := []data.EnableBankingSyncTarget{{
+		IntegrationID: integrationID,
+		AccountUID:    "account",
 	}}
 	enqueue := func(dateTo time.Time) string {
 		batchIDs, err := app.d.EnqueueEnableBankingSyncs(t.Context(), userID, request, dateTo)

@@ -18,15 +18,15 @@ const EnableBankingSource = "enable_banking"
 var (
 	ErrBankSyncInProgress           = errors.New("bank account sync is already in progress")
 	ErrBankSyncNotFound             = errors.New("bank sync job not found")
+	ErrBankSyncAccountNotFound      = errors.New("bank account not found")
+	ErrBankSyncDuplicateAccount     = errors.New("bank account was selected more than once")
 	ErrBankSyncRepeatedContinuation = errors.New("Enable Banking returned a repeated continuation key")
 )
 
-type EnableBankingSyncRequest struct {
-	IntegrationID      string
-	Bank               string
-	BucketID           string
-	AccountUID         string
-	IdentificationHash string
+type EnableBankingSyncTarget struct {
+	IntegrationID string `json:"integration_id"`
+	AccountUID    string `json:"account_uid,omitempty"`
+	AllAccounts   bool   `json:"all_accounts,omitempty"`
 }
 
 type EnableBankingSyncJob struct {
@@ -54,97 +54,183 @@ func (d *Data) HasActiveEnableBankingSyncs(ctx context.Context, userID string) (
 	return active, err
 }
 
-// EnqueueEnableBankingSyncs creates every requested import batch and provider
-// job atomically. No bank request is made on the caller's request path.
-func (d *Data) EnqueueEnableBankingSyncs(ctx context.Context, userID string, requests []EnableBankingSyncRequest, dateTo time.Time) ([]string, error) {
-	if len(requests) == 0 {
+// EnqueueEnableBankingSyncs resolves saved bank accounts and their mapped
+// buckets, validates the full selection, and creates every sync job atomically.
+func (d *Data) EnqueueEnableBankingSyncs(ctx context.Context, userID string, targets []EnableBankingSyncTarget, dateTo time.Time) ([]string, error) {
+	if len(targets) == 0 {
 		return []string{}, nil
 	}
-	now := time.Now().UTC()
-	dateToText := dateTo.UTC().Format(time.DateOnly)
-	batchIDs := make([]string, len(requests))
-	bucketIDs := make([]string, len(requests))
-	accountUIDs := make([]string, len(requests))
-	identificationHashes := make([]string, len(requests))
-	integrationIDs := make([]string, len(requests))
-	filenames := make([]string, len(requests))
-	for i, request := range requests {
-		batchIDs[i] = NewPrivateID()
-		bucketIDs[i] = request.BucketID
-		accountUIDs[i] = request.AccountUID
-		identificationHashes[i] = request.IdentificationHash
-		integrationIDs[i] = request.IntegrationID
-		filenames[i] = request.Bank + " sync"
+	allAccounts := targets[0].AllAccounts
+	if allAccounts && len(targets) != 1 {
+		return nil, ErrIntegrationAccount
 	}
-
-	tx, err := d.db.BeginTx(ctx, nil)
+	seen := make(map[string]bool, len(targets))
+	integrations := make(map[string]bool, len(targets))
+	for _, target := range targets {
+		if target.IntegrationID == "" || target.AllAccounts != allAccounts || (!allAccounts && target.AccountUID == "") {
+			return nil, ErrIntegrationAccount
+		}
+		key := target.IntegrationID + ":" + target.AccountUID
+		if seen[key] {
+			return nil, ErrBankSyncDuplicateAccount
+		}
+		seen[key] = true
+		integrations[target.IntegrationID] = true
+	}
+	encodedTargets, err := json.Marshal(targets)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
-	var inserted int
-	err = tx.QueryRowContext(ctx, `
-		with requested(batch_id, bucket_id, account_uid, identification_hash, integration_id, filename) as (
-			select *
-			from unnest($3::uuid[], $4::uuid[], $5::text[], $6::text[], $7::uuid[], $8::text[])
-		), mapped_accounts as (
+
+	var ownedIntegrations, resolvedAccounts, mappedAccounts int
+	var encodedBatchIDs []byte
+	err = d.db.QueryRowContext(ctx, `
+		with requested as materialized (
 			select
-				requested.batch_id,
-				requested.bucket_id,
-				requested.account_uid,
-				requested.identification_hash,
-				requested.integration_id,
-				requested.filename,
+				target.integration_id,
+				target.account_uid,
+				raw_target.ordinality as request_ordinality
+			from jsonb_array_elements($3::jsonb) with ordinality as raw_target(value, ordinality)
+			cross join lateral jsonb_to_record(raw_target.value) as target(
+				integration_id uuid,
+				account_uid text,
+				all_accounts boolean
+			)
+		), owned_integrations as materialized (
+			select
+				requested.request_ordinality,
+				requested.account_uid as requested_account_uid,
+				integration.id,
+				integration.data,
+				integration.updated_at
+			from requested
+			join bank_integrations integration
+			  on integration.id = requested.integration_id
+			 and integration.user_id = $1
+			 and integration.provider = $2
+			 and integration.deleted_at is null
+		), resolved_accounts as materialized (
+			select
+				integration.request_ordinality,
+				raw_account.ordinality as account_ordinality,
+				integration.id as integration_id,
+				integration.data->>'bank' as bank,
+				integration.updated_at,
+				account.uid as account_uid,
+				account.identification_hash,
+				account.iban
+			from owned_integrations integration
+			cross join lateral jsonb_array_elements(
+				coalesce(integration.data->'accounts', '[]'::jsonb)
+			) with ordinality as raw_account(value, ordinality)
+			cross join lateral jsonb_to_record(raw_account.value) as account(
+				uid text,
+				identification_hash text,
+				iban text
+			)
+			where $4::boolean
+			   or account.uid = integration.requested_account_uid
+		), mapped_accounts as materialized (
+			select
+				account.*,
+				bucket.id as bucket_id
+			from resolved_accounts account
+			join buckets bucket
+			  on bucket.owner_user_id = $1
+			 and bucket.iban = account.iban
+			 and bucket.active_bank_integration_id = account.integration_id
+			 and bucket.kind in ('asset', 'liability')
+			 and not bucket.hidden
+			where account.account_uid <> ''
+			  and account.identification_hash <> ''
+		), selection as (
+			select
+				(select count(distinct id) from owned_integrations) as owned_integrations,
+				(select count(*) from resolved_accounts) as resolved_accounts,
+				(select count(*) from mapped_accounts) as mapped_accounts,
+				(select count(*) from requested) as requested_accounts
+		), valid_selection as (
+			select
+				selection.*,
+				owned_integrations = (select count(distinct integration_id) from requested)
+				and (
+					$4::boolean
+					or (
+						resolved_accounts = requested_accounts
+						and mapped_accounts = requested_accounts
+					)
+				) as valid
+			from selection
+		), prepared as materialized (
+			select
+				uuidv7() as batch_id,
+				account.*,
 				greatest(
 					coalesce(
 						(
 							select max(previous.date_to) - 2
 							from enable_banking_syncs previous
-							where previous.integration_id = requested.integration_id
-							  and previous.identification_hash = requested.identification_hash
+							where previous.integration_id = account.integration_id
+							  and previous.identification_hash = account.identification_hash
 							  and previous.completed_at is not null
-							  and previous.completed_at >= integration.updated_at
+							  and previous.completed_at >= account.updated_at
 						),
-						($10::date - interval '2 years')::date
+						($5::date - interval '2 years')::date
 					),
-					($10::date - interval '2 years')::date
+					($5::date - interval '2 years')::date
 				) as date_from
-			from requested
-			join buckets bucket on bucket.id = requested.bucket_id
-			join bank_integrations integration on integration.id = requested.integration_id
-			where bucket.owner_user_id = $1
-			  and bucket.kind in ('asset', 'liability')
-			  and not bucket.hidden
-			  and bucket.active_bank_integration_id = integration.id
-			  and integration.user_id = $1
-			  and integration.provider = $2
-			  and integration.deleted_at is null
-			  and requested.account_uid <> ''
-			  and requested.identification_hash <> ''
+			from mapped_accounts account
+			cross join valid_selection selection
+			where selection.valid
 		), created_batches as (
 			insert into import_batches (
 				id, user_id, bucket_id, source, filename, created_at, status
 			)
-			select batch_id, $1, bucket_id, $2, filename, $9, 'queued'
-			from mapped_accounts
+			select batch_id, $1, bucket_id, $2, bank || ' sync', $6, 'queued'
+			from prepared
 			returning id
 		), created_syncs as (
 			insert into enable_banking_syncs (
 				batch_id, integration_id, identification_hash, account_uid, date_from, date_to
 			)
-			select sync.batch_id, sync.integration_id, sync.identification_hash, sync.account_uid, sync.date_from, $10
-			from mapped_accounts sync
+			select
+				sync.batch_id,
+				sync.integration_id,
+				sync.identification_hash,
+				sync.account_uid,
+				sync.date_from,
+				$5
+			from prepared sync
 			join created_batches batch on batch.id = sync.batch_id
 			returning batch_id
 		), audited as (
 			insert into audit_logs (
 				id, actor_user_id, table_name, row_id, operation, before, created_at
 			)
-			select uuidv7(), $1, 'import_batches', batch_id, 'insert', null, $9
+			select uuidv7(), $1, 'import_batches', batch_id, 'insert', null, $6
 			from created_syncs
 		)
-		select count(*) from created_syncs
-	`, userID, EnableBankingSource, batchIDs, bucketIDs, accountUIDs, identificationHashes, integrationIDs, filenames, now, dateToText).Scan(&inserted)
+		select
+			selection.owned_integrations,
+			selection.resolved_accounts,
+			selection.mapped_accounts,
+			coalesce(
+				(
+					select jsonb_agg(sync.batch_id order by prepared.request_ordinality, prepared.account_ordinality)
+					from created_syncs sync
+					join prepared on prepared.batch_id = sync.batch_id
+				),
+				'[]'::jsonb
+			)
+		from valid_selection selection
+	`,
+		userID,
+		EnableBankingSource,
+		encodedTargets,
+		allAccounts,
+		dateTo.UTC().Format(time.DateOnly),
+		time.Now().UTC(),
+	).Scan(&ownedIntegrations, &resolvedAccounts, &mappedAccounts, &encodedBatchIDs)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -152,10 +238,17 @@ func (d *Data) EnqueueEnableBankingSyncs(ctx context.Context, userID string, req
 		}
 		return nil, err
 	}
-	if inserted != len(requests) {
+	if ownedIntegrations != len(integrations) {
+		return nil, ErrIntegrationNotFound
+	}
+	if !allAccounts && resolvedAccounts != len(targets) {
+		return nil, ErrBankSyncAccountNotFound
+	}
+	if !allAccounts && mappedAccounts != len(targets) {
 		return nil, ErrIntegrationAccount
 	}
-	if err := tx.Commit(); err != nil {
+	var batchIDs []string
+	if err := json.Unmarshal(encodedBatchIDs, &batchIDs); err != nil {
 		return nil, err
 	}
 	return batchIDs, nil

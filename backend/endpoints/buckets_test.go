@@ -55,6 +55,42 @@ func TestNewUserSystemBucketsAreHidden(t *testing.T) {
 	require.NoError(t, app.d.Users.QueryRow("select count(*) filter(where kind='transit'),count(*) filter(where kind='fx_conversion') from buckets where hidden=true").Scan(&transit, &fx))
 	require.Equal(t, 1, transit)
 	require.Equal(t, 1, fx)
+
+	var userAudits, bucketAudits int
+	require.NoError(t, app.d.Users.QueryRow(`
+		select
+			count(*) filter (where table_name = 'users'),
+			count(*) filter (where table_name = 'buckets')
+		from audit_logs
+		where operation = 'insert'
+		  and before is null
+	`).Scan(&userAudits, &bucketAudits))
+	require.Equal(t, 1, userAudits)
+	require.Equal(t, 2, bucketAudits)
+}
+
+func TestCreateUserRollsBackSystemBuckets(t *testing.T) {
+	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
+	login(t, app)
+	var issuer, subject string
+	require.NoError(t, app.d.Users.QueryRow("select issuer, subject from users limit 1").Scan(&issuer, &subject))
+
+	userID := data.NewPrivateID()
+	err := app.d.CreateUser(t.Context(), data.User{
+		ID: userID, Subject: subject, Issuer: issuer, Email: "duplicate@example.com", CreatedAt: time.Now(),
+	})
+	require.Error(t, err)
+
+	var users, buckets, audits int
+	require.NoError(t, app.d.Users.QueryRow(`
+		select
+			(select count(*) from users where id = $1),
+			(select count(*) from buckets where owner_user_id = $1),
+			(select count(*) from audit_logs where actor_user_id = $1)
+	`, userID).Scan(&users, &buckets, &audits))
+	require.Zero(t, users)
+	require.Zero(t, buckets)
+	require.Zero(t, audits)
 }
 
 func TestCreateAndListBucket(t *testing.T) {
