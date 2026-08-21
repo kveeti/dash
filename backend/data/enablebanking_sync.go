@@ -103,6 +103,7 @@ func (d *Data) EnqueueEnableBankingSyncs(ctx context.Context, userID string, req
 							where previous.integration_id = requested.integration_id
 							  and previous.identification_hash = requested.identification_hash
 							  and previous.completed_at is not null
+							  and previous.completed_at >= integration.updated_at
 						),
 						($10::date - interval '2 years')::date
 					),

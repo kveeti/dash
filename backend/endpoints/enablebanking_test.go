@@ -307,7 +307,7 @@ func TestSyncSelectedEnableBankingAccountsEnqueuesAtomicallyAcrossConnections(t 
 	require.Zero(t, jobs, "a conflict must roll back every selected account")
 }
 
-func TestSyncEnableBankingKeepsProgressWhenAccountUIDChanges(t *testing.T) {
+func TestSyncEnableBankingUsesUpdatedAccountUIDAfterReauthorization(t *testing.T) {
 	var requests atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestNumber := requests.Add(1)
@@ -502,6 +502,18 @@ func TestEnableBankingSyncDateFromIsAlwaysClampedToTwoYears(t *testing.T) {
 	laterDateTo := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 	incrementalBatch := enqueue(laterDateTo)
 	require.Equal(t, firstDateTo.AddDate(0, 0, -2), dateFrom(incrementalBatch))
+	complete(incrementalBatch, laterDateTo)
+
+	_, err := app.d.Users.Exec("update bank_integrations set updated_at = now() where id = $1", integrationID)
+	require.NoError(t, err)
+	postReauthorizationDateTo := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+	postReauthorizationBatch := enqueue(postReauthorizationDateTo)
+	require.Equal(t, postReauthorizationDateTo.AddDate(-2, 0, 0), dateFrom(postReauthorizationBatch))
+	complete(postReauthorizationBatch, postReauthorizationDateTo)
+
+	nextDateTo := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	nextBatch := enqueue(nextDateTo)
+	require.Equal(t, postReauthorizationDateTo.AddDate(0, 0, -2), dateFrom(nextBatch))
 }
 
 func TestSyncEnableBankingSkipsMalformedRows(t *testing.T) {
