@@ -23,7 +23,10 @@ const testFrontURL = "http://frontend.test"
 
 // testFrontendFS stands in for the embedded build in router tests.
 func testFrontendFS() fs.FS {
-	return fstest.MapFS{"index.html": {Data: []byte("<!doctype html><title>test</title>")}}
+	return fstest.MapFS{
+		"index.html":           {Data: []byte("<!doctype html><title>test</title>")},
+		"assets/app-abc123.js": {Data: []byte("console.log('test')")},
+	}
 }
 
 type testApp struct {

@@ -47,6 +47,10 @@ func FrontendHandler(st *state.State, dist fs.FS) http.Handler {
 			serveIndex(w, dist)
 			return
 		}
+		if strings.HasPrefix(r.URL.Path, "/assets/") {
+			files.ServeHTTP(&immutableAssetWriter{ResponseWriter: w}, r)
+			return
+		}
 		files.ServeHTTP(w, r)
 	})
 }
@@ -60,6 +64,41 @@ func isNavigation(r *http.Request) bool {
 	return strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
+type immutableAssetWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (w *immutableAssetWriter) WriteHeader(status int) {
+	if w.wroteHeader {
+		return
+	}
+	w.wroteHeader = true
+	if (status >= 200 && status < 300) || status == http.StatusNotModified {
+		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	} else {
+		w.Header().Del("Cache-Control")
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *immutableAssetWriter) Write(body []byte) (int, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	return w.ResponseWriter.Write(body)
+}
+
+func (w *immutableAssetWriter) ReadFrom(source io.Reader) (int64, error) {
+	if !w.wroteHeader {
+		w.WriteHeader(http.StatusOK)
+	}
+	if readerFrom, ok := w.ResponseWriter.(io.ReaderFrom); ok {
+		return readerFrom.ReadFrom(source)
+	}
+	return io.Copy(w.ResponseWriter, source)
+}
+
 func serveIndex(w http.ResponseWriter, dist fs.FS) {
 	f, err := dist.Open("index.html")
 	if err != nil {
@@ -69,5 +108,6 @@ func serveIndex(w http.ResponseWriter, dist fs.FS) {
 	defer f.Close()
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	io.Copy(w, f)
 }

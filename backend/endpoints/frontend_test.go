@@ -59,6 +59,7 @@ func TestFrontendGateServesAuthenticated(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
 	body, _ := io.ReadAll(resp.Body)
 	require.True(t, strings.Contains(string(body), "<!doctype html>"))
 }
@@ -67,10 +68,17 @@ func TestFrontendGateServesAuthenticated(t *testing.T) {
 func TestFrontendAssetsNotGated(t *testing.T) {
 	app := newTestAppWith(t, appOpts{})
 
-	req, _ := http.NewRequest(http.MethodGet, app.url+"/missing.js", nil)
+	req, _ := http.NewRequest(http.MethodGet, app.url+"/assets/app-abc123.js", nil)
 	req.Header.Set("Accept", "*/*")
 	resp, err := app.client.Do(req)
 	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "public, max-age=31536000, immutable", resp.Header.Get("Cache-Control"))
 
+	req, _ = http.NewRequest(http.MethodGet, app.url+"/assets/missing.js", nil)
+	req.Header.Set("Accept", "*/*")
+	resp, err = app.client.Do(req)
+	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	require.Empty(t, resp.Header.Get("Cache-Control"))
 }
