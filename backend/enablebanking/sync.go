@@ -33,6 +33,7 @@ func (s *Syncer) Start(ctx context.Context) {
 	for range syncWorkers {
 		go s.worker(ctx)
 	}
+	go s.poll(ctx)
 	s.Kick()
 }
 
@@ -43,15 +44,25 @@ func (s *Syncer) Kick() {
 	}
 }
 
-func (s *Syncer) worker(ctx context.Context) {
+func (s *Syncer) poll(ctx context.Context) {
 	ticker := time.NewTicker(syncPoll)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-s.kick:
 		case <-ticker.C:
+			s.Kick()
+		}
+	}
+}
+
+func (s *Syncer) worker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.kick:
 		}
 		for {
 			job, ok, err := s.data.ClaimEnableBankingSync(ctx)

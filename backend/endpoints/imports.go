@@ -8,8 +8,8 @@ import (
 	"money/backend/data"
 	"money/backend/state"
 	"net/http"
-	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -35,7 +35,7 @@ func mapImportErr(err error) error {
 
 // HandleCreateImport lands the upload durably and returns immediately; parsing
 // and promotion happen in the background worker. It caps the body, checks the
-// selected format's header, then buffers to a temp file before storing it.
+// CSV header, then stores the upload for the worker.
 func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 	return func(w http.ResponseWriter, r *http.Request) error {
 		deadline := time.Now().Add(importRequestTimeout)
@@ -84,27 +84,8 @@ func HandleCreateImport(state *state.State, getUserID GetUserID) Handler {
 			return NewErr("CSV header must be date,occurred_at,amount,currency,counterparty,note", http.StatusBadRequest)
 		}
 
-		tmp, err := os.CreateTemp("", "import-*.csv")
-		if err != nil {
-			return NewUnexpectedErr("temp file: %w", err)
-		}
-		defer os.Remove(tmp.Name())
-		defer tmp.Close()
-
-		if _, err := tmp.WriteString(firstLine); err != nil {
-			return NewUnexpectedErr("buffering upload: %w", err)
-		}
-		if _, err := io.Copy(tmp, br); err != nil {
-			if isTooLarge(err) {
-				return NewErr("file too large", http.StatusRequestEntityTooLarge)
-			}
-			return NewUnexpectedErr("buffering upload: %w", err)
-		}
-		if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-			return NewUnexpectedErr("temp seek: %w", err)
-		}
-
-		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, "csv", header.Filename, tmp)
+		upload := io.MultiReader(strings.NewReader(firstLine), br)
+		batch, err := state.Data.CreateImport(r.Context(), userID, bucketID, "csv", header.Filename, upload)
 		if err != nil {
 			return mapImportErr(err)
 		}

@@ -171,9 +171,9 @@ create table if not exists import_staged_rows (
     counterparty text not null default '',
     note text not null default '',
     dedup_hash text not null,
-    occurrence int not null default 0,
     unique (batch_id, sequence)
 );
+alter table import_staged_rows drop column if exists occurrence;
 create index if not exists idx_import_staged_rows_batch on import_staged_rows(batch_id, sequence);
 
 -- The uploaded file itself: the durable work item. Written at ingest, read by the

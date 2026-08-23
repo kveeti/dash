@@ -121,16 +121,17 @@ func TestImportIdenticalRowsBothImport(t *testing.T) {
 	require.Len(t, getInbox(t, app, ""), 2)
 }
 
-func TestImportDedupsAdjacentDateAcrossSources(t *testing.T) {
+func TestImportDoesNotDedupAdjacentDatesAcrossSources(t *testing.T) {
 	app := newTestAppWith(t, appOpts{frontURL: testFrontURL})
 	bank := createBucket(t, app, "asset", "Bank")
 	first := doImport(t, app, bank, nordeaHeader+nordeaRow("2026/07/02", "-12,34", "Cafe", "CSV"))
 	_, err := app.d.Users.Exec("update import_batches set source='legacy_csv' where id=$1", first.ID)
 	require.NoError(t, err)
+
 	second := doImport(t, app, bank, nordeaHeader+nordeaRow("2026/07/01", "-12,34", "Cafe", "API"))
-	report := second
-	require.Equal(t, 0, report.Imported)
-	require.Equal(t, 1, report.Duplicates)
+	require.Equal(t, 1, second.Imported)
+	require.Zero(t, second.Duplicates)
+	require.Len(t, getInbox(t, app, ""), 2)
 }
 
 func TestImportDedupsReimport(t *testing.T) {

@@ -71,6 +71,23 @@ func (d *Data) importCSV(ctx context.Context, batch ImportBatch, parser *Generic
 		if err != nil {
 			return err
 		}
+		var parseErrors any
+		if len(parser.Errors()) > 0 {
+			encoded, err := json.Marshal(parser.Errors())
+			if err != nil {
+				return err
+			}
+			parseErrors = string(encoded)
+		}
+		if _, err := tx.Exec(ctx, `
+			update import_batches
+			set status = 'done',
+			    error = null,
+			    parse_errors = $2::jsonb
+			where id = $1
+		`, batch.ID, parseErrors); err != nil {
+			return err
+		}
 		return tx.Commit(ctx)
 	})
 	return added, duplicates, err
@@ -129,9 +146,6 @@ func (d *Data) processNextCSVImport(ctx context.Context) (bool, error) {
 		return true, nil
 	}
 
-	if err := d.finishCSVImport(ctx, batch.ID, parseErrors); err != nil {
-		return true, err
-	}
 	if err := d.files.Delete(ctx, batch.ID); err != nil {
 		slog.Error("import blob delete failed", "batch", batch.ID, "err", err)
 	}
@@ -169,24 +183,6 @@ func (d *Data) importCSVWithRetry(ctx context.Context, batch ImportBatch) (int, 
 		time.Sleep(importBackoff)
 	}
 	return 0, 0, nil, lastErr
-}
-
-func (d *Data) finishCSVImport(ctx context.Context, batchID string, parseErrors []RowError) error {
-	var storedErrors any
-	if len(parseErrors) > 0 {
-		encoded, err := json.Marshal(parseErrors)
-		if err != nil {
-			return err
-		}
-		storedErrors = encoded
-	}
-	_, err := d.db.ExecContext(ctx, `
-		update import_batches
-		set status = 'done',
-		    parse_errors = $2
-		where id = $1
-	`, batchID, storedErrors)
-	return err
 }
 
 func (d *Data) failCSVImport(ctx context.Context, batchID string, cause error) {

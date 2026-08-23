@@ -29,18 +29,29 @@ func (d *Data) StartImportWorkers(ctx context.Context) {
 	for i := 0; i < importWorkers; i++ {
 		go d.importWorker(ctx)
 	}
+	go d.pollImports(ctx)
 	d.kickImport()
 }
 
-func (d *Data) importWorker(ctx context.Context) {
+func (d *Data) pollImports(ctx context.Context) {
 	ticker := time.NewTicker(importPollFallback)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-d.importKick:
 		case <-ticker.C:
+			d.kickImport()
+		}
+	}
+}
+
+func (d *Data) importWorker(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-d.importKick:
 		}
 		d.drainImports(ctx)
 	}
